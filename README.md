@@ -49,7 +49,7 @@ It is experimental: compatibility and feature parity are incomplete.
 - For FSR 3.1 frame generation: Windows x64 and a GPU with Vulkan 1.3
 - Optional, for LODs: **Distant Horizons 3.3.1 or newer** (tested with 3.3.1 and 3.3.3).
   Distant Horizons 3.3.0 for 1.21.1 runs, but its LODs are not drawn: its NeoForge build cannot be taken over, and the
-  log asks you to update it. (The 1.20.1 build on `main` supports 3.3.0.)
+  log asks you to update it. The 1.20.1 build on `main` asks for the same versions.
 
 ## Installing
 
