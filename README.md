@@ -1,5 +1,7 @@
 # VulkanMod-shaded
 
+English | [한국어](README.ko.md)
+
 A Vulkan renderer for **legacy Forge 1.20.1 modpacks**: an unofficial, modified build of
 [VulkanMod Reforged](https://github.com/TrulyRin/VulkanMod-Reforged), itself a fork of
 [VulkanMod](https://github.com/xCollateral/VulkanMod). This branch is the Forge 1.20.1 build; the NeoForge 1.21.1
@@ -114,6 +116,7 @@ its output is checked in; the build does not need a C compiler.
 | `src/test/` | JUnit tests (maths, struct layouts, settings and wiring checks; no game needed) |
 | `third_party/` | SMAA sources, FidelityFX headers and provenance, LWJGL licence |
 | `tools/` | the MSVC probe that pins the FidelityFX struct layouts, and its output |
+| `branding/` | the CurseForge icon (512 and 1024) and the script that draws it |
 | `libs/DistantHorizonsApi-7.3.0.jar` | Distant Horizons API, compile-time only (not packed into the jar); Distant Horizons 3.3.3 itself is fetched from Modrinth's Maven at build time, also compile-time only |
 
 ## Known limitations
