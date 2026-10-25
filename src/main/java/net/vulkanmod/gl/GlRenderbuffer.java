@@ -48,7 +48,15 @@ public class GlRenderbuffer {
     }
 
     public static void deleteRenderbuffer(int i) {
-        map.remove(i);
+        GlRenderbuffer renderbuffer = map.remove(i);
+        if (renderbuffer == null) return;
+        if (bound == renderbuffer) {
+            bound = null;
+            boundId = 0;
+        }
+        //Freed once no framebuffer holds it; one that is not bound keeps it, as GL keeps an attached renderbuffer alive
+        VulkanImage image = renderbuffer.vulkanImage;
+        if (!GlFramebuffer.renderbufferDeleted(i, image) && image != null) image.free();
     }
 
     public static GlRenderbuffer getRenderbuffer(int id) {
@@ -274,8 +282,7 @@ public class GlRenderbuffer {
     }
 
     void allocateImage(int width, int height, int vkFormat) {
-        if (this.vulkanImage != null)
-            this.vulkanImage.free();
+        VulkanImage previous = this.vulkanImage;
 
         if (VulkanImage.isDepthFormat(vkFormat))
             this.vulkanImage = VulkanImage.createDepthImage(vkFormat,
@@ -288,6 +295,10 @@ public class GlRenderbuffer {
                     .setFormat(vkFormat)
                     .addUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
                     .createVulkanImage();
+
+        GlFramebuffer.renderbufferImageChanged(this.id, previous, this.vulkanImage);
+        if (previous != null)
+            previous.free();
 
         VTextureSelector.bindTexture(this.vulkanImage);
     }

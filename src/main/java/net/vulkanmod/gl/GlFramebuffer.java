@@ -946,6 +946,43 @@ public class GlFramebuffer {
         }
     }
 
+    /**
+     * 2026-10-26: textures re-specified while attached are followed (textureImageChanged); renderbuffers were not, so a framebuffer
+     * kept the image glRenderbufferStorage had just replaced and freed, and its next bind began a render pass on a destroyed image
+     * (the 1.20.1 crash with Xaero's Minimap 26.6.0, there on a texture). Framebuffers holding renderbuffer {@code id} now move to
+     * {@code replacement}.
+     */
+    static void renderbufferImageChanged(int id, VulkanImage previous, VulkanImage replacement) {
+        for (GlFramebuffer target : map.values()) {
+            boolean changed = false;
+            for (int attachment : target.attachments.keySet().toIntArray()) {
+                AttachmentInfo info = target.attachments.get(attachment);
+                if (info.objectType != GL30.GL_RENDERBUFFER || info.objectName != id || info.renderbufferImage != previous) continue;
+                target.attachments.put(attachment, new AttachmentInfo(GL30.GL_RENDERBUFFER, id, 0, replacement));
+                if (target.borrowedPairs != null || !isRenderableAttachment(attachment)) continue;
+                if (!changed) target.cleanUp();
+                changed = true;
+                if (attachment == GL30.GL_COLOR_ATTACHMENT0) target.colorAttachment = replacement;
+                else target.depthAttachment = replacement;
+            }
+        }
+    }
+
+    /** As textureDeleted: a deleted renderbuffer leaves the bound framebuffers. Returns whether any framebuffer still holds {@code image}. */
+    static boolean renderbufferDeleted(int id, VulkanImage image) {
+        boolean held = false;
+        for (GlFramebuffer target : map.values()) {
+            boolean bound = target == boundDrawFramebuffer || target == boundReadFramebuffer;
+            for (int attachment : target.attachments.keySet().toIntArray()) {
+                AttachmentInfo info = target.attachments.get(attachment);
+                if (info.objectType != GL30.GL_RENDERBUFFER || info.objectName != id || info.renderbufferImage != image) continue;
+                if (bound) target.clearAttachment(attachment);
+                else held = true;
+            }
+        }
+        return held;
+    }
+
     private void ensureNativePair() {
         if (this.framebuffer == null && (this.colorAttachment != null || this.depthAttachment != null)) createAndBind();
     }
