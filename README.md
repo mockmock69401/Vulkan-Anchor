@@ -33,7 +33,7 @@ It is experimental: compatibility and feature parity are incomplete.
   lights, anti-aliasing (SMAA, TAA). It needs no shader pack and no LOD mod. Its passes and shaders were written
   for this build from requirement documents and published graphics literature; they contain no shader-pack code.
 - **Distant Horizons support**: Distant Horizons LODs drawn by the Vulkan renderer, composited under vanilla terrain and
-  lit and shadowed by the shaders. Works with the released Distant Horizons 3.3.0 and newer (it takes over Distant
+  lit and shadowed by the shaders. Works with the released Distant Horizons 3.3.1 and newer (it takes over Distant
   Horizons' internal render definition) and with Distant Horizons' render API once that is released (3.3.5).
 - **Frame generation** ("Frame Generation" block on the Shaders → Image page), two choices, one at a time:
   - **FSR 3.1 Frame Generation**: AMD FidelityFX Super Resolution 3.1 frame generation (one generated frame between
@@ -48,8 +48,8 @@ It is experimental: compatibility and feature parity are incomplete.
 - Java 17
 - A GPU and driver with Vulkan 1.2
 - For FSR 3.1 frame generation: Windows x64 and a GPU with Vulkan 1.3
-- Optional, for LODs: Distant Horizons 3.3.0 or newer (tested with 3.3.0, 3.3.3 and a 3.3.5 development build).
-  Older Distant Horizons versions run, but their LODs are not drawn.
+- Optional, for LODs: Distant Horizons 3.3.1 or newer (tested with 3.3.3 and a 3.3.5 development build), the same
+  as the 1.21.1 build. Older Distant Horizons versions are not supported.
 
 ## Installing
 
