@@ -2,7 +2,8 @@
 
 A Vulkan renderer for **legacy Forge 1.20.1 modpacks**: an unofficial, modified build of
 [VulkanMod Reforged](https://github.com/TrulyRin/VulkanMod-Reforged), itself a fork of
-[VulkanMod](https://github.com/xCollateral/VulkanMod).
+[VulkanMod](https://github.com/xCollateral/VulkanMod). This branch is the Forge 1.20.1 build; the NeoForge 1.21.1
+build is on the `1.21.1` branch.
 
 > **Made with AI.** Every change this build makes to VulkanMod Reforged — the compatibility fixes, the
 > post-processing shaders, the Xaero map support, the Distant Horizons support, the frame generation and this
