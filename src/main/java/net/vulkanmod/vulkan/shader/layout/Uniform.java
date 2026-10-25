@@ -51,7 +51,8 @@ public class Uniform {
 
     public static Uniform createField(Info info) {
         return switch (info.type) {
-            case "mat4", "vec3", "vec4", "vec2" -> new Uniform(info);
+            //Integer vectors (Immersive Engineering's "uniform ivec2 OverlayUV"): the game's int buffer copies as it is (Reforged 0.3.5)
+            case "mat4", "vec3", "vec4", "vec2", "ivec2", "ivec3", "ivec4" -> new Uniform(info);
             case "mat3" -> new Mat3(info);
             case "float" -> new Vec1f(info);
             case "int" -> new Vec1i(info);
@@ -80,7 +81,13 @@ public class Uniform {
 
                 default -> throw new IllegalStateException("Unexpected value: " + count);
             };
-            case "int" -> new Info("int", name, 1, 1);
+            case "int" -> switch (count) {
+                case 1 -> new Info("int", name, 1, 1);
+                case 2 -> new Info("ivec2", name, 2, 2);
+                case 3 -> new Info("ivec3", name, 4, 3);
+                case 4 -> new Info("ivec4", name, 4, 4);
+                default -> throw new IllegalStateException("Unexpected value: " + count);
+            };
             default -> throw new RuntimeException("not admitted type..");
         };
     }
@@ -88,11 +95,12 @@ public class Uniform {
     public static Info createUniformInfo(String type, String name) {
         return switch (type) {
             case "mat4" -> new Info(type, name, 4, 16);
-            case "mat3" -> new Info(type, name, 4, 9);
+            //std140: three columns of a vec4 each; Mat3.update writes the third at 32 bytes, so 9 words let the next uniform overlap it
+            case "mat3" -> new Info(type, name, 4, 12);
 
-            case "vec4" -> new Info(type, name, 4, 4);
-            case "vec3" -> new Info(type, name, 4, 3);
-            case "vec2" -> new Info(type, name, 2, 2);
+            case "vec4", "ivec4" -> new Info(type, name, 4, 4);
+            case "vec3", "ivec3" -> new Info(type, name, 4, 3);
+            case "vec2", "ivec2" -> new Info(type, name, 2, 2);
 
             case "float", "int" -> new Info(type, name, 1, 1);
 

@@ -19,8 +19,14 @@ direction and testing. They:
 
 - merge the vulkanfix compatibility add-on (package dev.vulkanfix, mixin
   config vulkanfix.mixins.json), including Xaero's Minimap / World Map
-  support, and patch net.vulkanmod.Initializer and
+  and Gnetum support, and patch net.vulkanmod.Initializer and
   net.vulkanmod.mixin.render.GameRendererMixin directly;
+- backport fixes from VulkanMod Reforged 0.3.5 for Minecraft 1.21.1 (the
+  shader converter's interpolation qualifiers, integer vector and mat3
+  uniforms, and the interpolated-animation upload in
+  net.vulkanmod.render.texture.SpriteInterpolation*), and fix the
+  framebuffer emulation (net.vulkanmod.gl) when a mod re-specifies or
+  deletes an attached texture;
 - add post-processing (package net.vulkanmod.visuals and
   assets/vulkanmod/visuals), written from requirement documents and
   published graphics literature, with no code from any shader pack;

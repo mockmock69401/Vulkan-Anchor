@@ -25,9 +25,10 @@ It is experimental: compatibility and feature parity are incomplete.
 
 ## What it adds to VulkanMod Reforged
 
-- **Modpack compatibility fixes** (`src/vulkanfix`): legacy OpenGL shaders from mods, framebuffer reads and blits,
-  GUI and HUD layouts, screen-effect mods (for example attack effects that used to flip the world), and renderer
-  stability fixes found while testing the modpacks below.
+- **Modpack compatibility fixes** (`src/vulkanfix`): legacy OpenGL shaders from mods (including converter fixes
+  backported from VulkanMod Reforged 0.3.5 for 1.21.1), framebuffer reads and blits, GUI and HUD layouts, HUD-caching mods
+  such as Gnetum, screen-effect mods (for example attack effects that used to flip the world), and renderer stability
+  fixes found while testing the modpacks below.
 - **Xaero's Minimap and Xaero's World Map support**: their map framebuffers, readbacks and projections work on
   Vulkan.
 - **Shaders (post-processing)**, on the "Shaders" pages of VulkanMod's video settings: sun shading and shadows,
@@ -78,16 +79,13 @@ world entered). "Disable" means renaming the jar to `<name>.jar.disabled` (Curse
 | NightfallCraft – The Casket of Reveries (2.2.9.7) | `embeddium`, `oculus`, `chloride`, `flerovium`, `acceleratedrendering`, `sodiumdynamiclights`, `ModernUI` |
 | Society: Sunlit Valley (4.1.5A) | `embeddium`, `oculus`, `flerovium`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (keep `colorwheel_patcher`) |
 | Zero to Engineering (0.5.1) | `embeddium`, `oculus`, `mekalus`, `pfg` (its own OpenGL frame generation), `colorwheel`, `createbetterfps`, `sodiumdynamiclights`, `sodiumoptionsapi`, `sodiumoptionsmodcompat` (the pack ships it disabled) |
-| Better MC [FORGE] BMC4 (v62hf) | `xenon` (an Embeddium fork), `oculus`, `IrisSearch`, `iris_shader_folder`, `colorwheel`, `sodiumdynamiclights`, `sodiumoptionsapi`, `immersivelanterns`, `particle_core` (Particle Core), `modpack-update-checker` — see the note on Xaero's Minimap below |
+| Better MC [FORGE] BMC4 (v62hf) | `xenon` (an Embeddium fork), `oculus`, `IrisSearch`, `iris_shader_folder`, `colorwheel`, `sodiumdynamiclights`, `sodiumoptionsapi`, `immersivelanterns`, `particle_core` (Particle Core), `modpack-update-checker` |
 
 Notes:
 
 - Zero to Engineering's Serene Seasons Plus shows a Sodium warning screen on every launch; close it and continue.
 - Particle Core and Modpack Update Checker change the same particle and texture code as this build and stop the game
   at startup. Modpack Update Checker does the same in the 1.21.1 packs.
-- BMC4: with the mods above disabled the pack loads and enters a world, but a few seconds later the game crashes in the
-  graphics driver while Xaero's Minimap 26.6.0 (with XaeroPlus) draws entity radar icons. This is a bug in this build,
-  being fixed; until then BMC4 is not playable with it.
 - Crash Assistant can stay enabled; it only opens a window after a crash.
 - If a mod you add later fails to load, check whether it needs one of the disabled mods (for example, Immersive
   Lanterns requires Sodium Dynamic Lights).

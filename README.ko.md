@@ -23,8 +23,9 @@ Vulkan으로 돌리기 위해 만들어졌고, 그 위에 셰이더 느낌의 �
 
 ## VulkanMod Reforged에 더한 것
 
-- **모드팩 호환성 수정**(`src/vulkanfix`): 모드가 가진 레거시 OpenGL 셰이더, 프레임버퍼 읽기와 블릿, GUI·HUD 배치,
-  화면 효과 모드(예: 전에는 월드를 뒤집어 버리던 공격 효과), 아래 모드팩을 테스트하며 찾은 렌더러 안정성 수정.
+- **모드팩 호환성 수정**(`src/vulkanfix`): 모드가 가진 레거시 OpenGL 셰이더(1.21.1용 VulkanMod Reforged 0.3.5에서
+  가져온 변환기 수정 포함), 프레임버퍼 읽기와 블릿, GUI·HUD 배치, Gnetum 같은 HUD 캐시 모드, 화면 효과 모드(예: 전에는
+  월드를 뒤집어 버리던 공격 효과), 아래 모드팩을 테스트하며 찾은 렌더러 안정성 수정.
 - **Xaero's Minimap과 Xaero's World Map 지원**: 지도의 프레임버퍼, 읽어오기, 투영이 Vulkan에서 작동합니다.
 - **셰이더(후처리)**: VulkanMod 비디오 설정의 "Shaders" 페이지에 있습니다. 햇빛 음영과 그림자, 물 반사와 물결, 안개와
   빛줄기, 블룸, 구름, 앰비언트 오클루전, 식물 흔들림, 손에 든 광원, 안티에일리어싱(SMAA, TAA). 셰이더팩이나 LOD 모드가
@@ -72,16 +73,13 @@ Vulkan으로 돌리기 위해 만들어졌고, 그 위에 셰이더 느낌의 �
 | NightfallCraft – The Casket of Reveries (2.2.9.7) | `embeddium`, `oculus`, `chloride`, `flerovium`, `acceleratedrendering`, `sodiumdynamiclights`, `ModernUI` |
 | Society: Sunlit Valley (4.1.5A) | `embeddium`, `oculus`, `flerovium`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (`colorwheel_patcher`는 유지) |
 | Zero to Engineering (0.5.1) | `embeddium`, `oculus`, `mekalus`, `pfg` (자체 OpenGL 프레임 생성), `colorwheel`, `createbetterfps`, `sodiumdynamiclights`, `sodiumoptionsapi`, `sodiumoptionsmodcompat` (팩에서 이미 비활성화됨) |
-| Better MC [FORGE] BMC4 (v62hf) | `xenon` (Embeddium 포크), `oculus`, `IrisSearch`, `iris_shader_folder`, `colorwheel`, `sodiumdynamiclights`, `sodiumoptionsapi`, `immersivelanterns`, `particle_core` (Particle Core), `modpack-update-checker` — 아래 Xaero's Minimap 참고 |
+| Better MC [FORGE] BMC4 (v62hf) | `xenon` (Embeddium 포크), `oculus`, `IrisSearch`, `iris_shader_folder`, `colorwheel`, `sodiumdynamiclights`, `sodiumoptionsapi`, `immersivelanterns`, `particle_core` (Particle Core), `modpack-update-checker` |
 
 참고:
 
 - Zero to Engineering의 Serene Seasons Plus는 실행할 때마다 Sodium 경고 화면을 띄웁니다. 닫고 계속하면 됩니다.
 - Particle Core와 Modpack Update Checker는 이 빌드가 바꾸는 파티클·텍스처 코드를 같이 건드려서 게임 시작 시 크래시를
   냅니다. Modpack Update Checker는 1.21.1 팩에서도 마찬가지입니다.
-- BMC4: 위 모드를 끄면 팩이 로딩되고 월드에 들어가지만, 몇 초 뒤 Xaero's Minimap 26.6.0(XaeroPlus 포함)이 엔티티
-  레이더 아이콘을 그릴 때 그래픽 드라이버 안에서 크래시가 납니다. 이 빌드의 버그이며 수정 중입니다. 그 전까지는 이
-  빌드로 BMC4를 플레이할 수 없습니다.
 - Crash Assistant는 켜 둬도 됩니다. 크래시가 난 뒤 창을 띄울 뿐입니다.
 - 나중에 추가한 모드가 로드되지 않으면, 비활성화한 모드가 필요한 모드인지 확인하세요(예: Immersive Lanterns는 Sodium
   Dynamic Lights가 필요합니다).

@@ -98,6 +98,8 @@ public class GlslConverter {
         switch (token) {
             case "uniform" -> this.state = State.MATCHING_UNIFORM;
             case "in", "out" -> this.state = State.MATCHING_IN_OUT;
+            //"flat out int cannonPower;" (Create Big Cannons): an interpolation qualifier before the direction (Reforged 0.3.5)
+            case "flat", "smooth", "noperspective", "centroid" -> this.state = State.MATCHING_IN_OUT;
             case "#version" -> {
                 return null;
             }

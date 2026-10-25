@@ -73,8 +73,10 @@ public class GlTexture {
     public static void glDeleteTextures(int i) {
         GlTexture glTexture = map.remove(i);
         VulkanImage image = glTexture != null ? glTexture.vulkanImage : null;
-        if (image != null)
+        if (image != null) {
+            GlFramebuffer.replaceAttachmentImage(image, null);
             MemoryManager.getInstance().addToFreeable(image);
+        }
 
         if (glTexture != null && glTexture == boundTexture) {
             boundTexture = null;
@@ -551,8 +553,8 @@ public class GlTexture {
     }
 
     void allocateImage(int width, int height, int vkFormat) {
-        if (this.vulkanImage != null)
-            this.vulkanImage.free();
+        //Released once the frames that may use it are done, and the framebuffers that hold it move to the new image
+        VulkanImage old = this.vulkanImage;
 
         if (VulkanImage.isDepthFormat(vkFormat))
             this.vulkanImage = VulkanImage.createDepthImage(vkFormat,
@@ -565,6 +567,11 @@ public class GlTexture {
                     .setFormat(vkFormat)
                     .addUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
                     .createVulkanImage();
+
+        if (old != null) {
+            GlFramebuffer.replaceAttachmentImage(old, this.vulkanImage);
+            MemoryManager.getInstance().addToFreeable(old);
+        }
     }
 
     void updateSampler() {

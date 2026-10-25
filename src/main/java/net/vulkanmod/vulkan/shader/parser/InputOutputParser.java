@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import static net.vulkanmod.vulkan.shader.parser.UniformParser.removeSemicolon;
 
@@ -18,6 +19,8 @@ public class InputOutputParser {
     private GlslConverter.ShaderStage shaderStage;
 
     private int currentLocation = 0;
+    private static final Set<String> QUALIFIERS = Set.of("flat", "smooth", "noperspective", "centroid");
+    private String qualifier = "";
     private String ioType;
     private String type;
     private String name;
@@ -34,7 +37,9 @@ public class InputOutputParser {
 
     public boolean parseToken(String token) {
 
-        if (this.ioType == null)
+        if (this.ioType == null && QUALIFIERS.contains(token))
+            this.qualifier = this.qualifier + token + " ";
+        else if (this.ioType == null)
             this.ioType = token;
         else if (this.type == null)
             this.type = token;
@@ -45,8 +50,8 @@ public class InputOutputParser {
 
             if(this.shaderStage == GlslConverter.ShaderStage.Vertex) {
                 switch (this.ioType) {
-                    case "in" -> this.vertInAttributes.add(this.type, this.name);
-                    case "out" -> this.vertOutAttributes.add(this.type, this.name);
+                    case "in" -> this.vertInAttributes.add(this.type, this.name, "");
+                    case "out" -> this.vertOutAttributes.add(this.type, this.name, this.qualifier);
                 }
             }
             else {
@@ -67,6 +72,7 @@ public class InputOutputParser {
     }
 
     private void resetState() {
+        this.qualifier = "";
         this.ioType = null;
         this.type = null;
         this.name = null;
@@ -84,14 +90,14 @@ public class InputOutputParser {
             builder.append("\n");
 
             for(Attribute attribute : this.vertOutAttributes.attributes) {
-                builder.append(String.format("layout(location = %d) out %s %s;\n", attribute.location, attribute.type, attribute.name));
+                builder.append(String.format("layout(location = %d) %sout %s %s;\n", attribute.location, attribute.qualifier, attribute.type, attribute.name));
             }
             builder.append("\n");
         }
         else {
 
             for(Attribute attribute : this.vertOutAttributes.attributes) {
-                builder.append(String.format("layout(location = %d) in %s %s;\n", attribute.location, attribute.type, attribute.name));
+                builder.append(String.format("layout(location = %d) %sin %s %s;\n", attribute.location, attribute.qualifier, attribute.type, attribute.name));
             }
             builder.append("\n");
 
@@ -105,14 +111,15 @@ public class InputOutputParser {
         this.shaderStage = shaderStage;
     }
 
-    public record Attribute(int location, String type, String name) {}
+    /** qualifier: the interpolation qualifiers with a trailing space ("flat "), or empty; the fragment input repeats the output's. */
+    public record Attribute(int location, String type, String name, String qualifier) {}
 
     static class AttributeSet {
         List<Attribute> attributes = new ObjectArrayList<>();
         int currentLocation = 0;
         InputOutputParser parser;
 
-        void add(String type, String name) {
+        void add(String type, String name, String qualifier) {
             int loc = this.currentLocation;
             if (parser != null && parser.shaderStage == GlslConverter.ShaderStage.Vertex && parser.vertexFormat != null) {
                 int idx = parser.vertexFormat.getElementAttributeNames().indexOf(name);
@@ -120,7 +127,7 @@ public class InputOutputParser {
                     loc = idx;
                 }
             }
-            this.attributes.add(new Attribute(loc, type, name));
+            this.attributes.add(new Attribute(loc, type, name, qualifier));
             this.currentLocation++;
         }
 

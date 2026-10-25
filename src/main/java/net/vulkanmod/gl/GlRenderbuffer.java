@@ -1,6 +1,7 @@
 package net.vulkanmod.gl;
 
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
+import net.vulkanmod.vulkan.memory.MemoryManager;
 import net.vulkanmod.vulkan.texture.ImageUtil;
 import net.vulkanmod.vulkan.texture.SamplerManager;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
@@ -46,7 +47,11 @@ public class GlRenderbuffer {
     }
 
     public static void deleteRenderbuffer(int i) {
-        map.remove(i);
+        GlRenderbuffer renderbuffer = map.remove(i);
+        if (renderbuffer != null && renderbuffer.vulkanImage != null) {
+            GlFramebuffer.replaceAttachmentImage(renderbuffer.vulkanImage, null);
+            MemoryManager.getInstance().addToFreeable(renderbuffer.vulkanImage);
+        }
     }
 
     public static GlRenderbuffer getRenderbuffer(int id) {
@@ -181,8 +186,8 @@ public class GlRenderbuffer {
     }
 
     void allocateImage(int width, int height, int vkFormat) {
-        if (this.vulkanImage != null)
-            this.vulkanImage.free();
+        //As GlTexture.allocateImage: the old image is released after the frames using it, its framebuffers follow
+        VulkanImage old = this.vulkanImage;
 
         if (VulkanImage.isDepthFormat(vkFormat))
             this.vulkanImage = VulkanImage.createDepthImage(vkFormat,
@@ -195,6 +200,11 @@ public class GlRenderbuffer {
                     .setFormat(vkFormat)
                     .addUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
                     .createVulkanImage();
+
+        if (old != null) {
+            GlFramebuffer.replaceAttachmentImage(old, this.vulkanImage);
+            MemoryManager.getInstance().addToFreeable(old);
+        }
 
         VTextureSelector.bindTexture(this.vulkanImage);
     }

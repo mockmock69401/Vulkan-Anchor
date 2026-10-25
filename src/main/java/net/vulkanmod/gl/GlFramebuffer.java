@@ -218,6 +218,43 @@ public class GlFramebuffer {
         return boundId;
     }
 
+    /**
+     * 2026-10-25 (BMC4: a driver crash in vkCmdPipelineBarrier a few seconds into a world): a framebuffer keeps the VulkanImage its
+     * texture or renderbuffer had when it was attached. Xaero's Minimap 26.6.0 re-specifies its radar-icon texture (glTexImage2D on
+     * the same name) while the texture stays attached; the image was freed and the next bind began a render pass on it. Every
+     * framebuffer holding {@code old} now follows: onto {@code replacement}, or, when the texture or renderbuffer is deleted
+     * (null), loses that attachment as a deleted attachment would.
+     */
+    static void replaceAttachmentImage(VulkanImage old, VulkanImage replacement) {
+        if (old == null || old == replacement)
+            return;
+        for (GlFramebuffer glFramebuffer : map.values()) {
+            boolean color = glFramebuffer.colorAttachment == old, depth = glFramebuffer.depthAttachment == old;
+            if (!color && !depth)
+                continue;
+            if (color)
+                glFramebuffer.colorAttachment = replacement;
+            if (depth)
+                glFramebuffer.depthAttachment = replacement;
+            if (glFramebuffer.colorAttachment != null) {
+                glFramebuffer.createAndBind();
+            } else {
+                glFramebuffer.endIfRendering();
+                glFramebuffer.cleanUp();
+            }
+        }
+    }
+
+    /** Ends this framebuffer's render pass if it is the one recording, keeping it bound. */
+    private void endIfRendering() {
+        if (boundFramebuffer == this && boundId == this.id && this.renderPass != null
+                && Renderer.getInstance().getBoundRenderPass() == this.renderPass) {
+            Renderer.getInstance().endRenderPass();
+            boundFramebuffer = this;
+            boundId = this.id;
+        }
+    }
+
     public static GlFramebuffer getFramebuffer(int id) {
         return map.get(id);
     }

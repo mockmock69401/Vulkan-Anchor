@@ -37,6 +37,8 @@
     "reforged.GlslCommentStripMixin",
     "reforged.CodeParserPercentMixin",
     "gnetum.HudFramebufferLayoutMixin",
+    "gnetum.MainTargetHudMixin",
+    "gnetum.BlendAlphaMixin",
     "fancymenu.SmoothImageRectFallbackMixin",
     "vix.PostEffectLayoutMixin",
     "vix.PassViewportMixin"
