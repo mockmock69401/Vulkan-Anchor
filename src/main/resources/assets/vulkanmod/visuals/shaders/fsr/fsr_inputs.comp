@@ -1,0 +1,55 @@
+#version 450
+//FSR frame generation (FSR design 4.5 step 2): the depth and the camera motion vectors FSR reads, one pass at render size.
+// depthOut (r32f): near / view distance of the vanilla or LOD surface (viewpos.glsl), 0 for the sky: an inverted depth with an
+// infinite far plane in the main projection's near plane. motionOut (rg16f): previous UV minus current UV of the pixel's surface
+// point (FSR's UV: top-left origin, v down), camera motion only; FSR scales it by the render size. FsrInputMath mirrors every block
+// below (each is marked with its mirror's name): change both together.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, r32f) uniform writeonly restrict image2D depthOut;
+layout(binding = 1, rg16f) uniform writeonly restrict image2D motionOut;
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(binding = 3) uniform sampler2D lodDepth;
+
+layout(location = 0) uniform mat4 invVanillaProj;//this frame's main projection, unjittered
+layout(location = 1) uniform mat4 invLodProj;//this frame's LOD projection, unjittered
+layout(location = 2) uniform mat4 prevFromView;//view position (w 1) or direction (w 0) to the previous frame's clip space
+layout(location = 3) uniform vec4 depthParams;//x LodClamp.CLAMP_THRESHOLD, y 1 when the LOD depth is valid
+layout(location = 4) uniform vec4 fsrParams;//x the main projection's near plane (blocks), y 1 when the depth is valid (else all sky)
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/viewpos.glsl>
+
+//FsrInputMath.pixelUv
+vec2 fsrPixelUv(ivec2 p, ivec2 size) {
+    return (vec2(p) + 0.5)/vec2(size);
+}
+
+//FsrInputMath.depth
+float fsrDepth(bool geometry, float viewDistance, float near) {
+    return geometry ? near/max(viewDistance, near) : 0.0;
+}
+
+//FsrInputMath.motionOf: {0, 0} behind the previous camera
+vec2 fsrMotion(vec4 view, vec2 uv) {
+    vec4 clip = prevFromView*view;
+    if (clip.w <= 0.0) {
+        return vec2(0.0);
+    }
+    vec2 prevUv = vec2(clip.x/clip.w*0.5 + 0.5, 0.5 - clip.y/clip.w*0.5);
+    return prevUv - uv;
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(depthOut);
+    if (any(greaterThanEqual(p, size))) {
+        return;
+    }
+    vec3 view = vec3(0.0);
+    bool geometry = fsrParams.y > 0.5 && scenePosition(p, size, view);
+    //FsrInputMath.viewPoint: the surface point (w 1), or for the sky the ray's direction (w 0)
+    vec4 point = geometry ? vec4(view, 1.0) : vec4(viewRay(invVanillaProj, pixelUvGl(p, size)), 0.0);
+    imageStore(depthOut, p, vec4(fsrDepth(geometry, -view.z, fsrParams.x)));
+    imageStore(motionOut, p, vec4(fsrMotion(point, fsrPixelUv(p, size)), 0.0, 0.0));
+}

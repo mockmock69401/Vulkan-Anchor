@@ -1,0 +1,96 @@
+package net.vulkanmod.visuals.render;
+
+import net.vulkanmod.visuals.vk.LooseUniformWriter;
+import net.vulkanmod.visuals.vk.VkGpuBuffer;
+import net.vulkanmod.visuals.vk.VkUploadStream;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import org.lwjgl.system.MemoryUtil;
+
+import java.nio.ByteBuffer;
+
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
+import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+/**
+ * P7k design 3: the held light's grid around the player's eye, spread again when the eye block or the held light changes and
+ * every REFRESH_TICKS while there is light (blocks change); uploaded only then. scene_copy reads it at COPY_HELD.
+ */
+public final class HeldLightSystem {
+    /** scene_copy.comp: the grid's corner minus the light volume's camera block, 1 when on. */
+    public static final int COPY_HELD = 24;
+    static final int REFRESH_TICKS = 10;
+
+    private final VkGpuBuffer buffer = VkGpuBuffer.device(HeldLight.BYTES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+    private int x, y, z, level;
+    private long spreadTick = Long.MIN_VALUE;
+    private boolean on;
+
+    /** Before the frame's upload commit. enabled: the setting and the per-pixel light. */
+    public void update(VkUploadStream upload, boolean enabled) {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer player = mc.player;
+        ClientLevel level = mc.level;
+        int held = enabled && player != null && level != null ? HeldLight.held(emission(player.getMainHandItem()), emission(player.getOffhandItem())) : 0;
+        if (held <= 0) {
+            this.on = false;
+            this.level = 0;
+            return;
+        }
+        BlockPos eye = BlockPos.containing(player.getEyePosition());
+        long tick = level.getGameTime();
+        boolean moved = !this.on || eye.getX() != this.x || eye.getY() != this.y || eye.getZ() != this.z || held != this.level;
+        if (!moved && tick - this.spreadTick < REFRESH_TICKS) return;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        byte[] cells = HeldLight.spread(eye.getX(), eye.getY(), eye.getZ(), held,
+                (bx, by, bz) -> level.getBlockState(pos.set(bx, by, bz)).getLightBlock(level, pos));
+        ByteBuffer bytes = MemoryUtil.memAlloc(HeldLight.BYTES);
+        try {
+            HeldLight.pack(cells, bytes);
+            upload.upload(this.buffer, 0, bytes);
+        } finally {
+            MemoryUtil.memFree(bytes);
+        }
+        this.x = eye.getX();
+        this.y = eye.getY();
+        this.z = eye.getZ();
+        this.level = held;
+        this.spreadTick = tick;
+        this.on = true;
+    }
+
+    /** An item's light: a block item's block's, a lava bucket's 15, else 0. */
+    static int emission(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return 0;
+        if (stack.is(Items.LAVA_BUCKET)) return 15;
+        if (stack.getItem() instanceof BlockItem block) return block.getBlock().defaultBlockState().getLightEmission();
+        return 0;
+    }
+
+    /** The grid's corner relative to the light volume's camera block (cameraBlock), and whether it is on. */
+    public void writeCopy(LooseUniformWriter w, float[] cameraBlock) {
+        if (!this.on || cameraBlock == null) {
+            w.putVec4(COPY_HELD, 0, 0, 0, 0);
+            return;
+        }
+        w.putVec4(COPY_HELD, this.x - HeldLight.RADIUS - cameraBlock[0], this.y - HeldLight.RADIUS - cameraBlock[1],
+                this.z - HeldLight.RADIUS - cameraBlock[2], 1);
+    }
+
+    public boolean on() {
+        return this.on;
+    }
+
+    public VkGpuBuffer buffer() {
+        return this.buffer;
+    }
+
+    public void free() {
+        this.buffer.free();
+    }
+}

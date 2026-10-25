@@ -1,0 +1,41 @@
+#version 450
+//Visuals light shafts (design 2026-10-10 P7c 3.3), at half resolution: MASK keeps the bright sky (the sun disc and its
+// halo; anything that wrote depth blocks it), BLUR walks toward the sun's screen position (GPU Gems 3, ch. 13).
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D dst;
+layout(binding = 1) uniform sampler2D src;
+#ifdef MASK
+layout(binding = 2) uniform sampler2D mainDepth;
+#endif
+layout(location = 0) uniform vec4 params;//sun position (row 0 at the top), unused, unused
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/postmath.glsl>
+#import <vulkanmod:visuals/post/atmosphere.glsl>
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(dst);
+    if (any(greaterThanEqual(p, size))) {
+        return;
+    }
+#ifdef MASK
+    //The composite writes depth for LODs too, so only the sky is left at the far plane
+    ivec2 q = min(p*2, textureSize(src, 0) - 1);
+    bool sky = texelFetch(mainDepth, q, 0).r == FAR;
+    float light = sky ? max(dot(texelFetch(src, q, 0).rgb, LUMA) - SHAFT_THRESHOLD, 0.0) : 0.0;
+#else
+    vec2 uv = (vec2(p) + 0.5)/vec2(size);
+    vec2 stepToSun = (uv - params.xy)/float(SHAFT_SAMPLES);
+    float decay = 1.0;
+    float light = 0.0;
+    for (int i = 0; i < SHAFT_SAMPLES; i++) {
+        uv -= stepToSun;
+        light += texture(src, uv).r*decay;
+        decay *= SHAFT_DECAY;
+    }
+    light /= float(SHAFT_SAMPLES);
+#endif
+    imageStore(dst, p, vec4(light, 0.0, 0.0, 1.0));
+}

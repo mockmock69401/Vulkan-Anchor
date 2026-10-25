@@ -1,0 +1,161 @@
+#version 450
+//W3: bloom. Three programs from this file (boundary.md 3.4), mirrored by BloomMath.java (every const here is a BloomMath
+// field of the same name and value; BloomTest checks it).
+//
+//  PREFILTER  scene (full resolution, linear HDR in W2's scene units) + main depth -> pyramid level 0 (half resolution).
+//             level 0 texel q reads the 4x4 scene pixels 2q-1 .. 2q+2 and writes P = c*(1 + g) + bright(c): the scene itself
+//             (plain tent weights), plus positive additions only. c is the scene average, g the distance gain (in proportion to
+//             how far the pixels are) and bright(c) the soft-thresholded part, averaged with a Karis weight (so a lone sparkle
+//             cannot make the glow flicker). W2 blends mix(scene, level0/levels, w): with P = c that is the identity, so plain
+//             areas are unchanged and only the additions w*blur(extra) show.
+//  DOWN       level i-1 -> level i, a 13-tap filter (the weights sum to 1: a uniform image stays itself).
+//  UP         adds level i+1, upsampled by a 3x3 tent, onto level i (dst keeps its content). Weights sum to 1 too.
+//
+// So after UP reaches level 0, level 0 holds the SUM of the levels' blurred light in scene units; W2's final pass divides it by
+// the number of levels and mixes it with the scene.
+//
+// Literature: Jimenez 2014, "Next Generation Post Processing in Call of Duty: Advanced Warfare" (SIGGRAPH): the 13-tap
+// downsample, the tent upsample, the Karis average (after Karis 2013, "Real Shading in Unreal Engine 4" notes on high quality
+// bloom). The soft threshold is the idea of a quadratic knee below the threshold (a smooth start instead of a hard cut), written
+// here from that description. Distance glow: a smoothstep ramp in view distance (Hermite smoothstep). The Karis weight takes
+// postmath.glsl's LUMA (W2's luminance weights).
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform restrict image2D dst;
+layout(binding = 1) uniform sampler2D src;
+layout(location = 0) uniform vec4 params;//1/srcWidth, 1/srcHeight (written by the dispatcher)
+
+#import <vulkanmod:visuals/post/postmath.glsl>
+#ifdef PREFILTER
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(location = 1) uniform vec4 glowParams;//distance glow: start (blocks), 1/span, amount, bright threshold (scene units)
+layout(location = 2) uniform vec4 depthMap;//view distance = (x*d + y)/(z*d + w) for the main depth d
+#endif
+
+//Prefilter
+const float KNEE = 0.5;//width of the soft threshold's knee, scene units
+const float MAX_VALUE = 4096.0;//cap per sample: eight levels of it still fit rgba16f
+const float TAP_OUTER = 0.125;//1-D weights of the 4x4 footprint: 1 3 3 1 over 8
+const float TAP_INNER = 0.375;
+const float KARIS_SCALE = 4.0;//a sample of luminance L weighs 1/(1 + L/KARIS_SCALE)
+const float SOFT_EPS = 0.00001;
+const float KNEE_RANGE = 2.0;//the knee spans KNEE_RANGE*KNEE above the lower edge
+const float SOFT_DIV = 4.0;//the knee curve is rq^2/(SOFT_DIV*KNEE)
+const float DEPTH_TAP = 0.25;//weight of each of the 2x2 depth texels
+const float HALF_TEXEL = 0.5;
+const float FAR_DEPTH = 1.0;//the main depth of sky
+const float DEPTH_DEN_MIN = 0.000000001;
+
+//DOWN: offsets in source texels from the edge between source texels 2q and 2q+1
+const float DOWN_CENTRE = 0.125;
+const float DOWN_INNER = 0.125;
+const float DOWN_EDGE = 0.0625;
+const float DOWN_CORNER = 0.03125;
+const float DOWN_INNER_OFFSET = 1.0;
+const float DOWN_OUTER_OFFSET = 2.0;
+
+//UP: offsets in source texels from the destination texel's centre
+const float UP_SCALE = 0.5;//destination texel to source texel
+const float UP_CENTRE = 0.25;
+const float UP_EDGE = 0.125;
+const float UP_CORNER = 0.0625;
+const float UP_RADIUS = 1.0;
+
+//Linear sampling at a position in source texels; clamping to [0.5, size - 0.5] is clamp-to-edge whatever the sampler does
+vec3 tap(vec2 texels) {
+    vec2 inv = params.xy;
+    return texture(src, clamp(texels*inv, HALF_TEXEL*inv, vec2(1.0) - HALF_TEXEL*inv)).rgb;
+}
+
+#ifdef PREFILTER
+//NaN becomes 0, the rest is kept in [0, MAX_VALUE]
+vec3 cleanColour(vec3 c) {
+    if (any(isnan(c))) {
+        return vec3(0.0);
+    }
+    return clamp(c, vec3(0.0), vec3(MAX_VALUE));
+}
+
+//The part of a colour above the threshold, with a quadratic knee below it (by the brightest channel)
+vec3 softThreshold(vec3 c, float threshold) {
+    float br = max(c.r, max(c.g, c.b));
+    float rq = clamp(br - threshold + KNEE, 0.0, KNEE_RANGE*KNEE);
+    rq = rq*rq/(SOFT_DIV*KNEE + SOFT_EPS);
+    return c*(max(rq, br - threshold)/max(br, SOFT_EPS));
+}
+
+//How much of its own colour a pixel of this main depth adds to the glow
+float distanceGlow(float depth) {
+    if (depth >= FAR_DEPTH) {
+        return glowParams.z;
+    }
+    float den = depthMap.z*depth + depthMap.w;
+    if (!(den > DEPTH_DEN_MIN)) {
+        return glowParams.z;
+    }
+    float t = clamp(((depthMap.x*depth + depthMap.y)/den - glowParams.x)*glowParams.y, 0.0, 1.0);
+    return glowParams.z*t*t*(3.0 - 2.0*t);
+}
+#endif
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(p, imageSize(dst)))) {
+        return;
+    }
+#ifdef PREFILTER
+    ivec2 size = textureSize(src, 0);
+    ivec2 depthSize = textureSize(mainDepth, 0);
+    ivec2 base = 2*p;
+    vec3 sumBright = vec3(0.0);
+    vec3 sumColour = vec3(0.0);
+    float sumWeight = 0.0;
+    float sumTent = 0.0;
+    for (int j = 0; j < 4; j++) {
+        float wy = (j == 1 || j == 2) ? TAP_INNER : TAP_OUTER;
+        for (int i = 0; i < 4; i++) {
+            float wx = (i == 1 || i == 2) ? TAP_INNER : TAP_OUTER;
+            vec3 c = cleanColour(texelFetch(src, clamp(base + ivec2(i - 1, j - 1), ivec2(0), size - 1), 0).rgb);
+            float tent = wx*wy;
+            float w = tent/(1.0 + dot(c, LUMA)/KARIS_SCALE);
+            sumBright += w*softThreshold(c, glowParams.w);
+            sumColour += tent*c;
+            sumTent += tent;
+            sumWeight += w;
+        }
+    }
+    float glow = 0.0;
+    for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 2; i++) {
+            glow += DEPTH_TAP*distanceGlow(texelFetch(mainDepth, clamp(base + ivec2(i, j), ivec2(0), depthSize - 1), 0).r);
+        }
+    }
+    vec3 result = sumColour/sumTent*(1.0 + glow) + sumBright/sumWeight;
+    imageStore(dst, p, vec4(min(result, vec3(MAX_VALUE)), 1.0));
+#endif
+#ifdef DOWN
+    vec2 centre = vec2(2*p + 1);//the edge between source texels 2p and 2p+1
+    vec3 sum = DOWN_CENTRE*tap(centre);
+    for (int j = -1; j <= 1; j += 2) {
+        for (int i = -1; i <= 1; i += 2) {
+            sum += DOWN_INNER*tap(centre + vec2(i, j)*DOWN_INNER_OFFSET);
+            sum += DOWN_CORNER*tap(centre + vec2(i, j)*DOWN_OUTER_OFFSET);
+        }
+    }
+    sum += DOWN_EDGE*(tap(centre + vec2(DOWN_OUTER_OFFSET, 0.0)) + tap(centre - vec2(DOWN_OUTER_OFFSET, 0.0))
+                      + tap(centre + vec2(0.0, DOWN_OUTER_OFFSET)) + tap(centre - vec2(0.0, DOWN_OUTER_OFFSET)));
+    imageStore(dst, p, vec4(sum, 1.0));
+#endif
+#ifdef UP
+    vec2 centre = (vec2(p) + HALF_TEXEL)*UP_SCALE;//in source texels: source texel j covers destination texels 2j and 2j+1
+    vec3 sum = UP_CENTRE*tap(centre);
+    for (int j = -1; j <= 1; j += 2) {
+        for (int i = -1; i <= 1; i += 2) {
+            sum += UP_CORNER*tap(centre + vec2(i, j)*UP_RADIUS);
+        }
+    }
+    sum += UP_EDGE*(tap(centre + vec2(UP_RADIUS, 0.0)) + tap(centre - vec2(UP_RADIUS, 0.0))
+                    + tap(centre + vec2(0.0, UP_RADIUS)) + tap(centre - vec2(0.0, UP_RADIUS)));
+    imageStore(dst, p, imageLoad(dst, p) + vec4(sum, 0.0));
+#endif
+}

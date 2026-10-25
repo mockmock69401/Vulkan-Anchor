@@ -1,0 +1,60 @@
+VulkanMod-shaded
+
+An unofficial modified build of VulkanMod Reforged, itself an unofficial
+modified fork of VulkanMod:
+https://github.com/xCollateral/VulkanMod
+https://github.com/TrulyRin/VulkanMod-Reforged
+
+Original authors: xCollateral and the VulkanMod contributors.
+VulkanMod Reforged maintainer and contributed modifications: Rindw (TrulyRin).
+
+VulkanMod Reforged was modified on 2026-06-19 for NeoForge compatibility and
+release metadata. Further renderer, compatibility, and publication changes
+were made through 2026-10-16.
+
+VulkanMod-shaded is a further modified version, changed from 2026-10-17 to
+2026-10-25 by mockmock69401. The changes were written with an AI coding
+assistant (Anthropic's Claude, through Claude Code) under mockmock69401's
+direction and testing. They:
+
+- merge the vulkanfix compatibility add-on (package dev.vulkanfix, mixin
+  config vulkanfix.mixins.json), including Xaero's Minimap / World Map
+  support, and patch net.vulkanmod.Initializer and
+  net.vulkanmod.mixin.render.GameRendererMixin directly;
+- add post-processing (package net.vulkanmod.visuals and
+  assets/vulkanmod/visuals), written from requirement documents and
+  published graphics literature, with no code from any shader pack;
+- add Distant Horizons LOD rendering through the Distant Horizons render API,
+  and for Distant Horizons 3.3.0 to 3.3.4 by taking over its internal render
+  definition (package net.vulkanmod.visuals.dh, mixins in
+  net.vulkanmod.mixin.visuals.legacydh); the LOD terrain shaders in
+  assets/vulkanmod/visuals/shaders/dh are translated from Distant Horizons
+  (LGPL-3.0, Copyright (C) 2020 James Seibel);
+- add frame generation: a built-in camera-reprojection generator ("Optical
+  Flow", package net.vulkanmod.visuals.framegen) and AMD FSR 3.1 frame
+  generation through AMD's FidelityFX SDK v1.1.4 (package
+  net.vulkanmod.visuals.fsr), whose prebuilt signed library is included
+  unmodified under its MIT licence;
+- add renderer performance and stability fixes found while testing large
+  modpacks.
+
+These changes are contributed under LGPL-3.0-only and are not endorsed by
+Rindw, the upstream VulkanMod contributors, the Distant Horizons authors,
+the authors of Xaero's mods, or AMD.
+
+Third-party parts and their licences are listed in THIRD_PARTY_NOTICES.md.
+
+The covered code remains licensed under LGPL-3.0-only. See LICENSE for
+the LGPLv3 text and COPYING for the incorporated GPLv3 text.
+
+Preserve applicable copyright, license, warranty, and attribution notices
+and identify modified versions as required by those licenses. Do not
+misrepresent authorship or imply endorsement by this build's author, the
+VulkanMod Reforged maintainer or the upstream contributors.
+
+The code license grants no trademark rights. Upstream names, logos, and
+other branding remain subject to their owners' applicable rights.
+
+This notice does not restrict copying, modification, or redistribution
+permitted by LGPLv3/GPLv3. Corresponding source and build scripts accompany
+the releases.

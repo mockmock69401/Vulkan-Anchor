@@ -1,0 +1,411 @@
+#version 450
+//W5: the half-resolution lighting pass. One invocation per half-resolution texel q, which stands for the full-resolution pixel 2q:
+// the surface's position (vanilla or Distant Horizons LOD), its normal (the LOD face, B1, or rebuilt from the main depth and snapped to
+// the block axes), how much it faces the sun relative to flat ground, the sun's visibility from the shadow cascades, and its translucent
+// kind (water / ice-glass, B4, B5). The 2x2 full-resolution pixels of q get their own sun visibility when they are plants (B13).
+// lighting.glsl says what each output channel means and how the composite combines them. LightingMath mirrors the constants and maths.
+//
+// Literature: Lambert's cosine law for the facing; percentage-closer filtering of shadow maps (Reeves, Salesin and Cook 1987,
+// "Rendering antialiased shadows with depth maps", SIGGRAPH), here on the four texels of a gather with bilinear weights; normal-offset
+// shadow lookups (Holbert 2011, "Saying goodbye to shadow acne", GDC poster); the receiver plane depth bias for wide filters (Isidoro
+// 2006, "Shadow mapping: GPU-based tips and techniques", GDC); cascades blended across a band (Engel 2006, "Cascaded shadow maps",
+// ShaderX5); depth-reconstructed normals from the nearer of the two neighbours per axis (a common screen-space technique, e.g.
+// Mittring 2007, "Finding next gen", SIGGRAPH course on CryEngine 2).
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D lightOut;
+layout(binding = 1, rgba16f) uniform writeonly restrict image2D sunOut;
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(binding = 3) uniform sampler2D lodDepth;
+layout(binding = 4) uniform sampler2D mainColour;
+layout(binding = 5) uniform sampler2D beforeTranslucent;
+layout(binding = 6) uniform sampler2D afterTranslucent;
+layout(binding = 7) uniform sampler2D lodOpaque;
+layout(binding = 8) uniform sampler2D shadowNearMap;
+layout(binding = 9) uniform sampler2D shadowFarMap;
+layout(binding = 10, r32f) uniform writeonly restrict image2D plantSunOut;
+layout(binding = 11) uniform sampler2D shadowNearMapB;
+layout(binding = 12) uniform sampler2D shadowFarMapB;
+layout(binding = 13) uniform sampler2D shadowCloseMap;
+layout(binding = 14) uniform sampler2D shadowCloseMapB;
+layout(binding = 15) uniform usampler2D lodLight;
+
+//Clean LightingUniforms.writeLighting
+layout(location = 0) uniform mat4 invVanillaProj;
+layout(location = 1) uniform mat4 invLodProj;
+layout(location = 2) uniform mat4 proj;//view to clip
+layout(location = 3) uniform vec4 sunView;//xyz toward the sun (view space), w 1 when sun shading is on
+layout(location = 4) uniform vec4 depthParams;//x LodClamp.CLAMP_THRESHOLD, y 1 when the LOD depth is valid, z 1 when the translucent copies are
+layout(location = 5) uniform vec4 upView;//xyz world up (view space), w the camera's y fraction
+//Clean ShadowUniforms: view space to each map's clip space (orthographic, depth 0..1, row 0 of a map at ndc y -1)
+layout(location = 6) uniform mat4 shadowNear;
+layout(location = 7) uniform mat4 shadowFar;
+layout(location = 8) uniform vec4 shadowParams;//x near on, y far on, z the blend band (share of the half width)
+layout(location = 9) uniform vec4 shadowBias;//x near normal offset (blocks), y near depth bias, z far normal offset, w far depth bias
+layout(location = 10) uniform mat4 shadowNearB;
+layout(location = 11) uniform mat4 shadowFarB;
+layout(location = 12) uniform vec4 shadowSteps;//x the near second map's weight, y the far one's
+layout(location = 13) uniform mat4 shadowClose;
+layout(location = 14) uniform mat4 shadowCloseB;
+layout(location = 15) uniform vec4 closeParams;//x on, y normal offset (blocks), z depth bias, w the second map's weight
+layout(location = 16) uniform vec4 eastView;//xyz world east (+x, view space)
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/viewpos.glsl>
+#import <vulkanmod:visuals/post/lighting.glsl>
+
+//Lambert with an optional wrap: facing = clamp((N.L + FACING_WRAP)/(1 + FACING_WRAP), 0, 1); the flat ground's facing is the
+// reference (lightOut.g = facing/ground, capped at FACING_MAX); the ground's facing is not taken below GROUND_FACING_MIN
+const float FACING_WRAP = 0.0;
+const float GROUND_FACING_MIN = 0.1;
+//B2, in blocks per full-resolution pixel: the face contrast fades from CONTRAST_FADE_START (a block covers 5 pixels) to
+// CONTRAST_FADE_END (under 2); small shadows are averaged over a wide filter from SHADOW_FADE_START to SHADOW_FADE_END
+const float CONTRAST_FADE_START = 0.2;
+const float CONTRAST_FADE_END = 0.6;
+const float SHADOW_FADE_START = 0.15;
+const float SHADOW_FADE_END = 0.5;
+//The wide shadow filter's radius: SHADOW_WIDE_BLOCKS, or SHADOW_WIDE_PIXELS pixels' worth of blocks when that is more; WIDE_TAPS
+// bilinear lookups (the centre and a rotated square at SHADOW_WIDE_SPREAD of the radius); the receiver plane's slope is capped
+const float SHADOW_WIDE_BLOCKS = 3.0;
+const float SHADOW_WIDE_PIXELS = 3.0;
+const float SHADOW_WIDE_SPREAD = 0.7;
+const int WIDE_TAPS = 5;
+const float RECEIVER_SLOPE_MAX = 4.0;
+//leanNormal: below this length the leaned normal is world up
+const float LEAN_MIN_LENGTH = 1e-4;
+//A translucent surface whose normal has at least HORIZONTAL_MIN of world up (within 60 degrees of up, so one-pixel edges and grazing
+// views of water stay horizontal) is horizontal; a horizontal one within
+// BOUNDARY_TOLERANCE blocks of a whole world y is on a block boundary (ice, glass, slime: negative kind), any other horizontal one is
+// water; vertical translucent surfaces are glass (positive kinds there cannot be told from panes and windows). 2026-10-22 (CTE2: rows
+// of dashes across far lakes): only where one depth step moves the surface's height by at most BOUNDARY_STEP_MAX (an eighth of the
+// tolerance: the rebuilt height errs by several steps, the D24 rounding of the surface and the float maths of the inverse
+// projection; within ~50 blocks); farther the depth cannot tell water's 8/9 top from a whole y (one D24 step is about a tenth of a
+// block at 300 blocks) and rows whose error landed near the whole y lost their water colour, so there a horizontal surface is water.
+// The normal the kind is told by is rebuilt from neighbours far enough apart that one depth step is at most KIND_STEP_SHARE of their
+// spacing (up to KIND_STRIDE_MAX pixels): one pixel apart, the rows where the stepped depth jumps tilted far water to "vertical"
+// (glass). Past KIND_STRIDE_MAX the depth tells nothing: water. The step is measured over KIND_PROBE_STEPS depth steps (one step
+// rebuilt in float often moves the position by nothing far away, where the rebuilt position itself errs by more than a step)
+const float HORIZONTAL_MIN = 0.5;
+const float BOUNDARY_TOLERANCE = 0.04;
+const float BOUNDARY_STEP_MAX = 0.005;
+const float KIND_STEP_SHARE = 0.1;
+const float KIND_STRIDE_MAX = 16.0;
+const float KIND_PROBE_STEPS = 16.0;
+//The translucent kind's length: at most WATER_MAX_LENGTH (nothing behind: also that), at least KIND_MIN_LENGTH (never 0)
+const float WATER_MAX_LENGTH = 1024.0;
+const float KIND_MIN_LENGTH = 0.015625;
+//B4: an LOD translucent pixel shows the LOD when the main depth's distance is within LOD_WATER_DEPTH_STEPS main depth steps (at least
+// LOD_WATER_MATCH_MIN blocks) of the LOD surface: four times viewpos.glsl's tolerance, which the depths of far LOD water exceed while
+// the field of view changes
+const float LOD_WATER_DEPTH_STEPS = 64.0;
+const float LOD_WATER_MATCH_MIN = 1.0;
+//One step of a 24-bit depth (2^-24, as viewpos.glsl)
+const float DEPTH_STEP = 5.9604645e-8;
+
+const vec2 WIDE_OFFSETS[WIDE_TAPS] = vec2[WIDE_TAPS](vec2(0.0, 0.0), vec2(0.894427, 0.447214), vec2(-0.447214, 0.894427),
+        vec2(-0.894427, -0.447214), vec2(0.447214, -0.894427));
+
+ivec2 fullSize;
+
+float facing(float nDotL) {
+    return clamp((nDotL + FACING_WRAP)/(1.0 + FACING_WRAP), 0.0, 1.0);
+}
+
+//2026-10-21 (CTE2: a trunk's north or south face flickered while the sun moved): vanilla's sun turns in the world's x-y plane, so on
+// north and south faces N.L is 0 but for rounding, whose sign changed from frame to frame and switched the face's sun lookup (and
+// with it the sky light's lift) on and off. Within GRAZING_NDOTL of 0 a face is grazed: N.L counts as 0 and it is looked up
+const float GRAZING_NDOTL = 0.002;
+
+float grazingNDotL(float nDotL) {
+    return abs(nDotL) <= GRAZING_NDOTL ? 0.0 : nDotL;
+}
+
+float relativeFacing(float nDotL, float groundNDotL) {
+    return min(facing(nDotL)/max(facing(groundNDotL), GROUND_FACING_MIN), FACING_MAX);
+}
+
+float contrastFade(float blocksPerPixel) {
+    return smoothstep(CONTRAST_FADE_START, CONTRAST_FADE_END, blocksPerPixel);
+}
+
+float shadowFade(float blocksPerPixel) {
+    return smoothstep(SHADOW_FADE_START, SHADOW_FADE_END, blocksPerPixel);
+}
+
+float wideRadius(float blocksPerPixel) {
+    return max(SHADOW_WIDE_BLOCKS, SHADOW_WIDE_PIXELS*blocksPerPixel);
+}
+
+//n leaned toward up by t, normalised; where the two cancel (a face turned down, t near 0.5) up itself
+vec3 leanNormal(vec3 n, vec3 up, float t) {
+    vec3 m = mix(n, up, t);
+    float len = length(m);
+    return len > LEAN_MIN_LENGTH ? m/len : up;
+}
+
+//ShadowMath.blendWeight: 0 inside a cascade, 1 at its edge
+float bandWeight(float edge) {
+    float band = max(shadowParams.z, 1e-4);
+    float t = clamp((edge - (1.0 - band))/band, 0.0, 1.0);
+    return t*t*(3.0 - 2.0*t);
+}
+
+//Bilinear percentage-closer lookup: the four texels around uv compared with ref (lit where ref is not behind the map), mixed by uv's
+// position between them
+float pcf(sampler2D map, vec2 uv, float ref) {
+    vec2 size = vec2(textureSize(map, 0));
+    vec2 t = uv*size - 0.5;
+    vec2 f = fract(t);
+    vec4 lit = step(vec4(ref), textureGather(map, (floor(t) + 1.0)/size, 0));
+    return mix(mix(lit.w, lit.z, f.x), mix(lit.x, lit.y, f.x), f.y);
+}
+
+//One map's visibility at clip (inside it): the sharp lookup, mixed by fade into the wide one, whose taps follow the receiver's plane
+// (normal n) so a slope does not shadow itself
+float mapVisibility(sampler2D map, mat4 m, vec3 clip, vec3 n, float bias, float fade, float wideBlocks) {
+    float ref = clip.z - bias;
+    vec2 uv = clip.xy*0.5 + 0.5;
+    float sharp = fade < 1.0 ? pcf(map, uv, ref) : 0.0;
+    if (fade <= 0.0) {
+        return sharp;
+    }
+    vec3 rx = vec3(m[0][0], m[1][0], m[2][0]);
+    vec3 ry = vec3(m[0][1], m[1][1], m[2][1]);
+    vec3 rz = vec3(m[0][2], m[1][2], m[2][2]);
+    float xyScale = max(length(rx), 1e-9);
+    float zScale = length(rz);
+    vec3 nl = vec3(dot(n, rx)/xyScale, dot(n, ry)/max(length(ry), 1e-9), dot(n, rz)/max(zScale, 1e-9));
+    float nz = nl.z >= 0.0 ? max(nl.z, 1e-3) : min(nl.z, -1e-3);
+    vec2 slope = -nl.xy/nz;
+    float s = length(slope);
+    if (s > RECEIVER_SLOPE_MAX) {
+        slope *= RECEIVER_SLOPE_MAX/s;
+    }
+    float radius = wideBlocks*xyScale*SHADOW_WIDE_SPREAD;
+    float wide = 0.0;
+    for (int k = 0; k < WIDE_TAPS; k++) {
+        vec2 o = radius*WIDE_OFFSETS[k];
+        wide += pcf(map, uv + o*0.5, ref + dot(slope, o)*zScale/xyScale);
+    }
+    return mix(sharp, wide/float(WIDE_TAPS), fade);
+}
+
+bool insideMap(vec3 clip) {
+    return max(abs(clip.x), abs(clip.y)) < 1.0 && clip.z >= 0.0 && clip.z <= 1.0;
+}
+
+//A cascade's visibility at view-space pos from its two maps (the second weighted by weightB, the sun-step crossfade), or -1 where
+// its first map does not cover pos; edge receives max(|ndc x|, |ndc y|)
+float cascade(sampler2D mapA, sampler2D mapB, mat4 mA, mat4 mB, float weightB, vec3 pos, vec3 n, float bias, float fade,
+              float wideBlocks, out float edge) {
+    vec3 clip = (mA*vec4(pos, 1.0)).xyz;
+    edge = max(abs(clip.x), abs(clip.y));
+    if (!insideMap(clip)) {
+        return -1.0;
+    }
+    float v = mapVisibility(mapA, mA, clip, n, bias, fade, wideBlocks);
+    if (weightB > 0.0) {
+        vec3 clipB = (mB*vec4(pos, 1.0)).xyz;
+        if (insideMap(clipB)) {
+            v = mix(v, mapVisibility(mapB, mB, clipB, n, bias, fade, wideBlocks), weightB);
+        }
+    }
+    return v;
+}
+
+//The sun's visibility at view-space pos: the close cascade (only with the near one), then the near, then the far, each fading into the
+// next across its blend band; what no drawn cascade covers is lit. n is the receiver's normal, along which pos moves by each cascade's
+// normal offset. LightingMath.combineCascades mirrors the order and the blend.
+float sunVisibility(vec3 pos, vec3 n, float fade, float wideBlocks) {
+    float acc = 0.0;
+    float rest = 1.0;
+    float edge;
+    if (shadowParams.x > 0.5 && closeParams.x > 0.5) {
+        float v = cascade(shadowCloseMap, shadowCloseMapB, shadowClose, shadowCloseB, closeParams.w, pos + n*closeParams.y, n,
+                closeParams.z, fade, wideBlocks, edge);
+        if (v >= 0.0) {
+            float w = 1.0 - bandWeight(edge);
+            acc += rest*w*v;
+            rest *= 1.0 - w;
+        }
+    }
+    if (rest > 0.0 && shadowParams.x > 0.5) {
+        float v = cascade(shadowNearMap, shadowNearMapB, shadowNear, shadowNearB, shadowSteps.x, pos + n*shadowBias.x, n, shadowBias.y,
+                fade, wideBlocks, edge);
+        if (v >= 0.0) {
+            float w = 1.0 - bandWeight(edge);
+            acc += rest*w*v;
+            rest *= 1.0 - w;
+        }
+    }
+    if (rest > 0.0 && shadowParams.y > 0.5) {
+        float v = cascade(shadowFarMap, shadowFarMapB, shadowFar, shadowFarB, shadowSteps.y, pos + n*shadowBias.z, n, shadowBias.w, fade,
+                wideBlocks, edge);
+        if (v >= 0.0) {
+            float w = 1.0 - bandWeight(edge);
+            acc += rest*w*v;
+            rest *= 1.0 - w;
+        }
+    }
+    return acc + rest;
+}
+
+int markAt(ivec2 p) {
+    return alphaCode(texelFetch(mainColour, p, 0).a);
+}
+
+//The distance of what lies behind a vanilla translucent surface (the depth before the translucents), -1 for nothing; past vanilla's far
+// plane the LOD before its translucents
+float behindDistance(float before, vec2 uv, ivec2 p) {
+    if (depthParams.y > 0.5 && before >= depthParams.x) {
+        float lod = texelFetch(lodOpaque, lodTexel(p, fullSize), 0).r;
+        return lod == FAR ? -1.0 : length(viewPosition(invLodProj, uv, lod));
+    }
+    return before == FAR ? -1.0 : length(viewPosition(invVanillaProj, uv, before));
+}
+
+float kindLength(float behind, float surface) {
+    return behind < 0.0 ? WATER_MAX_LENGTH : clamp(behind - surface, KIND_MIN_LENGTH, WATER_MAX_LENGTH);
+}
+
+//B5: a horizontal vanilla translucent surface on a whole world y is ice/glass/slime, any other horizontal one water; vertical ones glass.
+// heightStep: how far one depth step moves the surface's world y (a coarser depth cannot tell a boundary: water); resolved false: the
+// depth is too coarse to rebuild a normal (water)
+float vanillaKind(float len, vec3 view, vec3 n, float heightStep, bool resolved) {
+    if (!resolved) {
+        return len;
+    }
+    if (abs(dot(n, upView.xyz)) < HORIZONTAL_MIN) {
+        return -len;
+    }
+    float y = upView.w + dot(view, upView.xyz);
+    return heightStep <= BOUNDARY_STEP_MAX && abs(y - floor(y + 0.5)) <= BOUNDARY_TOLERANCE ? -len : len;
+}
+
+void main() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(q, imageSize(lightOut)))) {
+        return;
+    }
+    fullSize = textureSize(mainDepth, 0);
+    ivec2 p = min(q*2, fullSize - 1);
+    bool sunOn = sunView.w > 0.5;
+    //Blocks one full-resolution pixel covers per block of distance
+    float pixelBlocks = 2.0/(max(abs(proj[1][1]), 1e-6)*float(fullSize.y));
+    int centreMark = markAt(p);
+
+    vec4 light = vec4(1.0, 1.0, SKY_DISTANCE, 0.0);
+    vec4 sun = vec4(1.0, 0.0, 0.0, 0.0);
+    float centreVisibility = 1.0;
+    vec3 view;
+    bool fromLod;
+    if (scenePositionFrom(p, fullSize, view, fromLod)) {
+        vec2 uv = pixelUvGl(p, fullSize);
+        bool lodOn = depthParams.y > 0.5;
+        float kind = 0.0;
+        bool vanillaTranslucent = false;
+        float vanillaLength = 0.0;
+        float vanillaHeightStep = 0.0;
+        float vanillaStride = 1.0;
+        if (!fromLod) {
+            float mainD = texelFetch(mainDepth, p, 0).r;
+            if (depthParams.z > 0.5) {
+                float before = texelFetch(beforeTranslucent, p, 0).r;
+                float after = texelFetch(afterTranslucent, p, 0).r;
+                //A translucent surface lies over the opaque one and nothing drawn later (particles) covers it
+                if (after < before && mainD >= after) {
+                    vanillaTranslucent = true;
+                    vec3 surface = viewPosition(invVanillaProj, uv, after);
+                    vanillaLength = kindLength(behindDistance(before, uv, p), length(surface));
+                    float probe = min(after + KIND_PROBE_STEPS*DEPTH_STEP, 1.0);
+                    float steps = max((probe - after)/DEPTH_STEP, 1.0);
+                    vec3 next = viewPosition(invVanillaProj, uv, probe);
+                    vanillaHeightStep = abs(dot(next - surface, upView.xyz))/steps;
+                    //The pixels the kind's normal spans: one depth step at most KIND_STEP_SHARE of the neighbours' spacing
+                    vanillaStride = abs(length(next) - length(surface))/steps/(KIND_STEP_SHARE*max(length(surface)*pixelBlocks, 1e-6));
+                }
+            }
+            if (!vanillaTranslucent && lodOn) {
+                //B4: far LOD water whose main depth drifted a few steps from the LOD surface still shows the LOD
+                ivec2 lt = lodTexel(p, fullSize);
+                float lod = texelFetch(lodDepth, lt, 0).r;
+                if (lod != FAR && lod < texelFetch(lodOpaque, lt, 0).r) {
+                    vec3 l = viewPosition(invLodProj, uv, lod);
+                    float dv = length(view);
+                    float steps = abs(length(viewPosition(invVanillaProj, uv, min(mainD + LOD_WATER_DEPTH_STEPS*DEPTH_STEP, 1.0))) - dv);
+                    if (abs(length(l) - dv) <= max(LOD_WATER_MATCH_MIN, steps)) {
+                        view = l;
+                        fromLod = true;
+                    }
+                }
+            }
+        }
+        vec3 n;
+        if (fromLod) {
+            ivec2 lt = lodTexel(p, fullSize);
+            n = lodFaceNormal(texelFetch(lodLight, lt, 0).r, eastView.xyz, upView.xyz);
+            float lod = texelFetch(lodDepth, lt, 0).r;
+            float lodO = texelFetch(lodOpaque, lt, 0).r;
+            //B5: every LOD translucent is water
+            if (lod < lodO) {
+                kind = kindLength(lodO == FAR ? -1.0 : length(viewPosition(invLodProj, uv, lodO)), length(view));
+            }
+        } else {
+            n = snapNormal(depthNormal(mainDepth, invVanillaProj, p, fullSize, view), eastView.xyz, upView.xyz);
+            if (vanillaTranslucent) {
+                bool resolved = vanillaStride <= KIND_STRIDE_MAX;
+                vec3 kindNormal = resolved && vanillaStride > 1.0
+                        ? snapNormal(depthNormalStride(mainDepth, invVanillaProj, p, fullSize, view, int(ceil(vanillaStride))), eastView.xyz, upView.xyz)
+                        : n;
+                kind = vanillaKind(vanillaLength, view, kindNormal, vanillaHeightStep, resolved);
+            }
+        }
+        float dist = length(view);
+        float bpp = dist*pixelBlocks;
+        float g = 1.0;
+        float v = 1.0;
+        vec3 used = n;
+        if (sunOn) {
+            float sf = shadowFade(bpp);
+            float wide = wideRadius(bpp);
+            if (centreMark == PLANT_ALPHA_CODE) {
+                //B13: lit as if facing the sun, its own visibility
+                used = sunView.xyz;
+                v = sunVisibility(view, used, sf, wide);
+            } else if (centreMark != EMISSIVE_ALPHA_CODE) {
+                float cf = kind != 0.0 ? 0.0 : contrastFade(bpp);
+                float nl = grazingNDotL(dot(n, sunView.xyz));
+                if (kind == 0.0) {
+                    g = mix(relativeFacing(nl, dot(upView.xyz, sunView.xyz)), 1.0, cf);
+                }
+                //A face turned away from the sun is not looked up (its own block shadows it); one the rays run along is (see
+                // GRAZING_NDOTL); far away the lookup leans toward the ground's normal, as the facing does
+                v = g > 0.0 || nl == 0.0 ? sunVisibility(view, leanNormal(n, upView.xyz, cf), sf, wide) : 0.0;
+            }
+        }
+        centreVisibility = v;
+        light = vec4(1.0, g, dist, kind);
+        sun = vec4(v, used);
+    }
+    imageStore(lightOut, q, light);
+    imageStore(sunOut, q, sun);
+
+    //B13: each full-resolution pixel of q that is a plant gets its own visibility, every other one -1
+    for (int k = 0; k < 4; k++) {
+        ivec2 pp = q*2 + ivec2(k & 1, k >> 1);
+        if (any(greaterThanEqual(pp, fullSize))) {
+            continue;
+        }
+        float plant = -1.0;
+        if ((k == 0 ? centreMark : markAt(pp)) == PLANT_ALPHA_CODE) {
+            vec3 pv;
+            if (k == 0) {
+                plant = light.b >= 0.0 ? centreVisibility : -1.0;
+            } else if (scenePosition(pp, fullSize, pv)) {
+                float bpp = length(pv)*pixelBlocks;
+                plant = sunOn ? sunVisibility(pv, sunView.xyz, shadowFade(bpp), wideRadius(bpp)) : 1.0;
+            }
+        }
+        imageStore(plantSunOut, pp, vec4(plant));
+    }
+}

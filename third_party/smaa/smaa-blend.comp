@@ -1,0 +1,36 @@
+#version 450
+//Port P7i: SMAA (iryoku/smaa, MIT) through turol/smaaDemo's compute entry points (MIT), neighborhood blending pass. This wrapper is
+// the port's; third_party/smaa/smaa.h is spliced in where it is included, and SmaaShadersTest preprocesses the result into
+// assets/vulkanmod/visuals/shaders/post/smaa_blend.comp (GlslForVulkan does not evaluate #if).
+#extension GL_EXT_control_flow_attributes : enable
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(location = 0) uniform vec4 smaaMetrics;//1/width, 1/height, width, height
+layout(location = 1) uniform vec4 smaaParams;//threshold, max search steps, max diagonal search steps, corner rounding (percent)
+
+#define SMAA_GLSL_4 1
+#define SMAA_RT_METRICS smaaMetrics
+#define SMAA_THRESHOLD smaaParams.x
+#define SMAA_DEPTH_THRESHOLD (0.1*smaaParams.x)
+#define SMAA_MAX_SEARCH_STEPS smaaParams.y
+#define SMAA_MAX_SEARCH_STEPS_DIAG smaaParams.z
+#define SMAA_CORNER_ROUNDING smaaParams.w
+//The visuals' images are written with row 0 at the top and read with v = 0 there, as Direct3D does
+#define SMAA_FLIP_Y 0
+#define SMAA_INCLUDE_CS 1
+#define SMAA_INCLUDE_PS 0
+#define SMAA_INCLUDE_VS 0
+
+layout(binding = 0, rgba8) uniform writeonly restrict image2D outputImage;
+layout(binding = 1) uniform sampler2D colorTex;//linear
+layout(binding = 2) uniform sampler2D blendTex;//linear
+
+#include "smaa.h"
+
+void main() {
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    if (coord.x < int(smaaMetrics.z) && coord.y < int(smaaMetrics.w)) {
+        imageStore(outputImage, coord, SMAANeighborhoodBlendingCS(coord, colorTex, blendTex));
+    }
+}

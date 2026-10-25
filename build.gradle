@@ -1,0 +1,286 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+    id 'net.neoforged.moddev.legacyforge' version '2.0.141'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = "https://api.modrinth.com/maven"
+            }
+        }
+        filter {
+            includeGroup "maven.modrinth"
+        }
+    }
+}
+
+legacyForge {
+    enable {
+        neoForgeVersion = project.neo_version
+    }
+
+    accessTransformers.from("src/main/resources/META-INF/accesstransformer.cfg")
+
+    runs {
+        client {
+            client()
+            systemProperty 'fml.earlydisplay', 'true'
+            systemProperty 'org.lwjgl.util.Debug', 'false'
+            systemProperty 'org.lwjgl.util.DebugAllocator', 'false'
+            systemProperty 'vulkanmod.compat.externalLod', System.getProperty('vulkanmod.compat.externalLod', 'off')
+            systemProperty 'vulkanmod.compat.externalLod.draw', System.getProperty('vulkanmod.compat.externalLod.draw', 'true')
+            systemProperty 'vulkanmod.compat.externalLod.debugDraw', System.getProperty('vulkanmod.compat.externalLod.debugDraw', 'false')
+            jvmArguments.add('-ea')
+            jvmArguments.add('-XX:+UseZGC')
+            jvmArguments.add('-XX:SoftMaxHeapSize=1536m')
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+        }
+
+        data {
+            data()
+            programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+        }
+    }
+
+}
+
+// The merged vulkanfix fixes. Compiled without the Mixin annotation processor, as in the standalone add-on:
+// its mixins target other mods' classes by name and Minecraft members by SRG name (remap = false), which the
+// processor would try to resolve against the dev (Mojang-named) classpath. Its classes ship in the main jar.
+sourceSets {
+    vulkanfix {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+    test {
+        compileClasspath += sourceSets.vulkanfix.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.vulkanfix.output + sourceSets.main.runtimeClasspath
+    }
+}
+
+project.ext.lwjglVersion = "3.3.3"
+
+project.ext.bundledNatives = ["natives-windows", "natives-linux", "natives-macos", "natives-macos-arm64"]
+
+def host = org.gradle.internal.os.OperatingSystem.current()
+project.ext.devNatives = host.windows ? "natives-windows"
+        : host.macOsX ? (System.getProperty("os.arch").contains("aarch64") ? "natives-macos-arm64" : "natives-macos")
+        : "natives-linux"
+
+dependencies {
+
+    implementation "org.lwjgl:lwjgl-vulkan:$lwjglVersion"
+    implementation "org.lwjgl:lwjgl-shaderc:$lwjglVersion"
+    implementation "org.lwjgl:lwjgl-vma:$lwjglVersion"
+
+    runtimeOnly "org.lwjgl:lwjgl-shaderc:$lwjglVersion:$devNatives"
+    runtimeOnly "org.lwjgl:lwjgl-vma:$lwjglVersion:$devNatives"
+
+    additionalRuntimeClasspath "org.lwjgl:lwjgl-vulkan:$lwjglVersion"
+    additionalRuntimeClasspath "org.lwjgl:lwjgl-shaderc:$lwjglVersion"
+    additionalRuntimeClasspath "org.lwjgl:lwjgl-vma:$lwjglVersion"
+    additionalRuntimeClasspath "org.lwjgl:lwjgl-shaderc:$lwjglVersion:$devNatives"
+    additionalRuntimeClasspath "org.lwjgl:lwjgl-vma:$lwjglVersion:$devNatives"
+
+    jarJar "org.lwjgl:lwjgl-vulkan:$lwjglVersion"
+    jarJar "org.lwjgl:lwjgl-shaderc:$lwjglVersion"
+    jarJar "org.lwjgl:lwjgl-vma:$lwjglVersion"
+    bundledNatives.each { n ->
+        jarJar "org.lwjgl:lwjgl-shaderc:$lwjglVersion:$n"
+        jarJar "org.lwjgl:lwjgl-vma:$lwjglVersion:$n"
+    }
+
+    jarJar "org.lwjgl:lwjgl-vulkan:$lwjglVersion:natives-macos"
+    jarJar "org.lwjgl:lwjgl-vulkan:$lwjglVersion:natives-macos-arm64"
+
+    annotationProcessor "org.spongepowered:mixin:0.8.5:processor"
+
+    // Distant Horizons API (LGPL-3.0). Compile-time only: the fork jar must not carry it, DH ships its own.
+    compileOnly files('libs/DistantHorizonsApi-7.3.0.jar')
+    testImplementation files('libs/DistantHorizonsApi-7.3.0.jar')
+    // Distant Horizons 3.3.3 (LGPL-3.0), compile-time only, after the API jar above: the legacy path (visuals.dh.legacy) implements
+    // DH 3.3.0 to 3.3.4's internal render interfaces, which only DH's own jar has
+    compileOnly("maven.modrinth:distanthorizons:3.3.3-1.20.1") { transitive = false }
+    testImplementation("maven.modrinth:distanthorizons:3.3.3-1.20.1") { transitive = false }
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations.jarJar {
+    exclude group: 'org.lwjgl', module: 'lwjgl'
+    exclude group: 'org.lwjgl', module: 'lwjgl-glfw'
+    exclude group: 'org.lwjgl', module: 'lwjgl-opengl'
+    exclude group: 'org.lwjgl', module: 'lwjgl-stb'
+}
+
+processResources {
+    inputs.property "version", project.version
+
+    filesMatching("META-INF/mods.toml") {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 17
+    it.options.encoding = 'UTF-8'
+    it.options.compilerArgs += [
+            "-AoutRefMapFile=${layout.buildDirectory.file("tmp/compileJava/compileJava-refmap.json").get().asFile}",
+            "-AoutMixinConfig=vulkanmod.mixins.json",
+            "-AreobfSrgFile=${layout.buildDirectory.file("moddev/artifacts/namedToIntermediate.srg").get().asFile}",
+            "-AdefaultObfuscationEnv=searge"
+    ]
+}
+
+tasks.register('generateNamedToIntermediateSrg') {
+    dependsOn tasks.named('createMinecraftArtifacts')
+
+    def input = layout.buildDirectory.file("moddev/artifacts/namedToIntermediate.tsrg")
+    def output = layout.buildDirectory.file("moddev/artifacts/namedToIntermediate.srg")
+
+    inputs.file(input)
+    outputs.file(output)
+
+    doLast {
+        def inFile = input.get().asFile
+        def outFile = output.get().asFile
+        outFile.parentFile.mkdirs()
+
+        def currentClass = null
+        outFile.withWriter('UTF-8') { writer ->
+            inFile.eachLine { line ->
+                if (!line.trim()) return
+
+                if (!line.startsWith('\t')) {
+                    def parts = line.trim().split('\\s+')
+                    if (parts.length >= 2) {
+                        currentClass = [from: parts[0], to: parts[1]]
+                        writer.writeLine("CL: ${currentClass.from} ${currentClass.to}")
+                    }
+                } else if (currentClass != null) {
+                    def parts = line.trim().split('\\s+')
+                    if (parts.length == 2) {
+                        writer.writeLine("FD: ${currentClass.from}/${parts[0]} ${currentClass.to}/${parts[1]}")
+                    } else if (parts.length >= 3) {
+                        writer.writeLine("MD: ${currentClass.from}/${parts[0]} ${parts[1]} ${currentClass.to}/${parts[2]} ${parts[1]}")
+                    }
+                }
+            }
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('generateNamedToIntermediateSrg')
+}
+
+java {
+    withSourcesJar()
+}
+
+tasks.named('sourcesJar', Jar).configure {
+    from sourceSets.vulkanfix.allSource
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    systemProperty "org.lwjgl.system.stackSize", "1024"
+}
+
+jar {
+    dependsOn tasks.named('compileJava')
+
+    from sourceSets.vulkanfix.output
+
+    from(layout.buildDirectory.file("tmp/compileJava/compileJava-refmap.json")) {
+        rename { "vulkanmod.refmap.json" }
+    }
+
+    manifest {
+        attributes 'MixinConfigs': 'vulkanmod.mixins.json,vulkanfix.mixins.json'
+    }
+
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}"}
+    }
+    from("COPYING") {
+        rename { "${it}_${project.base.archivesName.get()}"}
+    }
+    from("NOTICE") {
+        rename { "${it}_${project.base.archivesName.get()}"}
+    }
+    from("THIRD_PARTY_NOTICES.md")
+    from("third_party/lwjgl/LICENSE.md") {
+        rename { "THIRD_PARTY_LICENSE_LWJGL.md" }
+    }
+}
+
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+}
+
+tasks.named('jar') {
+    doLast {
+        def jarFile = archiveFile.get().asFile
+        def tmpDir = new File(temporaryDir, "repack")
+
+        tmpDir.deleteDir()
+        tmpDir.mkdirs()
+        ant.unzip(src: jarFile, dest: tmpDir)
+
+        def jarjarDir = new File(tmpDir, "META-INF/jarjar")
+        if (jarjarDir.exists()) {
+            jarjarDir.listFiles().findAll { it.name.endsWith('.jar') && it.name.startsWith('lwjgl-') }.each { embeddedJar ->
+                def stripped = new File(temporaryDir, "stripped-${embeddedJar.name}")
+                ant.zip(destfile: stripped) {
+                    zipfileset(src: embeddedJar) {
+                        exclude(name: 'module-info.class')
+                        exclude(name: 'META-INF/versions/*/module-info.class')
+                    }
+                }
+                embeddedJar.delete()
+                stripped.renameTo(embeddedJar)
+            }
+
+            def metadataFile = new File(jarjarDir, "metadata.json")
+            if (metadataFile.exists()) {
+                def slurper = new groovy.json.JsonSlurper()
+                def metadata = slurper.parseText(metadataFile.text)
+                metadata.jars.each { jarEntry ->
+
+                    def m = (jarEntry.path =~ /-(natives-[a-z0-9-]+)\.jar$/)
+                    if (m) {
+                        jarEntry.identifier.artifact += "-" + m[0][1]
+                    }
+                }
+                metadataFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(metadata))
+            }
+        }
+
+        jarFile.delete()
+        ant.zip(destfile: jarFile, basedir: tmpDir)
+    }
+}

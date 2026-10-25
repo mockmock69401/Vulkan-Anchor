@@ -1,0 +1,107 @@
+#version 450
+//W10: the ambient occlusion's search, one invocation per half-resolution texel q (the full pixel 2q). ao.glsl's header has the
+// method and the outputs; AmbientOcclusion.occlusion mirrors main() step by step.
+// Inputs: aoDepth (ao_depth.comp), W5's sunOut (gba: the view-space normal the texel was lit with, also LOD face normals, B1) and W5's
+// raw lightOut (a: the translucent kind), both on the same grid. The pass runs only after the lighting pass.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, r32f) uniform writeonly restrict image2D aoRawOut;
+layout(binding = 1) uniform sampler2D aoDepth;
+layout(binding = 2) uniform sampler2D sunTex;
+layout(binding = 3) uniform sampler2D lightTex;
+
+//AmbientOcclusion.writeOcclusion: the view rays' inverse projection; x, y the full image's size, z the half-resolution texels a
+// block spans at view distance 1
+layout(location = 0) uniform mat4 invVanillaProj;
+layout(location = 1) uniform vec4 aoSize;
+
+#import <vulkanmod:visuals/post/ao.glsl>
+
+void main() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(aoRawOut);
+    if (any(greaterThanEqual(q, size))) {
+        return;
+    }
+    float d = texelFetch(aoDepth, q, 0).r;
+    if (d == 0.0 || texelFetch(lightTex, q, 0).a != 0.0) {
+        imageStore(aoRawOut, q, vec4(AO_NONE));
+        return;
+    }
+    if (d < 0.0) {
+        imageStore(aoRawOut, q, vec4(AO_TAKE_NEIGHBOURS));
+        return;
+    }
+    vec3 n = texelFetch(sunTex, q, 0).gba;
+    if (!(dot(n, n) > 0.25)) {
+        imageStore(aoRawOut, q, vec4(AO_NONE));
+        return;
+    }
+    n = normalize(n);
+    vec2 full = aoSize.xy;
+    vec3 ray = aoRay(invVanillaProj, vec2(q), full);
+    vec3 centre = ray*d;
+    vec3 toEye = -ray;
+    float rTex = aoRadiusTexels(aoWorldRadius(d), d, aoSize.z);
+    float fade = smoothstep(AO_MIN_RADIUS_TEXELS, AO_FULL_RADIUS_TEXELS, rTex);
+    if (fade <= 0.0) {
+        imageStore(aoRawOut, q, vec4(1.0));
+        return;
+    }
+    rTex = min(rTex, AO_MAX_RADIUS_TEXELS);
+    float radius = rTex*d/aoSize.z;//the world radius the capped search covers
+    int k = aoPatternIndex(q);
+    float rotation = aoRotation(k);
+    float jitter = aoJitter(k);
+    float visible = 0.0;
+    float open = 0.0;
+    for (int s = 0; s < AO_SLICES; s++) {
+        float phi = (float(s) + rotation)*AO_PI/float(AO_SLICES);
+        vec2 dir = vec2(cos(phi), sin(phi));
+        //The slice is the plane through the eye, this texel's ray and the ray one texel along dir; side holds its +dir direction
+        // perpendicular to the view direction, axis its normal
+        vec3 next = aoRay(invVanillaProj, vec2(q) + dir, full);
+        vec3 side = next - ray*dot(next, ray);
+        if (!(dot(side, side) > 1e-12)) {
+            continue;
+        }
+        side = normalize(side);
+        vec3 axis = normalize(cross(side, toEye));
+        vec3 projected = n - axis*dot(n, axis);
+        float projectedLength = length(projected);
+        if (!(projectedLength > 1e-4)) {
+            continue;
+        }
+        float cosN = clamp(dot(projected, toEye)/projectedLength, -1.0, 1.0);
+        float angleN = clamp((dot(projected, side) < 0.0 ? -1.0 : 1.0)*acos(cosN), -0.5*AO_PI, 0.5*AO_PI);
+        //The highest elevation above the tangent plane on each side (sin, falloff-weighted), sides 0 (-dir) and 1 (+dir)
+        float rise[2] = float[2](0.0, 0.0);
+        for (int h = 0; h < 2; h++) {
+            float way = h == 0 ? -1.0 : 1.0;
+            for (int i = 0; i < AO_STEPS; i++) {
+                ivec2 t = ivec2(floor(vec2(q) + 0.5 + way*dir*aoStepTexels(i, jitter, rTex)));
+                if (any(lessThan(t, ivec2(0))) || any(greaterThanEqual(t, size))) {
+                    continue;
+                }
+                float ds = texelFetch(aoDepth, t, 0).r;
+                if (!(ds > 0.0)) {
+                    continue;//sky, plants and light sources hide nothing
+                }
+                vec3 delta = aoRay(invVanillaProj, vec2(t), full)*ds - centre;
+                float len = length(delta);
+                if (!(len > AO_MIN_DISTANCE)) {
+                    continue;
+                }
+                //Less AO_DEPTH_BIAS x the distance: the depth's own precision raises no horizon on a plane
+                rise[h] = max(rise[h], max(dot(delta, n) - AO_DEPTH_BIAS*d, 0.0)/len*aoFalloff(len, radius));
+            }
+        }
+        //Horizon angles from the view direction, never past it (h0 <= 0 <= h1), the tangent plane's when nothing rises
+        float h0 = min(angleN - 0.5*AO_PI + asin(clamp(rise[0]/projectedLength, 0.0, 1.0)), 0.0);
+        float h1 = max(angleN + 0.5*AO_PI - asin(clamp(rise[1]/projectedLength, 0.0, 1.0)), 0.0);
+        visible += projectedLength*(aoArc(h0, angleN) + aoArc(h1, angleN));
+        open += projectedLength*(cos(angleN) + angleN*sin(angleN));
+    }
+    float ao = open > 1e-4 ? clamp(visible/open, 0.0, 1.0) : 1.0;
+    imageStore(aoRawOut, q, vec4(mix(1.0, pow(ao, AO_POWER), fade)));
+}

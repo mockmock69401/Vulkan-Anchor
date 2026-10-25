@@ -1,0 +1,18 @@
+#version 450
+//Visuals P7d (task 7a), between lighting.comp and the copy: lightOut to the composite's lightTex. It was a depth-aware blur of the
+// AO in R; the AO is W10's own image now (boundary 3.2: lightOut.r is always 1), so final fix R5 dropped the blur's 5x5 loop: every
+// texel (R 1, G sun facing x contact shadow, B distance, A translucent kind) passes through unchanged. lighting.glsl keeps
+// BLUR_RADIUS and blurWeight (boundary 3.9) for an AO that would come back into R.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D lightOut;
+layout(binding = 1) uniform sampler2D lightIn;
+
+void main() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(lightOut);
+    if (any(greaterThanEqual(q, size))) {
+        return;
+    }
+    imageStore(lightOut, q, texelFetch(lightIn, q, 0));
+}

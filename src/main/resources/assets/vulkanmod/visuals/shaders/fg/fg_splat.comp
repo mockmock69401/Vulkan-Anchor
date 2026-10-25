@@ -1,0 +1,40 @@
+#version 450
+//Frame generation (FG design 5.1 step 1): each non-sky pixel of the real world image goes through genFromReal into the generated
+// camera and writes its depth (float bits as uint) with an atomic min into the SPLAT_FOOTPRINT x SPLAT_FOOTPRINT block of target
+// pixels whose top-left is floor(target - 0.5), so stretched areas leave no cracks. The splat image is cleared to EMPTY before.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, r32ui) uniform uimage2D splatOut;
+layout(binding = 1) uniform sampler2D worldTex;
+
+#import <vulkanmod:visuals/fg/params.glsl>
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 wsz = textureSize(worldTex, 0);
+    if (any(greaterThanEqual(p, wsz))) {
+        return;
+    }
+    float depth = texelFetch(worldTex, p, 0).a;
+    if (!(depth < SKY_DEPTH)) {
+        return;
+    }
+    vec3 target;
+    if (!splatTarget(invRealProj, genFromReal, float(p.x) + 0.5, float(p.y) + 0.5, depth, size.xy, target)) {
+        return;
+    }
+    if (!(abs(target.x) < 65536.0 && abs(target.y) < 65536.0)) {
+        return;//also NaN
+    }
+    ivec2 base = ivec2(floor(target.xy - 0.5));
+    ivec2 last = imageSize(splatOut) - 1;
+    uint bits = depthBits(target.z);
+    for (int j = 0; j < SPLAT_FOOTPRINT; j++) {
+        for (int i = 0; i < SPLAT_FOOTPRINT; i++) {
+            ivec2 q = base + ivec2(i, j);
+            if (all(greaterThanEqual(q, ivec2(0))) && all(lessThanEqual(q, last))) {
+                imageAtomicMin(splatOut, q, bits);
+            }
+        }
+    }
+}

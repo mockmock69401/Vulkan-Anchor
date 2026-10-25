@@ -1,0 +1,74 @@
+#version 450
+//Frame generation (FG design 5.2): a hole takes the colour of the farthest-depth valid neighbour found along FILL_DIRECTIONS
+// directions within FILL_RADIUS pixels (the uncovered area is behind the occluder, so the background is the right guess), then a 3x3
+// average with the valid neighbours so the fill has no hard line. Every other pixel is copied. The marks in alpha are kept. A pixel
+// with no valid neighbour stays a hole.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D fillOut;
+layout(binding = 1, rgba16f) uniform readonly restrict image2D resolved;
+layout(binding = 2, r32ui) uniform readonly restrict uimage2D splatIn;
+
+#import <vulkanmod:visuals/fg/params.glsl>
+
+const ivec2 FILL_DIRS[8] = ivec2[8](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1), ivec2(1, 1), ivec2(-1, 1), ivec2(1, -1), ivec2(-1, -1));
+//The marks tell apart by their midpoints
+const float HOLE_BELOW = 0.25;
+const float VALID_ABOVE = 0.75;
+
+//The splat depth of a valid pixel; a pixel the sky filled has none and counts as the farthest
+float depthOf(ivec2 q) {
+    uint bits = imageLoad(splatIn, q).r;
+    return bits == EMPTY ? 3.0e38 : uintBitsToFloat(bits);
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 last = ivec2(size.xy) - 1;
+    if (any(greaterThan(p, last))) {
+        return;
+    }
+    vec4 px = imageLoad(resolved, p);
+    if (px.a >= HOLE_BELOW) {
+        imageStore(fillOut, p, px);
+        return;
+    }
+    float bestDepth = -1.0;
+    vec3 best = vec3(0.0);
+    for (int d = 0; d < FILL_DIRECTIONS; d++) {
+        for (int r = 1; r <= FILL_RADIUS; r++) {
+            ivec2 q = p + FILL_DIRS[d]*r;
+            if (any(lessThan(q, ivec2(0))) || any(greaterThan(q, last))) {
+                break;
+            }
+            vec4 n = imageLoad(resolved, q);
+            if (n.a > VALID_ABOVE) {
+                float depth = depthOf(q);
+                if (depth > bestDepth) {
+                    bestDepth = depth;
+                    best = n.rgb;
+                }
+                break;
+            }
+        }
+    }
+    if (bestDepth < 0.0) {
+        imageStore(fillOut, p, px);
+        return;
+    }
+    vec3 sum = best;
+    float count = 1.0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            ivec2 q = p + ivec2(i, j);
+            if ((i != 0 || j != 0) && all(greaterThanEqual(q, ivec2(0))) && all(lessThanEqual(q, last))) {
+                vec4 n = imageLoad(resolved, q);
+                if (n.a > VALID_ABOVE) {
+                    sum += n.rgb;
+                    count += 1.0;
+                }
+            }
+        }
+    }
+    imageStore(fillOut, p, vec4(sum/count, HOLE_MARK));
+}

@@ -1,0 +1,432 @@
+#version 450
+//W6: the water reflections (boundary 3.3). Reads the composite's lit scene (sceneLit; its alpha marks how each pixel reflects: > 0
+// water, < 0 ice/glass/slime, 0 none, see water.glsl) and writes the frame's scene: every pixel unchanged except the reflective
+// ones, which get the reflection mixed in by reflectivity(mark, cos) (Schlick's Fresnel term) on a rippled normal (water) or the
+// surface's own flat normal (ice, glass, slime: no ripples, B9).
+//
+// The reflection is a screen-space ray march (McGuire and Mara 2014, "Efficient GPU screen-space ray tracing", JCGT 3(4): the ray is
+// walked in screen space, its depth interpolated perspective-correctly through 1/w). A hit is never a reflective pixel and must stand
+// clear above the reflecting surface (B6); a hit on broken cover fades toward the sky by how much of its neighbourhood it covers
+// (B7); a ray that finds nothing reflects the sky computed for its direction with the far clouds, the sun and the moon (B8, B9,
+// B10), or, where the water does not see the sky, the water's own colour. The reflected colour is hazed like the water around it.
+// WaterMath mirrors the consts here and in water.glsl (WaterTest).
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D sceneOut;
+layout(binding = 1) uniform sampler2D sceneLit;
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(binding = 3) uniform sampler2D lodDepth;
+layout(binding = 4) uniform sampler2D cloudMap;
+layout(binding = 5, std430) readonly restrict buffer LightData { uint lightData[]; };
+layout(binding = 6, std430) readonly restrict buffer LightReady { uint lightReady[]; };
+layout(binding = 7) uniform sampler2D sunTex;
+layout(binding = 8) uniform usampler2D lodLight;
+//2026-10-23: the terrain light (TerrainLightTarget), read by lightvolume.glsl's pixelLight while lightCamera.w is 2
+layout(binding = 9, r32ui) uniform readonly restrict uimage2D terrainLight;
+
+//0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
+// 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
+// view; 14..18 W4's cloud block; 19..22 the clean light volume; 24..29 reserved (written 0)
+layout(location = 0) uniform mat4 invVanillaProj;
+layout(location = 1) uniform mat4 invLodProj;
+layout(location = 2) uniform mat4 proj;
+layout(location = 3) uniform vec4 depthParams;
+layout(location = 4) uniform vec4 atmosphereSun;
+layout(location = 5) uniform vec4 atmosphereSunLight;
+layout(location = 6) uniform vec4 atmosphereMoonLight;
+layout(location = 7) uniform vec4 atmosphereDepth;
+layout(location = 8) uniform mat4 invView;
+layout(location = 9) uniform vec4 atmosphereAmbient;
+layout(location = 10) uniform vec4 atmosphereGlow;
+layout(location = 11) uniform vec4 rippleOffsetsA;
+layout(location = 12) uniform vec4 rippleOffsetsB;
+layout(location = 13) uniform vec4 reflectParams;
+layout(location = 14) uniform vec4 cloudShape;
+layout(location = 15) uniform vec4 cloudOffset;
+layout(location = 16) uniform vec4 cloudLit;
+layout(location = 17) uniform vec4 cloudAmbient;
+layout(location = 18) uniform vec4 cloudLightDir;
+layout(location = 19) uniform vec4 lightCamera;
+layout(location = 20) uniform vec4 lightFrac;
+layout(location = 21) uniform vec4 lightSize;
+layout(location = 22) uniform vec4 lightMode;
+layout(location = 23) uniform vec4 atmosphereFog;
+layout(location = 24) uniform vec4 reserved24;
+layout(location = 25) uniform vec4 reserved25;
+layout(location = 26) uniform vec4 reserved26;
+layout(location = 27) uniform vec4 reserved27;
+layout(location = 28) uniform vec4 reserved28;
+layout(location = 29) uniform vec4 reserved29;
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/viewpos.glsl>
+#import <vulkanmod:visuals/post/lightvolume.glsl>
+#import <vulkanmod:visuals/post/clouds.glsl>
+#import <vulkanmod:visuals/post/lighting.glsl>
+#import <vulkanmod:visuals/post/water.glsl>
+
+//The march: REFLECT_STEPS steps in screen space up to the screen's edge, denser near the start (t^REFLECT_STEP_POWER), then
+// REFLECT_REFINE halvings between the last step in front and the first behind
+const int REFLECT_STEPS = 24;
+const int REFLECT_REFINE = 5;
+const float REFLECT_STEP_POWER = 1.6;
+//The ray's far end (blocks): far enough to reach any LOD; toward the camera it stops REFLECT_NEAR in front of it
+const float REFLECT_RAY_LENGTH = 100000.0;
+const float REFLECT_NEAR = 0.06;
+//A step counts as behind a surface by at most this much: REFLECT_THICK_MIN blocks or REFLECT_THICK_SHARE of the surface's depth, plus
+// the step's own depth change (a coarse step can pass a surface by up to one step), that part capped at REFLECT_STEP_CAP of the
+// surface's depth: far steps toward the horizon span hundreds of blocks, and an uncapped step would take a near silhouette the
+// screen path crosses for a hit (B6). After the refinement the step's part is the depth the ray still spans across the remaining
+// bracket (the last point in front to the first behind), with the same cap
+const float REFLECT_THICK_MIN = 0.5;
+const float REFLECT_THICK_SHARE = 0.03;
+const float REFLECT_STEP_CAP = 0.25;
+//Hits fade out over this share of the screen at its edges
+const float REFLECT_EDGE_FADE = 0.05;
+//Below this reflectivity the march is skipped (the sky alone is mirrored: at 2% a missed island is invisible)
+const float REFLECT_MIN_MARCH = 0.025;
+//Refraction of the water's own colour by the ripples: the floor's image moves REFRACT_BLOCKS per unit of slope, at most
+// REFRACT_MAX_PIXELS, and only to a pixel of the same water (a water pixel within REFRACT_SAME_DEPTH of the distance plus a block)
+const float REFRACT_BLOCKS = 0.25;
+const float REFRACT_MAX_PIXELS = 24.0;
+const float REFRACT_SAME_DEPTH = 0.08;
+//The far clouds in the reflection: a short march (the composite's cloudMarch is too dear per water pixel) with a fixed share of
+// the self-shading instead of the light samples
+// a sample every REFLECT_CLOUD_STEP blocks of the ray's span through the layer, REFLECT_CLOUD_MIN_SAMPLES to REFLECT_CLOUD_MAX_SAMPLES
+// (a cloud cell is 12 blocks), started at a screen-fixed jitter so long grazing spans do not alias into the same bands
+const int REFLECT_CLOUD_MIN_SAMPLES = 4;
+const int REFLECT_CLOUD_MAX_SAMPLES = 12;
+const float REFLECT_CLOUD_STEP = 8.0;
+const float REFLECT_CLOUD_SHADE = 0.7;
+//The reflective debug view (B18): water and ice/glass/slime in flat colours
+const float DEBUG_WATER_RED = 0.0;
+const float DEBUG_WATER_GREEN = 0.35;
+const float DEBUG_WATER_BLUE = 1.0;
+const float DEBUG_GLASS_RED = 1.0;
+const float DEBUG_GLASS_GREEN = 0.45;
+const float DEBUG_GLASS_BLUE = 0.0;
+
+//A pixel's view position for the march: the LOD depth where the composite clamped an LOD, else the main depth; false for sky
+bool marchPosition(ivec2 q, ivec2 size, out vec3 view) {
+    float depth = texelFetch(mainDepth, q, 0).r;
+    if (depth == FAR) {
+        return false;
+    }
+    vec2 uvGl = pixelUvGl(q, size);
+    if (clampedToLod(depth)) {
+        float lod = texelFetch(lodDepth, lodTexel(q, size), 0).r;
+        if (lod == FAR) {
+            return false;
+        }
+        view = viewPosition(invLodProj, uvGl, lod);
+        return true;
+    }
+    view = viewPosition(invVanillaProj, uvGl, depth);
+    return true;
+}
+
+//The pixel at GL screen position uv (row 0 at the top), clamped into the image
+ivec2 marchPixel(vec2 uv, ivec2 size) {
+    ivec2 q = ivec2(floor(vec2(uv.x, 1.0 - uv.y)*vec2(size)));
+    return clamp(q, ivec2(0), size - 1);
+}
+
+//The precise position of a pixel the ray reached, as the ray's own origin is found (viewpos.glsl's scenePositionFrom: an LOD that
+// shows through the main depth takes the LOD's position); false for sky and for a clamped pixel without an LOD behind it
+bool hitPosition(ivec2 q, ivec2 size, out vec3 view) {
+    float depth = texelFetch(mainDepth, q, 0).r;
+    if (depth == FAR || (clampedToLod(depth) && texelFetch(lodDepth, lodTexel(q, size), 0).r == FAR)) {
+        return false;
+    }
+    return scenePosition(q, size, view);
+}
+
+//How far behind a surface at depth sceneZ (view z) a coarse step whose depth changed by stepZ may lie and still count (see the consts)
+float marchThickness(float sceneZ, float stepZ) {
+    return max(REFLECT_THICK_MIN, REFLECT_THICK_SHARE*abs(sceneZ)) + min(abs(stepZ), REFLECT_STEP_CAP*abs(sceneZ));
+}
+
+//The same after the refinement: bracketZ is the ray's depth change across the remaining bracket
+float refinedThickness(float sceneZ, float bracketZ) {
+    return max(REFLECT_THICK_MIN, REFLECT_THICK_SHARE*abs(sceneZ)) + min(abs(bracketZ), REFLECT_STEP_CAP*abs(sceneZ));
+}
+
+//Whether the ray at depth rayZ is behind a surface at sceneZ by less than thick (view z is negative in front of the camera)
+bool marchBehind(float rayZ, float sceneZ, float thick) {
+    return rayZ < sceneZ && rayZ > sceneZ - thick;
+}
+
+//The march from v0 (view space) along rView. Returns the hit's weight (0: none) with its colour and the reflected path's length
+// from v0 to the hit; nGeom is the reflecting surface's world normal, dist its view distance
+float marchReflection(vec3 v0, vec3 rView, vec3 nGeom, float dist, ivec2 p, ivec2 size, mat3 toWorld, out vec3 colour, out float pathLength) {
+    colour = vec3(0.0);
+    pathLength = 0.0;
+    float len = REFLECT_RAY_LENGTH;
+    if (rView.z > 0.0) {
+        len = min(len, (-REFLECT_NEAR - v0.z)/rView.z);
+    }
+    if (!(len > 0.0)) {
+        return 0.0;
+    }
+    vec3 v1 = v0 + rView*len;
+    vec4 c0 = proj*vec4(v0, 1.0);
+    vec4 c1 = proj*vec4(v1, 1.0);
+    if (!(c0.w > 0.0) || !(c1.w > 0.0)) {
+        return 0.0;
+    }
+    float k0 = 1.0/c0.w;
+    float k1 = 1.0/c1.w;
+    vec2 s0 = c0.xy*k0*0.5 + 0.5;
+    vec2 s1 = c1.xy*k1*0.5 + 0.5;
+    vec2 ds = s1 - s0;
+    //Cut the walk where it leaves the screen
+    float sMax = 1.0;
+    for (int axis = 0; axis < 2; axis++) {
+        if (ds[axis] > 0.0) {
+            sMax = min(sMax, (1.0 - s0[axis])/ds[axis]);
+        } else if (ds[axis] < 0.0) {
+            sMax = min(sMax, -s0[axis]/ds[axis]);
+        }
+    }
+    if (!(sMax > 0.0) || length(ds*sMax*vec2(size)) < 1.0) {
+        return 0.0;
+    }
+    float jitter = interleavedGradientNoise(vec2(p));
+    float prevS = 0.0;
+    float prevZ = v0.z;
+    for (int i = 0; i < REFLECT_STEPS; i++) {
+        float s = sMax*pow((float(i) + jitter)/float(REFLECT_STEPS), REFLECT_STEP_POWER);
+        float k = mix(k0, k1, s);
+        float rayZ = mix(v0.z*k0, v1.z*k1, s)/k;
+        vec3 scene;
+        ivec2 q = marchPixel(s0 + ds*s, size);
+        if (marchPosition(q, size, scene) && marchBehind(rayZ, scene.z, marchThickness(scene.z, rayZ - prevZ))) {
+            //Refine between the last step in front and this one
+            float lo = prevS;
+            float hi = s;
+            for (int j = 0; j < REFLECT_REFINE; j++) {
+                float mid = 0.5*(lo + hi);
+                float km = mix(k0, k1, mid);
+                float zm = mix(v0.z*k0, v1.z*k1, mid)/km;
+                vec3 sm;
+                if (hitPosition(marchPixel(s0 + ds*mid, size), size, sm) && zm < sm.z) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            float kh = mix(k0, k1, hi);
+            float zh = mix(v0.z*k0, v1.z*k1, hi)/kh;
+            float kl = mix(k0, k1, lo);
+            float zl = mix(v0.z*k0, v1.z*k1, lo)/kl;
+            vec2 uv = s0 + ds*hi;
+            ivec2 qh = marchPixel(uv, size);
+            vec3 hit;
+            bool found = hitPosition(qh, size, hit);
+            float thick = found ? refinedThickness(hit.z, zh - zl) : 0.0;
+            //On the ray: the refined ray depth within the tight thickness of the surface, in front or behind (B6)
+            if (found && abs(zh - hit.z) < thick) {
+                vec4 h = texelFetch(sceneLit, qh, 0);
+                float above = dot(toWorld*(hit - v0), nGeom);
+                if (reflectAcceptsHit(h.a, above, dist)) {
+                    //B7: the share of the neighbourhood the hit surface covers (sky or something far behind the ray is a gap)
+                    float covered = 1.0;
+                    ivec2 taps[4] = ivec2[4](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1));
+                    for (int t = 0; t < 4; t++) {
+                        vec3 nb;
+                        if (hitPosition(clamp(qh + taps[t], ivec2(0), size - 1), size, nb) && nb.z > zh - thick) {
+                            covered += 1.0;
+                        }
+                    }
+                    float edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+                    colour = h.rgb;
+                    pathLength = length(hit - v0);
+                    return reflectCoverWeight(covered/5.0)*smoothstep(0.0, REFLECT_EDGE_FADE, edge);
+                }
+            }
+        }
+        prevS = s;
+        prevZ = rayZ;
+    }
+    return 0.0;
+}
+
+//The cloud samples for a span of len blocks through the layer
+int reflectCloudSamples(float len) {
+    return int(clamp(ceil(len/REFLECT_CLOUD_STEP), float(REFLECT_CLOUD_MIN_SAMPLES), float(REFLECT_CLOUD_MAX_SAMPLES)));
+}
+
+//The far clouds along a reflected ray from origin (camera relative): clouds.glsl's layer, 4..12 samples from a screen-fixed jitter
+// (0..1), fixed self-shading.
+// Returns cloudMarch's (light-weighted coverage, coverage, mean distance)
+vec3 reflectedCloudMarch(vec3 origin, vec3 dir, float jitter) {
+    vec2 span = cloudInterval(origin, dir, HAZE_MAX_DISTANCE);
+    if (cloudShape.w < 0.5 || span.y <= span.x) {
+        return vec3(0.0);
+    }
+    float len = span.y - span.x;
+    int n = reflectCloudSamples(len);
+    float dt = len/float(n);
+    float shadeMin = mix(1.0, CLOUD_SHADE_MIN, smoothstep(0.0, CLOUD_SHADE_LEVEL, abs(cloudLightDir.y)));
+    float lit = mix(shadeMin, 1.0, REFLECT_CLOUD_SHADE);
+    float light = 0.0;
+    float trans = 1.0;
+    float dsum = 0.0;
+    float wsum = 0.0;
+    for (int i = 0; i < REFLECT_CLOUD_MAX_SAMPLES; i++) {
+        if (i >= n || trans < 0.01) {
+            break;
+        }
+        float t = span.x + (float(i) + jitter)*dt;
+        vec3 q = origin + dir*t;
+        float d = cloudDensity(q);
+        if (d <= 0.0) {
+            continue;
+        }
+        float fade = 1.0 - smoothstep(CLOUD_FADE_START, 1.0, length(q.xz)/cloudShape.z);
+        float a = (1.0 - exp(-d*CLOUD_DENSITY*dt))*fade;
+        float w = a*trans;
+        light += w*lit;
+        dsum += w*t;
+        wsum += w;
+        trans *= 1.0 - a;
+    }
+    return vec3(light, 1.0 - trans, wsum > 0.0 ? dsum/wsum : 0.0);
+}
+
+//The sun visibility at full-resolution pixel p (W5's sunOut.r), upsampled as W5's lightingAt does: texel q stands for full pixel 2q,
+// an odd coordinate reads the two (four) texels around it, each weighted by how well its distance and normal match the pixel's,
+// the closest in distance when none matches. lightingAt itself cannot be called here: it reads each texel's distance from lightTex,
+// which this pass does not bind (boundary 3.3); the distance is read from the depth at the texel's pixel 2q instead (the same
+// precise position as the pixel's own). normalView: the pixel's view-space normal
+float sunVisibilityAt(ivec2 p, ivec2 size, float dist, vec3 normalView) {
+    ivec2 halfSize = textureSize(sunTex, 0);
+    ivec2 q0 = p >> 1;
+    ivec2 odd = p & 1;
+    float sum = 0.0;
+    float weights = 0.0;
+    float closest = 1e30;
+    float nearest = 1.0;
+    for (int j = 0; j <= odd.y; j++) {
+        for (int i = 0; i <= odd.x; i++) {
+            ivec2 q = min(q0 + ivec2(i, j), halfSize - 1);
+            vec4 s = texelFetch(sunTex, q, 0);
+            vec3 v;
+            if (!hitPosition(min(q*2, size - 1), size, v)) {
+                continue;
+            }
+            float miss = abs(length(v) - dist);
+            float w = exp(-miss/(UPSAMPLE_DEPTH_SHARE*dist + UPSAMPLE_DEPTH_MIN));
+            if (dot(s.gba, s.gba) > 0.0) {
+                w *= pow(max(dot(normalView, s.gba), 0.0), UPSAMPLE_NORMAL_POWER);
+            }
+            sum += w*s.r;
+            weights += w;
+            if (miss < closest) {
+                closest = miss;
+                nearest = s.r;
+            }
+        }
+    }
+    return weights < 1e-6 ? nearest : sum/weights;
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(sceneOut);
+    if (any(greaterThanEqual(p, size))) {
+        return;
+    }
+    vec4 lit = texelFetch(sceneLit, p, 0);
+    float mark = lit.a;
+    //Not reflective (NaN included): unchanged
+    if (!(abs(mark) >= REFLECT_MARK_MIN)) {
+        imageStore(sceneOut, p, vec4(lit.rgb, 1.0));
+        return;
+    }
+    if (reflectParams.w > 0.5) {
+        vec3 debug = mark > 0.0 ? vec3(DEBUG_WATER_RED, DEBUG_WATER_GREEN, DEBUG_WATER_BLUE) : vec3(DEBUG_GLASS_RED, DEBUG_GLASS_GREEN, DEBUG_GLASS_BLUE);
+        imageStore(sceneOut, p, vec4(debug, 1.0));
+        return;
+    }
+    vec3 view;
+    bool fromLod;
+    if (!scenePositionFrom(p, size, view, fromLod)) {
+        imageStore(sceneOut, p, vec4(lit.rgb, 1.0));
+        return;
+    }
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog);
+    mat3 toWorld = mat3(invView);
+    mat3 toView = transpose(toWorld);
+    vec3 world = toWorld*view;
+    float dist = length(view);
+    vec3 d = world/max(dist, 0.000001);
+    //The surface's own normal: water lies flat; ice/glass/slime take their snapped depth normal (windows are upright)
+    vec3 nGeom = vec3(0.0, 1.0, 0.0);
+    if (mark < 0.0) {
+        vec3 east = toView*vec3(1.0, 0.0, 0.0);
+        vec3 up = toView*vec3(0.0, 1.0, 0.0);
+        nGeom = normalize(toWorld*snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), east, up));
+    }
+    float cosGeom = -dot(d, nGeom);
+    if (!(cosGeom > 0.0)) {
+        //Seen from behind (from under the water): no reflection
+        imageStore(sceneOut, p, vec4(lit.rgb, 1.0));
+        return;
+    }
+    //Ripples on water only, faded by the blocks one pixel covers along the view (W5's blocks per pixel, foreshortened)
+    float bpp = dist*2.0/(abs(proj[1][1])*float(size.y));
+    float footprint = bpp/max(cosGeom, RIPPLE_MIN_COS);
+    float strength = mark > 0.0 ? reflectParams.x : 0.0;
+    vec3 n = mark > 0.0 ? rippleNormal(world.xz, rippleOffsetsA, rippleOffsetsB, strength, footprint) : nGeom;
+    float ripple = mark > 0.0 ? rippleAmount(strength, footprint) : 0.0;
+    float f = reflectivity(mark, -dot(d, n))*clamp(reflectParams.y, 0.0, 1.0);
+    vec3 r = reflect(d, n);
+    float rise = dot(r, nGeom);
+    if (rise < REFLECT_MIN_UP) {
+        r = normalize(r + nGeom*(REFLECT_MIN_UP - rise));
+    }
+    //The light at the surface: its sky light where known (the light volume or the LOD pass), else the camera's sky exposure
+    vec3 pl = pixelLight(p, size, world, nGeom);
+    bool known = pl.z > 0.5;
+    float skyAccess = known ? skyVisibility(pl.x) : clamp(reflectParams.z, 0.0, 1.0);
+    float amount = hazeAmount(a, known ? skyShare(pl.x) : 1.0, fromLod);
+    //The water's own colour, refracted by the ripples, only from the same water (B9)
+    vec3 own = lit.rgb;
+    if (ripple > 0.0) {
+        vec3 tilt = toView*(n - nGeom);
+        vec2 shift = vec2(tilt.x, -tilt.y)*(REFRACT_BLOCKS/max(bpp, 0.000001));
+        float sl = length(shift);
+        if (sl > REFRACT_MAX_PIXELS) {
+            shift *= REFRACT_MAX_PIXELS/sl;
+        }
+        ivec2 q = clamp(p + ivec2(round(shift)), ivec2(0), size - 1);
+        if (q != p) {
+            vec4 other = texelFetch(sceneLit, q, 0);
+            vec3 ov;
+            if (other.a >= REFLECT_MARK_MIN && marchPosition(q, size, ov) && abs(length(ov) - dist) < REFRACT_SAME_DEPTH*dist + 1.0) {
+                own = other.rgb;
+            }
+        }
+    }
+    //What a missed ray reflects: the sky for its direction with the far clouds, the discs (glints), hazed like the water (B8, B10)
+    float sunVisibility = sunVisibilityAt(p, size, dist, toView*nGeom);
+    vec3 sky = reflectedSky(a, r, ripple, sunVisibility);
+    if (cloudShape.w > 0.5 && atmosphereSky(a)) {
+        vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
+        sky = sky*(1.0 - cloud.a) + cloud.rgb;
+    }
+    vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+    if (f >= REFLECT_MIN_MARCH) {
+        vec3 hitColour;
+        float pathLength;
+        float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength);
+        if (w > 0.0) {
+            //The hit's pixel is already hazed over its own distance from the camera: add the haze of the rest of the longer path
+            vec3 hitWorld = world + r*pathLength;
+            float extra = max(dist + pathLength - length(hitWorld), 0.0);
+            reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
+        }
+    }
+    imageStore(sceneOut, p, vec4(mix(own, reflection, clamp(f, 0.0, 1.0)), 1.0));
+}

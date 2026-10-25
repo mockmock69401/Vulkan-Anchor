@@ -1,0 +1,7 @@
+VulkanMod-shaded for Minecraft 1.20.1 (Forge).
+
+An unofficial modified build of VulkanMod Reforged, written with an AI coding assistant, to run legacy Forge modpacks on Vulkan. Experimental: compatibility and feature parity are incomplete. See README.md for the mods each tested modpack needs disabled.
+
+Install only the production JAR, in place of VulkanMod or VulkanMod Reforged. The source JAR and source ZIP are for development. SHA256SUMS.txt lists download checksums.
+
+The source ZIP contains the corresponding source and build scripts for this commit. LGPL-3.0-only; preserve applicable notices and identify modified versions. See LICENSE, COPYING, NOTICE and THIRD_PARTY_NOTICES.md.

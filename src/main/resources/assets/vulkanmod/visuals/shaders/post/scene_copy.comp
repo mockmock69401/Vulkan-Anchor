@@ -1,0 +1,640 @@
+#version 450
+//W7: the scene composite (boundary 3.2), one invocation per full-resolution pixel. It turns vanilla's frame into the lit scene in W2's
+// scene units (postmath.glsl) and assembles the other packages' exports; it redesigns none of them:
+//   sky pixel (nothing wrote the depth): W4's skyColour + sunGlow, W6's sunDisc, W4's vanillaStars (vanilla's stars and moon), then
+//     the far clouds over it (clouds.glsl cloudMarch, W4 cloudOver). Without an atmosphere (W4's NONE) and without sky light (NO_SKY:
+//     the End keeps its sky box, B17) the game's pixel, converted; under an environmental fog W4's fog colour.
+//   geometry pixel (vanilla or LOD, viewpos.glsl):
+//     1. vanillaToScene (W2) of the main colour
+//     2. its light: sky and block levels from the light volume or the LOD light (lightvolume.glsl pixelLight), the sky light lifted
+//        where the sun reaches (RelightMath's lift), water's side sky (B12), the held light (B16); vanilla's lightmap (lightmapTex)
+//        turns the levels into colours and the colour is scaled from the old light to the new (relightGain, the held gain bound)
+//     3. its sky-lit share (from the lightmap) takes W5's sun factor (lightingAt, sunShadingAt; plant pixels their own plantSunTex,
+//        light-source pixels none, B13), with vanilla's baked face shade divided out under the sun weight (W5 replaces it), the
+//        light colour (slots 22/23, B15) and the sky exposure; the block-lit share keeps its colour and takes the block exposure (B14).
+//        Translucent pixels (water, ice, glass, slime) have no face shade divided out: they are a texel blended over what lies behind
+//     4. water: W6's waterColour over the length the view travels through it, lit by what a white texel here receives
+//     5. W4's haze over the view distance (hazeAmount: the lifted sky light given to sunShadingAt, water its unlifted one as W6's
+//        reflection takes it, LOD pixels full), then the far clouds in front of it
+//     6. alpha: W6's reflectionMark of W5's translucent kind (0 for sky, and everywhere when the lighting pass did not run)
+//   vanilla's own clouds (B3) take no lighting at all; the light debug views 1..3 (B18) replace the colour.
+// W10: the ambient occlusion (aoTex, binding 13, ao.glsl's aoAt) at slot 10 .x's strength darkens only the sky light's ambient part
+// (the sun shading's level without direct sun) and the lightmap's no-light floor; never the direct sun, block light or the sky.
+// Final fix R1 (B20): every exposure added here (NO_SKY_, UNDERWATER_, DAY_BLOCK_, NIGHT_SKY_, OVERCAST_, UNDERGROUND_SKY_EXPOSURE) is
+// mix(1, E, look), look = W4's slot 29 .x (the sun-shading setting / 100); they do not depend on whether the lighting pass ran, and the
+// sky-light ones skip only light an active light volume does not know yet (a section still loading; with the volume off every pixel takes them). Final fix R2: under water is slot 29 .y (the
+// camera's fluid), not the fog colour.
+// SceneCompositeMath mirrors every const and the per-pixel combination here (SceneCompositeTest): change both together.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D sceneOut;
+layout(binding = 1) uniform sampler2D mainColour;
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(binding = 3) uniform sampler2D lodDepth;
+layout(binding = 4) uniform sampler2D lightTex;
+layout(binding = 5) uniform sampler2D cloudMap;
+layout(binding = 6, std430) readonly restrict buffer LightData { uint lightData[]; };
+layout(binding = 7, std430) readonly restrict buffer LightReady { uint lightReady[]; };
+layout(binding = 8) uniform sampler2D lightmapTex;
+layout(binding = 9) uniform sampler2D sunTex;
+layout(binding = 10) uniform usampler2D lodLight;
+layout(binding = 11, std430) readonly restrict buffer HeldLight { uint heldLight[]; };
+layout(binding = 12) uniform sampler2D plantSunTex;
+//W10: the ambient occlusion (ao_blur.comp's aoOut: r visibility, g view distance), read only when it ran (pass ran and slot 10 .x > 0)
+layout(binding = 13) uniform sampler2D aoTex;
+//2026-10-23: the terrain light (TerrainLightTarget), read by lightvolume.glsl's pixelLight while lightCamera.w is 2
+layout(binding = 14, r32ui) uniform readonly restrict uimage2D terrainLight;
+//2026-10-23: the albedo of each pixel's front fragment (TerrainLightTarget)
+layout(binding = 15, r32ui) uniform readonly restrict uimage2D terrainAlbedo;
+
+//Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
+// star inputs; 29 W4's look slot; 30..34 W4's reserved slots
+layout(location = 0) uniform mat4 invVanillaProj;
+layout(location = 1) uniform mat4 invLodProj;
+layout(location = 2) uniform mat4 invView;//view to world rotation
+layout(location = 3) uniform vec4 atmosphereSun;
+layout(location = 4) uniform vec4 atmosphereSunLight;
+layout(location = 5) uniform vec4 atmosphereMoonLight;
+layout(location = 6) uniform vec4 atmosphereDepth;
+layout(location = 7) uniform vec4 atmosphereAmbient;
+layout(location = 8) uniform vec4 depthParams;//x LodClamp.CLAMP_THRESHOLD, y 1 when the LOD depth is valid
+layout(location = 9) uniform vec4 atmosphereGlow;
+//Clean LightingUniforms: x AO strength, y sun-shading weight (setting x day x sky exposure), z 1 when the lighting pass ran, w sunHeightTerm
+layout(location = 10) uniform vec4 lighting;
+//Clean LightingUniforms: x water-depth strength, y WaterMath.ambient, z sun-up factor (0 night .. 1 day), w that x the camera's sky exposure
+layout(location = 11) uniform vec4 waterParams;
+//W4's cloud block (CloudUniforms.COPY_FIRST): clouds.glsl's cloudShape and cloudOffset, then CloudLight
+layout(location = 12) uniform vec4 cloudShape;
+layout(location = 13) uniform vec4 cloudOffset;
+layout(location = 14) uniform vec4 cloudLit;
+layout(location = 15) uniform vec4 cloudAmbient;
+layout(location = 16) uniform vec4 cloudLightDir;
+//Clean ShadowUniforms.writeCopy: x 1 when a cascade is drawn (not needed here: W5's sun visibility already says it)
+layout(location = 17) uniform vec4 shadowParams;
+//Clean LightVolumeUniforms (COPY_FIRST 18): lightvolume.glsl's four vec4
+layout(location = 18) uniform vec4 lightCamera;
+layout(location = 19) uniform vec4 lightFrac;
+layout(location = 20) uniform vec4 lightSize;
+layout(location = 21) uniform vec4 lightMode;
+//Clean LightingUniforms: rgb ColourMath.sunLight, w the light-colour strength; rgb ColourMath.SKY_SHADE, w the sun's weight (day x sky exposure)
+layout(location = 22) uniform vec4 lightSun;
+layout(location = 23) uniform vec4 lightShade;
+//Clean HeldLightSystem.writeCopy: xyz the held grid's corner minus the light volume's camera block, w 1 when on
+layout(location = 24) uniform vec4 heldOrigin;
+layout(location = 25) uniform vec4 atmosphereFog;
+layout(location = 26) uniform vec4 vanillaSky;
+layout(location = 27) uniform vec4 vanillaFog;
+layout(location = 28) uniform vec4 starGate;
+//W4 (final fix R1, R2): x the look weight (the sun-shading setting / 100), y 1 with the camera inside water, z the overcast share and
+// w the atmosphere's mode as if it were drawn (the exposures follow them also when W4 draws nothing: NONE)
+layout(location = 29) uniform vec4 lookParams;
+//2026-10-21: the border fog (AtmosphereUniforms.BORDER): x where it starts, y where it is full (horizontal blocks), z 1 when on (no LODs)
+layout(location = 30) uniform vec4 borderFog;
+layout(location = 31) uniform vec4 reserved31;
+layout(location = 32) uniform vec4 reserved32;
+layout(location = 33) uniform vec4 reserved33;
+layout(location = 34) uniform vec4 reserved34;
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/viewpos.glsl>
+#import <vulkanmod:visuals/post/lightvolume.glsl>
+#import <vulkanmod:visuals/post/clouds.glsl>
+#import <vulkanmod:visuals/post/lighting.glsl>
+#import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/ao.glsl>
+
+//Vanilla's directional face shade in a dimension with sky light (ClientLevel.getShade: display values the terrain colour was multiplied
+// with). W5's sun facing replaces it on the sky-lit light: it is divided out there, FACE_UNSHADE of it at full sun weight
+const float FACE_SHADE_DOWN = 0.5;
+const float FACE_SHADE_UP = 1.0;
+const float FACE_SHADE_NORTH_SOUTH = 0.8;
+const float FACE_SHADE_WEST_EAST = 0.6;
+const float FACE_UNSHADE = 1.0;
+//A normal counts as a block face when within acos(FACE_AXIS_MIN) of an axis (snapNormal gives exact axes; mobs keep their own shading)
+const float FACE_AXIS_MIN = 0.999;
+//The share of vanilla's face shade baked into Distant Horizons' LOD colours (1: as vanilla's terrain)
+const float LOD_FACE_SHADE_SHARE = 1.0;
+//B14: separate exposures. By day a camera without sky light (underground) sees sky-lit surfaces at UNDERGROUND_SKY_EXPOSURE (they do not
+// jump brighter than the shade outside when the sun shading lets go); by day block light is seen at DAY_BLOCK_EXPOSURE wherever the camera
+// is (tuning round 1: refs/S8, a closed room at noon, is 0.6 of vanilla's light), at night at full. The night's sky light takes
+// NIGHT_SKY_EXPOSURE (tuning round 3, below).
+const float UNDERGROUND_SKY_EXPOSURE = 0.7;
+const float DAY_BLOCK_EXPOSURE = 0.6;
+//Tuning round 1: dimensions without sky light (Nether, End: slot 29 .w NO_SKY) are seen at this exposure (refs/S9 is about 1.6, refs/S10
+// about 1.9 of vanilla's light); light sources keep their brightness
+const float NO_SKY_EXPOSURE = 1.7;
+//Tuning round 2: with the camera under water the whole view is seen at UNDERWATER_EXPOSURE (refs/S5 is about 1.8, its darkest quarter
+// 2.4 of vanilla's light). Final fix R2: under water is the camera's fluid (slot 29 .y: swamp and mangrove water too; lava, powder snow
+// and a modded blue fog are not)
+const float UNDERWATER_EXPOSURE = 2.0;
+//B3: vanilla's cloud layer (cloudShape x, y while the far clouds are off) widened by this many blocks plus a share of the distance
+// (also for a flat layer of thickness 0, vanilla's fast clouds)
+const float VANILLA_CLOUD_MARGIN = 0.5;
+const float VANILLA_CLOUD_MARGIN_SHARE = 0.01;
+//B3: the sky light a cell must hold to count as cloud air (clouds sit in open air)
+const int VANILLA_CLOUD_SKY = 15;
+//The held light's grid (HeldLight.SIDE) and how far it may lift a colour (HeldLight.MAX_GAIN)
+const int HELD_GRID_SIDE = 31;
+const float HELD_MAX_GAIN = 256.0;
+//Tuning round 1: the held light falls off HELD_FALLOFF times as fast as vanilla spreads it (levels per block from the eye), so it lights
+// the surfaces near the hand, not the whole room (refs/S12; tuning round 2: 2.0 left only a spot, 1.4; tuning round 3: 1.4 was 1.87x, 1.7)
+const float HELD_FALLOFF = 1.7;
+//Tuning round 3: the sky-lit light's weather and night exposures. Under an overcast day sky (W4's overcast share, Atmosphere.sunLight.w,
+// 0.8 in full rain (slot 29 .z), times the day seen from under the open sky: slot 11 .w) it rises toward OVERCAST_EXPOSURE (refs/S4 lights rainy
+// terrain about 3x vanilla: 1 + (3.6 - 1) x 0.8 = 3.1); at night (1 - slot 11 .z) it falls to NIGHT_SKY_EXPOSURE (refs/S3: the moonlit
+// terrain was 1.34x). Block light is not touched; without sky (slot 29 .w not ATMOSPHERE_SKY) and underground both are 1
+const float OVERCAST_EXPOSURE = 3.6;
+const float NIGHT_SKY_EXPOSURE = 0.7;
+//Tuning round 3 (refs/S13): with the camera inside vanilla's cloud layer (cloudShape x below CLOUD_CAMERA_MARGIN and its top above
+// -CLOUD_CAMERA_MARGIN) the far clouds start FAR_CLOUD_NEAR blocks out: the march from inside a cloud cell veiled every surface (a ray down
+// crosses the cell around the camera), which vanilla does not show
+const float FAR_CLOUD_NEAR = 16.0;
+const float CLOUD_CAMERA_MARGIN = 1.0;
+//Below this a lightmap difference counts as no light (the sky/block split)
+const float LIGHT_SPLIT_MIN = 0.00001;
+//B18: the light debug views (lightMode.x; 4 is W6's reflective view)
+const int DEBUG_SKY_VIEW = 1;
+const int DEBUG_BLOCK_VIEW = 2;
+const int DEBUG_SHARE_VIEW = 3;
+//2026-10-23: where each pixel's light came from: green the terrain light, blue the light volume, yellow the LOD pass, the unknown colour
+const int DEBUG_SOURCE_VIEW = 5;
+//The debug views' colour where the light is not known
+const float DEBUG_UNKNOWN_RED = 0.25;
+const float DEBUG_UNKNOWN_GREEN = 0.0;
+const float DEBUG_UNKNOWN_BLUE = 0.25;
+
+//Vanilla's lightmap (block light along u, sky light along v, display values) at fractional levels, in scene units
+vec3 lightmapLinear(float block, float sky) {
+    vec2 l = clamp(vec2(block, sky), 0.0, 15.0);
+    return vanillaToScene(texture(lightmapTex, (l + 0.5)/16.0).rgb);
+}
+
+//The baked face shade (linear) for a world normal: block faces get getShade's value, anything else 1
+float bakedShade(vec3 n) {
+    vec3 a = abs(n);
+    if (a.y >= FACE_AXIS_MIN) {
+        return displayToLinear(n.y > 0.0 ? FACE_SHADE_UP : FACE_SHADE_DOWN);
+    }
+    if (a.z >= FACE_AXIS_MIN) {
+        return displayToLinear(FACE_SHADE_NORTH_SOUTH);
+    }
+    if (a.x >= FACE_AXIS_MIN) {
+        return displayToLinear(FACE_SHADE_WEST_EAST);
+    }
+    return 1.0;
+}
+
+//The factor that takes the face shade back out of the sky-lit light, by the sun weight (1 at weight 0)
+float faceUnshade(float shade, float sunWeight) {
+    return mix(1.0, 1.0/max(shade, 0.01), clamp(sunWeight, 0.0, 1.0)*FACE_UNSHADE);
+}
+
+//The sky-lit share of the light per channel: the lightmap's sky-only part against its combined colour (each above the dark floor), so
+// block light only takes what it adds to the sky's (2026-10-22: a torch in daylight, where vanilla's lightmap is already full, took half
+// the light to the lower day block exposure and darkened the sunlit ground)
+vec3 skyLitShare(vec3 skyOnly, vec3 lightAll, vec3 dark) {
+    vec3 s = max(skyOnly - dark, vec3(0.0));
+    vec3 total = max(lightAll - dark, s);
+    return mix(vec3(0.0), s/max(total, vec3(LIGHT_SPLIT_MIN)), greaterThan(total, vec3(LIGHT_SPLIT_MIN)));
+}
+
+//B15: the colour of the sky-lit light at luminance 1 (both colours are): the shade colour where only the sky reaches, the sun's colour
+// where the sun does (W5's sunShare 0..1), mixed in by strength (light colour setting x the sun's weight; 0: white)
+vec3 lightTint(float share, float strength, vec3 sunColour, vec3 shadeColour) {
+    vec3 blend = mix(shadeColour, sunColour, clamp(share, 0.0, 1.0));
+    return mix(vec3(1.0), blend, clamp(strength, 0.0, 1.0));
+}
+
+//Final fix R1: the look weight every added exposure is blended toward 1 by (W4's slot 29 .x)
+float lookWeight() {
+    return clamp(lookParams.x, 0.0, 1.0);
+}
+
+//An exposure as applied: mix(1, e, look)
+float looked(float e, float look) {
+    return mix(1.0, e, clamp(look, 0.0, 1.0));
+}
+
+//B14: the sky-lit light's exposure from the sun-up factor and that times the camera's sky exposure (slot 11 z, w)
+float skyExposure(float sunUp, float sunUpExposed, float look) {
+    return 1.0 - clamp(sunUp - sunUpExposed, 0.0, 1.0)*(1.0 - looked(UNDERGROUND_SKY_EXPOSURE, look));
+}
+
+//Tuning round 3: the sky-lit light's weather (overcast day) and night exposure; overcast the overcast share (slot 29 .z)
+float skyWeatherExposure(float overcast, float sunUp, float sunUpExposed, float look) {
+    float o = clamp(overcast, 0.0, 1.0)*clamp(sunUpExposed, 0.0, 1.0);
+    return mix(1.0, looked(OVERCAST_EXPOSURE, look), o)*mix(1.0, looked(NIGHT_SKY_EXPOSURE, look), 1.0 - clamp(sunUp, 0.0, 1.0));
+}
+
+//Where the far clouds start along a view: FAR_CLOUD_NEAR with the camera inside vanilla's cloud layer, else at the camera
+float farCloudNear() {
+    return cloudShape.x < CLOUD_CAMERA_MARGIN && cloudShape.x + cloudShape.y > -CLOUD_CAMERA_MARGIN ? FAR_CLOUD_NEAR : 0.0;
+}
+
+//B14: the block light's exposure from the sun-up factor (slot 11 z)
+float blockExposure(float sunUp, float look) {
+    return 1.0 - clamp(sunUp, 0.0, 1.0)*(1.0 - looked(DAY_BLOCK_EXPOSURE, look));
+}
+
+//The view's exposure with the camera inside water (slot 29 .y, the camera's fluid), else 1
+float underwaterExposure() {
+    return lookParams.y > 0.5 ? looked(UNDERWATER_EXPOSURE, lookWeight()) : 1.0;
+}
+
+//The mode the exposures follow (slot 29 .w: W4's mode as if the atmosphere were drawn)
+bool exposureMode(float mode) {
+    return abs(lookParams.w - mode) < 0.5;
+}
+
+//The held level at a surface whose spread level is level, the eye's level eye: HELD_FALLOFF levels lost per level vanilla's spread loses
+float heldFalloff(float level, float eye) {
+    return level > 0.0 ? max(eye - HELD_FALLOFF*(eye - level), 0.0) : 0.0;
+}
+
+//HeldLight.whiteSurfaceScale: the scale on a held gain (largest channel gainMax) so a colour (largest channel litMax) ends at most at
+// the held light's lightmap colour (largest channel heldMax), and never darker than it was
+float heldRoom(float litMax, float gainMax, float heldMax) {
+    float room = max(heldMax/max(litMax, 1e-4), 1.0);
+    return min(1.0, room/gainMax);
+}
+
+//The held grid's level at cell c (x fastest, then y, then z: HeldLight.index), 0 outside it
+int heldCell(ivec3 c) {
+    if (any(lessThan(c, ivec3(0))) || any(greaterThanEqual(c, ivec3(HELD_GRID_SIDE)))) {
+        return 0;
+    }
+    uint i = uint(c.x + HELD_GRID_SIDE*(c.y + HELD_GRID_SIDE*c.z));
+    return int((heldLight[i >> 2u] >> ((i & 3u)*8u)) & 0xFFu);
+}
+
+//B16: the held light at a face (rel: the surface relative to the light volume's camera block corner, n its world normal): the layer of
+// cells half a block in front of it, bilinear, skipping dark cells (inside blocks) while another is lit, as lightvolume.glsl reads faces
+float heldLightAt(vec3 rel, vec3 n) {
+    vec3 g = rel - heldOrigin.xyz;
+    vec3 a = abs(n);
+    int axis = a.x >= a.y && a.x >= a.z ? 0 : (a.y >= a.z ? 1 : 2);
+    int u = axis == 0 ? 1 : 0;
+    int v = axis == 2 ? 1 : 2;
+    int layer = int(floor(g[axis] + (n[axis] >= 0.0 ? 0.5 : -0.5)));
+    vec2 q = vec2(g[u], g[v]) - 0.5;
+    vec2 f = floor(q);
+    vec2 t = q - f;
+    float cells[4];
+    bool anyLit = false;
+    for (int i = 0; i < 4; i++) {
+        ivec3 c = ivec3(0);
+        c[axis] = layer;
+        c[u] = int(f.x) + (i & 1);
+        c[v] = int(f.y) + ((i >> 1) & 1);
+        cells[i] = float(heldCell(c));
+        anyLit = anyLit || cells[i] > 0.0;
+    }
+    if (!anyLit) {
+        return 0.0;
+    }
+    float sum = 0.0;
+    float weights = 0.0;
+    for (int i = 0; i < 4; i++) {
+        if (cells[i] <= 0.0) {
+            continue;
+        }
+        float w = ((i & 1) != 0 ? t.x : 1.0 - t.x)*(((i >> 1) & 1) != 0 ? t.y : 1.0 - t.y);
+        sum += cells[i]*w;
+        weights += w;
+    }
+    return weights > 1e-6 ? sum/weights : max(max(cells[0], cells[1]), max(cells[2], cells[3]));
+}
+
+//The light volume's horizontal reach from the camera in blocks (its ring of sections around the camera's section)
+float volumeReach() {
+    return floor(lightSize.x*0.5)*16.0;
+}
+
+//B3: a pixel of vanilla's own cloud layer. Only while vanilla draws it (the far clouds off: cloudShape.w 0) and W4 gives the layer
+// (cloudShape x the bottom, y the thickness, 0 for flat clouds; all 0: no layer), within the layer's height, and only where the light
+// volume says the cell half a block behind the surface is open air under the sky (sky light VANILLA_CLOUD_SKY): a block face has its block
+// behind it. Where the volume does not know the cell, only beyond the volume's reach (vanilla terrain there is not drawn); without the
+// light volume nothing is taken for a cloud (it cannot be told from terrain at the layer's height)
+bool vanillaCloud(vec3 world, vec3 dir, float dist) {
+    if (cloudShape.w > 0.5 || !(cloudShape.y > 0.0 || cloudShape.x != 0.0) || lightCamera.w < 0.5) {
+        return false;
+    }
+    float margin = VANILLA_CLOUD_MARGIN + VANILLA_CLOUD_MARGIN_SHARE*dist;
+    if (world.y < cloudShape.x - margin || world.y > cloudShape.x + max(cloudShape.y, 0.0) + margin) {
+        return false;
+    }
+    int behind = lightByte(ivec3(lightCamera.xyz) + ivec3(floor(lightFrac.xyz + world + dir*0.5)));
+    if (behind < 0) {
+        return max(abs(world.x), abs(world.z)) > volumeReach();
+    }
+    return (behind & 15) >= VANILLA_CLOUD_SKY;
+}
+
+//The far cloud layer in front of maxDist along dir (W4's cloudOver of clouds.glsl's march, premultiplied and hazed), over colour
+vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist) {
+    if (cloudShape.w < 0.5 || !atmosphereSky(a)) {
+        return colour;
+    }
+    float near = farCloudNear();
+    if (!(maxDist > near)) {
+        return colour;
+    }
+    vec3 m = cloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz);
+    if (!(m.y > 0.0)) {
+        return colour;//no cloud in front: no haze to evaluate
+    }
+    m.z += near;//the march's distances are from its start
+    vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0);
+    return colour*(1.0 - r.a) + r.rgb;
+}
+
+//2026-10-21 (CTE2: light dots and dashes on far water): vanilla's water texture has bright streaks, which under the water colour and the
+// reflection stood out where a texel is about a pixel. A vanilla water pixel takes up to WATER_FLATTEN of the mean of its eight
+// neighbours WATER_FLATTEN_RADIUS pixels away that lie on the same surface (view distance within WATER_SAME_SURFACE of its own), fading
+// in from WATER_FLATTEN_NEAR to WATER_FLATTEN_FAR blocks (near water keeps its texture)
+const float WATER_FLATTEN = 0.75;
+const int WATER_FLATTEN_RADIUS = 2;
+const float WATER_SAME_SURFACE = 0.03;
+const float WATER_FLATTEN_NEAR = 24.0;
+const float WATER_FLATTEN_FAR = 64.0;
+
+vec3 flattenWaterTexture(ivec2 p, ivec2 size, vec3 scene, float dist) {
+    float w = WATER_FLATTEN*smoothstep(WATER_FLATTEN_NEAR, WATER_FLATTEN_FAR, dist);
+    if (w <= 0.0) {
+        return scene;
+    }
+    vec3 sum = scene;
+    float n = 1.0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            if (i == 0 && j == 0) {
+                continue;
+            }
+            ivec2 q = clamp(p + ivec2(i, j)*WATER_FLATTEN_RADIUS, ivec2(0), size - 1);
+            float d = texelFetch(mainDepth, q, 0).r;
+            if (d == FAR || abs(length(viewPosition(invVanillaProj, pixelUvGl(q, size), d)) - dist) > WATER_SAME_SURFACE*dist) {
+                continue;
+            }
+            sum += vanillaToScene(texelFetch(mainColour, q, 0).rgb);
+            n += 1.0;
+        }
+    }
+    return mix(scene, sum/n, w);
+}
+
+//2026-10-21 (CTE2: with the LODs off the terrain ended against the sky; NoFog and DH both take vanilla's fog away): with no LODs drawn
+// a vanilla surface fades into the sky behind it over the last part of the render distance, by its horizontal distance
+float borderAmount(vec3 world, bool fromLod) {
+    if (borderFog.z < 0.5 || fromLod) {
+        return 0.0;
+    }
+    return smoothstep(borderFog.x, borderFog.y, length(world.xz));
+}
+
+//B18: a light debug view (1 sky light, 2 block light, 3 the light's shares: red direct sun, green block light, blue sky shade)
+vec3 debugView(int view, bool known, float sky, float block, vec3 share, float sunPart) {
+    if (!known) {
+        return vec3(DEBUG_UNKNOWN_RED, DEBUG_UNKNOWN_GREEN, DEBUG_UNKNOWN_BLUE);
+    }
+    if (view == DEBUG_SKY_VIEW) {
+        return vec3(displayToLinear(clamp(sky/15.0, 0.0, 1.0)));
+    }
+    if (view == DEBUG_BLOCK_VIEW) {
+        return vec3(displayToLinear(clamp(block/15.0, 0.0, 1.0)));
+    }
+    float s = luminance(share);
+    float sun = s*clamp(sunPart, 0.0, 1.0);
+    return vec3(sun, 1.0 - s, s - sun);
+}
+
+//2026-10-23, debug view 5: where the light came from (source: pixelLight's z; albedo: the pixel also has its albedo)
+vec3 sourceView(float source, bool fromLod, bool albedo) {
+    if (source < 0.5) {
+        return vec3(DEBUG_UNKNOWN_RED, DEBUG_UNKNOWN_GREEN, DEBUG_UNKNOWN_BLUE);
+    }
+    if (source > 1.5) {
+        return albedo ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 1.0, 1.0);
+    }
+    return fromLod ? vec3(1.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
+}
+
+//2026-10-23, the albedo (terrain_light.glsl packs it, TerrainLightMath mirrors it): rgb, the depth step's low bits, written on top
+const uint TERRAIN_ALBEDO_WRITTEN = 2147483648u;
+const uint TERRAIN_ALBEDO_TAG_MASK = 127u;
+
+//The colour before the lightmap (display values) of the fragment the terrain light holds here, when that fragment wrote it (opaque,
+// unfogged); a farther fragment's that landed last carries another depth tag
+bool terrainAlbedoAt(ivec2 p, out vec3 albedo) {
+    uint v = imageLoad(terrainLight, p).r;
+    uint a = imageLoad(terrainAlbedo, p).r;
+    albedo = vec3(float(a & 255u), float((a >> 8) & 255u), float((a >> 16) & 255u))/255.0;
+    return a >= TERRAIN_ALBEDO_WRITTEN && ((a >> 24) & TERRAIN_ALBEDO_TAG_MASK) == ((v >> 12) & TERRAIN_ALBEDO_TAG_MASK);
+}
+
+//Vanilla's lightmap colour at fractional levels as vanilla multiplies it (display values)
+vec3 lightmapDisplay(float block, float sky) {
+    vec2 l = clamp(vec2(block, sky), 0.0, 15.0);
+    return texture(lightmapTex, (l + 0.5)/16.0).rgb;
+}
+
+//2026-10-23 (CTE2: grass block edges flickered between green and dirt): an albedo is only the pixel's when it times vanilla's lightmap
+// at the stored levels gives the colour vanilla drew there (per channel within ABS + REL of it). Coplanar layers (the grass side's
+// overlay over the dirt), a farther fragment that wrote last, and decals, outlines or shadows drawn over a surface fail it
+const float TERRAIN_ALBEDO_MATCH_ABS = 0.03;
+const float TERRAIN_ALBEDO_MATCH_REL = 0.12;
+
+bool albedoMatches(vec3 albedo, vec3 vanilla, float block, float sky) {
+    vec3 d = abs(albedo*lightmapDisplay(block, sky) - vanilla);
+    return all(lessThanEqual(d, vec3(TERRAIN_ALBEDO_MATCH_ABS) + TERRAIN_ALBEDO_MATCH_REL*vanilla));
+}
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(sceneOut);
+    if (any(greaterThanEqual(p, size))) {
+        return;
+    }
+    vec4 colour = texelFetch(mainColour, p, 0);
+    vec3 scene = vanillaToScene(colour.rgb);
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog);
+    mat3 toWorld = mat3(invView);
+    vec3 view;
+    bool fromLod;
+    if (!scenePositionFrom(p, size, view, fromLod)) {
+        //Sky: W4's sky and glow, W6's disc, vanilla's stars and moon through W4, then the far clouds (they cover the disc). Without an
+        // atmosphere, and without sky light (B17: no sun or sky effects; the End keeps its sky box), the game's pixel
+        if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5) {
+            imageStore(sceneOut, p, vec4(scene*underwaterExposure(), 0.0));
+            return;
+        }
+        vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
+        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir) + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate);
+        imageStore(sceneOut, p, vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE)*underwaterExposure(), 0.0));
+        return;
+    }
+    float dist = length(view);
+    vec3 world = toWorld*view;
+    vec3 dir = world/max(dist, 0.000001);
+    bool passRan = lighting.z > 0.5;
+    float look = lookWeight();
+    bool plant = isPlant(colour.a);
+    bool emissive = isEmissive(colour.a);
+    bool cloud = !fromLod && vanillaCloud(world, dir, dist);
+    //The pixel's own normal, made as W5's pass makes it (lightingAt's normal); none for plants, light sources and clouds
+    vec3 east = vec3(invView[0][0], invView[1][0], invView[2][0]);
+    vec3 up = vec3(invView[0][1], invView[1][1], invView[2][1]);
+    vec3 normalView = vec3(0.0);
+    if (fromLod) {
+        normalView = lodFaceNormal(texelFetch(lodLight, lodTexel(p, size), 0).r, east, up);
+    } else if (!plant && !emissive && !cloud) {
+        normalView = snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), east, up);
+    }
+    vec3 normalWorld = toWorld*normalView;
+    //W5's lighting, read only when the pass ran (slot 10 .z)
+    vec4 lt = vec4(1.0, 1.0, 0.0, 1.0);
+    float plantSun = -1.0;
+    if (passRan) {
+        lt = lightingAt(lightTex, sunTex, p, dist, normalView);
+        if (plant) {
+            plantSun = texelFetch(plantSunTex, p, 0).r;
+        }
+    }
+    float kind = passRan && !cloud ? lt.z : 0.0;
+    bool water = kind > 0.0;
+    vec3 lightNormal = water ? vec3(0.0, 1.0, 0.0) : normalWorld;
+    //The light levels at the surface: the light volume or the LOD light (unknown: full sky light, no block light, nothing relit)
+    vec3 pl = pixelLight(p, size, world, lightNormal);
+    bool known = pl.z > 0.5;
+    vec3 albedo;
+    bool hasAlbedo = pl.z > 1.5 && terrainAlbedoAt(p, albedo) && albedoMatches(albedo, colour.rgb, pl.y, pl.x);
+    float sky = known ? pl.x : 15.0;
+    float block = known ? pl.y : 0.0;
+    float skyT = sky;
+    float blockT = block;
+    if (water && !fromLod) {
+        scene = flattenWaterTexture(p, size, scene, dist);
+    }
+    vec3 lit = scene;
+    vec3 share = vec3(1.0);
+    float sunPart = 0.0;
+    if (!cloud && !emissive) {
+        bool ownSun = plant && plantSun >= 0.0;
+        float direct = ownSun ? plantSun : lt.y;
+        float visibility = ownSun ? plantSun : lt.w;
+        if (known) {
+            //Sky Light Ambient: the sky light lifted where the sun reaches (RelightMath.lift; lightFrac.w is 0 without valid sun visibility)
+            if (passRan) {
+                skyT = liftedSky(sky, clamp(visibility, 0.0, 1.0)*clamp(lightFrac.w, 0.0, 1.0));
+            }
+            //B12: water that sees the sky sideways keeps that sky light
+            if (water && !fromLod && lightMode.z > 0.5) {
+                skyT = max(skyT, 15.0*waterSky(sky, sideSky(world)));
+            }
+            //B16: the held light, where the light volume is known
+            if (heldOrigin.w > 0.5 && lightCamera.w > 0.5 && !fromLod) {
+                float held = heldLightAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world);
+                blockT = max(blockT, heldFalloff(held, float(heldCell(ivec3(HELD_GRID_SIDE/2)))));
+            }
+        }
+        //Final fix R5: each lightmap colour is sampled once; equal levels reuse a sample (unknown light: one sample, nothing relit)
+        vec3 lightAll = lightmapLinear(blockT, skyT);
+        vec3 lightSky = blockT == block ? lightAll : lightmapLinear(block, skyT);
+        vec3 lightNow = skyT == sky ? lightSky : lightmapLinear(block, sky);
+        vec3 dark = vec3(0.0);
+        vec3 skyOnly = vec3(0.0);
+        vec3 blockOnly = vec3(0.0);
+        vec3 gain = vec3(1.0);
+        bool capped = false;
+        //The scene at the new light (sky lift, side sky, held light) before the shading
+        vec3 relit = scene;
+        if (known) {
+            if (hasAlbedo) {
+                //2026-10-23: vanilla's own product at the new levels, the held light's too: no gain cap, no stretched 8-bit steps
+                relit = vanillaToScene(albedo*lightmapDisplay(blockT, skyT));
+            } else {
+                gain = relightGain(lightNow, lightSky);
+                capped = relightCapped(lightNow, lightSky);
+                if (blockT > block) {
+                    vec3 held = min(lightAll/max(lightSky, vec3(1e-4)), vec3(HELD_MAX_GAIN));
+                    vec3 base = scene*gain;
+                    float scale = heldRoom(max(base.r, max(base.g, base.b)), max(max(held.r, max(held.g, held.b)), 1.0),
+                            max(lightAll.r, max(lightAll.g, lightAll.b)));
+                    gain *= max(held*scale, vec3(1.0));
+                }
+                relit = scene*gain;
+            }
+            dark = lightmapLinear(0.0, 0.0);
+            skyOnly = skyT == 0.0 ? dark : (blockT == 0.0 ? lightAll : lightmapLinear(0.0, skyT));
+            blockOnly = blockT == 0.0 ? dark : (skyT == 0.0 ? lightAll : lightmapLinear(blockT, 0.0));
+            share = skyLitShare(skyOnly, lightAll, dark);
+        }
+        float skyLight = clamp(skyT/15.0, 0.0, 1.0);
+        float sunWeight = passRan ? lighting.y : 0.0;
+        float shade = 1.0;
+        if (!plant && kind == 0.0) {
+            //Water, ice, glass and slime are vanilla's texel blended over what lies behind, which that face never shaded
+            shade = fromLod ? mix(1.0, bakedShade(lightNormal), LOD_FACE_SHADE_SHARE) : bakedShade(lightNormal);
+        }
+        float skyFactor = sunShadingAt(direct, skyLight, sunWeight, lighting.w)*faceUnshade(shade, sunWeight);
+        float directShare = sunShare(direct, skyLight);
+        float shadeL = shadeLevel(lighting.w);
+        float sunL = sunLevel(lighting.w);
+        sunPart = (sunL - shadeL)*directShare/(shadeL + (sunL - shadeL)*directShare);
+        vec3 tint = passRan ? lightTint(directShare, lightSun.w*lightShade.w, lightSun.rgb, lightShade.rgb) : vec3(1.0);
+        //The exposures (final fix R1): the sky-light ones not on light the active volume does not know yet (a section still loading);
+        // with the volume off every vanilla pixel takes them on its lightmap share (all sky-lit), as its LOD neighbours do (follow-up 1).
+        // The block light's falls on the known block-lit share alone
+        bool exposed = known || lightCamera.w < 0.5;
+        float se = exposed ? skyExposure(waterParams.z, waterParams.w, look) : 1.0;
+        if (exposed && exposureMode(ATMOSPHERE_SKY)) {
+            se *= skyWeatherExposure(lookParams.z, waterParams.z, waterParams.w, look);
+        }
+        float be = blockExposure(waterParams.z, look);
+        //What the lighting does to a white texel's light here, per channel
+        vec3 perLight = share*skyFactor*tint*se + (vec3(1.0) - share)*be;
+        //W10: per channel, the share of perLight the ambient occlusion leaves. It takes the sky light's ambient part (the sun shading at
+        // no direct sun, with the face unshade, tint and exposure the sky-lit share gets) and the lightmap's floor in the block-lit share
+        vec3 ao = vec3(1.0);
+        if (passRan && lighting.x > 0.0) {
+            float occlusion = aoStrengthApplied(aoAt(aoTex, p, dist), lighting.x);
+            if (occlusion < 1.0) {
+                vec3 floorShare = known ? aoFloorShare(skyOnly, blockOnly, dark) : vec3(0.0);
+                vec3 occludable = share*sunShadingAt(0.0, skyLight, sunWeight, lighting.w)*faceUnshade(shade, sunWeight)*tint*se
+                        + (vec3(1.0) - share)*be*floorShare;
+                ao = aoOccludedLight(perLight, occludable, occlusion);
+            }
+        }
+        lit = relit*perLight*ao;
+        if (exposureMode(ATMOSPHERE_NO_SKY)) {
+            lit *= looked(NO_SKY_EXPOSURE, look);
+        }
+        if (water && capped) {
+            //Gate G7l: water whose vanilla light was too dark to scale keeps its body's scattering floor
+            lit = max(lit, lightAll*perLight*LIGHT_WATER_ALBEDO);
+        }
+        if (water) {
+            //W6: the water's colour over its depth, lit by what a white texel here receives (before the haze)
+            lit = waterColour(lit, kind*waterParams.x, lightAll*perLight*ao*waterParams.y);
+        }
+    }
+    int debug = int(lightMode.x + 0.5);
+    if (debug >= DEBUG_SKY_VIEW && debug <= DEBUG_SHARE_VIEW) {
+        imageStore(sceneOut, p, vec4(debugView(debug, known, skyT, blockT, share, sunPart), 0.0));
+        return;
+    }
+    if (debug == DEBUG_SOURCE_VIEW) {
+        imageStore(sceneOut, p, vec4(sourceView(pl.z, fromLod, hasAlbedo), 0.0));
+        return;
+    }
+    //W4's haze over the view distance: the sky light given to sunShadingAt (the lifted one); water its own unlifted sky light, as W6's
+    // reflection hazes the reflected colour; LOD pixels full
+    float hazeSky = water ? skyShare(sky) : clamp(skyT/15.0, 0.0, 1.0);
+    float amount = hazeAmount(a, known && !cloud ? hazeSky : 1.0, fromLod);
+    lit = applyHaze(a, lit, dir, dist, amount);
+    float border = atmosphereSky(a) ? borderAmount(world, fromLod) : 0.0;
+    if (border > 0.0) {
+        lit = mix(lit, skyColour(a, dir) + sunGlow(a, dir), border);
+    }
+    lit = farCloudsOver(a, lit, dir, dist);
+    imageStore(sceneOut, p, vec4(lit*underwaterExposure(), passRan && !cloud ? reflectionMark(kind) : 0.0));
+}

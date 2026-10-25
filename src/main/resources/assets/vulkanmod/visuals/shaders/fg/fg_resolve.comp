@@ -1,0 +1,61 @@
+#version 450
+//Frame generation (FG design 5.1 step 2, 5.3): each generated pixel unprojects its splatted depth with the generated camera's
+// inverse, projects into the real frame (realFromGen), samples the real colour (bilinear) and accepts it when the real frame's view
+// depth there agrees (accept). Output alpha is the validity mark: VALID_MARK, HOLE_MARK, or EDGE_MARK for a position outside the real
+// frame (the colour of the nearest edge texel). No splat: the pixel's ray (w 0, no camera translation) is looked up in the real frame
+// and a sky there gives the sky colour; anything else is a hole.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D resolveOut;
+layout(binding = 1, r32ui) uniform readonly restrict uimage2D splatIn;
+layout(binding = 2) uniform sampler2D worldLinear;
+layout(binding = 3) uniform sampler2D worldNearest;//the depth in alpha must not be filtered
+
+#import <vulkanmod:visuals/fg/params.glsl>
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 sz = imageSize(resolveOut);
+    if (any(greaterThanEqual(p, sz))) {
+        return;
+    }
+    vec2 wh = size.xy;
+    ivec2 whi = ivec2(wh);
+    vec2 uvGl = vec2((float(p.x) + 0.5)/wh.x, 1.0 - (float(p.y) + 0.5)/wh.y);
+    uint bits = imageLoad(splatIn, p).r;
+    //A hole keeps the real frame's colour as a fallback (fill replaces it where it can): the texel at the reprojected position, else the same pixel
+    vec4 result = vec4(texelFetch(worldNearest, clamp(p, ivec2(0), whi - 1), 0).rgb, HOLE_MARK);
+
+    vec4 clip;
+    float expected = 0.0;
+    if (bits == EMPTY) {
+        clip = realFromGen*vec4(fgViewRay(invGenProj, uvGl), 0.0);
+    } else {
+        clip = realFromGen*vec4(viewPos(invGenProj, uvGl.x, uvGl.y, uintBitsToFloat(bits)), 1.0);
+        expected = clip.w;
+    }
+    if (clip.w > 0.0) {
+        vec2 uv = clip.xy/clip.w*0.5 + 0.5;
+        vec2 pos = vec2(uv.x, 1.0 - uv.y)*wh;
+        if (!(all(greaterThanEqual(pos, vec2(0.0))) && all(lessThan(pos, wh)))) {
+            if (all(lessThan(abs(pos), vec2(65536.0)))) {
+                result = vec4(texelFetch(worldNearest, edgeClamp(pos, whi), 0).rgb, EDGE_MARK);
+            }
+        } else {
+            ivec2 q = edgeClamp(pos, whi);
+            float source = texelFetch(worldNearest, q, 0).a;
+            if (bits == EMPTY) {
+                if (source >= SKY_DEPTH) {
+                    result = vec4(textureLod(worldLinear, pos/wh, 0.0).rgb, VALID_MARK);
+                } else {
+                    result.rgb = texelFetch(worldNearest, q, 0).rgb;
+                }
+            } else if (accept(source, expected)) {
+                result = vec4(textureLod(worldLinear, pos/wh, 0.0).rgb, VALID_MARK);
+            } else {
+                result = vec4(texelFetch(worldNearest, q, 0).rgb, HOLE_MARK);
+            }
+        }
+    }
+    imageStore(resolveOut, p, result);
+}

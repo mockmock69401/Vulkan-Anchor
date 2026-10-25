@@ -1,0 +1,17 @@
+#version 450
+//FSR frame generation (FSR design 4.5 step 1): the world before the hand, HUD and GUI, copied as FSR's HUD-less colour at display
+// size. The main colour is a colour attachment without transfer usage, so it is sampled here: texel for texel at the same size
+// (nearest sampler), filtered like the render-scale blit to the screen when the world is drawn smaller (linear sampler).
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba8) uniform writeonly restrict image2D hudLessOut;
+layout(binding = 1) uniform sampler2D mainColour;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(hudLessOut);
+    if (any(greaterThanEqual(p, size))) {
+        return;
+    }
+    imageStore(hudLessOut, p, textureLod(mainColour, (vec2(p) + 0.5)/vec2(size), 0.0));
+}

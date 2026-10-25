@@ -1,0 +1,38 @@
+#version 450
+//Frame generation (FG design 4): the world image of a real frame, written at the end of the world pass: the main colour in rgb and
+// the positive view depth in alpha (vanilla or LOD depth per pixel as viewpos.glsl chooses, as post_taa.comp does; SKY_DEPTH for the
+// sky). Without a valid depth (menus) every pixel is SKY_DEPTH. RGBA16F, so the depth is capped at SKY_DEPTH.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D captureOut;
+layout(binding = 1) uniform sampler2D colourTex;
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(binding = 3) uniform sampler2D lodDepth;
+
+#import <vulkanmod:visuals/fg/params.glsl>
+
+//LodClamp.CLAMP_THRESHOLD (the post passes' depthParams.x)
+const float LOD_CLAMP_THRESHOLD = 0.99999982;
+//viewpos.glsl's inputs, from the parameter block
+#define invVanillaProj invRealProj
+#define depthParams vec4(LOD_CLAMP_THRESHOLD, flags.x, 0.0, 0.0)
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/viewpos.glsl>
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 sz = imageSize(captureOut);
+    if (any(greaterThanEqual(p, sz))) {
+        return;
+    }
+    vec3 colour = min(texelFetch(colourTex, p, 0).rgb, vec3(65504.0));
+    float depth = SKY_DEPTH;
+    if (flags.y > 0.5) {
+        vec3 view;
+        if (scenePosition(p, sz, view)) {
+            depth = min(-view.z, SKY_DEPTH);//LODs past SKY_DEPTH count as sky (rgba16f range)
+        }
+    }
+    imageStore(captureOut, p, vec4(colour, depth));
+}

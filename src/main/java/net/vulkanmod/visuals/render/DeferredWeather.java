@@ -1,0 +1,71 @@
+package net.vulkanmod.visuals.render;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.vulkanmod.mixin.visuals.LevelRendererWeatherInvoker;
+import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LightTexture;
+import org.joml.Matrix4f;
+
+/**
+ * P7h final review: vanilla draws rain, snow and the world border after the clouds without writing depth, so over the sky the
+ * scene copy's far clouds would cover them. While the visuals draw the clouds (FarClouds, not on Fabulous) they are recorded instead and
+ * drawn after the post-process with the level's model-view matrix. The render thread records and draws.
+ */
+public final class DeferredWeather {
+    private static final Matrix4f MODEL_VIEW = new Matrix4f();
+    private static boolean pending, replaying;
+    private static LightTexture lightTexture;
+    private static float partialTick;
+    private static double camX, camY, camZ;
+    private static Camera border;
+
+    private DeferredWeather() {
+    }
+
+    /** LevelRendererWeatherMixin at renderSnowAndRain's head: true when it is recorded (the caller cancels vanilla's draw). */
+    public static boolean deferRain(LightTexture light, float tick, double x, double y, double z) {
+        if (replaying || !FarClouds.replacesVanilla() || Minecraft.useShaderTransparency()) return false;
+        lightTexture = light;
+        partialTick = tick;
+        camX = x;
+        camY = y;
+        camZ = z;
+        MODEL_VIEW.set(RenderSystem.getModelViewMatrix());
+        border = null;
+        pending = true;
+        return true;
+    }
+
+    /** At renderWorldBorder's head, right after the weather: deferred with it. */
+    public static boolean deferBorder(Camera camera) {
+        if (replaying || !pending) return false;
+        border = camera;
+        return true;
+    }
+
+    /** GameRendererPostMixin, after the post-process (whether or not it drew): the recorded weather and border, in the resumed main pass. */
+    public static void replay() {
+        if (!pending) return;
+        pending = false;
+        replaying = true;
+        LevelRendererWeatherInvoker renderer = (LevelRendererWeatherInvoker) Minecraft.getInstance().levelRenderer;
+        PoseStack stack = RenderSystem.getModelViewStack();
+        stack.pushPose();
+        stack.last().pose().set(MODEL_VIEW);
+        RenderSystem.applyModelViewMatrix();
+        RenderSystem.depthMask(false);
+        try {
+            renderer.visuals$renderSnowAndRain(lightTexture, partialTick, camX, camY, camZ);
+            if (border != null) renderer.visuals$renderWorldBorder(border);
+        } finally {
+            RenderSystem.depthMask(true);
+            stack.popPose();
+            RenderSystem.applyModelViewMatrix();
+            replaying = false;
+            lightTexture = null;
+            border = null;
+        }
+    }
+}

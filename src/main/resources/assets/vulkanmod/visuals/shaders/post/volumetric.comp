@@ -1,0 +1,122 @@
+#version 450
+//W8: light shafts through the sun's shadow cascades, at the bloom pyramid's level-0 size. Each texel q marches the view ray to its
+// full-resolution pixel 2q (sky: the longest ray) and sums the light a homogeneous medium scatters toward the camera, segment by
+// segment, times the sun's visibility from the near and far cascades (single scattering with Beer-Lambert extinction, e.g.
+// Nishita et al. 1987; ray-marched shadow-map shafts as in Toth and Umenhofer 2009, "Real-time volumetric lighting in participating
+// media", Eurographics). The ray offset is a 4x4 ordered dither fixed in screen space, which volumetric_blur.comp averages out.
+// VolumetricMath mirrors every constant and step here: change both together.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D dst;
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(binding = 3) uniform sampler2D lodDepth;
+layout(binding = 8) uniform sampler2D shadowNearMap;
+layout(binding = 9) uniform sampler2D shadowFarMap;
+
+layout(location = 0) uniform mat4 invVanillaProj;
+layout(location = 1) uniform mat4 invLodProj;
+layout(location = 2) uniform vec4 depthParams;//x LodClamp.CLAMP_THRESHOLD, y 1 when the LOD depth is valid
+layout(location = 3) uniform vec4 sunView;//xyz toward the sun, view space
+layout(location = 4) uniform vec4 marchParams;//x the longest ray (blocks)
+//Clean ShadowUniforms.write: view space to each cascade's clip space (orthographic, depth 0..1 away from the sun), which are drawn,
+// the bias in blocks and depth units
+layout(location = 6) uniform mat4 shadowNear;
+layout(location = 7) uniform mat4 shadowFar;
+layout(location = 8) uniform vec4 shadowParams;//x near on, y far on, z the near cascade's blend band
+layout(location = 9) uniform vec4 shadowBias;//x near normal offset, y near depth bias, z far normal offset, w far depth bias
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/viewpos.glsl>
+
+const int STEPS = 16;
+const float DENSITY = 0.0015;
+const float PHASE_G = 0.5;
+const int DITHER_SIZE = 4;
+
+//4x4 Bayer matrix (Bayer 1973): 4 M2(low bits) + M2(high bits), M2(x, y) = 2 (x ^ y) + y
+float dither(ivec2 q) {
+    ivec2 a = q & 1;
+    ivec2 b = (q >> 1) & 1;
+    int m0 = 2*(a.x ^ a.y) + a.y;
+    int m1 = 2*(b.x ^ b.y) + b.y;
+    return (float(4*m0 + m1) + 0.5)/float(DITHER_SIZE*DITHER_SIZE);
+}
+
+//Henyey-Greenstein (1941) scaled by 4 pi: 1 is isotropic
+float phase(float cosTheta) {
+    float g2 = PHASE_G*PHASE_G;
+    float d = max(1.0 + g2 - 2.0*PHASE_G*cosTheta, 1e-4);
+    return (1.0 - g2)/pow(d, 1.5);
+}
+
+//Positive viewport: row 0 of a map is ndc y -1
+ivec2 mapTexel(vec2 ndc, ivec2 size) {
+    return clamp(ivec2((ndc*0.5 + 0.5)*vec2(size)), ivec2(0), size - 1);
+}
+
+//A point inside a cascade: within its map and its depth range (z outside 0..1 lies beyond what the map recorded, e.g. the far end of
+// a ray or a map drawn before the camera moved)
+bool insideCascade(vec3 clip) {
+    return max(abs(clip.x), abs(clip.y)) < 1.0 && clip.z >= 0.0 && clip.z <= 1.0;
+}
+
+//The sun's visibility at a point given in both cascades' clip spaces. With the far cascade drawn, inside the near cascade's blend
+// band the cascade is picked by pick against the blend weight (ShadowMath.blendWeight), dithered like the ray offset; without it the
+// near map decides up to its edge. A point no drawn cascade covers is lit. VolumetricMath.visibility mirrors this.
+float visibility(vec3 nearClip, vec3 farClip, float pick) {
+    bool farOn = shadowParams.y > 0.5;
+    if (shadowParams.x > 0.5 && insideCascade(nearClip)) {
+        float edge = max(abs(nearClip.x), abs(nearClip.y));
+        float t = clamp((edge - (1.0 - shadowParams.z))/max(shadowParams.z, 1e-4), 0.0, 1.0);
+        float weight = farOn ? t*t*(3.0 - 2.0*t) : 0.0;
+        if (pick >= weight) {
+            float map = texelFetch(shadowNearMap, mapTexel(nearClip.xy, textureSize(shadowNearMap, 0)), 0).r;
+            return nearClip.z <= map + shadowBias.y ? 1.0 : 0.0;
+        }
+    }
+    if (farOn && insideCascade(farClip)) {
+        float map = texelFetch(shadowFarMap, mapTexel(farClip.xy, textureSize(shadowFarMap, 0)), 0).r;
+        return farClip.z <= map + shadowBias.w ? 1.0 : 0.0;
+    }
+    return 1.0;
+}
+
+void main() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(q, imageSize(dst)))) {
+        return;
+    }
+    ivec2 full = textureSize(mainDepth, 0);
+    ivec2 p = min(q*2, full - 1);
+    float dist = marchParams.x;
+    vec3 dir;
+    vec3 view;
+    if (scenePosition(p, full, view)) {
+        float len = length(view);
+        dir = view/max(len, 1e-6);
+        dist = min(len, marchParams.x);
+    } else {
+        //Sky: the direction through the pixel
+        dir = viewRay(invVanillaProj, pixelUvGl(p, full));
+    }
+    float jitter = dither(q);
+    float pick = dither(q + ivec2(2, 1));
+    //Orthographic cascades: a point at distance t is origin + t * step in clip space
+    vec3 nearOrigin = (shadowNear*vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vec3 nearStep = (shadowNear*vec4(dir, 0.0)).xyz;
+    vec3 farOrigin = (shadowFar*vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+    vec3 farStep = (shadowFar*vec4(dir, 0.0)).xyz;
+    float sum = 0.0;
+    float before = 1.0;
+    for (int i = 0; i < STEPS; i++) {
+        //Quadratic spacing: segment i spans D (i/STEPS)^2 .. D ((i+1)/STEPS)^2, short steps near the camera
+        float u = float(i + 1)/float(STEPS);
+        float after = exp(-DENSITY*dist*u*u);
+        float s = (float(i) + jitter)/float(STEPS);
+        float t = dist*s*s;
+        sum += (before - after)*visibility(nearOrigin + nearStep*t, farOrigin + farStep*t, pick);
+        before = after;
+    }
+    float mask = max(sum*phase(dot(dir, sunView.xyz)), 0.0);
+    imageStore(dst, q, vec4(mask, 0.0, 0.0, 1.0));
+}

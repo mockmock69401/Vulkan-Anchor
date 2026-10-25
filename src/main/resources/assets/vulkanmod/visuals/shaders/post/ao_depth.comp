@@ -1,0 +1,44 @@
+#version 450
+//W10: the ambient occlusion's first pass, one invocation per half-resolution texel q (the full pixel 2q): the view distance of the
+// surface the pixel shows (vanilla or LOD, viewpos.glsl), 0 for sky, negative for plant and light-source pixels and for water, ice,
+// glass and slime (W5's translucent kind: a flat sheet over what lies behind, which hides nothing) (ao.glsl's header).
+// The occlusion pass reads its neighbours from this one image instead of both depths. AmbientOcclusion mirrors it.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, r32f) uniform writeonly restrict image2D aoDepthOut;
+layout(binding = 1) uniform sampler2D mainColour;
+layout(binding = 2) uniform sampler2D mainDepth;
+layout(binding = 3) uniform sampler2D lodDepth;
+//W5's raw lightOut on the same grid (a: the translucent kind)
+layout(binding = 4) uniform sampler2D lightTex;
+
+//AmbientOcclusion.writeDepth: viewpos.glsl's inputs, then x, y the full image's size (z texels per block at distance 1, unused here)
+layout(location = 0) uniform mat4 invVanillaProj;
+layout(location = 1) uniform mat4 invLodProj;
+layout(location = 2) uniform vec4 depthParams;//x LodClamp.CLAMP_THRESHOLD, y 1 when the LOD depth is valid
+layout(location = 3) uniform vec4 aoSize;
+
+#import <vulkanmod:visuals/util/depthutils.glsl>
+#import <vulkanmod:visuals/post/viewpos.glsl>
+#import <vulkanmod:visuals/post/lighting.glsl>
+#import <vulkanmod:visuals/post/ao.glsl>
+
+void main() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(aoDepthOut);
+    if (any(greaterThanEqual(q, size))) {
+        return;
+    }
+    ivec2 full = ivec2(aoSize.xy);
+    ivec2 p = min(2*q, full - 1);
+    vec3 view;
+    float d = 0.0;
+    if (scenePosition(p, full, view)) {
+        d = max(length(view), AO_MIN_DISTANCE);
+        float alpha = texelFetch(mainColour, p, 0).a;
+        if (isPlant(alpha) || isEmissive(alpha) || texelFetch(lightTex, q, 0).a != 0.0) {
+            d = -d;
+        }
+    }
+    imageStore(aoDepthOut, q, vec4(d, 0.0, 0.0, 0.0));
+}
