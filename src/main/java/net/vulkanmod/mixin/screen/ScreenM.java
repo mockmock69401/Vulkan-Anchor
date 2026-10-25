@@ -23,21 +23,6 @@ public class ScreenM {
     @Inject(method = "renderWithTooltip", at = @At("HEAD"))
     private void vulkanMod$beginScreenRenderStateBoundary(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
         this.vulkanMod$screenStateSnapshot = new RenderStateSnapshot();
-
-        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-        RenderSystem.colorMask(true, true, true, true);
-        RenderSystem.disableDepthTest();
-        RenderSystem.depthMask(false);
-        RenderSystem.disableCull();
-        RenderSystem.enableBlend();
-        RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
-
-                                                                                                    
-                                                                                                      
-                                                                                                     
-                                                                                                     
-                                                                                                    
-                                                                                       
         Renderer.clearAttachments(GL11.GL_DEPTH_BUFFER_BIT);
     }
 
@@ -51,9 +36,7 @@ public class ScreenM {
         }
     }
 
-                                                                                                              
-                                                                                                          
-    @Inject(method = "renderBlurredBackground", at = @At("HEAD"), cancellable = true, require = 0)
+    @Inject(method = "renderBlurredBackground", at = @At("HEAD"), cancellable = true)
     private void vulkanMod$beginBlurBackgroundState(float f, CallbackInfo ci) {
         if (Minecraft.getInstance().level != null) {
             Renderer.resetScissor();
@@ -72,7 +55,7 @@ public class ScreenM {
         Renderer.resetScissor();
     }
 
-    @Inject(method = "renderBlurredBackground", at = @At("RETURN"), require = 0)
+    @Inject(method = "renderBlurredBackground", at = @At("RETURN"))
     private void vulkanMod$endBlurBackgroundState(float f, CallbackInfo ci) {
         Renderer.resetScissor();
 
@@ -86,4 +69,3 @@ public class ScreenM {
         }
     }
 }
-

@@ -40,11 +40,11 @@ public final class EntityCulling {
             return frustum.isVisible(aabb);
         }
 
-        if (!isVisible(frustum, aabb)) {
+        if (!isWithinAggressiveDistance(entity, aabb, cameraX, cameraY, cameraZ)) {
             return false;
         }
 
-        return isWithinAggressiveDistance(entity, aabb, cameraX, cameraY, cameraZ);
+        return isVisible(frustum, aabb);
     }
 
     public static boolean isVisible(Frustum frustum, AABB aabb) {
@@ -93,22 +93,34 @@ public final class EntityCulling {
     }
 
     private static boolean isWithinAggressiveDistance(Entity entity, AABB aabb, double cameraX, double cameraY, double cameraZ) {
-        if (entity.noCulling || isImportantEntity(entity)) {
+        if (entity.noCulling) {
             return true;
         }
 
-        Minecraft minecraft = Minecraft.getInstance();
-        Entity cameraEntity = minecraft.getCameraEntity();
-        if (entity == cameraEntity || entity.hasIndirectPassenger(cameraEntity)) {
-            return true;
-        }
-
-        double limit = getAggressiveCullDistance(entity);
         double dx = (aabb.minX + aabb.maxX) * 0.5D - cameraX;
         double dy = (aabb.minY + aabb.maxY) * 0.5D - cameraY;
         double dz = (aabb.minZ + aabb.maxZ) * 0.5D - cameraZ;
+        double distanceSquared = dx * dx + dy * dy + dz * dz;
+        if (isWithinAggressiveDistanceSquared(distanceSquared, false)) {
+            return true;
+        }
 
-        return dx * dx + dy * dy + dz * dz <= limit * limit;
+        boolean miscellaneous = entity.getType().getCategory() == MobCategory.MISC;
+        if (miscellaneous && isWithinAggressiveDistanceSquared(distanceSquared, true)) {
+            return true;
+        }
+
+        if (isImportantEntity(entity)) {
+            return true;
+        }
+
+        Entity cameraEntity = Minecraft.getInstance().getCameraEntity();
+        return entity == cameraEntity || entity.hasIndirectPassenger(cameraEntity);
+    }
+
+    static boolean isWithinAggressiveDistanceSquared(double distanceSquared, boolean miscellaneous) {
+        double limit = miscellaneous ? MISC_CULL_DISTANCE : MOB_CULL_DISTANCE;
+        return distanceSquared <= limit * limit;
     }
 
     private static boolean isImportantEntity(Entity entity) {
@@ -119,15 +131,6 @@ public final class EntityCulling {
                 || entity.isCurrentlyGlowing()
                 || entity.hasCustomName()
                 || entity.getBoundingBox().getSize() > 4.0D;
-    }
-
-    private static double getAggressiveCullDistance(Entity entity) {
-        MobCategory category = entity.getType().getCategory();
-        if (category == MobCategory.MISC) {
-            return MISC_CULL_DISTANCE;
-        }
-
-        return MOB_CULL_DISTANCE;
     }
 
     private static int sectionCoord(double coordinate) {
@@ -160,4 +163,3 @@ public final class EntityCulling {
         return visible;
     }
 }
-

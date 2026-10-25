@@ -86,7 +86,7 @@ public class GL32M {
 
     @Overwrite(remap = false)
     public static void glViewport(@NativeType("GLint") int x, @NativeType("GLint") int y, @NativeType("GLsizei") int width, @NativeType("GLsizei") int height) {
-        Renderer.setViewport(x, y, width, height);
+        Renderer.setGlViewport(x, y, width, height);
     }
 
     @Overwrite(remap = false)
@@ -329,4 +329,3 @@ public class GL32M {
 
     private static final int GL_COLOR_CLEAR_VALUE = 0x0C22;
 }
-

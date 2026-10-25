@@ -1,5 +1,6 @@
 package net.vulkanmod.mixin.visuals;
 
+import net.minecraft.client.DeltaTracker;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.GameRenderer;
 import net.vulkanmod.visuals.framegen.FrameGen;
@@ -21,13 +22,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GameRenderer.class)
 public abstract class GameRendererFrameGenMixin {
     @Inject(method = "renderLevel", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V", ordinal = 0), require = 0)
-    private void visuals$beforeHand(float partialTick, long finishNanos, PoseStack poseStack, CallbackInfo ci) {
+    private void visuals$beforeHand(DeltaTracker deltaTracker, CallbackInfo ci) {
         FrameGen.beforeHand();
         FsrCapture.beforeHand();
     }
 
     @Inject(method = "renderLevel", at = @At("RETURN"))
-    private void visuals$afterLevelWithoutHand(float partialTick, long finishNanos, PoseStack poseStack, CallbackInfo ci) {
+    private void visuals$afterLevelWithoutHand(DeltaTracker deltaTracker, CallbackInfo ci) {
         FrameGen.beforeHand();
         FsrCapture.beforeHand();
     }

@@ -96,19 +96,22 @@ class SectionLayerChoiceTest {
         assertEquals(1100, priority(Bytecode.read("net/vulkanmod/mixin/chunk/SectionLayerLateMixin")));
     }
 
+    /** 1.21.1: the plain drawer draws before vanilla's body without cancelling it (as upstream 1.21.1); the DH pair cancels. */
     @Test
-    void allThreeDrawAndCancelButOnlyTheGuardBranchesOnDhBeingActive() throws Exception {
+    void allThreeDrawTheDhPairCancelsAndOnlyTheGuardBranchesOnDhBeingActive() throws Exception {
         for (String name : List.of("SectionLayerMixin", "SectionLayerGuardMixin", "SectionLayerLateMixin")) {
             ClassNode c = Bytecode.read("net/vulkanmod/mixin/chunk/" + name);
-            List<String> calls = calls(injectOn(c, "m_172993_"));
-            assertTrue(Bytecode.inOrder(calls, List.of("WorldRenderer.renderSectionLayer", "CallbackInfo.cancel")), name + " " + calls);
+            List<String> calls = calls(injectOn(c, "renderSectionLayer"));
+            assertTrue(calls.contains("WorldRenderer.renderSectionLayer"), name + " " + calls);
+            assertEquals(!name.equals("SectionLayerMixin"), Bytecode.inOrder(calls, List.of("WorldRenderer.renderSectionLayer", "CallbackInfo.cancel")),
+                    name + " " + calls);
             assertEquals(name.equals("SectionLayerGuardMixin"), calls.contains("DhPresence.isActive"), name + " " + calls);
         }
     }
 
     @Test
     void theGuardChecksBeforeItDraws() throws Exception {
-        List<String> calls = calls(injectOn(Bytecode.read("net/vulkanmod/mixin/chunk/SectionLayerGuardMixin"), "m_172993_"));
+        List<String> calls = calls(injectOn(Bytecode.read("net/vulkanmod/mixin/chunk/SectionLayerGuardMixin"), "renderSectionLayer"));
         assertTrue(Bytecode.inOrder(calls, List.of("DhPresence.isActive", "WorldRenderer.renderSectionLayer", "CallbackInfo.cancel")), calls.toString());
     }
 
@@ -124,8 +127,8 @@ class SectionLayerChoiceTest {
                 targets.addAll((List<String>) a.values.get(a.values.indexOf("method") + 1));
             }
         }
-        assertFalse(targets.contains("m_172993_"), targets.toString());
-        for (String kept : List.of("m_194338_", "m_194370_", "m_202430_", "<init>", "m_109701_", "m_109599_")) {
+        assertFalse(targets.contains("renderSectionLayer"), targets.toString());
+        for (String kept : List.of("setupRender", "applyFrustum", "allChanged", "<init>", "setLevel", "renderLevel")) {
             assertTrue(targets.contains(kept), kept + " in " + targets);
         }
     }

@@ -1,5 +1,6 @@
 package net.vulkanmod.vulkan.device;
 
+import net.vulkanmod.Initializer;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.vulkan.*;
@@ -62,9 +63,13 @@ public class Device {
         if (this.availableFeatures.features().multiDrawIndirect() && this.availableFeatures11.shaderDrawParameters())
             this.drawIndirectSupported = true;
 
-                                                                                                         
-        this.portabilitySubset = getUnsupportedExtensions(
-                Set.of(KHRPortabilitySubset.VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME)).isEmpty();
+        Set<String> availableExtensions = getAvailableExtensions(this.physicalDevice);
+
+        this.portabilitySubset = availableExtensions.contains(
+                KHRPortabilitySubset.VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+
+        Initializer.LOGGER.info("VulkanMod: {} exposes {} device extensions.",
+                this.deviceName, availableExtensions.size());
     }
 
     private static String decodeVendor(int i) {
@@ -115,13 +120,9 @@ public class Device {
         return unsupportedExtensions;
     }
 
-                                                                                                     
-                                                                                                    
     static Set<String> getAvailableExtensions(VkPhysicalDevice physicalDevice) {
         try (MemoryStack stack = stackPush()) {
-
             IntBuffer extensionCount = stack.ints(0);
-
             vkEnumerateDeviceExtensionProperties(physicalDevice, (String) null, extensionCount, null);
 
             VkExtensionProperties.Buffer availableExtensions = VkExtensionProperties.malloc(extensionCount.get(0));
@@ -141,6 +142,10 @@ public class Device {
         return drawIndirectSupported;
     }
 
+    public boolean isPortabilitySubset() {
+        return portabilitySubset;
+    }
+
     public boolean isAMD() {
         return vendorId == 0x1022;
     }
@@ -153,15 +158,9 @@ public class Device {
         return vendorId == 0x8086;
     }
 
-                                                                                                                      
-    public boolean isPortabilitySubset() {
-        return portabilitySubset;
-    }
-
     public void free() {
         this.properties.free();
         this.availableFeatures11.free();
         this.availableFeatures.free();
     }
 }
-

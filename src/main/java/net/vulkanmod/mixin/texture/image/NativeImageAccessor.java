@@ -10,4 +10,3 @@ public interface NativeImageAccessor {
     @Accessor
     long getPixels();
 }
-

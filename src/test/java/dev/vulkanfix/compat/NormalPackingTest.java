@@ -48,27 +48,10 @@ class NormalPackingTest {
         assertEquals(127 << 16, NormalPacking.pack(0, 0, huge), "front face must stay +Z, not wrap to -1/127");
     }
 
+    /** 1.21.1: Reforged's VertexUtil.packNormal itself clamps (the fork's own code; no mixin). */
     @Test
-    void overwritesReforgedPackNormalWheneverVulkanModLoaded() throws Exception {
-        String mixin = "reforged.VertexUtilMixin";
-        try (InputStream in = getClass().getClassLoader().getResourceAsStream("vulkanfix.mixins.json")) {
-            assertTrue(new String(in.readAllBytes(), StandardCharsets.UTF_8).contains("\"" + mixin + "\""));
-        }
-        assertTrue(CompatGate.shouldApply(mixin, Set.of("vulkanmod")::contains));
-        assertFalse(CompatGate.shouldApply(mixin, Set.<String>of()::contains));
-
-        ClassNode node = new ClassNode();
-        try (InputStream in = getClass().getClassLoader()
-                .getResourceAsStream("dev/vulkanfix/mixin/reforged/VertexUtilMixin.class")) {
-            assertNotNull(in, "mixin class not compiled");
-            new ClassReader(in).accept(node, 0);
-        }
-        AnnotationNode target = node.invisibleAnnotations.stream()
-                .filter(a -> a.desc.equals("Lorg/spongepowered/asm/mixin/Mixin;")).findFirst().orElseThrow();
-        assertEquals(List.of("net.vulkanmod.render.vertex.VertexUtil"), target.values.get(target.values.indexOf("targets") + 1));
-        MethodNode m = node.methods.stream().filter(x -> x.name.equals("packNormal") && x.desc.equals("(FFF)I"))
-                .findFirst().orElseThrow();
-        assertNotNull(m.visibleAnnotations.stream()
-                .filter(a -> a.desc.equals("Lorg/spongepowered/asm/mixin/Overwrite;")).findFirst().orElse(null));
+    void reforgedsPackNormalClamps() {
+        assertEquals(NormalPacking.pack(1e25f, -1e25f, 0.5f), net.vulkanmod.render.vertex.VertexUtil.packNormal(1e25f, -1e25f, 0.5f));
+        assertEquals(NormalPacking.pack(1f, -1f, 0f), net.vulkanmod.render.vertex.VertexUtil.packNormal(1e25f, -1e25f, 0f));
     }
 }

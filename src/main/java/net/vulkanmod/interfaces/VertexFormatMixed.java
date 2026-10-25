@@ -10,4 +10,3 @@ public interface VertexFormatMixed {
 
     List<VertexFormatElement> getFastList();
 }
-

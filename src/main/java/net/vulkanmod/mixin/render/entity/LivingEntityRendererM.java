@@ -24,4 +24,3 @@ public class LivingEntityRendererM<T extends LivingEntity, M extends EntityModel
         GuiEntityRenderState.prepareDeferredDraw();
     }
 }
-

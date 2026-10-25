@@ -46,7 +46,14 @@ public class PipelineState {
 
     public static int getAssemblyRasterState() {
         int cullMode = VRenderSystem.cull ? VRenderSystem.cullFace : VK_CULL_MODE_NONE;
-        return AssemblyRasterState.encode(cullMode, VRenderSystem.topology, VRenderSystem.polygonMode, VRenderSystem.frontFace);
+        int frontFace = VRenderSystem.frontFace;
+
+
+        if (Renderer.isRasterRowsBottomUp()) {
+            frontFace = frontFace == VK_FRONT_FACE_COUNTER_CLOCKWISE
+                    ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        }
+        return AssemblyRasterState.encode(cullMode, VRenderSystem.topology, VRenderSystem.polygonMode, frontFace);
     }
 
     public static int getDepthState() {
@@ -505,4 +512,3 @@ public class PipelineState {
         }
     }
 }
-

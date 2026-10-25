@@ -11,17 +11,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(VoxelShape.class)
 public class VoxelShapeMixin implements VoxelShapeExtended {
-    @Shadow(remap = false) @Final protected DiscreteVoxelShape f_83211_;
+    @Shadow @Final protected DiscreteVoxelShape shape;
 
     int co;
 
     @SuppressWarnings("UnreachableCode")
     @Inject(method = "<init>", at = @At("RETURN"))
     private void initCornerOcclusion(DiscreteVoxelShape discreteVoxelShape, CallbackInfo ci) {
-        var disShape = this.f_83211_;
+        var disShape = this.shape;
 
-                                   
-                                                                  
+
+
         VoxelShape shape = (VoxelShape)((Object)this);
         if(!(shape instanceof CubeVoxelShape) || disShape == null) {
             this.co = 0;
@@ -53,4 +53,3 @@ public class VoxelShapeMixin implements VoxelShapeExtended {
         return this.co;
     }
 }
-

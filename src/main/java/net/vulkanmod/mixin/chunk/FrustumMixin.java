@@ -13,20 +13,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Frustum.class)
 public class FrustumMixin implements FrustumMixed {
 
-    @Shadow(remap = false) private double f_112996_;
-    @Shadow(remap = false) private double f_112997_;
-    @Shadow(remap = false) private double f_112998_;
+    @Shadow private double camX;
+    @Shadow private double camY;
+    @Shadow private double camZ;
     private final VFrustum vFrustum = new VFrustum();
 
-    @Inject(method = "m_253155_", at = @At("HEAD"), remap = false)
+    @Inject(method = "calculateFrustum", at = @At("HEAD"))
     private void calculateFrustum(Matrix4f modelView, Matrix4f projection, CallbackInfo ci) {
 
         this.vFrustum.calculateFrustum(modelView, projection);
     }
 
-    @Inject(method = "m_113002_", at = @At("RETURN"), remap = false)
+    @Inject(method = "prepare", at = @At("RETURN"))
     public void prepare(double d, double e, double f, CallbackInfo ci) {
-        this.vFrustum.setCamOffset(this.f_112996_, this.f_112997_, this.f_112998_);
+        this.vFrustum.setCamOffset(this.camX, this.camY, this.camZ);
     }
 
     @Override
@@ -34,4 +34,3 @@ public class FrustumMixin implements FrustumMixed {
         return vFrustum;
     }
 }
-

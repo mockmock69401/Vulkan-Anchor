@@ -14,7 +14,11 @@ public final class RuntimeOptions {
     }
 
     public static boolean hudTraceEnabled() {
-        return diagnosticsEnabled() && Boolean.getBoolean(HUD_TRACE_PROPERTY);
+        return diagnosticsEnabled() && hudTraceRequested();
+    }
+
+    public static boolean hudTraceRequested() {
+        return Boolean.getBoolean(HUD_TRACE_PROPERTY);
     }
 
     public static boolean profilingMixinsEnabled() {
@@ -37,4 +41,3 @@ public final class RuntimeOptions {
         return net.vulkanmod.compat.capabilities.ExternalRenderPathOptions.externalLodDebugDrawEnabled();
     }
 }
-

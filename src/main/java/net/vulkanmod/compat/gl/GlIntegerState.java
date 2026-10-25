@@ -13,10 +13,15 @@ import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import org.lwjgl.opengl.GL32;
+import org.lwjgl.opengl.GL40C;
 
+import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_CONSTANT_ALPHA;
+import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_CONSTANT_COLOR;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_DST_ALPHA;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_DST_COLOR;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE;
+import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
 import static org.lwjgl.vulkan.VK10.VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -40,12 +45,18 @@ public final class GlIntegerState {
     }
 
     public static int getInteger(int pname) {
-        if (pname == GL30.GL_FRAMEBUFFER_BINDING || pname == GL30.GL_DRAW_FRAMEBUFFER_BINDING
-                || pname == GL30.GL_READ_FRAMEBUFFER_BINDING) {
+        if (pname == GL30.GL_READ_FRAMEBUFFER_BINDING) {
+            return GlFramebuffer.getBoundReadId();
+        }
+
+        if (pname == GL30.GL_FRAMEBUFFER_BINDING || pname == GL30.GL_DRAW_FRAMEBUFFER_BINDING) {
             return GlFramebuffer.getBoundId();
         }
 
         return switch (pname) {
+            case GL11.GL_VIEWPORT -> Renderer.getGlViewport(0);
+            case GL40C.GL_PATCH_VERTICES -> GlPatchState.getPatchVertices();
+            case GL40C.GL_MAX_PATCH_VERTICES -> GlPatchState.getMaxPatchVertices();
             case GL20.GL_CURRENT_PROGRAM -> GlProgram.currentProgramId();
             case GL30.GL_VERTEX_ARRAY_BINDING -> GlVertexArray.boundId();
             case GL15_BINDING_ARRAY, GL15_BINDING_ELEMENT_ARRAY, GL32.GL_PIXEL_PACK_BUFFER_BINDING,
@@ -86,7 +97,7 @@ public final class GlIntegerState {
 
             case GL32.GL_MAX_COLOR_ATTACHMENTS, GL32.GL_MAX_DRAW_BUFFERS, GL32.GL_MAX_CLIP_DISTANCES -> 8;
             case GL32.GL_MAX_SAMPLES -> 4;
-            case GL32.GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS -> 48;
+            case GL32.GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS -> TextureUnitLimits.COMBINED;
             case GL32.GL_MAX_TEXTURE_IMAGE_UNITS, GL32.GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
                     GL32.GL_MAX_VERTEX_ATTRIBS, GL_MAX_VERTEX_ATTRIB_BINDINGS -> 16;
             case GL32.GL_MAX_VERTEX_UNIFORM_COMPONENTS, GL32.GL_MAX_FRAGMENT_UNIFORM_COMPONENTS,
@@ -106,6 +117,10 @@ public final class GlIntegerState {
     }
 
     public static int getInteger(int pname, int index) {
+        if (pname == GL11.GL_VIEWPORT) {
+            return Renderer.getGlViewport(index);
+        }
+
         if (pname == GL11.GL_COLOR_WRITEMASK) {
             return colorMaskComponent(index) ? GL11.GL_TRUE : GL11.GL_FALSE;
         }
@@ -118,7 +133,7 @@ public final class GlIntegerState {
     }
 
     public static int getComponentCount(int pname) {
-        return (pname == GL11.GL_COLOR_WRITEMASK || pname == GL11.GL_SCISSOR_BOX) ? 4 : 1;
+        return (pname == GL11.GL_COLOR_WRITEMASK || pname == GL11.GL_SCISSOR_BOX || pname == GL11.GL_VIEWPORT) ? 4 : 1;
     }
 
     public static boolean isBooleanIntegerState(int pname) {
@@ -161,6 +176,10 @@ public final class GlIntegerState {
         return switch (factor) {
             case VK_BLEND_FACTOR_ZERO -> GL11.GL_ZERO;
             case VK_BLEND_FACTOR_ONE -> GL11.GL_ONE;
+            case VK_BLEND_FACTOR_CONSTANT_COLOR -> GL14.GL_CONSTANT_COLOR;
+            case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR -> GL14.GL_ONE_MINUS_CONSTANT_COLOR;
+            case VK_BLEND_FACTOR_CONSTANT_ALPHA -> GL14.GL_CONSTANT_ALPHA;
+            case VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA -> GL14.GL_ONE_MINUS_CONSTANT_ALPHA;
             case VK_BLEND_FACTOR_SRC_COLOR -> GL11.GL_SRC_COLOR;
             case VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR -> GL11.GL_ONE_MINUS_SRC_COLOR;
             case VK_BLEND_FACTOR_DST_COLOR -> GL11.GL_DST_COLOR;
@@ -185,4 +204,3 @@ public final class GlIntegerState {
         };
     }
 }
-

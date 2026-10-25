@@ -47,7 +47,7 @@ public class SortUtil {
     public static void quickSort(int[] is, float[] distances, int from, int to) {
         int len = to - from;
         if (len < 16) {
-                                                
+
             insertionSort(is, distances, from, to);
         } else {
             int m = from + len / 2;
@@ -149,4 +149,3 @@ public class SortUtil {
         return ab < 0 ? (bc < 0 ? b : (ac < 0 ? c : a)) : (bc > 0 ? b : (ac > 0 ? c : a));
     }
 }
-

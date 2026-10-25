@@ -31,4 +31,3 @@ public abstract class BuildTimeProfiler {
         return deltaTime;
     }
 }
-

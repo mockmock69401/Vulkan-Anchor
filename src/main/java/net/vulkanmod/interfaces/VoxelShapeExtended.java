@@ -4,4 +4,3 @@ public interface VoxelShapeExtended {
 
     int getCornerOcclusion();
 }
-

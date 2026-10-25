@@ -82,4 +82,3 @@ public class GL14M {
     public static void glPointParameteriv(@NativeType("GLenum") int pname, @NativeType("GLint const *") int[] params) {
     }
 }
-

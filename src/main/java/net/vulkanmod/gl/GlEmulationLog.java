@@ -1,9 +1,11 @@
 package net.vulkanmod.gl;
 
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class GlEmulationLog {
+    private static final int DIAGNOSTIC_KEY_LIMIT = 256;
     private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
     private static final Set<String> CONTRACT_FAMILIES = Set.of(
             "provider",
@@ -38,7 +40,7 @@ public final class GlEmulationLog {
     }
 
     static void warnOnce(String key, String message, Object... args) {
-        if (!REPORTED.add(key)) {
+        if (REPORTED.contains(key) || REPORTED.size() >= DIAGNOSTIC_KEY_LIMIT || !REPORTED.add(key)) {
             return;
         }
 
@@ -47,5 +49,8 @@ public final class GlEmulationLog {
         } catch (Throwable ignored) {
         }
     }
-}
 
+    public static Set<String> reportedContractGaps() {
+        return Set.copyOf(new TreeSet<>(REPORTED));
+    }
+}

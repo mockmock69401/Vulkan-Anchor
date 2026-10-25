@@ -39,9 +39,10 @@ class PacedPathWiringTest {
         List<String> calls = Bytecode.calls(RENDERER, "submitFrame");
         assertTrue(Bytecode.inOrder(calls, List.of("FsrSwapchain.live", "QueueLock.submit", "QueueLock.present", "Renderer.signalAfterFsr")),
                 calls.toString());
-        //and with FSR live at most two real frames are in flight
-        assertTrue(Bytecode.inOrder(Bytecode.calls(RENDERER, "beginFrame"), List.of("VK10.vkWaitForFences", "FsrSwapchain.live",
-                "VK10.vkWaitForFences")), Bytecode.calls(RENDERER, "beginFrame").toString());
+        //and with FSR live at most two real frames are in flight (1.21.1 waits for the frame's own fence in preInitFrame, at runTick's start)
+        assertTrue(Bytecode.calls(RENDERER, "preInitFrame").contains("VK10.vkWaitForFences"));
+        assertTrue(Bytecode.inOrder(Bytecode.calls(RENDERER, "beginFrame"), List.of("FsrSwapchain.live", "VK10.vkWaitForFences")),
+                Bytecode.calls(RENDERER, "beginFrame").toString());
     }
 
     @Test void fsrPresentWaitsForTheInterpolationInputFirst() throws Exception {

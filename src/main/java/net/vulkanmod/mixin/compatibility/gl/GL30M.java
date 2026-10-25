@@ -148,6 +148,7 @@ public class GL30M {
 
     @Overwrite(remap = false)
     public static void glVertexAttribIPointer(@NativeType("GLuint") int index, @NativeType("GLint") int size, @NativeType("GLenum") int type, @NativeType("GLsizei") int stride, @NativeType("void const *") long pointer) {
+        GlVertexArray.vertexAttribIPointer(index, size, type, stride, pointer);
     }
 
     @Overwrite(remap = false)
@@ -185,12 +186,12 @@ public class GL30M {
 
     @Overwrite(remap = false)
     public static void glRenderbufferStorageMultisample(@NativeType("GLenum") int target, @NativeType("GLsizei") int samples, @NativeType("GLenum") int internalformat, @NativeType("GLsizei") int width, @NativeType("GLsizei") int height) {
-        GlRenderbuffer.renderbufferStorage(target, internalformat, width, height);
+        GlRenderbuffer.renderbufferStorageMultisample(target, samples, internalformat, width, height);
     }
 
     @Overwrite(remap = false)
     public static int glGetRenderbufferParameteri(@NativeType("GLenum") int target, @NativeType("GLenum") int pname) {
-        return 0;
+        return GlRenderbuffer.getRenderbufferParameter(target, pname);
     }
 
     @Overwrite(remap = false)
@@ -205,8 +206,7 @@ public class GL30M {
 
     @Overwrite(remap = false)
     public static void glBlitFramebuffer(@NativeType("GLint") int srcX0, @NativeType("GLint") int srcY0, @NativeType("GLint") int srcX1, @NativeType("GLint") int srcY1, @NativeType("GLint") int dstX0, @NativeType("GLint") int dstY0, @NativeType("GLint") int dstX1, @NativeType("GLint") int dstY1, @NativeType("GLbitfield") int mask, @NativeType("GLenum") int filter) {
-        GlEmulationLog.warnContractGap("framebuffer_readback", "glBlitFramebuffer",
-                "glBlitFramebuffer Vulkan image blit is not implemented yet; dropping blit safely");
+        GlFramebuffer.blitFramebuffer(srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, mask, filter);
     }
 
     @Overwrite(remap = false)
@@ -402,12 +402,16 @@ public class GL30M {
 
     @Overwrite(remap = false)
     public static void glGetRenderbufferParameteriv(@NativeType("GLenum") int target, @NativeType("GLenum") int pname, @NativeType("GLint *") IntBuffer params) {
-        vulkanmod$putZero(params);
+        if (params != null && params.remaining() > 0) {
+            params.put(params.position(), GlRenderbuffer.getRenderbufferParameter(target, pname));
+        }
     }
 
     @Overwrite(remap = false)
     public static void glGetRenderbufferParameteriv(@NativeType("GLenum") int target, @NativeType("GLenum") int pname, @NativeType("GLint *") int[] params) {
-        vulkanmod$putZero(params);
+        if (params != null && params.length > 0) {
+            params[0] = GlRenderbuffer.getRenderbufferParameter(target, pname);
+        }
     }
 
     @Overwrite(remap = false)
@@ -620,33 +624,41 @@ public class GL30M {
 
     @Overwrite(remap = false)
     public static int glGetVertexAttribIi(@NativeType("GLuint") int index, @NativeType("GLenum") int pname) {
-        return 0;
+        return GlVertexArray.getVertexAttribi(index, pname);
     }
 
     @Overwrite(remap = false)
     @NativeType("GLuint")
     public static int glGetVertexAttribIui(@NativeType("GLuint") int index, @NativeType("GLenum") int pname) {
-        return 0;
+        return GlVertexArray.getVertexAttribi(index, pname);
     }
 
     @Overwrite(remap = false)
     public static void glGetVertexAttribIiv(@NativeType("GLuint") int index, @NativeType("GLenum") int pname, @NativeType("GLint *") IntBuffer params) {
-        vulkanmod$putZero(params);
+        if (params != null && params.remaining() > 0) {
+            params.put(params.position(), GlVertexArray.getVertexAttribi(index, pname));
+        }
     }
 
     @Overwrite(remap = false)
     public static void glGetVertexAttribIiv(@NativeType("GLuint") int index, @NativeType("GLenum") int pname, @NativeType("GLint *") int[] params) {
-        vulkanmod$putZero(params);
+        if (params != null && params.length > 0) {
+            params[0] = GlVertexArray.getVertexAttribi(index, pname);
+        }
     }
 
     @Overwrite(remap = false)
     public static void glGetVertexAttribIuiv(@NativeType("GLuint") int index, @NativeType("GLenum") int pname, @NativeType("GLuint *") IntBuffer params) {
-        vulkanmod$putZero(params);
+        if (params != null && params.remaining() > 0) {
+            params.put(params.position(), GlVertexArray.getVertexAttribi(index, pname));
+        }
     }
 
     @Overwrite(remap = false)
     public static void glGetVertexAttribIuiv(@NativeType("GLuint") int index, @NativeType("GLenum") int pname, @NativeType("GLuint *") int[] params) {
-        vulkanmod$putZero(params);
+        if (params != null && params.length > 0) {
+            params[0] = GlVertexArray.getVertexAttribi(index, pname);
+        }
     }
 
     @Overwrite(remap = false)
@@ -771,14 +783,16 @@ public class GL30M {
 
     @Overwrite(remap = false)
     public static void glVertexAttribIPointer(@NativeType("GLuint") int index, @NativeType("GLint") int size, @NativeType("GLenum") int type, @NativeType("GLsizei") int stride, @NativeType("void const *") ByteBuffer pointer) {
+        GlVertexArray.unsupportedClientPointer();
     }
 
     @Overwrite(remap = false)
     public static void glVertexAttribIPointer(@NativeType("GLuint") int index, @NativeType("GLint") int size, @NativeType("GLenum") int type, @NativeType("GLsizei") int stride, @NativeType("void const *") ShortBuffer pointer) {
+        GlVertexArray.unsupportedClientPointer();
     }
 
     @Overwrite(remap = false)
     public static void glVertexAttribIPointer(@NativeType("GLuint") int index, @NativeType("GLint") int size, @NativeType("GLenum") int type, @NativeType("GLsizei") int stride, @NativeType("void const *") IntBuffer pointer) {
+        GlVertexArray.unsupportedClientPointer();
     }
 }
-

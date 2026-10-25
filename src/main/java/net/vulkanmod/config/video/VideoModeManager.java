@@ -94,4 +94,3 @@ public abstract class VideoModeManager {
         return null;
     }
 }
-

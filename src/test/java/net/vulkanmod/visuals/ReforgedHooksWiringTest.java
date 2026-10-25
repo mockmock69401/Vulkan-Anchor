@@ -39,14 +39,14 @@ class ReforgedHooksWiringTest {
 
     @Test
     void eachBlockNotesItsEmissionFirst() throws Exception {
-        List<String> c = calls(BLOCK, "renderBatched");
+        List<String> c = calls(BLOCK, "renderBlock");
         assertTrue(inOrder(c, List.of("BlockState.getLightEmission", "FoliageMarker.setEmissive", "BlockRenderer.tessellateBlock")), c.toString());
     }
 
     /** 2026-10-15: a full mesh upload of the current section releases its held light change. */
     @Test
     void aFullMeshUploadIsReported() throws Exception {
-        List<String> c = calls("net/vulkanmod/render/chunk/build/TaskDispatcher", "doSectionUpdate");
+        List<String> c = calls("net/vulkanmod/render/chunk/build/TaskDispatcher", "commitFullResult");
         assertTrue(inOrder(c, List.of("CompileResult.matchesCurrentSection", "CompileResult.updateSection", "LightUpdates.meshUploaded")), c.toString());
         assertEquals(1, Bytecode.count(c, "LightUpdates.meshUploaded"));
     }

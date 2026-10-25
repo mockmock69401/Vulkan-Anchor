@@ -1,7 +1,7 @@
 package net.vulkanmod.visuals.dh;
 
-import net.minecraftforge.fml.loading.LoadingModList;
-import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
+import net.neoforged.fml.loading.LoadingModList;
+import net.neoforged.fml.loading.moddiscovery.ModFileInfo;
 
 import java.nio.file.Files;
 
@@ -22,6 +22,14 @@ public final class DhPresence {
     private static final String[] LEGACY_RENDER_DEF_CLASS = {
             "com", "seibel", "distanthorizons", "core", "wrapperInterfaces", "render", "AbstractDhRenderApiDefinition.class"
     };
+    /**
+     * DH 3.3.0's 1.21.1 jar: its NeoForge build runs on its own copies of DH's classes (render definition, render passes, the API),
+     * suffixed "_neoforge", which the fork's DH code does not name, so the takeover would hand DH objects of the wrong types.
+     * From 3.3.1 the NeoForge build shares those classes.
+     */
+    private static final String[] SUFFIXED_LEGACY_RENDER_DEF_CLASS = {
+            "com", "seibel", "distanthorizons", "core", "wrapperInterfaces", "render", "AbstractDhRenderApiDefinition_neoforge.class"
+    };
     /** DH 3.3.0 and 3.3.1's depth direction enum; DH 3.3.2 moved it to the API (EDhApiDepthDirection). */
     private static final String[] LEGACY_RENDER_DEPTH_CLASS = {
             "com", "seibel", "distanthorizons", "core", "render", "EDhRenderDepth.class"
@@ -29,6 +37,7 @@ public final class DhPresence {
 
     private static volatile State cached;
     private static volatile boolean legacyRenderDepth;
+    private static volatile boolean suffixedLegacy;
     private static volatile boolean active;
 
     private DhPresence() {
@@ -60,6 +69,12 @@ public final class DhPresence {
         return legacyRenderDepth;
     }
 
+    /** DH 3.3.0's 1.21.1 jar, whose NeoForge build VulkanMod cannot take over: DH is kept from drawing (SuffixedClientApiMixin). */
+    public static boolean suffixedLegacyRenderDef() {
+        current();
+        return suffixedLegacy;
+    }
+
     /** Looks at the loading mod list; logs one line when DH is there. Only valid once FML has the mod list. */
     public static State detect() {
         LoadingModList list = LoadingModList.get();
@@ -72,9 +87,16 @@ public final class DhPresence {
 
         boolean renderApi = Files.exists(file.getFile().findResource(RENDER_API_CLASS));
         boolean legacy = Files.exists(file.getFile().findResource(LEGACY_RENDER_DEF_CLASS));
+        boolean suffixed = Files.exists(file.getFile().findResource(SUFFIXED_LEGACY_RENDER_DEF_CLASS));
         legacyRenderDepth = Files.exists(file.getFile().findResource(LEGACY_RENDER_DEPTH_CLASS));
-        State state = classify(true, renderApi, legacy);
+        State state = classify(true, renderApi, legacy && !suffixed);
         String version = file.getMods().isEmpty() ? "?" : String.valueOf(file.getMods().get(0).getVersion());
+        suffixedLegacy = !renderApi && legacy && suffixed;
+        if (suffixedLegacy) {
+            Log.warn("Distant Horizons " + version + ": this DH build runs on its own suffixed copies of DH's classes, which VulkanMod "
+                    + "cannot take over; DH does not draw its LODs under VulkanMod (update Distant Horizons to 3.3.1 or later)");
+            return state;
+        }
         switch (state) {
             case RENDER_API -> Log.info("Distant Horizons " + version + ": render API found, DH LODs are drawn by VulkanMod");
             case LEGACY_RENDER_DEF -> Log.info("Distant Horizons " + version + ": no render API, DH's render definition is taken over, "
@@ -111,6 +133,10 @@ public final class DhPresence {
     private static final class Log {
         static void info(String line) {
             org.apache.logging.log4j.LogManager.getLogger("VulkanMod").info(line);
+        }
+
+        static void warn(String line) {
+            org.apache.logging.log4j.LogManager.getLogger("VulkanMod").warn(line);
         }
     }
 }

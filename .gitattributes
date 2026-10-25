@@ -1,4 +1,4 @@
-* text=auto
+* text=auto eol=lf
 gradlew text eol=lf
 *.properties text eol=lf
 *.sh text eol=lf
@@ -6,9 +6,3 @@ gradlew text eol=lf
 *.jar binary
 *.png binary
 *.wasm binary
-*.bin binary
-src/main/resources/assets/vulkanmod/visuals/**/*.glsl text eol=lf
-src/main/resources/assets/vulkanmod/visuals/**/*.comp text eol=lf
-src/main/resources/assets/vulkanmod/visuals/**/*.frag text eol=lf
-src/main/resources/assets/vulkanmod/visuals/**/*.vert text eol=lf
-src/main/resources/assets/vulkanmod/visuals/LICENSE_SMAA text eol=lf

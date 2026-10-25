@@ -21,4 +21,3 @@ public final class RenderScale {
         return Math.max(1, Math.round(dimension * (clamp(scale) / 100.0f)));
     }
 }
-

@@ -24,14 +24,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * DH 3.3.0 to 3.3.4 (no render API): DH's GL render definition hands out the fork's passes and buffers instead of its GL ones, as
- * DhRenderDefinition does through the render API from DH 3.3.5. DH's released jars carry the Fabric and the Forge build at once
- * and run Forge's copy of this class under a suffixed name. The depth direction is the two
+ * DhRenderDefinition does through the render API from DH 3.3.5. DH's released jars carry the Fabric and the NeoForge build at once
+ * and run NeoForge's copy of this class under a suffixed name. The depth direction is the two
  * GlRenderDefinition...Mixin's (DH renamed it in 3.3.2). Applied only with such a DH (MixinPlugin.legacyDhMixin).
  */
 @Pseudo
 @Mixin(targets = {
         "com.seibel.distanthorizons.common.render.openGl.GlDhRenderApiDefinition",
-        "com.seibel.distanthorizons.common.render.openGl.GlDhRenderApiDefinition_forge"
+        "com.seibel.distanthorizons.common.render.openGl.GlDhRenderApiDefinition_neoforge"
 }, remap = false)
 public abstract class GlRenderDefinitionMixin {
 

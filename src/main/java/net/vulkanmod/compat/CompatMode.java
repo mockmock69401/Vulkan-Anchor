@@ -12,4 +12,3 @@ public enum CompatMode {
         return this == SAFE || this == BRIDGED || this == FAST;
     }
 }
-

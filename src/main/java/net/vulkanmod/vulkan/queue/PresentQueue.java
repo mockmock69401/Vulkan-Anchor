@@ -8,4 +8,3 @@ public class PresentQueue extends Queue {
         super(stack, familyIndex, false);
     }
 }
-

@@ -142,4 +142,3 @@ public final class CompressedTextureDecoder {
         return (v << 2) | (v >> 4);
     }
 }
-

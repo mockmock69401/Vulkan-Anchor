@@ -1,17 +1,22 @@
 package net.vulkanmod.mixin.render;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.systems.TimerQuery;
 import net.minecraft.Util;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.GraphicsStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraft.client.main.GameConfig;
+import net.minecraft.client.renderer.GameRenderer;
 import net.vulkanmod.compat.ExternalClientFaultBoundary;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compat.opengl.GlCapabilitiesFallback;
 import net.vulkanmod.config.GraphicsModeCompatibility;
+import net.vulkanmod.diagnostics.benchmark.MinecraftBenchmarkController;
 import net.vulkanmod.render.texture.SpriteUtil;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Vulkan;
@@ -32,18 +37,22 @@ import java.util.Optional;
 @Mixin(Minecraft.class)
 public class MinecraftMixin {
 
-    @Shadow(remap = false) private boolean f_91079_;
-    @Shadow(remap = false) @Final private Options f_91066_;
+    @Shadow public boolean noRender;
+    @Shadow @Final public Options options;
+
+    @Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;initRenderer(IZ)V", shift = At.Shift.AFTER))
+    private void installGlCapabilitiesFallback(GameConfig gameConfig, CallbackInfo ci) {
+        GlCapabilitiesFallback.install();
+    }
 
     @Inject(method = "<init>", at = @At(value = "RETURN"))
     private void forceGraphicsMode(GameConfig gameConfig, CallbackInfo ci) {
-        GlCapabilitiesFallback.install();
         clampUnsupportedGraphicsMode();
     }
 
     @Unique
     private void clampUnsupportedGraphicsMode() {
-        var graphicsModeOption = this.f_91066_.graphicsMode();
+        var graphicsModeOption = this.options.graphicsMode();
         GraphicsStatus requested = graphicsModeOption.get();
         GraphicsStatus supported = GraphicsModeCompatibility.coerce(requested);
 
@@ -55,6 +64,7 @@ public class MinecraftMixin {
 
     @Inject(method = "runTick", at = @At(value = "HEAD"))
     private void resetBuffers(boolean bl, CallbackInfo ci) {
+        MinecraftBenchmarkController.onClientTick((Minecraft) (Object) this);
         clampUnsupportedGraphicsMode();
         Renderer.getInstance().preInitFrame();
     }
@@ -62,12 +72,24 @@ public class MinecraftMixin {
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))
     private void beginRender(int i, boolean bl) {
         RenderSystem.clear(i, bl);
+        MinecraftBenchmarkController.onFrameStart();
         Renderer.getInstance().beginFrame();
+    }
+
+    @WrapOperation(method = "runTick", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/client/renderer/GameRenderer;render(Lnet/minecraft/client/DeltaTracker;Z)V"), require = 1)
+    private void vulkanMod$renderAcquiredFrame(GameRenderer gameRenderer, DeltaTracker deltaTracker, boolean renderLevel,
+                                              Operation<Void> original) {
+        if (Renderer.isRecording() && !Renderer.skipRendering) {
+            original.call(gameRenderer, deltaTracker, renderLevel);
+        }
     }
 
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/Window;updateDisplay()V", shift = At.Shift.BEFORE))
     private void submitRender(boolean tick, CallbackInfo ci) {
-        Renderer.getInstance().endFrame();
+        if (Renderer.getInstance().endFrame()) {
+            MinecraftBenchmarkController.onFrameEnd((Minecraft) (Object) this);
+        }
         //a screenshot deferred while paced runs here, after the frame that drew its hand and GUI into the world (final review I4)
         net.vulkanmod.visuals.framegen.FrameGen.afterEndFrame();
     }
@@ -92,7 +114,7 @@ public class MinecraftMixin {
 
     @Inject(method = "getFramerateLimit", at = @At("HEAD"), cancellable = true)
     private void limitWhenMinimized(CallbackInfoReturnable<Integer> cir) {
-        if(this.f_91079_) cir.setReturnValue(10);
+        if(this.noRender) cir.setReturnValue(10);
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/TimerQuery;getInstance()Ljava/util/Optional;"))
@@ -102,7 +124,7 @@ public class MinecraftMixin {
 
     @Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;tick()V"),
     locals = LocalCapture.CAPTURE_FAILHARD)
-    private void redirectResourceTick(boolean bl, CallbackInfo ci, long l, Runnable runnable, int i, int j) {
+    private void redirectResourceTick(boolean bl, CallbackInfo ci, Runnable runnable, int i, int j) {
         int n = Math.min(10, i) - 1;
         SpriteUtil.setDoUpload(j == n);
     }
@@ -139,7 +161,10 @@ public class MinecraftMixin {
 
     @Inject(method = "resizeDisplay", at = @At("HEAD"))
     public void onResolutionChanged(CallbackInfo ci) {
-        Renderer.scheduleSwapChainUpdate();
+        Renderer renderer = Renderer.getInstance();
+        if (renderer == null || !renderer.consumeInternalResizeDisplayNotification()) {
+            Renderer.scheduleSwapChainUpdate();
+        }
     }
 
     @Redirect(method = "setScreen", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;noRender:Z", opcode = Opcodes.PUTFIELD))
@@ -151,8 +176,7 @@ public class MinecraftMixin {
             net.vulkanmod.Initializer.LOGGER.info("VulkanMod: Handoff is active, forcing vanilla LoadingOverlay instead of FML overlay.");
             return mc;
         }
-        return net.minecraftforge.fml.loading.ImmediateWindowHandler.loadingOverlay(mc, rm, listener, bl);
+        return net.neoforged.fml.loading.ImmediateWindowHandler.loadingOverlay(mc, rm, listener, bl);
     }
 
 }
-

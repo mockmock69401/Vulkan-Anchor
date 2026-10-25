@@ -214,8 +214,8 @@ class VisualsRendererWiringTest {
         assertTrue(defer.contains("FarClouds.replacesVanilla") && defer.contains("Minecraft.useShaderTransparency")
                 && defer.contains("RenderSystem.getModelViewMatrix"), defer.toString());
         List<String> replay = calls(WEATHER, "replay");
-        assertTrue(inOrder(replay, List.of("PoseStack.pushPose", "RenderSystem.applyModelViewMatrix", "LevelRendererWeatherInvoker.visuals$renderSnowAndRain",
-                "LevelRendererWeatherInvoker.visuals$renderWorldBorder", "PoseStack.popPose")), replay.toString());
+        assertTrue(inOrder(replay, List.of("Matrix4fStack.pushMatrix", "RenderSystem.applyModelViewMatrix", "LevelRendererWeatherInvoker.visuals$renderSnowAndRain",
+                "LevelRendererWeatherInvoker.visuals$renderWorldBorder", "Matrix4fStack.popMatrix")), replay.toString());
         assertTrue(calls("net/vulkanmod/mixin/visuals/LevelRendererWeatherMixin", "visuals$deferWeather").contains("DeferredWeather.deferRain"));
         assertTrue(calls("net/vulkanmod/mixin/visuals/LevelRendererWeatherMixin", "visuals$deferBorder").contains("DeferredWeather.deferBorder"));
     }

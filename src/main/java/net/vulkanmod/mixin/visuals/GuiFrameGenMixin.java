@@ -33,13 +33,11 @@ public abstract class GuiFrameGenMixin {
     }
 
     @Redirect(method = "renderCrosshair", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/gui/GuiGraphics;blit(Lnet/minecraft/resources/ResourceLocation;IIIIII)V"), require = 0)
-    private void visuals$crosshair(GuiGraphics graphics, ResourceLocation texture, int x, int y, int u, int v, int width, int height) {
-        if (FrameGen.uiLayerActive()) {
-            //GuiGraphics.blit's seven-argument form samples a 256 x 256 texture; the pose places it (a HUD mod may move the crosshair)
-            FrameGen.crosshairQuad(graphics.pose().last().pose(), x, y, width, height, u, v, 256, 256);
+            target = "Lnet/minecraft/client/gui/GuiGraphics;blitSprite(Lnet/minecraft/resources/ResourceLocation;IIII)V"), require = 0)
+    private void visuals$crosshair(GuiGraphics graphics, ResourceLocation sprite, int x, int y, int width, int height) {
+        if (FrameGen.uiLayerActive() && FrameGen.crosshairSprite(graphics.pose().last().pose(), sprite, x, y, width, height)) {
             return;
         }
-        graphics.blit(texture, x, y, u, v, width, height);
+        graphics.blitSprite(sprite, x, y, width, height);
     }
 }

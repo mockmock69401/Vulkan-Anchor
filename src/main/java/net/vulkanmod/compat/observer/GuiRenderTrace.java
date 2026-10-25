@@ -69,4 +69,3 @@ public final class GuiRenderTrace {
         inGuiRender.remove();
     }
 }
-

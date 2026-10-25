@@ -24,13 +24,13 @@ layout (location = 3) out vec2 lightLevels;
 //The colour before the lightmap (tint, face shade, AO; the alpha holds the wind marks, so only rgb), for the scene albedo
 layout (location = 4) out vec3 albedoTint;
 
-                   
+
 layout (location = 0) in ivec4 Position;
 layout (location = 1) in vec4 Color;
 layout (location = 2) in uvec2 UV0;
 
 const float UV_INV = 1.0 / 32768.0;
-                                               
+
 const vec3 POSITION_INV = vec3(1.0 / 2048.0);
 const vec3 POSITION_OFFSET = vec3(4.0);
 
@@ -118,20 +118,19 @@ void main() {
     albedoTint = Color.rgb;
 }
 
-                  
-                                        
-                                     
-                                   
-                                    
-                                      
-  
-               
-                                                                                                
-                                                            
-                              
-  
-                                                        
-                                                                     
-                      
-                                             
-   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

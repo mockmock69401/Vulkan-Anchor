@@ -3,7 +3,7 @@ package net.vulkanmod.visuals.dev;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
-import net.minecraft.client.gui.screens.GenericDirtMessageScreen;
+import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
@@ -17,10 +17,11 @@ import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
-import net.minecraftforge.client.ClientCommandHandler;
-import net.minecraftforge.client.event.ViewportEvent;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent;
+import net.neoforged.neoforge.client.ClientCommandHandler;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.neoforge.client.event.ViewportEvent;
+import net.neoforged.neoforge.common.NeoForge;
 import net.vulkanmod.visuals.VisualsLog;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.VkGpuTimer;
@@ -92,15 +93,11 @@ public final class VisualsPilot {
     /** Registers the pilot's hooks when the property names a script; does nothing otherwise. */
     public static void install() {
         if (System.getProperty(PROPERTY) == null) return;
-        MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> {
-            if (event.phase == TickEvent.Phase.END) tick();
-        });
-        MinecraftForge.EVENT_BUS.addListener((ViewportEvent.ComputeCameraAngles event) -> cameraAngles(event));
-        MinecraftForge.EVENT_BUS.addListener((ViewportEvent.ComputeFov event) -> computeFov(event));
-        MinecraftForge.EVENT_BUS.addListener((TickEvent.RenderTickEvent event) -> {
-            if (event.phase == TickEvent.Phase.START) glideFrame();
-            if (event.phase == TickEvent.Phase.END) renderTick();
-        });
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> tick());
+        NeoForge.EVENT_BUS.addListener((ViewportEvent.ComputeCameraAngles event) -> cameraAngles(event));
+        NeoForge.EVENT_BUS.addListener((ViewportEvent.ComputeFov event) -> computeFov(event));
+        NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> glideFrame());
+        NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Post event) -> renderTick());
     }
 
     /** Every frame before the level renders: the camera's place on the glide's line. */
@@ -204,20 +201,25 @@ public final class VisualsPilot {
         try {
             switch (line.command()) {
                 case "world" -> {
-                    if (mc.level != null && mc.player != null && mc.screen == null) {
+                    //joined: in the level with no loading screen up (a pack may open its own screen on the first join)
+                    if (mc.level != null && mc.player != null && !(mc.screen instanceof net.minecraft.client.gui.screens.LevelLoadingScreen
+                            || mc.screen instanceof net.minecraft.client.gui.screens.ReceivingLevelScreen
+                            || mc.screen instanceof net.minecraft.client.gui.screens.GenericMessageScreen
+                            || mc.screen instanceof net.minecraft.client.gui.screens.ProgressScreen)) {
                         this.loading = false;//joined: a later world line (after leave) may load again
                         return 0;
                     }
-                    if (this.loading || !(mc.screen instanceof TitleScreen)) return -1;//loading, or the title screen is not up yet
+                    //loading, or the game is not loaded yet; any screen will do once it is (a pack's welcome screen may stay up)
+                    if (this.loading || mc.getOverlay() != null || mc.screen == null) return -1;
                     String[] a = arg.split("\\s+");
                     boolean exists = mc.getLevelSource().levelExists(a[0]);
                     long seed = exists ? 0 : Long.parseLong(a[1]);//arguments first, so a bad line fails before loading starts
                     this.loading = true;
                     if (exists) {
-                        mc.createWorldOpenFlows().loadLevel(mc.screen, a[0]);
+                        mc.createWorldOpenFlows().openWorld(a[0], () -> mc.setScreen(new TitleScreen()));
                     } else {
                         LevelSettings settings = new LevelSettings(a[0], GameType.CREATIVE, false, Difficulty.PEACEFUL, true, new GameRules(), WorldDataConfiguration.DEFAULT);
-                        mc.createWorldOpenFlows().createFreshLevel(a[0], settings, new WorldOptions(seed, true, false), WorldPresets::createNormalWorldDimensions);
+                        mc.createWorldOpenFlows().createFreshLevel(a[0], settings, new WorldOptions(seed, true, false), WorldPresets::createNormalWorldDimensions, mc.screen);
                     }
                     return -1;
                 }
@@ -289,7 +291,7 @@ public final class VisualsPilot {
                 }
                 case "chunks" -> {
                     if (mc.level == null) return -1;
-                    VisualsLog.info("Visuals pilot: chunks " + mc.levelRenderer.getChunkStatistics() + " | " + mc.level.getChunkSource().gatherStats()
+                    VisualsLog.info("Visuals pilot: chunks " + mc.levelRenderer.getSectionStatistics() + " | " + mc.level.getChunkSource().gatherStats()
                             + " | " + (net.vulkanmod.render.chunk.ChunkStatusMap.INSTANCE == null ? "no status map" : net.vulkanmod.render.chunk.ChunkStatusMap.INSTANCE.describe()));
                     return 0;
                 }
@@ -332,6 +334,12 @@ public final class VisualsPilot {
                 }
                 case "log" -> {
                     VisualsLog.info("Visuals pilot: " + arg);
+                    return 0;
+                }
+                case "loaded" -> {
+                    //waits for the game to finish loading, then shows the title screen (a pack's first-launch screen is skipped)
+                    if (mc.getOverlay() != null || mc.screen == null) return -1;
+                    if (!(mc.screen instanceof TitleScreen)) mc.setScreen(new TitleScreen());
                     return 0;
                 }
                 case "screen" -> {
@@ -390,7 +398,7 @@ public final class VisualsPilot {
                     if (mc.level == null) return 0;
                     VisualsLog.info("Visuals pilot: leaving the world");
                     mc.level.disconnect();
-                    mc.clearLevel(new GenericDirtMessageScreen(Component.translatable("menu.savingLevel")));
+                    mc.disconnect(new GenericMessageScreen(Component.translatable("menu.savingLevel")));
                     mc.setScreen(new TitleScreen());
                     return 1;
                 }

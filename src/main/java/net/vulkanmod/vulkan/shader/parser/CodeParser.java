@@ -8,11 +8,26 @@ import java.util.StringTokenizer;
 
 public abstract class CodeParser {
 
-                                                                                               
-                                                             
-                                                       
-       
+
+
+
+
     public static String parseCodeLine(String line) {
+        return parseCodeLine(line, null);
+    }
+
+    /**
+     * The fork (vulkanfix, GlslPercent): "%" is kept as written. The rewrite below wraps the whitespace-split tokens around it in mod(),
+     * which breaks a remainder whose operands are not lone tokens ("COLORS[i % 16]"), and Vulkan GLSL has an integer "%".
+     */
+    public static String parseCodeLine(String line, GlslConverter.ShaderStage shaderStage) {
+        return dev.vulkanfix.compat.GlslPercent.restore(parseCodeLineKeepingPercent(dev.vulkanfix.compat.GlslPercent.protect(line), shaderStage));
+    }
+
+    private static String parseCodeLineKeepingPercent(String line, GlslConverter.ShaderStage shaderStage) {
+        boolean directive = line.stripLeading().startsWith("#");
+        line = rewriteLegacyFixedFunction(line, shaderStage);
+
         LinkedList<String> tokens = new LinkedList<>();
         StringTokenizer tokenizer = new StringTokenizer(line, " \t\n\r\f,(){}%", true);
 
@@ -33,8 +48,8 @@ public abstract class CodeParser {
         while (i < tokens.size()) {
             token = tokens.get(i);
 
-            if (token.equals("%")) {
-                processed.remove(processed.size() - 1);
+            if (token.equals("%") && !directive) {
+                processed.removeLast();
 
                 String prevToken = tokens.get(i - 1);
                 String nextToken = tokens.get(i + 1);
@@ -76,8 +91,27 @@ public abstract class CodeParser {
     private static String checkTokenMapping(String token) {
         return switch (token) {
             case "gl_VertexID" -> "gl_VertexIndex";
+            case "gl_FragColor", "uc_FragColor" -> "fragColor";
+            case "texture2D", "textureCube" -> "texture";
             default -> token;
         };
     }
-}
 
+    private static String rewriteLegacyFixedFunction(String line, GlslConverter.ShaderStage shaderStage) {
+        line = line.replaceAll("\\bgl_ModelViewProjectionMatrix\\b", "MVP");
+        line = line.replaceAll("\\bgl_MultiTexCoord0\\.st\\b", "UV0.xy");
+        line = line.replaceAll("\\bgl_MultiTexCoord0\\.xy\\b", "UV0.xy");
+        line = line.replaceAll("\\bgl_MultiTexCoord0\\b", "vec4(UV0, 0.0, 1.0)");
+        line = line.replaceAll("\\bgl_Vertex\\.xy\\b", "Position.xy");
+        line = line.replaceAll("\\bgl_Vertex\\b", "vec4(Position, 1.0)");
+        line = line.replaceAll("\\bgl_FrontColor\\b", "vertexColor");
+
+        if (shaderStage == GlslConverter.ShaderStage.Vertex) {
+            line = line.replaceAll("\\bgl_Color\\b", "Color");
+        } else {
+            line = line.replaceAll("\\bgl_Color\\b", "vertexColor");
+        }
+
+        return line;
+    }
+}

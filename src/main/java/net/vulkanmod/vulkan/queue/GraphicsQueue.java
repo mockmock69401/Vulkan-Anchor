@@ -1,11 +1,7 @@
 package net.vulkanmod.vulkan.queue;
 
-import net.vulkanmod.vulkan.Synchronization;
-import net.vulkanmod.vulkan.Vulkan;
 import net.vulkanmod.vulkan.memory.MemoryManager;
-import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.vulkan.*;
 
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -23,8 +19,8 @@ public class GraphicsQueue extends Queue {
     }
 
     public void endRecordingAndSubmit() {
-        long fence = submitCommands(currentCmdBuffer);
-        Synchronization.INSTANCE.addCommandBuffer(currentCmdBuffer);
+        submitCommands(currentCmdBuffer);
+        MemoryManager.getInstance().addFrameOp(currentCmdBuffer::reset);
         if (net.vulkanmod.visuals.dev.FrameRecorder.ON) net.vulkanmod.visuals.dev.FrameRecorder.add(net.vulkanmod.visuals.dev.FrameRecorder.GFX_SUBMITS, 1);
 
         currentCmdBuffer = null;
@@ -48,4 +44,3 @@ public class GraphicsQueue extends Queue {
     }
 
 }
-

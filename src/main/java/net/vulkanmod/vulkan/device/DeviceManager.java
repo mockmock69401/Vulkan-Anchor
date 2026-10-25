@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan.device;
 
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.compat.gl.GlPatchState;
 import net.vulkanmod.visuals.VisualsLog;
 import net.vulkanmod.visuals.vk.VkFeatureChain;
 import net.vulkanmod.visuals.vk.VkFeaturePlan;
@@ -11,6 +12,7 @@ import net.vulkanmod.visuals.fsr.FsrSupport;
 import net.vulkanmod.visuals.vk.VkFeatures;
 import net.vulkanmod.vulkan.VRenderSystem;
 import net.vulkanmod.vulkan.Vulkan;
+import net.vulkanmod.vulkan.framebuffer.MainDepthSnapshot;
 import net.vulkanmod.vulkan.queue.*;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -45,6 +47,8 @@ public abstract class DeviceManager {
     public static VkDevice vkDevice;
 
     public static Device device;
+    private static boolean tessellationEnabled;
+    private static boolean geometryShaderEnabled;
 
     public static VkPhysicalDeviceProperties deviceProperties;
     public static VkPhysicalDeviceMemoryProperties memoryProperties;
@@ -63,7 +67,8 @@ public abstract class DeviceManager {
             DeviceManager.getSuitableDevices(instance);
 
             if (availableDevices.isEmpty()) {
-                throw new RuntimeException("No Vulkan-capable GPU was detected.");
+                throw new RuntimeException("No Vulkan-capable GPU was detected.\n"
+                        + net.vulkanmod.config.Platform.vulkanDriverHint());
             }
             if (suitableDevices.isEmpty()) {
                 throw new RuntimeException("Found " + availableDevices.size()
@@ -156,6 +161,19 @@ public abstract class DeviceManager {
         return device != null && device.isDrawIndirectSupported() && !device.isIntel();
     }
 
+    public static boolean isGeometryShaderEnabled() {
+        return geometryShaderEnabled && vkDevice != null;
+    }
+
+    public static boolean isTessellationEnabled() {
+        return tessellationEnabled && vkDevice != null;
+    }
+
+    public static int maxTessellationPatchSize() {
+        return isTessellationEnabled() && deviceProperties != null
+                ? deviceProperties.limits().maxTessellationPatchSize() : 0;
+    }
+
     static Device autoPickDevice() {
         ArrayList<Device> integratedGPUs = new ArrayList<>();
         ArrayList<Device> otherDevices = new ArrayList<>();
@@ -190,6 +208,9 @@ public abstract class DeviceManager {
     }
 
     public static void createLogicalDevice() {
+        tessellationEnabled = false;
+        geometryShaderEnabled = false;
+        GlPatchState.configureLimit(0);
         try (MemoryStack stack = stackPush()) {
 
             net.vulkanmod.vulkan.queue.Queue.QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
@@ -227,6 +248,8 @@ public abstract class DeviceManager {
             deviceFeatures.sType$Default();
             deviceFeatures.features().samplerAnisotropy(device.availableFeatures.features().samplerAnisotropy());
             deviceFeatures.features().logicOp(device.availableFeatures.features().logicOp());
+            deviceFeatures.features().tessellationShader(device.availableFeatures.features().tessellationShader());
+            deviceFeatures.features().geometryShader(device.availableFeatures.features().geometryShader());
 
             deviceFeatures.features().multiDrawIndirect(device.isDrawIndirectSupported());
 
@@ -291,7 +314,6 @@ public abstract class DeviceManager {
             }
 
             java.util.Set<String> deviceExtensions = new java.util.HashSet<>(Vulkan.REQUIRED_EXTENSION);
-                                                                                                             
             if (device.isPortabilitySubset()) {
                 deviceExtensions.add(KHRPortabilitySubset.VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
             }
@@ -314,6 +336,9 @@ public abstract class DeviceManager {
             Vulkan.checkResult(res, "Failed to create logical device");
 
             vkDevice = new VkDevice(pDevice.get(0), physicalDevice, createInfo, VK_API_VERSION_1_2);
+            tessellationEnabled = deviceFeatures.features().tessellationShader();
+            geometryShaderEnabled = deviceFeatures.features().geometryShader();
+            GlPatchState.configureLimit(maxTessellationPatchSize());
 
             graphicsQueue = new GraphicsQueue(stack, indices.graphicsFamily);
             transferQueue = new TransferQueue(stack, indices.transferFamily);
@@ -559,8 +584,6 @@ public abstract class DeviceManager {
         try (MemoryStack stack = stackPush()) {
             Queue.QueueFamilyIndices indices = findQueueFamilies(device);
 
-                                                                                                
-                                                                                              
             boolean extensionsSupported = Device.getAvailableExtensions(device)
                     .containsAll(Vulkan.REQUIRED_EXTENSION);
 
@@ -580,29 +603,37 @@ public abstract class DeviceManager {
     }
 
     public static int findDepthFormat(boolean use24BitsDepthFormat) {
+
         int[] formats = use24BitsDepthFormat ? new int[]
-                {VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT}
-                : new int[]{VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT};
+                {VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_X8_D24_UNORM_PACK32, VK_FORMAT_D32_SFLOAT}
+                : new int[]{VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT};
 
         return findSupportedFormat(
                 VK_IMAGE_TILING_OPTIMAL,
-                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT,
+                MainDepthSnapshot.depthAttachmentUsage(),
                 formats);
     }
 
-    private static int findSupportedFormat(int tiling, int features, int... formatCandidates) {
+    private static int findSupportedFormat(int tiling, int features, int usage, int... formatCandidates) {
         try (MemoryStack stack = stackPush()) {
 
             VkFormatProperties props = VkFormatProperties.calloc(stack);
+            VkImageFormatProperties imageProps = VkImageFormatProperties.calloc(stack);
 
             for (int format : formatCandidates) {
 
                 vkGetPhysicalDeviceFormatProperties(physicalDevice, format, props);
 
-                if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures() & features) == features) {
-                    return format;
-                } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures() & features) == features) {
-                    return format;
+                boolean supportedFeatures = tiling == VK_IMAGE_TILING_LINEAR
+                        ? (props.linearTilingFeatures() & features) == features
+                        : tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures() & features) == features;
+                if (supportedFeatures) {
+                    int result = vkGetPhysicalDeviceImageFormatProperties(physicalDevice, format, VK_IMAGE_TYPE_2D,
+                            tiling, usage, 0, imageProps);
+                    if (result == VK_SUCCESS && (imageProps.sampleCounts() & VK_SAMPLE_COUNT_1_BIT) != 0) {
+                        return format;
+                    }
                 }
 
             }
@@ -642,11 +673,18 @@ public abstract class DeviceManager {
     }
 
     public static void destroy() {
-        graphicsQueue.cleanUp();
-        transferQueue.cleanUp();
-        computeQueue.cleanUp();
+        try {
+            graphicsQueue.cleanUp();
+            transferQueue.cleanUp();
+            computeQueue.cleanUp();
 
-        vkDestroyDevice(vkDevice, null);
+            vkDestroyDevice(vkDevice, null);
+        } finally {
+            vkDevice = null;
+            tessellationEnabled = false;
+            geometryShaderEnabled = false;
+            GlPatchState.configureLimit(0);
+        }
     }
 
     public static GraphicsQueue getGraphicsQueue() {
@@ -704,4 +742,3 @@ public abstract class DeviceManager {
     }
 
 }
-

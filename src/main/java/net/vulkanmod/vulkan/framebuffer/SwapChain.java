@@ -2,6 +2,7 @@ package net.vulkanmod.vulkan.framebuffer;
 
 import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.gl.GlFramebuffer;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.render.util.MathUtil;
 import net.vulkanmod.vulkan.Renderer;
@@ -60,6 +61,7 @@ public class SwapChain extends Framebuffer {
     }
 
     public void recreate() {
+        GlFramebuffer.invalidateBorrowedAttachments();
         if (this.depthAttachment != null) {
             this.depthAttachment.free();
             this.depthAttachment = null;
@@ -105,7 +107,9 @@ public class SwapChain extends Framebuffer {
             createInfo.imageColorSpace(surfaceFormat.colorSpace());
             createInfo.imageExtent(extent);
             createInfo.imageArrayLayers(1);
-            createInfo.imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+            int supportedTransfers = surfaceProperties.capabilities.supportedUsageFlags()
+                    & (VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            createInfo.imageUsage(VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | supportedTransfers);
 
             Queue.QueueFamilyIndices indices = Queue.getQueueFamilies();
 
@@ -156,7 +160,8 @@ public class SwapChain extends Framebuffer {
         for (long imageId : images) {
             long imageView = VulkanImage.createImageView(imageId, this.format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
 
-            VulkanImage image = new VulkanImage(imageId, this.format, 1, this.width, this.height, 4, 0, imageView);
+            VulkanImage image = new VulkanImage(imageId, this.format, 1, this.width, this.height, 4,
+                    this.createInfo.imageUsage(), imageView);
             image.updateTextureSampler(true, true, false);
             this.swapChainImages.add(image);
         }
@@ -272,7 +277,7 @@ public class SwapChain extends Framebuffer {
 
     private void createDepthResources() {
         this.depthAttachment = VulkanImage.createDepthImage(depthFormat, this.width, this.height,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                MainDepthSnapshot.depthAttachmentUsage(),
                 false, false);
 
         if (this.depthAttachmentGlId == -1) {
@@ -316,6 +321,7 @@ public class SwapChain extends Framebuffer {
     }
 
     public void cleanUp() {
+        GlFramebuffer.invalidateBorrowedAttachments();
         VkDevice device = Vulkan.getVkDevice();
 
         if (!DYNAMIC_RENDERING) {
@@ -461,4 +467,3 @@ public class SwapChain extends Framebuffer {
         return this.swapChainImages.size();
     }
 }
-

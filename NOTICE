@@ -10,22 +10,24 @@ VulkanMod Reforged maintainer and contributed modifications: Rindw (TrulyRin).
 
 VulkanMod Reforged was modified on 2026-06-19 for NeoForge compatibility and
 release metadata. Further renderer, compatibility, and publication changes
-were made through 2026-10-16.
+were made through 2026-10-22.
 
 VulkanMod-shaded is a further modified version, changed from 2026-10-17 to
-2026-10-25 by mockmock69401. The changes were written with an AI coding
-assistant (Anthropic's Claude, through Claude Code) under mockmock69401's
-direction and testing. They:
+2026-10-25 by mockmock69401. This branch ports those changes to VulkanMod
+Reforged's Minecraft 1.21.1 (NeoForge) code, on 2026-10-25. The changes
+were written with an AI coding assistant (Anthropic's Claude, through
+Claude Code) under mockmock69401's direction and testing. They:
 
 - merge the vulkanfix compatibility add-on (package dev.vulkanfix, mixin
-  config vulkanfix.mixins.json), including Xaero's Minimap / World Map
-  support, and patch net.vulkanmod.Initializer and
-  net.vulkanmod.mixin.render.GameRendererMixin directly;
+  config vulkanfix.mixins.json) and patch the vertex normal packing and the
+  shader converter (net.vulkanmod.vulkan.shader.parser) directly; the
+  converter also gains geometry stages, interface blocks and uniforms
+  declared in imported files, and the pipeline a geometry stage;
 - add post-processing (package net.vulkanmod.visuals and
   assets/vulkanmod/visuals), written from requirement documents and
   published graphics literature, with no code from any shader pack;
 - add Distant Horizons LOD rendering through the Distant Horizons render API,
-  and for Distant Horizons 3.3.0 to 3.3.4 by taking over its internal render
+  and for Distant Horizons 3.3.1 to 3.3.4 by taking over its internal render
   definition (package net.vulkanmod.visuals.dh, mixins in
   net.vulkanmod.mixin.visuals.legacydh); the LOD terrain shaders in
   assets/vulkanmod/visuals/shaders/dh are translated from Distant Horizons
@@ -40,7 +42,7 @@ direction and testing. They:
 
 These changes are contributed under LGPL-3.0-only and are not endorsed by
 Rindw, the upstream VulkanMod contributors, the Distant Horizons authors,
-the authors of Xaero's mods, or AMD.
+the authors of the mods it adds support for, or AMD.
 
 Third-party parts and their licences are listed in THIRD_PARTY_NOTICES.md.
 

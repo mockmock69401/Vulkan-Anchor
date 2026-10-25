@@ -13,11 +13,15 @@ import net.vulkanmod.render.chunk.build.light.data.QuadLightData;
 import net.vulkanmod.render.chunk.build.light.flat.FlatLightPipeline;
 import net.vulkanmod.render.chunk.build.light.smooth.NewSmoothLightPipeline;
 import net.vulkanmod.render.chunk.build.light.smooth.SmoothLightPipeline;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.level.block.state.BlockState;
 
 public class BuilderResources {
     public final ThreadBuilderPack builderPack = new ThreadBuilderPack();
     public final BlockRenderer blockRenderer = new BlockRenderer();
     public final LiquidRenderer liquidRenderer = new LiquidRenderer();
+    public final RandomSource randomSource = RandomSource.create();
+    public final BlockState[] blockStates = new BlockState[RenderRegion.BLOCK_COUNT];
     /** The animated sprites the section being built uses (SpriteActivity: they tick while the section is visible). */
     public final net.vulkanmod.render.texture.SpriteActivity.Collector animatedSprites = new net.vulkanmod.render.texture.SpriteActivity.Collector();
 
@@ -84,4 +88,3 @@ public class BuilderResources {
         buildCount = 0;
     }
 }
-

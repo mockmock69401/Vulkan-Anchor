@@ -10,4 +10,3 @@ public class SystemInfo {
         cpuInfo = String.format("%s", centralProcessor.getProcessorIdentifier().getName()).replaceAll("\\s+", " ");
     }
 }
-

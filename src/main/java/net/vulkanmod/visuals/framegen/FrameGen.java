@@ -72,10 +72,13 @@ public final class FrameGen {
     private static final Matrix4fc IDENTITY = new Matrix4f();
     private static final long STATS_WINDOW_NS = 1_000_000_000L;
 
-    /** Vanilla's vignette and GUI icons (the crosshair) for the compose pass; built on first use, so the class loads without the game. */
+    /**
+     * Vanilla's vignette and GUI sprite atlas (the crosshair is a sprite in it since 1.20.2) for the compose pass; built on first use,
+     * so the class loads without the game.
+     */
     private static final class Textures {
-        static final ResourceLocation VIGNETTE = new ResourceLocation("textures/misc/vignette.png");
-        static final ResourceLocation ICONS = new ResourceLocation("textures/gui/icons.png");
+        static final ResourceLocation VIGNETTE = ResourceLocation.withDefaultNamespace("textures/misc/vignette.png");
+        static final ResourceLocation ICONS = ResourceLocation.withDefaultNamespace("textures/atlas/gui.png");
     }
 
     /** Latched at swapchain recreation: the pacer runs and frames are recorded for it. */
@@ -225,7 +228,7 @@ public final class FrameGen {
         if (e == null) return;
         Camera c = mc.gameRenderer.getMainCamera();
         float eye = e.getEyeHeight();
-        sample = new CameraSample(System.nanoTime(), mc.getFrameTime(), e.xo, e.yo + eye, e.zo, e.getX(), e.getY() + eye, e.getZ(),
+        sample = new CameraSample(System.nanoTime(), mc.getTimer().getGameTimeDeltaPartialTick(true), e.xo, e.yo + eye, e.zo, e.getX(), e.getY() + eye, e.getZ(),
                 camX, camY, camZ, c.getYRot(), c.getXRot());
     }
 
@@ -311,7 +314,8 @@ public final class FrameGen {
         //vanilla's shouldShowEntityOutlines() holds whenever the outline chain exists; the chain is drawn when an entity glows
         boolean outlines = level && !screen && !overlay && !paused && !post && outlinesDrawn(mc);
         //F3's charts or Alt+F3's FPS chart (FG design 3.5 "F3 debug graphs")
-        boolean charts = mc.options.renderDebugCharts || mc.options.renderFpsChart;
+        boolean charts = mc.getDebugOverlay().showDebugScreen() && (mc.getDebugOverlay().showProfilerChart() || mc.getDebugOverlay().showFpsCharts()
+                || mc.getDebugOverlay().showNetworkCharts());
         return PauseRules.reason(level, screen, overlay, screenshotFrame, paused, post, outlines, charts, mc.getCameraEntity() != mc.player,
                 supported(), VisualsConfig.fgForcePause);
     }
@@ -408,6 +412,21 @@ public final class FrameGen {
     public static void crosshairQuad(Matrix4fc pose, int x, int y, int w, int h, int u, int v, int texW, int texH) {
         if (!uiLayerActive()) return;
         if (putQuad(quads, quadCount, pose, x, y, w, h, u, v, texW, texH, Minecraft.getInstance().getWindow().getGuiScale())) quadCount++;
+    }
+
+    /**
+     * Gui.renderCrosshair's blitSprite under the UI layer: the sprite's place in the GUI atlas as texels, then crosshairQuad. False (the
+     * caller draws it as usual) when the sprite is not in the GUI atlas the compose samples.
+     */
+    public static boolean crosshairSprite(Matrix4fc pose, ResourceLocation id, int x, int y, int w, int h) {
+        if (!uiLayerActive()) return false;
+        net.minecraft.client.renderer.texture.TextureAtlasSprite sprite = Minecraft.getInstance().getGuiSprites().getSprite(id);
+        if (!Textures.ICONS.equals(sprite.atlasLocation())) return false;
+        float du = sprite.getU1() - sprite.getU0(), dv = sprite.getV1() - sprite.getV0();
+        if (du <= 0 || dv <= 0) return false;
+        int texW = Math.round(sprite.contents().width() / du), texH = Math.round(sprite.contents().height() / dv);
+        crosshairQuad(pose, x, y, w, h, Math.round(sprite.getU0() * texW), Math.round(sprite.getV0() * texH), texW, texH);
+        return true;
     }
 
     /**

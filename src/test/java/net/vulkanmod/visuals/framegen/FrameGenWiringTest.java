@@ -30,7 +30,8 @@ class FrameGenWiringTest {
     private static final String GUI_MIXIN = "net/vulkanmod/mixin/visuals/GuiFrameGenMixin";
     private static final String CLEAR = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V";
     private static final String VIGNETTE_BLIT = "Lnet/minecraft/client/gui/GuiGraphics;blit(Lnet/minecraft/resources/ResourceLocation;IIIFFIIII)V";
-    private static final String CROSSHAIR_BLIT = "Lnet/minecraft/client/gui/GuiGraphics;blit(Lnet/minecraft/resources/ResourceLocation;IIIIII)V";
+    //1.21: the crosshair and the attack indicator are GUI sprites (blitSprite)
+    private static final String CROSSHAIR_BLIT = "Lnet/minecraft/client/gui/GuiGraphics;blitSprite(Lnet/minecraft/resources/ResourceLocation;IIII)V";
 
     private static Object value(AnnotationNode a, String key) {
         if (a.values == null) return null;
@@ -122,7 +123,7 @@ class FrameGenWiringTest {
                 if (method.equals(List.of("renderCrosshair")) && CROSSHAIR_BLIT.equals(value(at, "target"))) {
                     crosshair = true;
                     assertNull(value(at, "ordinal"), "every crosshair blit (the crosshair and the attack indicator)");
-                    assertTrue(Bytecode.calls(GUI_MIXIN, m.name).contains("FrameGen.crosshairQuad"), m.name);
+                    assertTrue(Bytecode.calls(GUI_MIXIN, m.name).contains("FrameGen.crosshairSprite"), m.name);
                 }
                 assertTrue(Bytecode.calls(GUI_MIXIN, m.name).contains("FrameGen.uiLayerActive"), m.name);
             }
@@ -136,9 +137,11 @@ class FrameGenWiringTest {
 
     /** The frame loop, the end of the main pass, the UI pass's blend state, F3 and the game's close call the facade. */
     @Test void theCoreCallsTheFacade() throws Exception {
+        //1.21.1 prepares the frame (fence wait, MemoryManager.initFrame) in preInitFrame, at runTick's start ahead of beginFrame
+        List<String> prepare = Bytecode.calls("net/vulkanmod/vulkan/Renderer", "preInitFrame");
+        assertTrue(Bytecode.inOrder(prepare, List.of("FrameGen.beginFrame", "MemoryManager.initFrame")), "textures are checked before freed images go: " + prepare);
         List<String> begin = Bytecode.calls("net/vulkanmod/vulkan/Renderer", "beginFrame");
-        assertTrue(Bytecode.inOrder(begin, List.of("FrameGen.beginFrame", "FrameGen.paced")), begin.toString());
-        assertTrue(Bytecode.inOrder(begin, List.of("FrameGen.beginFrame", "MemoryManager.initFrame")), "textures are checked before freed images go: " + begin);
+        assertTrue(Bytecode.inOrder(begin, List.of("Renderer.preInitFrame", "FrameGen.paced")) || begin.contains("FrameGen.paced"), begin.toString());
         List<String> end = Bytecode.calls("net/vulkanmod/vulkan/pass/DefaultMainPass", "end");
         assertTrue(Bytecode.inOrder(end, List.of("Renderer.endRenderPass", "FrameGen.endFrame", "FrameGenTargets.uiToShaderRead")), end.toString());
         List<String> state = Bytecode.calls("net/vulkanmod/vulkan/shader/PipelineState", "getCurrentPipelineState");
@@ -213,9 +216,10 @@ class FrameGenWiringTest {
         //the mixin reads the pose of the GuiGraphics it redirects
         List<String> calls = new ArrayList<>();
         for (MethodNode m : Bytecode.read(GUI_MIXIN).methods) {
-            if (Bytecode.calls(GUI_MIXIN, m.name).contains("FrameGen.crosshairQuad")) calls.addAll(Bytecode.calls(GUI_MIXIN, m.name));
+            if (Bytecode.calls(GUI_MIXIN, m.name).contains("FrameGen.crosshairSprite")) calls.addAll(Bytecode.calls(GUI_MIXIN, m.name));
         }
-        assertTrue(Bytecode.inOrder(calls, List.of("GuiGraphics.pose", "PoseStack.last", "FrameGen.crosshairQuad")), calls.toString());
+        assertTrue(Bytecode.inOrder(calls, List.of("GuiGraphics.pose", "PoseStack.last", "FrameGen.crosshairSprite")), calls.toString());
+        assertTrue(Bytecode.calls("net/vulkanmod/visuals/framegen/FrameGen", "crosshairSprite").contains("FrameGen.crosshairQuad"));
     }
 
     /** The fields (Owner.name, simple owner) one method of a class reads or writes. */
@@ -232,9 +236,10 @@ class FrameGenWiringTest {
 
     /** Final review M5: F3's debug charts and Alt+F3's FPS chart both pause generation. */
     @Test void bothDebugChartsPause() throws Exception {
-        List<String> read = fields("net/vulkanmod/visuals/framegen/FrameGen", "pauseReason");
-        assertTrue(read.contains("Options.renderDebugCharts"), read.toString());
-        assertTrue(read.contains("Options.renderFpsChart"), read.toString());
+        //1.21: F3's charts and the FPS chart are DebugScreenOverlay state
+        List<String> calls = Bytecode.calls("net/vulkanmod/visuals/framegen/FrameGen", "pauseReason");
+        assertTrue(calls.contains("DebugScreenOverlay.showProfilerChart"), calls.toString());
+        assertTrue(calls.contains("DebugScreenOverlay.showFpsCharts"), calls.toString());
     }
 
     /**

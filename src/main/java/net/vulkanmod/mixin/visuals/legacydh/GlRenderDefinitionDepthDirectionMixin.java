@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Pseudo
 @Mixin(targets = {
         "com.seibel.distanthorizons.common.render.openGl.GlDhRenderApiDefinition",
-        "com.seibel.distanthorizons.common.render.openGl.GlDhRenderApiDefinition_forge"
+        "com.seibel.distanthorizons.common.render.openGl.GlDhRenderApiDefinition_neoforge"
 }, remap = false)
 public abstract class GlRenderDefinitionDepthDirectionMixin {
 

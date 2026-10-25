@@ -13,7 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.client.extensions.IForgeDimensionSpecialEffects;
+import net.neoforged.neoforge.client.extensions.IDimensionSpecialEffectsExtension;
 import net.vulkanmod.mixin.visuals.LevelRendererTicksAccessor;
 import net.vulkanmod.visuals.Visuals;
 import net.vulkanmod.visuals.VisualsLog;
@@ -212,7 +212,7 @@ public final class VisualsRenderer {
             //1. The shading choice, the sky exposure and the sun views, from the conditions the atmosphere turns off by (P7d 3.3:
             // the last capture stands in for this frame's)
             ClientLevel level = Minecraft.getInstance().level;
-            float partialTick = Minecraft.getInstance().getFrameTime();
+            float partialTick = Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(true);
             PostProcessSettings settings = PostProcessSettings.from(VisualsConfig.get());
             boolean hasSky = level != null && level.dimensionType().hasSkyLight();
             Plan plan = Plan.of(hasSky, settings);
@@ -408,7 +408,7 @@ public final class VisualsRenderer {
         ClientLevel level = Minecraft.getInstance().level;
         if (level == null) return null;
         try {
-            float partialTick = Minecraft.getInstance().getFrameTime();
+            float partialTick = Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(true);
             float timeOfDay = level.getTimeOfDay(partialTick);
             float rain = level.getRainLevel(partialTick);
             //P7e-3 design 3.3: the ripples flow, faster in the rain and at the speed setting (revision 2.5); 2026-10-23: by FlowClock's
@@ -449,7 +449,7 @@ public final class VisualsRenderer {
 
     /** P7h design 3.3, 3.7: vanilla's clouds.png (resource packs applied) as the cloud mask, nearest-sampled to MAP x MAP; null when unreadable (vanilla's clouds stay). */
     private static byte[] loadCloudMap() {
-        try (InputStream in = Minecraft.getInstance().getResourceManager().open(new ResourceLocation("minecraft", "textures/environment/clouds.png"));
+        try (InputStream in = Minecraft.getInstance().getResourceManager().open(ResourceLocation.withDefaultNamespace("textures/environment/clouds.png"));
              NativeImage image = NativeImage.read(in)) {
             int[] abgr = new int[CloudMath.MAP * CloudMath.MAP];
             for (int y = 0; y < CloudMath.MAP; y++) {
@@ -464,12 +464,12 @@ public final class VisualsRenderer {
         }
     }
 
-    /** P7h task 4 review: a dimension whose effects draw their own clouds through Forge's hook keeps them; the far clouds stay off there. */
+    /** P7h task 4 review: a dimension whose effects draw their own clouds through NeoForge's hook keeps them; the far clouds stay off there. */
     private static final class OwnClouds extends ClassValue<Boolean> {
         @Override
         protected Boolean computeValue(Class<?> type) {
-            return FarClouds.overrides(type, IForgeDimensionSpecialEffects.class, "renderClouds", ClientLevel.class, int.class, float.class,
-                    PoseStack.class, double.class, double.class, double.class, Matrix4f.class);
+            return FarClouds.overrides(type, IDimensionSpecialEffectsExtension.class, "renderClouds", ClientLevel.class, int.class, float.class,
+                    PoseStack.class, double.class, double.class, double.class, Matrix4f.class, Matrix4f.class);
         }
     }
 
@@ -592,7 +592,7 @@ public final class VisualsRenderer {
         long serial = VkFrames.serial();
         try {
             this.post.ensureSize(main.width(), main.height());
-            float partialTick = mc.getFrameTime();
+            float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(true);
             boolean hasSkyLight = level.dimensionType().hasSkyLight();
             Plan plan = Plan.of(hasSkyLight, settings);
             //P7l design 3.1: the light volume around the camera (read here, not cached by frame(), which stops once it has failed),

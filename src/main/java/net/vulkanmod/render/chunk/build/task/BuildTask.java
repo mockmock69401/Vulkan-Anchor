@@ -2,18 +2,25 @@ package net.vulkanmod.render.chunk.build.task;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.chunk.VisGraph;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.ChunkRenderTypeSet;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import net.vulkanmod.Initializer;
+import net.vulkanmod.compat.sable.aeronautics.AeronauticsWorldLayers;
 import net.vulkanmod.render.chunk.RenderSection;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.chunk.build.BlockRenderer;
+import net.vulkanmod.render.chunk.build.BlockLayerMesh;
 import net.vulkanmod.render.chunk.build.LiquidRenderer;
 import net.vulkanmod.render.chunk.build.RenderRegion;
 import net.vulkanmod.render.chunk.build.UploadBuffer;
@@ -27,11 +34,14 @@ import org.joml.Vector3f;
 public class BuildTask extends ChunkTask {
     @Nullable
     protected RenderRegion region;
+    private final AeronauticsWorldLayers.Snapshot<RenderType> worldLayers;
 
-    public BuildTask(RenderSection renderSection, RenderRegion renderRegion, boolean highPriority) {
-        super(renderSection);
+    public BuildTask(RenderSection renderSection, RenderRegion renderRegion, boolean highPriority,
+                     long buildRevision) {
+        super(renderSection, buildRevision);
         this.region = renderRegion;
         this.highPriority = highPriority;
+        this.worldLayers = AeronauticsWorldLayers.captureBuildLayers();
     }
 
     public String name() {
@@ -41,126 +51,214 @@ public class BuildTask extends ChunkTask {
     public Result runTask(BuilderResources builderResources) {
         long startTime = System.nanoTime();
 
-        if (this.cancelled.get()) {
+        if (this.cancelled.get() || this.section.getBuildRevision() != this.buildRevision) {
+            this.clearPayload();
             return Result.CANCELLED;
         }
 
-        Vec3 vec3 = WorldRenderer.getCameraPos();
-        float x = (float) vec3.x;
-        float y = (float) vec3.y;
-        float z = (float) vec3.z;
-        CompileResult compileResult = this.compile(x, y, z, builderResources);
+        CompileResult compileResult = null;
+        try {
+            Vec3 vec3 = WorldRenderer.getCameraPos();
+            float x = (float) vec3.x;
+            float y = (float) vec3.y;
+            float z = (float) vec3.z;
+            compileResult = this.compile(x, y, z, builderResources);
+            if (compileResult == null) {
+                return Result.CANCELLED;
+            }
 
-        CompiledSection compiledSection = new CompiledSection();
-        compiledSection.blockEntities.addAll(compileResult.blockEntities);
-        compiledSection.transparencyState = compileResult.transparencyState;
-        compiledSection.isCompletelyEmpty = compileResult.renderedLayers.isEmpty();
-        compiledSection.animatedSprites = builderResources.animatedSprites.toArray();
-        compileResult.compiledSection = compiledSection;
+            CompiledSection compiledSection = new CompiledSection();
+            compiledSection.blockEntities.addAll(compileResult.blockEntities);
+            compiledSection.transparencyState = compileResult.transparencyState;
+            compiledSection.isCompletelyEmpty = compileResult.renderedLayers.isEmpty()
+                    && compileResult.blockLayerMesh == null;
+            compileResult.compiledSection = compiledSection;
+            compiledSection.animatedSprites = builderResources.animatedSprites.toArray();
 
-        if (this.cancelled.get()) {
-            compileResult.renderedLayers.values().forEach(UploadBuffer::release);
-            return Result.CANCELLED;
+            if (this.cancelled.get() || this.section.getBuildRevision() != this.buildRevision) {
+                return Result.CANCELLED;
+            }
+
+            taskDispatcher.scheduleSectionUpdate(compileResult, this);
+
+            compileResult = null;
+
+            float buildTime = (System.nanoTime() - startTime) * 0.000001f;
+            if (BENCH) {
+                builderResources.updateBuildStats((int) buildTime);
+            }
+
+            return Result.SUCCESSFUL;
+        } finally {
+            try {
+                if (compileResult != null) {
+                    compileResult.releaseBuffers();
+                }
+            } finally {
+                this.clearPayload();
+                builderResources.clear();
+            }
         }
-
-        taskDispatcher.scheduleSectionUpdate(compileResult);
-
-        float buildTime = (System.nanoTime() - startTime) * 0.000001f;
-        if (BENCH) {
-            builderResources.updateBuildStats((int) buildTime);
-        }
-
-        return Result.SUCCESSFUL;
     }
 
+    @Nullable
     private CompileResult compile(float camX, float camY, float camZ, BuilderResources builderResources) {
-        CompileResult compileResult = new CompileResult(this.section, true);
+        CompileResult compileResult = new CompileResult(this.section, true, this.buildRevision, -1L);
+        boolean completed = false;
+        try {
 
-        BlockPos startBlockPos = new BlockPos(section.xOffset(), section.yOffset(), section.zOffset()).immutable();
-        VisGraph visGraph = new VisGraph();
+            BlockPos startBlockPos = new BlockPos(section.xOffset(), section.yOffset(), section.zOffset()).immutable();
+            VisGraph visGraph = new VisGraph();
 
-        if (this.region == null) {
-            compileResult.visibilitySet = visGraph.resolve();
-            return compileResult;
-        }
+            if (this.region == null) {
+                compileResult.visibilitySet = visGraph.resolve();
+                completed = true;
+                return compileResult;
+            }
 
-        Vector3f pos = new Vector3f();
-        ThreadBuilderPack bufferBuilders = builderResources.builderPack;
-        setupBufferBuilders(bufferBuilders);
+            Vector3f pos = new Vector3f();
+            ThreadBuilderPack bufferBuilders = builderResources.builderPack;
+            setupBufferBuilders(bufferBuilders);
+            TerrainBufferBuilder blockLayerBufferBuilder = null;
 
-        this.region.loadBlockStates();
-        this.region.initTintCache(builderResources.tintCache);
+            this.region.loadBlockStates(builderResources.blockStates);
+            this.region.initTintCache(builderResources.tintCache);
 
-        builderResources.update(this.region, this.section);
-        builderResources.animatedSprites.clear();
+            builderResources.update(this.region, this.section);
+            builderResources.animatedSprites.clear();
 
-        BlockRenderer blockRenderer = builderResources.blockRenderer;
+            BlockRenderer blockRenderer = builderResources.blockRenderer;
 
-        LiquidRenderer liquidRenderer = builderResources.liquidRenderer;
+            LiquidRenderer liquidRenderer = builderResources.liquidRenderer;
 
-        BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
+            BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
+            RandomSource randomSource = builderResources.randomSource;
 
-        for (int y = 0; y < 16; ++y) {
-            for (int z = 0; z < 16; ++z) {
-                for (int x = 0; x < 16; ++x) {
-                    blockPos.set(section.xOffset() + x, section.yOffset() + y, section.zOffset() + z);
+            for (int y = 0; y < 16; ++y) {
+                if (this.cancelled.get() || this.section.getBuildRevision() != this.buildRevision) {
+                    return null;
+                }
+                for (int z = 0; z < 16; ++z) {
+                    for (int x = 0; x < 16; ++x) {
+                        blockPos.set(section.xOffset() + x, section.yOffset() + y, section.zOffset() + z);
 
-                    BlockState blockState = this.region.getBlockState(blockPos);
-                    if (blockState.isSolidRender(this.region, blockPos)) {
-                        visGraph.setOpaque(blockPos);
-                    }
-
-                    if (blockState.hasBlockEntity()) {
-                        BlockEntity blockEntity = this.region.getBlockEntity(blockPos);
-                        if (blockEntity != null) {
-                            this.handleBlockEntity(compileResult, blockEntity);
+                        BlockState blockState = this.region.getBlockState(blockPos);
+                        if (blockState.isSolidRender(this.region, blockPos)) {
+                            visGraph.setOpaque(blockPos);
                         }
-                    }
 
-                    FluidState fluidState = blockState.getFluidState();
-                    TerrainRenderType renderType;
-                    TerrainBufferBuilder bufferBuilder;
-                    if (!fluidState.isEmpty()) {
-                        renderType = TerrainRenderType.get(ItemBlockRenderTypes.getRenderLayer(fluidState));
+                        if (blockState.hasBlockEntity()) {
+                            BlockEntity blockEntity = this.region.getBlockEntity(blockPos);
+                            if (blockEntity != null) {
+                                this.handleBlockEntity(compileResult, blockEntity);
+                            }
+                        }
 
-                        bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
-                        bufferBuilder.setBlockAttributes(blockState);
+                        FluidState fluidState = blockState.getFluidState();
+                        TerrainRenderType renderType;
+                        TerrainBufferBuilder bufferBuilder;
+                        if (!fluidState.isEmpty()) {
+                            renderType = TerrainRenderType.get(ItemBlockRenderTypes.getRenderLayer(fluidState));
 
-                        liquidRenderer.renderLiquid(blockState, fluidState, blockPos, bufferBuilder);
-                    }
+                            bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
+                            bufferBuilder.setBlockAttributes(blockState);
 
-                    if (blockState.getRenderShape() == RenderShape.MODEL) {
-                        renderType = TerrainRenderType.get(ItemBlockRenderTypes.getChunkRenderType(blockState));
+                            liquidRenderer.renderLiquid(blockState, fluidState, blockPos, bufferBuilder);
+                        }
 
-                        bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
-                        bufferBuilder.setBlockAttributes(blockState);
+                        if (blockState.getRenderShape() == RenderShape.MODEL) {
+                            BakedModel model = Minecraft.getInstance().getBlockRenderer().getBlockModel(blockState);
+                            ModelData modelData = getModelData(blockPos, blockState, model);
+                            randomSource.setSeed(blockState.getSeed(blockPos));
+                            ChunkRenderTypeSet renderTypes = model.getRenderTypes(blockState, randomSource, modelData);
 
-                        pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
-                        blockRenderer.renderBatched(blockState, blockPos, pos, bufferBuilder);
+                            for (RenderType chunkRenderType : renderTypes) {
+                                if (this.worldLayers.isGhost(chunkRenderType)) {
+                                    continue;
+                                }
+                                if (this.worldLayers.isBase(chunkRenderType)) {
+                                    if (!this.worldLayers.buildBase()) {
+                                        continue;
+                                    }
+                                    if (blockLayerBufferBuilder == null) {
+                                        blockLayerBufferBuilder = bufferBuilders.blockLayerBuilder();
+                                        blockLayerBufferBuilder.begin();
+                                    }
+                                    bufferBuilder = blockLayerBufferBuilder;
+                                } else {
+                                    renderType = TerrainRenderType.get(chunkRenderType);
+                                    bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
+                                }
+                                bufferBuilder.setBlockAttributes(blockState);
+
+                                pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
+                                blockRenderer.renderBlock(blockState, blockPos, pos, bufferBuilder, model, modelData, chunkRenderType);
+                            }
+                        }
                     }
                 }
             }
-        }
 
-        TerrainBufferBuilder translucentBufferBuilder = bufferBuilders.builder(TerrainRenderType.TRANSLUCENT);
-        if (!translucentBufferBuilder.isCurrentBatchEmpty()) {
-            translucentBufferBuilder.setupQuadSortingPoints();
-            translucentBufferBuilder.setupQuadSorting(camX - (float) startBlockPos.getX(), camY - (float) startBlockPos.getY(), camZ - (float) startBlockPos.getZ());
-            compileResult.transparencyState = translucentBufferBuilder.getSortState();
-        }
+            TerrainBufferBuilder translucentBufferBuilder = bufferBuilders.builder(TerrainRenderType.TRANSLUCENT);
+            if (!translucentBufferBuilder.isCurrentBatchEmpty()) {
+                translucentBufferBuilder.setupQuadSortingPoints();
+                translucentBufferBuilder.setupQuadSorting(camX - (float) startBlockPos.getX(), camY - (float) startBlockPos.getY(), camZ - (float) startBlockPos.getZ());
+                compileResult.transparencyState = translucentBufferBuilder.getSortState();
+            }
 
-        for (TerrainRenderType renderType : TerrainRenderType.VALUES) {
-            TerrainBufferBuilder.RenderedBuffer renderedBuffer = bufferBuilders.builder(renderType).end();
-            if (renderedBuffer != null) {
-                UploadBuffer uploadBuffer = new UploadBuffer(renderedBuffer);
-                compileResult.renderedLayers.put(renderType, uploadBuffer);
-                renderedBuffer.release();
+            if (blockLayerBufferBuilder != null) {
+                TerrainBufferBuilder.RenderedBuffer renderedBuffer = blockLayerBufferBuilder.end();
+                if (renderedBuffer != null) {
+                    try {
+                        compileResult.blockLayerMesh = BlockLayerMesh.copyOf(renderedBuffer);
+                    } finally {
+                        renderedBuffer.release();
+                    }
+                }
+            }
+
+            for (TerrainRenderType renderType : TerrainRenderType.VALUES) {
+                TerrainBufferBuilder.RenderedBuffer renderedBuffer = bufferBuilders.builder(renderType).end();
+                if (renderedBuffer != null) {
+                    try {
+                        UploadBuffer uploadBuffer = new UploadBuffer(renderedBuffer);
+                        compileResult.renderedLayers.put(renderType, uploadBuffer);
+                    } finally {
+                        renderedBuffer.release();
+                    }
+                }
+            }
+
+            compileResult.visibilitySet = visGraph.resolve();
+            completed = true;
+            return compileResult;
+        } finally {
+            if (!completed) {
+                compileResult.releaseBuffers();
+            }
+        }
+    }
+
+    @Override
+    protected void clearPayload() {
+        this.region = null;
+    }
+
+    @Override
+    public void recoverFromFailure() {
+        this.section.setDirtyAfterBuildFailure(this.buildRevision);
+    }
+
+    private ModelData getModelData(BlockPos blockPos, BlockState blockState, BakedModel model) {
+        ModelData modelData = ModelData.EMPTY;
+        if (blockState.hasBlockEntity() && this.region != null) {
+            BlockEntity blockEntity = this.region.getBlockEntity(blockPos);
+            if (blockEntity != null) {
+                modelData = blockEntity.getModelData();
             }
         }
 
-        compileResult.visibilitySet = visGraph.resolve();
-        this.region = null;
-        return compileResult;
+        return model.getModelData(this.region, blockPos, blockState, modelData);
     }
 
     private void setupBufferBuilders(ThreadBuilderPack builderPack) {
@@ -203,4 +301,3 @@ public class BuildTask extends ChunkTask {
 
     }
 }
-

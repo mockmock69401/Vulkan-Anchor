@@ -11,11 +11,10 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import net.minecraft.client.renderer.EffectInstance;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
-import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.ResourceProvider;
-import net.minecraft.util.GsonHelper;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
+import net.vulkanmod.vulkan.shader.LegacyUniformSupplier;
 import net.vulkanmod.vulkan.shader.Pipeline;
 import net.vulkanmod.vulkan.shader.layout.Uniform;
 import net.vulkanmod.vulkan.shader.descriptor.UBO;
@@ -34,7 +33,6 @@ import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.Reader;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -43,53 +41,40 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntSupplier;
-import java.util.function.Supplier;
 
 @Mixin(value = EffectInstance.class, priority = 900)
 public class EffectInstanceM {
 
-    @Shadow(remap = false) @Final private Map<String, com.mojang.blaze3d.shaders.Uniform> f_108930_;
-    @Shadow(remap = false) @Final private List<com.mojang.blaze3d.shaders.Uniform> f_108928_;
+    @Shadow @Final private Map<String, com.mojang.blaze3d.shaders.Uniform> uniformMap;
+    @Shadow @Final private List<com.mojang.blaze3d.shaders.Uniform> uniforms;
 
-    @Shadow(remap = false) private boolean f_108933_;
-    @Shadow(remap = false) private static EffectInstance f_108923_;
-    @Shadow(remap = false) @Final private BlendMode f_108934_;
-    @Shadow(remap = false) private static int f_108924_;
-    @Shadow(remap = false) @Final private int f_108931_;
-    @Shadow(remap = false) @Final private List<Integer> f_108927_;
-    @Shadow(remap = false) @Final private List<String> f_108926_;
-    @Shadow(remap = false) @Final private Map<String, IntSupplier> f_108925_;
+    @Shadow private boolean dirty;
+    @Shadow private static EffectInstance lastAppliedEffect;
+    @Shadow @Final private BlendMode blend;
+    @Shadow private static int lastProgramId;
+    @Shadow @Final private int programId;
+    @Shadow @Final private List<Integer> samplerLocations;
+    @Shadow @Final private List<String> samplerNames;
+    @Shadow @Final private Map<String, IntSupplier> samplerMap;
 
-    @Shadow(remap = false) @Final private String f_108932_;
+    @Shadow @Final private String name;
     private static GraphicsPipeline lastPipeline;
 
     private GraphicsPipeline pipeline;
 
-    @Inject(method = "<init>", at = @At("RETURN"))
-    private void inj(ResourceManager resourceManager, String string, CallbackInfo ci) {
-                                                                                                     
-                                                                                                         
-                                                                                                    
-        String[] programPathInfo = this.decompose(string, ':');
-        ResourceLocation resourceLocation = new ResourceLocation(programPathInfo[0], "shaders/program/" + programPathInfo[1] + ".json");
-
-        try {
-            Resource resource = resourceManager.getResourceOrThrow(resourceLocation);
-            try (Reader reader = new InputStreamReader(resource.open(), StandardCharsets.UTF_8)) {
-                JsonObject jsonObject = GsonHelper.parse(reader);
-                String vertexShader = GsonHelper.getAsString(jsonObject, "vertex");
-                String fragmentShader = GsonHelper.getAsString(jsonObject, "fragment");
-                createShaders(resourceManager, vertexShader, fragmentShader);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+    @Inject(method = "<init>",
+            at = @At(value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/EffectInstance;updateLocations()V",
+                    shift = At.Shift.AFTER),
+            locals = LocalCapture.CAPTURE_FAILHARD
+    )
+    private void inj(ResourceProvider resourceProvider, String string, CallbackInfo ci, ResourceLocation resourceLocation, ResourceLocation resourceLocation2, Resource resource, Reader reader, JsonObject jsonObject, String string2, String string3) {
+        createShaders(resourceProvider, string2, string3);
     }
 
     @Redirect(method = "<init>", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/EffectInstance;m_172566_(Lnet/minecraft/server/packs/resources/ResourceManager;Lcom/mojang/blaze3d/shaders/Program$Type;Ljava/lang/String;)Lcom/mojang/blaze3d/shaders/EffectProgram;",
-            remap = false), require = 0)
-    private EffectProgram redirectShader(ResourceManager resourceManager, Program.Type type, String string) {
+            target = "Lnet/minecraft/client/renderer/EffectInstance;getOrCreate(Lnet/minecraft/server/packs/resources/ResourceProvider;Lcom/mojang/blaze3d/shaders/Program$Type;Ljava/lang/String;)Lcom/mojang/blaze3d/shaders/EffectProgram;"))
+    private EffectProgram redirectShader(ResourceProvider resourceProvider, Program.Type type, String string) {
         return null;
     }
 
@@ -97,7 +82,7 @@ public class EffectInstanceM {
     private void close(CallbackInfo ci) {
         ci.cancel();
 
-        for (com.mojang.blaze3d.shaders.Uniform uniform : this.f_108928_) {
+        for (com.mojang.blaze3d.shaders.Uniform uniform : this.uniforms) {
             uniform.close();
         }
 
@@ -107,26 +92,29 @@ public class EffectInstanceM {
 
         try {
             String[] vshPathInfo = this.decompose(vertexShader, ':');
-            ResourceLocation vshLocation = new ResourceLocation(vshPathInfo[0], "shaders/program/" + vshPathInfo[1] + ".vsh");
+            ResourceLocation vshLocation = ResourceLocation.fromNamespaceAndPath(vshPathInfo[0], "shaders/program/" + vshPathInfo[1] + ".vsh");
             Resource resource = resourceManager.getResourceOrThrow(vshLocation);
             InputStream inputStream = resource.open();
-            String vshSrc = modernizeLegacyGlsl(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8), false);
+            String vshSrc = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
 
             String[] fshPathInfo = this.decompose(fragShader, ':');
-            ResourceLocation fshLocation = new ResourceLocation(fshPathInfo[0], "shaders/program/" + fshPathInfo[1] + ".fsh");
+            ResourceLocation fshLocation = ResourceLocation.fromNamespaceAndPath(fshPathInfo[0], "shaders/program/" + fshPathInfo[1] + ".fsh");
             resource = resourceManager.getResourceOrThrow(fshLocation);
             inputStream = resource.open();
-            String fshSrc = modernizeLegacyGlsl(new String(inputStream.readAllBytes(), StandardCharsets.UTF_8), true);
+            String fshSrc = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
 
             GlslConverter converter = new GlslConverter();
+            converter.enableEffectSamplerOrigins();
+            converter.reserveUniformNames(this.uniformMap.keySet());
 
             converter.process(vshSrc, fshSrc);
             UBO ubo = converter.getUBO();
             this.setUniformSuppliers(ubo);
+            converter.bindEffectSamplerOrigins();
 
             Pipeline.Builder builder = new Pipeline.Builder(DefaultVertexFormat.POSITION);
             builder.setUniforms(Collections.singletonList(ubo), converter.getSamplerList());
-            builder.compileShaders(this.f_108932_, converter.getVshConverted(), converter.getFshConverted());
+            builder.compileShaders(this.name, converter.getVshConverted(), converter.getFshConverted());
 
             this.pipeline = builder.createGraphicsPipeline();
 
@@ -139,30 +127,23 @@ public class EffectInstanceM {
     private void setUniformSuppliers(UBO ubo) {
 
         for(Uniform v_uniform : ubo.getUniforms()) {
-            com.mojang.blaze3d.shaders.Uniform uniform = this.f_108930_.get(v_uniform.getName());
+            com.mojang.blaze3d.shaders.Uniform uniform = this.uniformMap.get(v_uniform.getName());
 
             if (uniform == null) {
 
                 continue;
             }
 
-            Supplier<MappedBuffer> supplier;
-            ByteBuffer byteBuffer;
-
-            if (uniform.getType() <= 3) {
-                byteBuffer = MemoryUtil.memByteBuffer(uniform.getIntBuffer());
-            }
-            else if (uniform.getType() <= 10) {
-                byteBuffer = MemoryUtil.memByteBuffer(uniform.getFloatBuffer());
-            }
-            else {
-                throw new RuntimeException("out of bounds value for uniform " + uniform);
-            }
-
-            MappedBuffer mappedBuffer = MappedBuffer.createFromBuffer(byteBuffer);
-            supplier = () -> mappedBuffer;
-
-            v_uniform.setSupplier(supplier);
+            String uniformName = v_uniform.getName();
+            v_uniform.setSupplier(new LegacyUniformSupplier(v_uniform, () -> this.uniformMap.get(uniformName), () -> {
+                com.mojang.blaze3d.shaders.Uniform owner = this.uniformMap.get(uniformName);
+                if (owner == null) return null;
+                ByteBuffer bytes;
+                if (owner.getType() >= 0 && owner.getType() <= 3) bytes = MemoryUtil.memByteBuffer(owner.getIntBuffer());
+                else if (owner.getType() >= 4 && owner.getType() <= 10) bytes = MemoryUtil.memByteBuffer(owner.getFloatBuffer());
+                else throw new IllegalArgumentException("Unsupported effect uniform owner " + uniformName + ": " + owner.getType());
+                return MappedBuffer.createFromBuffer(bytes);
+            }));
         }
 
     }
@@ -180,32 +161,12 @@ public class EffectInstanceM {
         return strings;
     }
 
-                                                                                                      
-                                                                                                     
-                                                                                                           
-                                                                                                               
-    private static String modernizeLegacyGlsl(String src, boolean fragment) {
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("#version\\s+(\\d{3})").matcher(src);
-        if (!m.find() || Integer.parseInt(m.group(1)) >= 150) {
-            return src;
-        }
-        src = src.replaceFirst("#version\\s+\\d{3}[^\\n]*", "#version 150");
-        src = src.replaceAll("\\battribute\\b", "in");
-        src = src.replaceAll("\\bvarying\\b", fragment ? "in" : "out");
-        src = src.replaceAll("\\btexture(2D|3D|Cube)\\b", "texture");
-        if (fragment && src.contains("gl_FragColor")) {
-            src = src.replaceFirst("(#version[^\\n]*\\n)", "$1out vec4 fragColor;\n");
-            src = src.replace("gl_FragColor", "fragColor");
-        }
-        return src;
-    }
-
-    @Inject(method = "m_108966_", at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = "apply", at = @At("HEAD"), cancellable = true)
     private void apply(CallbackInfo ci) {
         ci.cancel();
 
-        this.f_108933_ = false;
-        this.f_108934_.apply();
+        this.dirty = false;
+        this.blend.apply();
 
         Renderer renderer = Renderer.getInstance();
 
@@ -214,20 +175,20 @@ public class EffectInstanceM {
             lastPipeline = this.pipeline;
         }
 
-        for(int i = 0; i < this.f_108927_.size(); ++i) {
-            String string = this.f_108926_.get(i);
-            IntSupplier intSupplier = this.f_108925_.get(string);
+        for(int i = 0; i < this.samplerLocations.size(); ++i) {
+            String string = this.samplerNames.get(i);
+            IntSupplier intSupplier = this.samplerMap.get(string);
             if (intSupplier != null) {
                 RenderSystem.activeTexture(GL30.GL_TEXTURE0 + i);
                 int j = intSupplier.getAsInt();
                 if (j != -1) {
                     RenderSystem.bindTexture(j);
-                    com.mojang.blaze3d.shaders.Uniform.uploadInteger(this.f_108927_.get(i), i);
+                    com.mojang.blaze3d.shaders.Uniform.uploadInteger(this.samplerLocations.get(i), i);
                 }
             }
         }
 
-        for (com.mojang.blaze3d.shaders.Uniform uniform : this.f_108928_) {
+        for (com.mojang.blaze3d.shaders.Uniform uniform : this.uniforms) {
             uniform.upload();
         }
 
@@ -235,18 +196,18 @@ public class EffectInstanceM {
 
     }
 
-    @Inject(method = "m_108965_", at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = "clear", at = @At("HEAD"), cancellable = true)
     private void clear(CallbackInfo ci) {
         ci.cancel();
 
         RenderSystem.assertOnRenderThread();
         ProgramManager.glUseProgram(0);
-        f_108924_ = -1;
-        f_108923_ = null;
+        lastProgramId = -1;
+        lastAppliedEffect = null;
         lastPipeline = null;
 
-        for(int i = 0; i < this.f_108927_.size(); ++i) {
-            if (this.f_108925_.get(this.f_108926_.get(i)) != null) {
+        for(int i = 0; i < this.samplerLocations.size(); ++i) {
+            if (this.samplerMap.get(this.samplerNames.get(i)) != null) {
                 GlStateManager._activeTexture(GL30.GL_TEXTURE0 + i);
                 GlStateManager._bindTexture(0);
             }
@@ -254,4 +215,3 @@ public class EffectInstanceM {
 
     }
 }
-

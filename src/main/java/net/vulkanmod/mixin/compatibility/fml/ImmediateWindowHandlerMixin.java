@@ -1,6 +1,6 @@
 package net.vulkanmod.mixin.compatibility.fml;
 
-import net.minecraftforge.fml.loading.ImmediateWindowHandler;
+import net.neoforged.fml.loading.ImmediateWindowHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
@@ -25,4 +25,3 @@ public class ImmediateWindowHandlerMixin {
         }
     }
 }
-

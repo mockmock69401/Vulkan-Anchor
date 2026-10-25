@@ -82,7 +82,7 @@ public class CommandPool {
 
             vkBeginCommandBuffer(commandBuffer.handle, beginInfo);
 
-                        
+
 
             return commandBuffer;
         }
@@ -147,10 +147,10 @@ public class CommandPool {
         }
 
         public void reset() {
+            vkResetCommandBuffer(this.handle, 0);
             this.submitted = false;
             this.recording = false;
             addToAvailable(this);
         }
     }
 }
-

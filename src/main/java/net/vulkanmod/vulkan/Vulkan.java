@@ -1,6 +1,7 @@
 package net.vulkanmod.vulkan;
 
 import net.vulkanmod.Initializer;
+import net.vulkanmod.config.Platform;
 import net.vulkanmod.vulkan.device.Device;
 import net.vulkanmod.vulkan.device.DeviceManager;
 import net.vulkanmod.vulkan.framebuffer.SwapChain;
@@ -10,6 +11,8 @@ import net.vulkanmod.vulkan.memory.MemoryTypes;
 import net.vulkanmod.vulkan.memory.StagingBuffer;
 import net.vulkanmod.vulkan.queue.Queue;
 import net.vulkanmod.vulkan.shader.Pipeline;
+import net.vulkanmod.vulkan.texture.ImageUtil;
+import net.vulkanmod.vulkan.texture.SamplerManager;
 import net.vulkanmod.vulkan.util.ThreadStack;
 import net.vulkanmod.vulkan.util.VUtil;
 import net.vulkanmod.vulkan.util.VkResult;
@@ -28,7 +31,6 @@ import static net.vulkanmod.vulkan.queue.Queue.getQueueFamilies;
 import static net.vulkanmod.vulkan.util.VUtil.asPointerBuffer;
 import static org.lwjgl.glfw.GLFWVulkan.glfwCreateWindowSurface;
 import static org.lwjgl.glfw.GLFWVulkan.glfwGetRequiredInstanceExtensions;
-import static org.lwjgl.system.MemoryStack.stackGet;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.util.vma.Vma.vmaCreateAllocator;
@@ -124,10 +126,6 @@ public class Vulkan {
     private static long debugMessenger;
     private static long surface;
 
-                                                                                       
-                                                            
-    private static boolean portabilityEnumeration = false;
-
     private static SwapChain swapChain;
 
     private static long commandPool;
@@ -140,6 +138,8 @@ public class Vulkan {
 
     public static boolean use24BitsDepthFormat = true;
     private static int DEFAULT_DEPTH_FORMAT = 0;
+
+    private static boolean portabilityEnumeration = false;
 
     public static void initVulkan(long window) {
         Initializer.LOGGER.info("VulkanMod: initVulkan starting...");
@@ -206,7 +206,9 @@ public class Vulkan {
     }
 
     public static void cleanUp() {
-        net.vulkanmod.vulkan.queue.QueueLock.deviceWaitIdle(DeviceManager.vkDevice);
+        int deviceIdleResult = net.vulkanmod.vulkan.queue.QueueLock.deviceWaitIdle(DeviceManager.vkDevice);
+        ImageUtil.cleanupTerminalReadback(deviceIdleResult);
+        net.vulkanmod.compat.sable.veil.VeilProgramPipelines.cleanUp();
         vkDestroyCommandPool(DeviceManager.vkDevice, commandPool, null);
         vkDestroyFence(DeviceManager.vkDevice, immediateFence, null);
 
@@ -214,6 +216,7 @@ public class Vulkan {
 
         Renderer.getInstance().cleanUpResources();
         swapChain.cleanUp();
+        SamplerManager.cleanUp();
 
         freeStagingBuffers();
 
@@ -237,12 +240,9 @@ public class Vulkan {
             throw new RuntimeException("Validation requested but not supported");
         }
 
-                                                                                         
-                                                                                               
-                                                                                                      
         try (MemoryStack stack = stackPush()) {
-            portabilityEnumeration = getAvailableInstanceExtensions(stack)
-                    .contains(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+            portabilityEnumeration = Platform.isMacOS()
+                    && getAvailableInstanceExtensions(stack).contains(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
         }
 
         try (MemoryStack stack = stackPush()) {
@@ -264,7 +264,7 @@ public class Vulkan {
 
             if (portabilityEnumeration) {
                 createInfo.flags(createInfo.flags() | VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR);
-                Initializer.LOGGER.info("VulkanMod: portability driver detected (MoltenVK); enabling portability enumeration.");
+                Initializer.LOGGER.info("VulkanMod: macOS portability ICD (MoltenVK); enabling portability enumeration.");
             }
 
             if (ENABLE_VALIDATION_LAYERS) {
@@ -278,27 +278,15 @@ public class Vulkan {
 
             PointerBuffer instancePtr = stack.mallocPointer(1);
 
+            Initializer.LOGGER.info("VulkanMod: calling vkCreateInstance...");
             int result = vkCreateInstance(createInfo, null, instancePtr);
-            checkResult(result, "Failed to create instance");
+            if (result != VK_SUCCESS) {
+                throw new RuntimeException("Failed to create Vulkan instance: " + VkResult.decode(result)
+                        + "\n" + Platform.vulkanDriverHint());
+            }
 
-            instance = createVkInstance(instancePtr.get(0), createInfo);
-        }
-    }
-
-                                                                                                  
-                                                                                                     
-                                                                                                      
-                                                                                                        
-                                                                                                        
-    /**
-     * LWJGL's VkInstance constructor lists every device's extensions on its stack, past LWJGL's 64 KiB default: it runs on a thread
-     * with a 1 MiB stack (ThreadStack), so no -Dorg.lwjgl.system.stackSize launcher flag is needed.
-     */
-    private static VkInstance createVkInstance(long handle, VkInstanceCreateInfo createInfo) {
-        try {
-            return ThreadStack.call("VulkanMod-InstanceInit", 1 << 20, () -> new VkInstance(handle, createInfo));
-        } catch (RuntimeException e) {
-            throw new RuntimeException("Failed to initialize Vulkan instance.", e.getCause() != null ? e.getCause() : e);
+            Initializer.LOGGER.info("VulkanMod: vkCreateInstance succeeded; building instance capabilities...");
+            instance = VkInstanceFactory.create(instancePtr.get(0), createInfo);
         }
     }
 
@@ -478,7 +466,8 @@ public class Vulkan {
         PointerBuffer glfwExtensions = glfwGetRequiredInstanceExtensions();
 
         if (glfwExtensions == null) {
-            throw new RuntimeException("GLFW could not find the Vulkan loader / required instance extensions.");
+            throw new RuntimeException("GLFW could not find the Vulkan loader / required instance extensions.\n"
+                    + Platform.vulkanDriverHint());
         }
 
         int extra = (ENABLE_VALIDATION_LAYERS ? 1 : 0) + (portabilityEnumeration ? 1 : 0);
@@ -536,5 +525,4 @@ public class Vulkan {
         return DeviceManager.device;
     }
 }
-
 

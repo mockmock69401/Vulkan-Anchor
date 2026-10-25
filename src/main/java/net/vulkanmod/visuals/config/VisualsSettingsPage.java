@@ -41,7 +41,7 @@ public final class VisualsSettingsPage {
 
     public static void register() {
         ModSettingsRegistry.INSTANCE.addModEntry(new ModSettingsEntry(Component.translatable(KEY_PREFIX + "title"),
-                () -> new ResourceLocation("vulkanmod", "vlogo_transparent.png"), VisualsSettingsPage::pages, VisualsSettingsPage::save));
+                () -> ResourceLocation.fromNamespaceAndPath("vulkanmod", "vlogo_transparent.png"), VisualsSettingsPage::pages, VisualsSettingsPage::save));
         LOGGER.info("Shader settings added to the video settings screen");
     }
 

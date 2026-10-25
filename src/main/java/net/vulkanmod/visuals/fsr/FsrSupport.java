@@ -96,7 +96,7 @@ public final class FsrSupport {
     private static Path cacheDir() {
         Path gameDir;
         try {
-            gameDir = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get();
+            gameDir = net.neoforged.fml.loading.FMLPaths.GAMEDIR.get();
         } catch (Throwable t) {
             gameDir = Path.of("").toAbsolutePath();
         }

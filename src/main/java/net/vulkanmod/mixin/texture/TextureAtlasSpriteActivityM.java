@@ -18,16 +18,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * it as drawn (particles, block entity materials, the GUI and mods that read a sprite's UVs themselves). The getters are rewritten
  * with vanilla's bodies plus the mark rather than injected into: an injection would allocate a callback on every call of these hot
  * getters. Fields and getters are named in SRG with remap off, as DirectionMixin does (the refmap does not carry them):
- * f_244165_ contents, f_118351_..f_118354_ u0 u1 v0 v1; m_118409_ getU0, m_118410_ getU1, m_118411_ getV0, m_118412_ getV1,
- * m_118367_ getU(double), m_118393_ getV(double).
  */
 @Mixin(TextureAtlasSprite.class)
 public class TextureAtlasSpriteActivityM implements SpriteActivity.AtlasSprite {
-    @Shadow(remap = false) @Final private SpriteContents f_244165_;
-    @Shadow(remap = false) @Final private float f_118351_;
-    @Shadow(remap = false) @Final private float f_118352_;
-    @Shadow(remap = false) @Final private float f_118353_;
-    @Shadow(remap = false) @Final private float f_118354_;
+    @Shadow @Final private SpriteContents contents;
+    @Shadow @Final private float u0;
+    @Shadow @Final private float u1;
+    @Shadow @Final private float v0;
+    @Shadow @Final private float v1;
 
     @Unique
     private volatile SpriteActivity.Holder vulkanmod$animatedContents;
@@ -41,7 +39,7 @@ public class TextureAtlasSpriteActivityM implements SpriteActivity.AtlasSprite {
     private void vulkanmod$tickWhenDrawn(CallbackInfoReturnable<TextureAtlasSprite.Ticker> cir) {
         TextureAtlasSprite.Ticker ticker = cir.getReturnValue();
         if (ticker == null) return;
-        SpriteActivity.Holder holder = (SpriteActivity.Holder) (Object) this.f_244165_;
+        SpriteActivity.Holder holder = (SpriteActivity.Holder) (Object) this.contents;
         holder.vulkanmod$setAnimated();
         this.vulkanmod$animatedContents = holder;
         cir.setReturnValue(new ActiveSpriteTicker(ticker, holder));
@@ -57,61 +55,61 @@ public class TextureAtlasSpriteActivityM implements SpriteActivity.AtlasSprite {
      * @author VulkanMod
      * @reason SpriteActivity: getU0 marks the sprite as drawn (vanilla body otherwise)
      */
-    @Overwrite(remap = false)
-    public float m_118409_() {
+    @Overwrite
+    public float getU0() {
         this.vulkanmod$drawn();
-        return this.f_118351_;
+        return this.u0;
     }
 
     /**
      * @author VulkanMod
      * @reason SpriteActivity: getU1 marks the sprite as drawn (vanilla body otherwise)
      */
-    @Overwrite(remap = false)
-    public float m_118410_() {
+    @Overwrite
+    public float getU1() {
         this.vulkanmod$drawn();
-        return this.f_118352_;
+        return this.u1;
     }
 
     /**
      * @author VulkanMod
      * @reason SpriteActivity: getV0 marks the sprite as drawn (vanilla body otherwise)
      */
-    @Overwrite(remap = false)
-    public float m_118411_() {
+    @Overwrite
+    public float getV0() {
         this.vulkanmod$drawn();
-        return this.f_118353_;
+        return this.v0;
     }
 
     /**
      * @author VulkanMod
      * @reason SpriteActivity: getV1 marks the sprite as drawn (vanilla body otherwise)
      */
-    @Overwrite(remap = false)
-    public float m_118412_() {
+    @Overwrite
+    public float getV1() {
         this.vulkanmod$drawn();
-        return this.f_118354_;
+        return this.v1;
     }
 
     /**
      * @author VulkanMod
-     * @reason SpriteActivity: getU(double) marks the sprite as drawn (vanilla body otherwise)
+     * @reason SpriteActivity: getU(float) marks the sprite as drawn (vanilla body otherwise)
      */
-    @Overwrite(remap = false)
-    public float m_118367_(double u) {
+    @Overwrite
+    public float getU(float u) {
         this.vulkanmod$drawn();
-        float width = this.f_118352_ - this.f_118351_;
-        return this.f_118351_ + width * (float) u / 16.0F;
+        float width = this.u1 - this.u0;
+        return this.u0 + width * u;
     }
 
     /**
      * @author VulkanMod
-     * @reason SpriteActivity: getV(double) marks the sprite as drawn (vanilla body otherwise)
+     * @reason SpriteActivity: getV(float) marks the sprite as drawn (vanilla body otherwise)
      */
-    @Overwrite(remap = false)
-    public float m_118393_(double v) {
+    @Overwrite
+    public float getV(float v) {
         this.vulkanmod$drawn();
-        float height = this.f_118354_ - this.f_118353_;
-        return this.f_118353_ + height * (float) v / 16.0F;
+        float height = this.v1 - this.v0;
+        return this.v0 + height * v;
     }
 }

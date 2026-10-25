@@ -112,4 +112,3 @@ public final class GlQuery {
     private long startNanos;
     private long result;
 }
-

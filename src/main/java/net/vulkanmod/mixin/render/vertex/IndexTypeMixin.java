@@ -7,11 +7,11 @@ import org.spongepowered.asm.mixin.Overwrite;
 @Mixin(VertexFormat.IndexType.class)
 public class IndexTypeMixin {
 
-       
-              
-       
-    @Overwrite(remap = false)
-    public static VertexFormat.IndexType m_166933_(int number) {
+
+
+
+    @Overwrite
+    public static VertexFormat.IndexType least(int number) {
         return VertexFormat.IndexType.SHORT;
     }
 }

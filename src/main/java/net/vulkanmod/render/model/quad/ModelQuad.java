@@ -12,7 +12,7 @@ public class ModelQuad implements QuadView {
     TextureAtlasSprite sprite;
 
     private int flags;
-    
+
     @Override
     public int getFlags() {
         return flags;
@@ -93,4 +93,3 @@ public class ModelQuad implements QuadView {
         return vertexIndex * VERTEX_SIZE;
     }
 }
-

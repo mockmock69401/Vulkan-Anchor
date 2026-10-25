@@ -58,4 +58,3 @@ public class GL21M {
     public static void glUniformMatrix4x3fv(@NativeType("GLint") int location, @NativeType("GLboolean") boolean transpose, @NativeType("GLfloat const *") float[] value) {
     }
 }
-

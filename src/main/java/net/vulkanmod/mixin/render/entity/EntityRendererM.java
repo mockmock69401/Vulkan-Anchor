@@ -17,4 +17,3 @@ public class EntityRendererM<T extends Entity> {
         return EntityCulling.isVisible(entity, frustum, aABB, cameraX, cameraY, cameraZ);
     }
 }
-

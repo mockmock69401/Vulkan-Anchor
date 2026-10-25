@@ -1,0 +1,16 @@
+{
+  "required": false,
+  "minVersion": "0.8.5",
+  "package": "dev.vulkanfix.mixin",
+  "plugin": "dev.vulkanfix.compat.VulkanfixMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "aaaparticles.NativeLibraryGuardMixin",
+    "fancymenu.SmoothImageRectFallbackMixin",
+    "iceberg.CustomItemRendererMixin",
+    "vivecraft.VRStateMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

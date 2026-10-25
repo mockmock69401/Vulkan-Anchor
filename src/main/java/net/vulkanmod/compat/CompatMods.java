@@ -38,7 +38,7 @@ public final class CompatMods {
         }
     }
 
-    static boolean contains(String[] modIds, String modId) {
+    public static boolean contains(String[] modIds, String modId) {
         if (modId == null) {
             return false;
         }
@@ -61,4 +61,3 @@ public final class CompatMods {
         return ids.toArray(String[]::new);
     }
 }
-

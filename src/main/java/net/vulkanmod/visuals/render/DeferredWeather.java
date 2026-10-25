@@ -51,9 +51,9 @@ public final class DeferredWeather {
         pending = false;
         replaying = true;
         LevelRendererWeatherInvoker renderer = (LevelRendererWeatherInvoker) Minecraft.getInstance().levelRenderer;
-        PoseStack stack = RenderSystem.getModelViewStack();
-        stack.pushPose();
-        stack.last().pose().set(MODEL_VIEW);
+        org.joml.Matrix4fStack stack = RenderSystem.getModelViewStack();
+        stack.pushMatrix();
+        stack.set(MODEL_VIEW);
         RenderSystem.applyModelViewMatrix();
         RenderSystem.depthMask(false);
         try {
@@ -61,7 +61,7 @@ public final class DeferredWeather {
             if (border != null) renderer.visuals$renderWorldBorder(border);
         } finally {
             RenderSystem.depthMask(true);
-            stack.popPose();
+            stack.popMatrix();
             RenderSystem.applyModelViewMatrix();
             replaying = false;
             lightTexture = null;

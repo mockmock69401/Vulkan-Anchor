@@ -23,4 +23,3 @@ public class GlProgramManagerMixin {
         ci.cancel();
     }
 }
-

@@ -36,27 +36,11 @@ class SectionGraphRefreshTest {
         assertFalse(CompileResult.changesGraph(0x3fL, false, true, 0x3fL, false, true), "a rebuild with the same shape");
     }
 
-    @Test
-    void theDispatcherAsksBeforeApplyingTheMesh() throws Exception {
-        List<String> c = Bytecode.calls(DISPATCHER, "doSectionUpdate");
-        assertTrue(Bytecode.inOrder(c, List.of("CompileResult.matchesCurrentSection", "CompileResult.changesGraph", "CompileResult.updateSection")), c.toString());
-    }
-
-    /** uploadSections sets graphNeedsUpdate to true from updateSections' answer (the line Reforged dropped). */
+    /** 1.21.1: Reforged walks the graph again itself once meshes land (WorldRenderer.scheduleGraphUpdate), the fix dh carried for 1.20.1. */
     @Test
     void appliedMeshesScheduleAGraphUpdate() throws Exception {
-        MethodNode setup = Bytecode.method(WORLD, "uploadSections");
-        boolean called = false, scheduled = false;
-        for (AbstractInsnNode insn : setup.instructions) {
-            if (insn instanceof MethodInsnNode m && m.name.equals("updateSections") && m.owner.equals(DISPATCHER)) called = true;
-            if (called && insn instanceof FieldInsnNode f && f.getOpcode() == Opcodes.PUTFIELD && f.name.equals("graphNeedsUpdate")) {
-                AbstractInsnNode value = Bytecode.previous(f);
-                scheduled |= value instanceof InsnNode i && i.getOpcode() == Opcodes.ICONST_1;
-                break;
-            }
-        }
-        assertTrue(called, "uploadSections applies the compiled meshes");
-        assertTrue(scheduled, "and schedules a graph update when they change it");
+        List<String> c = Bytecode.calls(WORLD, "uploadSections");
+        assertTrue(Bytecode.inOrder(c, List.of("TaskDispatcher.updateSections", "WorldRenderer.scheduleGraphUpdate")), c.toString());
         assertEquals("Z", returnType(Bytecode.method(DISPATCHER, "updateSections")));
     }
 

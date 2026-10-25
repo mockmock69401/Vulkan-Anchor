@@ -23,12 +23,11 @@ public class EarlyWindowCompat {
 
     public static void disableFmlEarlyWindowProvider() {
         try {
-            Class<?> clazz = Class.forName("net.minecraftforge.fml.loading.ImmediateWindowHandler");
+            Class<?> clazz = Class.forName("net.neoforged.fml.loading.ImmediateWindowHandler");
             Field providerField = clazz.getDeclaredField("provider");
             providerField.setAccessible(true);
             providerField.set(null, createNoOpProvider(providerField.getType()));
             disableProgressWindowTick();
-            System.out.println("[VulkanMod] Replaced FML ImmediateWindowHandler provider with Vulkan no-op provider.");
         } catch (Throwable t) {
             System.err.println("[VulkanMod] Failed to replace FML provider field: " + t.getMessage());
         }
@@ -66,7 +65,7 @@ public class EarlyWindowCompat {
 
     private static void disableProgressWindowTick() {
         try {
-            Class<?> loaderClass = Class.forName("net.minecraftforge.fml.loading.FMLLoader");
+            Class<?> loaderClass = Class.forName("net.neoforged.fml.loading.FMLLoader");
             Field tickField = loaderClass.getDeclaredField("progressWindowTick");
             tickField.setAccessible(true);
             tickField.set(null, (Runnable) () -> { });
@@ -74,4 +73,3 @@ public class EarlyWindowCompat {
         }
     }
 }
-

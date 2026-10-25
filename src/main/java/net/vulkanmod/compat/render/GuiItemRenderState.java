@@ -56,7 +56,7 @@ public final class GuiItemRenderState {
 
         if (isTooltipOverlayActive()) {
             RenderSystem.disableDepthTest();
-            RenderSystem.depthMask(false);
+            RenderSystem.depthMask(true);
             RenderSystem.disableCull();
         } else {
             RenderSystem.enableDepthTest();
@@ -69,4 +69,3 @@ public final class GuiItemRenderState {
         VRenderSystem.setPolygonModeGL(GL11.GL_FILL);
     }
 }
-

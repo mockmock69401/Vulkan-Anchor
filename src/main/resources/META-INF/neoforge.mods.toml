@@ -1,0 +1,33 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="LGPL-3.0"
+
+[[mods]]
+modId="vulkanmod"
+version="${version}"
+displayName="VulkanMod-shaded"
+logoFile="assets/vulkanmod/Vlogo.png"
+authors="Rindw"
+credits="Rindw (VulkanMod Reforged), and XCollateral (original VulkanMod creator). Unofficial modified build by mockmock69401, made with AI assistance (modpack compatibility fixes, post-processing shaders, Distant Horizons and AMD FSR 3.1 support); not endorsed by Rindw or the upstream contributors."
+description='''
+Vulkan for NeoForge 1.21.1 modpacks: an unofficial build of VulkanMod Reforged with post-processing shaders, Distant Horizons LODs and AMD FSR 3.1 frame generation.
+'''
+
+[[mixins]]
+config="vulkanmod.mixins.json"
+
+[[mixins]]
+config="vulkanfix.mixins.json"
+
+[[dependencies.vulkanmod]]
+    modId="neoforge"
+    type="required"
+    versionRange="[21.1,21.2)"
+    ordering="NONE"
+    side="BOTH"
+[[dependencies.vulkanmod]]
+    modId="minecraft"
+    type="required"
+    versionRange="[1.21.1,1.21.2)"
+    ordering="NONE"
+    side="BOTH"

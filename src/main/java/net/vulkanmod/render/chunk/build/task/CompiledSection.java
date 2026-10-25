@@ -21,10 +21,14 @@ public class CompiledSection {
         return this.transparencyState != null;
     }
 
+    @Nullable
+    public QuadSorter.SortState getTransparencyState() {
+        return this.transparencyState;
+    }
+
     public List<BlockEntity> getBlockEntities() {
         return this.blockEntities;
     }
 }
-
 
 

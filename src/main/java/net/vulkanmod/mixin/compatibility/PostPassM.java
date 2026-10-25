@@ -10,7 +10,9 @@ import net.minecraft.client.renderer.PostPass;
 import net.vulkanmod.compat.render.RenderStateSnapshot;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
+import net.vulkanmod.vulkan.util.DrawUtil;
 import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -25,87 +27,81 @@ import java.util.function.IntSupplier;
 @Mixin(value = PostPass.class, priority = 900)
 public class PostPassM {
 
-    @Shadow(remap = false) @Final public RenderTarget f_110052_;
+    @Shadow @Final public RenderTarget inTarget;
 
-    @Shadow(remap = false) @Final public RenderTarget f_110053_;
+    @Shadow @Final public RenderTarget outTarget;
 
-    @Shadow(remap = false) @Final private EffectInstance f_110054_;
+    @Shadow @Final private EffectInstance effect;
 
-    @Shadow(remap = false) @Final private List<IntSupplier> f_110055_;
+    @Shadow @Final private List<IntSupplier> auxAssets;
 
-    @Shadow(remap = false) @Final private List<String> f_110056_;
+    @Shadow @Final private List<String> auxNames;
 
-    @Shadow(remap = false) @Final private List<Integer> f_110057_;
+    @Shadow @Final private List<Integer> auxWidths;
 
-    @Shadow(remap = false) @Final private List<Integer> f_110058_;
+    @Shadow @Final private List<Integer> auxHeights;
 
-    @Shadow(remap = false) private Matrix4f f_110059_;
+    @Shadow private Matrix4f shaderOrthoMatrix;
 
-                                                                                         
-                                                                                             
-                                                                                         
-                                     
-    @Inject(method = "m_110065_", at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = "process", at = @At("HEAD"), cancellable = true)
     private void process(float f, CallbackInfo ci) {
         ci.cancel();
 
         RenderStateSnapshot renderStateSnapshot = new RenderStateSnapshot();
 
         try {
-            this.f_110052_.unbindWrite();
-            float g = (float)this.f_110053_.width;
-            float h = (float)this.f_110053_.height;
+            this.inTarget.unbindWrite();
+            float g = (float)this.outTarget.width;
+            float h = (float)this.outTarget.height;
             RenderSystem.viewport(0, 0, (int)g, (int)h);
 
-            Objects.requireNonNull(this.f_110052_);
-            this.f_110054_.setSampler("DiffuseSampler", this.f_110052_::getColorTextureId);
+            Objects.requireNonNull(this.inTarget);
+            this.effect.setSampler("DiffuseSampler", this.inTarget::getColorTextureId);
 
-            if(this.f_110052_ instanceof MainTarget)
-                this.f_110052_.bindRead();
+            if(this.inTarget instanceof MainTarget)
+                this.inTarget.bindRead();
 
-            for(int i = 0; i < this.f_110055_.size(); ++i) {
-                this.f_110054_.setSampler(this.f_110056_.get(i), this.f_110055_.get(i));
-                this.f_110054_.safeGetUniform("AuxSize" + i).set((float) this.f_110057_.get(i), (float) this.f_110058_.get(i));
+            for(int i = 0; i < this.auxAssets.size(); ++i) {
+                this.effect.setSampler(this.auxNames.get(i), this.auxAssets.get(i));
+                this.effect.safeGetUniform("AuxSize" + i).set((float) this.auxWidths.get(i), (float) this.auxHeights.get(i));
             }
 
-            this.f_110054_.safeGetUniform("ProjMat").set(this.f_110059_);
-            this.f_110054_.safeGetUniform("InSize").set((float)this.f_110052_.width, (float)this.f_110052_.height);
-            this.f_110054_.safeGetUniform("OutSize").set(g, h);
-            this.f_110054_.safeGetUniform("Time").set(f);
+            this.effect.safeGetUniform("ProjMat").set(this.shaderOrthoMatrix);
+            this.effect.safeGetUniform("InSize").set((float)this.inTarget.width, (float)this.inTarget.height);
+            this.effect.safeGetUniform("OutSize").set(g, h);
+            this.effect.safeGetUniform("Time").set(f);
             Minecraft minecraft = Minecraft.getInstance();
-            this.f_110054_.safeGetUniform("ScreenSize").set((float)minecraft.getWindow().getWidth(), (float)minecraft.getWindow().getHeight());
+            this.effect.safeGetUniform("ScreenSize").set((float)minecraft.getWindow().getWidth(), (float)minecraft.getWindow().getHeight());
 
-            this.f_110053_.clear(Minecraft.ON_OSX);
-            this.f_110053_.bindWrite(false);
+            this.outTarget.clear(Minecraft.ON_OSX);
+            this.outTarget.bindWrite(false);
 
             VRenderSystem.disableCull();
-            RenderSystem.depthFunc(519);
+            VRenderSystem.depthFunc(519);
+            VRenderSystem.setPrimitiveTopologyGL(GL11.GL_TRIANGLES);
 
-            Renderer.setViewport(0, this.f_110053_.height, this.f_110053_.width, -this.f_110053_.height);
+            Renderer.setGlViewport(0, 0, this.outTarget.width, this.outTarget.height);
             Renderer.resetScissor();
 
-            this.f_110054_.apply();
+            this.effect.apply();
 
-            BufferBuilder bufferBuilder = Tesselator.getInstance().getBuilder();
-            bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION);
-            bufferBuilder.vertex(0.0, 0.0, 500.0).endVertex();
-            bufferBuilder.vertex(g, 0.0, 500.0).endVertex();
-            bufferBuilder.vertex(g, h, 500.0).endVertex();
-            bufferBuilder.vertex(0.0, h, 500.0).endVertex();
-            BufferUploader.draw(bufferBuilder.end());
+            BufferBuilder bufferBuilder = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION);
+            bufferBuilder.addVertex(0.0f, 0.0f, 500.0f);
+            bufferBuilder.addVertex(g, 0.0f, 500.0f);
+            bufferBuilder.addVertex(g, h, 500.0f);
+            bufferBuilder.addVertex(0.0f, h, 500.0f);
+            BufferUploader.draw(bufferBuilder.buildOrThrow());
             RenderSystem.depthFunc(515);
 
-            this.f_110054_.clear();
-            this.f_110053_.unbindWrite();
-            this.f_110052_.unbindRead();
+            this.effect.clear();
+            this.outTarget.unbindWrite();
+            this.inTarget.unbindRead();
 
-            for (Object object : this.f_110055_) {
+            for (Object object : this.auxAssets) {
                 if (object instanceof RenderTarget) {
                     ((RenderTarget) object).unbindRead();
                 }
             }
-
-            VRenderSystem.enableCull();
         } finally {
             renderStateSnapshot.restore();
             Renderer.resetScissor();

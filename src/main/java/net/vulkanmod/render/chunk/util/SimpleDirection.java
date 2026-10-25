@@ -49,4 +49,3 @@ public enum SimpleDirection {
         return this.nz;
     }
 }
-

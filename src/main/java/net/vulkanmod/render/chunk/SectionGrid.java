@@ -54,7 +54,21 @@ public class SectionGrid {
     }
 
     public void releaseAllBuffers() {
-        this.chunkAreaManager.releaseAllBuffers();
+        Throwable failure = null;
+        for (RenderSection section : this.sections) {
+            try { section.releaseBlockLayerVbo(); }
+            catch (RuntimeException | Error cleanup) {
+                if (failure == null) failure = cleanup;
+                else if (failure != cleanup) failure.addSuppressed(cleanup);
+            }
+        }
+        try { this.chunkAreaManager.releaseAllBuffers(); }
+        catch (RuntimeException | Error cleanup) {
+            if (failure == null) failure = cleanup;
+            else if (failure != cleanup) failure.addSuppressed(cleanup);
+        }
+        if (failure instanceof RuntimeException runtime) throw runtime;
+        if (failure instanceof Error error) throw error;
     }
 
     private int getChunkIndex(int x, int y, int z) {
@@ -68,10 +82,10 @@ public class SectionGrid {
         this.gridWidth = i;
     }
 
-       
-                                                                                              
-                                                                 
-       
+
+
+
+
     public void repositionCamera(double x, double z) {
         int secX = Mth.floor(x) >> 4;
         int secZ = Mth.floor(z) >> 4;
@@ -82,7 +96,7 @@ public class SectionGrid {
         int dz = Mth.clamp(secZ - this.prevSecZ, -this.gridWidth, this.gridWidth);
 
         int xAbsChunkIndex = secX - this.gridWidth / 2;
-        int xStart = Math.floorMod(xAbsChunkIndex, this.gridWidth);                         
+        int xStart = Math.floorMod(xAbsChunkIndex, this.gridWidth);
         int zAbsChunkIndex = secZ - this.gridWidth / 2;
         int zStart = Math.floorMod(zAbsChunkIndex, this.gridWidth);
 
@@ -103,7 +117,7 @@ public class SectionGrid {
         } else {
             xRangeStart = 0;
             xRangeEnd = -dx - 1;
-            xComplStart = xRangeEnd;
+            xComplStart = xRangeEnd + 1;
             xComplEnd = this.gridWidth - 1;
         }
 
@@ -215,7 +229,7 @@ public class SectionGrid {
     }
 
     private void unsetNeighbours(RenderSection section) {
-                                   
+
         section.adjDirs &= 0b11;
 
         for (int i = 2; i < 6; i++) {
@@ -314,4 +328,3 @@ public class SectionGrid {
         return this.sections.length;
     }
 }
-

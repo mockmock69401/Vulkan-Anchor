@@ -4,12 +4,12 @@ public class VertexUtil {
 
     private static final float NORM_INV = 1.0f / 127.0f;
 
+    /**
+     * The fork (vulkanfix, NormalPacking): each component clamped to [-1, 1] first, like vanilla's BufferBuilder.normalIntValue. GUI
+     * item poses produce normals around 1e25, which otherwise wrap and turn flat items in the hotbar dark.
+     */
     public static int packNormal(float x, float y, float z) {
-        x *= 127.0f;
-        y *= 127.0f;
-        z *= 127.0f;
-
-        return ((int)x & 0xFF) | ((int)y & 0xFF) << 8|  ((int)z & 0xFF) << 16;
+        return dev.vulkanfix.compat.NormalPacking.pack(x, y, z);
     }
 
     public static int packNormal(int x, int y, int z) {
@@ -29,4 +29,3 @@ public class VertexUtil {
     }
 
 }
-

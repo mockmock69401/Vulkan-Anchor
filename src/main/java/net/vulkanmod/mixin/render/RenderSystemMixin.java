@@ -2,7 +2,6 @@ package net.vulkanmod.mixin.render;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.vulkanmod.compat.observer.GLCallObserver;
 import net.vulkanmod.gl.GlTexture;
@@ -10,6 +9,7 @@ import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.VRenderSystem;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fStack;
 import org.joml.Vector3f;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,7 +29,7 @@ public abstract class RenderSystemMixin {
 
     @Shadow private static Matrix4f projectionMatrix;
     @Shadow private static Matrix4f savedProjectionMatrix;
-    @Shadow @Final private static PoseStack modelViewStack;
+    @Shadow @Final private static Matrix4fStack modelViewStack;
     @Shadow private static Matrix4f modelViewMatrix;
     @Shadow private static Matrix4f textureMatrix;
     @Shadow @Final private static int[] shaderTextures;
@@ -112,7 +112,7 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     public static void viewport(int x, int y, int width, int height) {
-        Renderer.setViewport(x, y, width, height);
+        Renderer.setGlViewport(x, y, width, height);
     }
 
     @Overwrite(remap = false)
@@ -176,17 +176,20 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     public static void blendFunc(GlStateManager.SourceFactor sourceFactor, GlStateManager.DestFactor destFactor) {
-        VRenderSystem.blendFunc(sourceFactor, destFactor);
+        assertOnRenderThread();
+        GlStateManager._blendFunc(sourceFactor.value, destFactor.value);
     }
 
     @Overwrite(remap = false)
     public static void blendFunc(int srcFactor, int dstFactor) {
-        VRenderSystem.blendFunc(srcFactor, dstFactor);
+        assertOnRenderThread();
+        GlStateManager._blendFunc(srcFactor, dstFactor);
     }
 
     @Overwrite(remap = false)
     public static void blendFuncSeparate(GlStateManager.SourceFactor p_69417_, GlStateManager.DestFactor p_69418_, GlStateManager.SourceFactor p_69419_, GlStateManager.DestFactor p_69420_) {
-        VRenderSystem.blendFuncSeparate(p_69417_, p_69418_, p_69419_, p_69420_);
+        assertOnRenderThread();
+        GlStateManager._blendFuncSeparate(p_69417_.value, p_69418_.value, p_69419_.value, p_69420_.value);
         if (GLCallObserver.shouldObserve()) {
             GLCallObserver.observeCall("blendFuncSeparate", "srcRgb=" + p_69417_.value + " dstRgb=" + p_69418_.value
                     + " srcAlpha=" + p_69419_.value + " dstAlpha=" + p_69420_.value);
@@ -195,7 +198,8 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     public static void blendFuncSeparate(int srcFactorRGB, int dstFactorRGB, int srcFactorAlpha, int dstFactorAlpha) {
-        VRenderSystem.blendFuncSeparate(srcFactorRGB, dstFactorRGB, srcFactorAlpha, dstFactorAlpha);
+        assertOnRenderThread();
+        GlStateManager._blendFuncSeparate(srcFactorRGB, dstFactorRGB, srcFactorAlpha, dstFactorAlpha);
         if (GLCallObserver.shouldObserve()) {
             GLCallObserver.observeCall("blendFuncSeparate", "srcRgb=" + srcFactorRGB + " dstRgb=" + dstFactorRGB
                     + " srcAlpha=" + srcFactorAlpha + " dstAlpha=" + dstFactorAlpha);
@@ -322,7 +326,7 @@ public abstract class RenderSystemMixin {
 
     @Overwrite(remap = false)
     public static void applyModelViewMatrix() {
-        Matrix4f matrix4f = new Matrix4f(modelViewStack.last().pose());
+        Matrix4f matrix4f = new Matrix4f(modelViewStack);
         if (!isOnRenderThread()) {
             recordRenderCall(() -> {
                 modelViewMatrix = matrix4f;
@@ -352,4 +356,3 @@ public abstract class RenderSystemMixin {
         GlTexture.texParameteri(target, pname, param);
     }
 }
-

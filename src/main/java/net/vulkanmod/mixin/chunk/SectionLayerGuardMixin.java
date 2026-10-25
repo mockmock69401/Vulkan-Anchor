@@ -1,6 +1,5 @@
 package net.vulkanmod.mixin.chunk;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.vulkanmod.visuals.dh.DhPresence;
@@ -18,10 +17,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = LevelRenderer.class, priority = 900)
 public abstract class SectionLayerGuardMixin {
 
-    @Inject(method = "m_172993_", at = @At("HEAD"), cancellable = true, remap = false)
-    private void guardSectionLayer(RenderType renderType, PoseStack poseStack, double camX, double camY, double camZ, Matrix4f projectionMatrix, CallbackInfo ci) {
+    @Inject(method = "renderSectionLayer", at = @At("HEAD"), cancellable = true)
+    private void guardSectionLayer(RenderType renderType, double camX, double camY, double camZ, Matrix4f modelView, Matrix4f projectionMatrix, CallbackInfo ci) {
         if (!DhPresence.isActive()) {
-            WorldRenderer.getInstance().renderSectionLayer(renderType, poseStack, camX, camY, camZ, projectionMatrix);
+            WorldRenderer.getInstance().renderSectionLayer(renderType, camX, camY, camZ, modelView, projectionMatrix);
             ci.cancel();
         }
     }

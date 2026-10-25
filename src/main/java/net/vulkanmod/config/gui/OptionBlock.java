@@ -9,4 +9,3 @@ public record OptionBlock(String title, Option<?>[] options, String note) {
         this(title, options, null);
     }
 }
-

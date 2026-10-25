@@ -16,7 +16,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererCloudsMixin {
     @Inject(method = "renderClouds", at = @At("HEAD"), cancellable = true)
-    private void visuals$farClouds(PoseStack poseStack, Matrix4f projection, float partialTick, double camX, double camY, double camZ, CallbackInfo ci) {
+    private void visuals$farClouds(PoseStack poseStack, Matrix4f frustum, Matrix4f projection, float partialTick, double camX, double camY, double camZ,
+                                   CallbackInfo ci) {
         if (FarClouds.replacesVanilla()) ci.cancel();
     }
 }

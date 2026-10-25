@@ -5,6 +5,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.vulkanmod.compat.gl.GlIntegerState;
 import net.vulkanmod.gl.GlBuffer;
 import net.vulkanmod.gl.GlFramebuffer;
+import net.vulkanmod.gl.GlProgram;
 import net.vulkanmod.gl.GlRenderbuffer;
 import net.vulkanmod.gl.GlTexture;
 import net.vulkanmod.vulkan.Renderer;
@@ -88,7 +89,7 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _viewport(int x, int y, int width, int height) {
-        Renderer.setViewport(x, y, width, height);
+        Renderer.setGlViewport(x, y, width, height);
     }
 
     @Overwrite(remap = false)
@@ -225,7 +226,9 @@ public class GlStateManagerM {
     }
 
     @Overwrite(remap = false)
-    public static void _glUseProgram(int i) {}
+    public static void _glUseProgram(int i) {
+        GlProgram.useProgram(i);
+    }
 
     @Overwrite(remap = false)
     public static void _disableDepthTest() {
@@ -352,4 +355,3 @@ public class GlStateManagerM {
     @Overwrite(remap = false)
     public static void _disableVertexAttribArray(int i) {}
 }
-

@@ -22,4 +22,3 @@ public final class GraphicsModeCompatibility {
         return new GraphicsStatus[]{GraphicsStatus.FAST, GraphicsStatus.FANCY};
     }
 }
-

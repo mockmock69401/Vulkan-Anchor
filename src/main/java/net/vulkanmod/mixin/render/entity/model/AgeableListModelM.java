@@ -9,15 +9,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-                                                                                                          
-                                                                                                       
-                                                                                             
 @Mixin(AgeableListModel.class)
 public class AgeableListModelM {
-    @Inject(method = "m_7695_", at = @At("HEAD"), remap = false)
+    @Inject(method = "renderToBuffer", at = @At("HEAD"))
     private void vulkanMod$deferDirectGuiPlayerModelStateBoundary(PoseStack poseStack, VertexConsumer buffer,
-                                                                  int packedLight, int packedOverlay,
-                                                                  float red, float green, float blue, float alpha,
+                                                                  int packedLight, int packedOverlay, int color,
                                                                   CallbackInfo ci) {
         if (!GuiEntityRenderState.isGuiEntityPreview(packedLight)) {
             return;

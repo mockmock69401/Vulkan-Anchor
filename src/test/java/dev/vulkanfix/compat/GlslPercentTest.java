@@ -59,27 +59,11 @@ class GlslPercentTest {
         assertEquals("float x = 1.0;", GlslPercent.protect("float x = 1.0;"));
     }
 
+    /** 1.21.1: Reforged's CodeParser itself keeps "%" (the fork's own code; no mixin). */
     @Test
-    void mixinWrapsReforgedsParseCodeLine() throws Exception {
-        ClassNode node = new ClassNode();
-        try (InputStream in = GlslPercentTest.class.getClassLoader()
-                .getResourceAsStream("dev/vulkanfix/mixin/reforged/CodeParserPercentMixin.class")) {
-            assertNotNull(in);
-            new ClassReader(in).accept(node, 0);
-        }
-        List<String> kinds = new ArrayList<>();
-        for (MethodNode m : node.methods) {
-            if (m.visibleAnnotations == null) {
-                continue;
-            }
-            for (AnnotationNode a : m.visibleAnnotations) {
-                if (a.desc.endsWith("/ModifyVariable;") || a.desc.endsWith("/Inject;")) {
-                    assertEquals("[parseCodeLine]", String.valueOf(a.values.get(a.values.indexOf("method") + 1)));
-                    kinds.add(a.desc.substring(a.desc.lastIndexOf('/') + 1));
-                }
-            }
-        }
-        kinds.sort(null);
-        assertEquals(List.of("Inject;", "ModifyVariable;"), kinds);
+    void reforgedsParseCodeLineKeepsTheRemainder() {
+        String line = net.vulkanmod.vulkan.shader.parser.CodeParser.parseCodeLine("vec4 c = COLORS[i % 16];");
+        assertTrue(line.contains("COLORS[i % 16]"), line);
+        assertFalse(line.contains("mod("), line);
     }
 }

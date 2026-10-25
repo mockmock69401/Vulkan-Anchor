@@ -9,4 +9,3 @@ public class Pair<A,B> {
         this.second = b;
     }
 }
-

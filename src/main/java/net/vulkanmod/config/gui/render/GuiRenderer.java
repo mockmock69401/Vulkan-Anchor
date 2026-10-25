@@ -123,11 +123,10 @@ public abstract class GuiRenderer {
         RenderSystem.setShader(GameRenderer::getPositionColorShader);
         RenderSystem.enableBlend();
 
-        BufferBuilder bufferBuilder = Tesselator.getInstance().getBuilder();
-        bufferBuilder.begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_COLOR);
+        BufferBuilder bufferBuilder = Tesselator.getInstance().begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_COLOR);
         for (float[] vertex : vertices) {
-            bufferBuilder.vertex(matrix4f, vertex[0], vertex[1], 0.0f).color(r, g, b, a).endVertex();
+            bufferBuilder.addVertex(matrix4f, vertex[0], vertex[1], 0.0f).setColor(r, g, b, a);
         }
-        Tesselator.getInstance().end();
+        BufferUploader.drawWithShader(bufferBuilder.buildOrThrow());
     }
 }

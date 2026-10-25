@@ -10,6 +10,7 @@ public class Mat3 extends Uniform {
     }
 
     void update(long ptr) {
+        if (writeDefault(ptr)) return;
         MappedBuffer src = values.get();
 
         MemoryUtil.memCopy(src.ptr + 0, ptr + this.offset + 0, 12);
@@ -17,4 +18,3 @@ public class Mat3 extends Uniform {
         MemoryUtil.memCopy(src.ptr + 24, ptr + this.offset + 32, 12);
     }
 }
-

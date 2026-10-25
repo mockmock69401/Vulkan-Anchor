@@ -22,7 +22,9 @@ public abstract class SpriteUtil {
     }
 
     public static void addTransitionedLayout(VulkanImage image) {
-        transitionedLayouts.add(image);
+        if (image != null) {
+            transitionedLayouts.add(image);
+        }
     }
 
     public static void removeTransitionedLayout(VulkanImage image) {
@@ -37,4 +39,3 @@ public abstract class SpriteUtil {
         }
     }
 }
-

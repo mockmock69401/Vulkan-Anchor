@@ -15,4 +15,3 @@ public final class GlDrawOptions {
         return Boolean.parseBoolean(System.getProperty(DEBUG_PROPERTY, "false"));
     }
 }
-

@@ -4,7 +4,6 @@ import net.minecraft.client.Minecraft;
 import net.vulkanmod.compat.CompatDetector;
 import net.vulkanmod.compat.CompatMode;
 import net.vulkanmod.compat.CompatPolicyManager;
-import net.vulkanmod.compat.path.RenderPath;
 import net.vulkanmod.compat.path.RenderPathOwnership;
 import net.vulkanmod.vulkan.shader.Pipeline;
 import net.vulkanmod.vulkan.shader.GraphicsPipeline;
@@ -79,7 +78,7 @@ public class CompatProfiler {
 
         Minecraft.getInstance().gui.getChat().addMessage(
             net.minecraft.network.chat.Component.literal(
-                "Â§6[CompatProfiler] Starting 300-frame benchmark phase: " + (activePhase ? "Â§aCOMPAT / OBSERVE" : "Â§bBASELINE")
+                "§6[CompatProfiler] Starting 300-frame benchmark phase: " + (activePhase ? "§aCOMPAT / OBSERVE" : "§bBASELINE")
             )
         );
     }
@@ -159,12 +158,12 @@ public class CompatProfiler {
 
             Minecraft.getInstance().gui.getChat().addMessage(
                 net.minecraft.network.chat.Component.literal(
-                    "Â§a[CompatProfiler] Baseline completed! FPS: " + String.format("%.2f", avgFps) + " | 1% Lows: " + String.format("%.2f", lowFps)
+                    "§a[CompatProfiler] Baseline completed! FPS: " + String.format("%.2f", avgFps) + " | 1% Lows: " + String.format("%.2f", lowFps)
                 )
             );
             Minecraft.getInstance().gui.getChat().addMessage(
                 net.minecraft.network.chat.Component.literal(
-                    "Â§eToggle compatibility options / OBSERVE mode, then press Left ALT + F10 again for the COMPAT phase."
+                    "§eToggle compatibility options / OBSERVE mode, then press Left ALT + F10 again for the COMPAT phase."
                 )
             );
         } else {
@@ -247,9 +246,9 @@ public class CompatProfiler {
             sb.append(String.format(" * Mod ID: %-18s | Active Mode: %s\n", mod, CompatPolicyManager.getCompatMode(mod)));
         }
         sb.append("\n--- Render Path Ownership Allocations ---\n");
-        for (RenderPath path : RenderPath.values()) {
+        for (RenderPathOwnership.PathState state : RenderPathOwnership.snapshot()) {
             sb.append(String.format(" * Path: %-15s | Owner: %-12s | Mode: %s\n",
-                    path, RenderPathOwnership.getPathOwner(path), RenderPathOwnership.getPathMode(path)));
+                    state.path(), state.owner(), state.mode()));
         }
         sb.append("\n------------------------------------------------------------\n");
         sb.append(String.format(" Performance Metric        | %-14s | %-14s | Delta \n", "Baseline (OFF)", "Observe/Compat"));
@@ -291,13 +290,13 @@ public class CompatProfiler {
             writer.write(sb.toString());
             Minecraft.getInstance().gui.getChat().addMessage(
                 net.minecraft.network.chat.Component.literal(
-                    "Â§a[CompatProfiler] Benchmark complete! Saved performance profile comparison report to: Â§evulkanmod_compat_profile.txt"
+                    "§a[CompatProfiler] Benchmark complete! Saved performance profile comparison report to: §evulkanmod_compat_profile.txt"
                 )
             );
         } catch (IOException e) {
             Minecraft.getInstance().gui.getChat().addMessage(
                 net.minecraft.network.chat.Component.literal(
-                    "Â§c[CompatProfiler] Failed to write report: " + e.getMessage()
+                    "§c[CompatProfiler] Failed to write report: " + e.getMessage()
                 )
             );
         }
@@ -311,4 +310,3 @@ public class CompatProfiler {
         return baselineCompleted;
     }
 }
-

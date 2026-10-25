@@ -2,6 +2,7 @@ package net.vulkanmod.mixin.compatibility.gl;
 
 import net.vulkanmod.gl.GlQuery;
 import net.vulkanmod.gl.GlSampler;
+import net.vulkanmod.gl.GlVertexArray;
 import org.lwjgl.opengl.GL33C;
 import org.lwjgl.system.NativeType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -52,6 +53,7 @@ public class GL33M {
 
     @Overwrite(remap = false)
     public static void glVertexAttribDivisor(@NativeType("GLuint") int index, @NativeType("GLuint") int divisor) {
+        GlVertexArray.vertexAttribDivisor(index, divisor);
     }
 
     @Overwrite(remap = false)
@@ -514,4 +516,3 @@ public class GL33M {
     public static void glMultiTexCoordP4uiv(@NativeType("GLenum") int texture, @NativeType("GLenum") int type, @NativeType("GLuint const *") int[] coords) {
     }
 }
-

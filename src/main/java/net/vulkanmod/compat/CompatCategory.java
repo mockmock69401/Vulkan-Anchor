@@ -6,4 +6,3 @@ public enum CompatCategory {
     RENDERER_GL,
     UNKNOWN
 }
-

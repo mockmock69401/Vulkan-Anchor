@@ -47,4 +47,3 @@ public final class RenderPathClaimAdapter implements CompatAdapter {
         RenderPathOwnership.releaseOwnership(RenderPath.HUD_CACHE, modId);
     }
 }
-

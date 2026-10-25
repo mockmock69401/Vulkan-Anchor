@@ -15,7 +15,7 @@ public class BoxBlur {
             int color;
             int r = 0, g = 0, b = 0;
 
-                              
+
             for(int x = 0; x < x0 + 1 + filterRadius; ++x) {
                 color = src[getIdx(x, y, totalWidth)];
                 r += unpackR(color);
@@ -36,7 +36,7 @@ public class BoxBlur {
                 g += unpackG(color);
                 b += unpackB(color);
 
-                           
+
                 dst[getIdx(y, x, totalWidth)] = packColor(r, g, b, div);
             }
         }
@@ -62,4 +62,3 @@ public class BoxBlur {
         return 0xFF000000 | (((r / div) & 0xFF) << 16) | (((g / div) & 0xFF) << 8) | ((b / div) & 0xFF);
     }
 }
-

@@ -26,4 +26,3 @@ public class CompatAdapterRegistry {
         return adapters.values();
     }
 }
-

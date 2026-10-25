@@ -21,6 +21,7 @@ class QueueLockTest {
     void onlyQueueLockTouchesTheQueue() throws IOException {
         List<String> offenders = new ArrayList<>();
         for (String root : List.of("src/main/java", "src/vulkanfix/java")) {
+            if (!Files.isDirectory(Path.of(root))) continue;
             try (Stream<Path> files = Files.walk(Path.of(root))) {
                 for (Path p : files.filter(f -> f.toString().endsWith(".java")).toList()) {
                     if (p.getFileName().toString().equals("QueueLock.java")) continue;

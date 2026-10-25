@@ -214,4 +214,3 @@ public class ARBMultitextureM {
     public static void glMultiTexCoord4dvARB(@NativeType("GLenum") int target, @NativeType("GLdouble const *") double[] v) {
     }
 }
-

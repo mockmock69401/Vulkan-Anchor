@@ -240,4 +240,3 @@ public class GL13FacadeM {
     public static void glMultTransposeMatrixd(@NativeType("GLdouble const *") double[] m) {
     }
 }
-

@@ -49,4 +49,3 @@ public class UploadBuffer {
             MemoryUtil.memFree(indexBuffer);
     }
 }
-
