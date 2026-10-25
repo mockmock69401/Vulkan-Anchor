@@ -48,8 +48,8 @@ It is experimental: compatibility and feature parity are incomplete.
 - Java 17
 - A GPU and driver with Vulkan 1.2
 - For FSR 3.1 frame generation: Windows x64 and a GPU with Vulkan 1.3
-- Optional, for LODs: Distant Horizons 3.3.1 or newer (tested with 3.3.3 and a 3.3.5 development build), the same
-  as the 1.21.1 build. Older Distant Horizons versions are not supported.
+- Optional, for LODs: Distant Horizons 3.3.1 or newer, the same as the 1.21.1 build; for 1.20.1 the first such release
+  is 3.3.2 (tested with 3.3.2, 3.3.3 and a 3.3.5 development build). Older Distant Horizons versions are not supported.
 
 ## Installing
 
