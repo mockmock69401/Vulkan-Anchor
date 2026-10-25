@@ -62,20 +62,27 @@ Vulkan으로 돌리기 위해 만들어졌고, 그 위에 셰이더 느낌의 �
 
 ## 테스트한 모드팩: 비활성화할 모드
 
-아래 버전으로 CurseForge에서 테스트했습니다. "비활성화"는 jar 이름을 `<이름>.jar.disabled`로 바꾸는 것입니다
-(CurseForge의 "disable" 스위치도 같은 일을 합니다).
+아래 버전으로 CurseForge에서 테스트했습니다(2026-10-25 클린 설치본으로 다시 확인: 각 팩의 복사본에서 로딩과 새 월드
+진입). "비활성화"는 jar 이름을 `<이름>.jar.disabled`로 바꾸는 것입니다(CurseForge의 "disable" 스위치도 같은 일을 합니다).
 
 | 모드팩 (테스트한 버전) | 비활성화 |
 |---|---|
 | Craft to Exile 2 (2.1.4, "2.0 Atlas Update") | `embeddium`, `oculus`, `chloride`, `ModernUI`, `gbf` (GeckoBetterFPS) |
-| DeceasedCraft – Urban Zombie Apocalypse (Beta 5.10.17) | `sodiumextras` |
+| DeceasedCraft – Urban Zombie Apocalypse (Beta 5.10.17) | `embeddium`, `oculus`, `flerovium`, `sodiumextras`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (`colorwheel_patcher`는 유지), `createbetterfps`, `immersivelanterns` |
 | NightfallCraft – The Casket of Reveries (2.2.9.7) | `embeddium`, `oculus`, `chloride`, `flerovium`, `acceleratedrendering`, `sodiumdynamiclights`, `ModernUI` |
-| Society: Sunlit Valley (4.1.5) | `embeddium`, `oculus`, `flerovium`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (`colorwheel_patcher`는 유지) |
-| Zero to Engineering (0.5.1) | `embeddium`, `oculus`, `mekalus`, `pfg` (자체 OpenGL 프레임 생성), `colorwheel`, `createbetterfps`, `sodiumdynamiclights`, `sodiumoptionsapi`, `sodiumoptionsmodcompat` |
+| Society: Sunlit Valley (4.1.5A) | `embeddium`, `oculus`, `flerovium`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (`colorwheel_patcher`는 유지) |
+| Zero to Engineering (0.5.1) | `embeddium`, `oculus`, `mekalus`, `pfg` (자체 OpenGL 프레임 생성), `colorwheel`, `createbetterfps`, `sodiumdynamiclights`, `sodiumoptionsapi`, `sodiumoptionsmodcompat` (팩에서 이미 비활성화됨) |
+| Better MC [FORGE] BMC4 (v62hf) | `xenon` (Embeddium 포크), `oculus`, `IrisSearch`, `iris_shader_folder`, `colorwheel`, `sodiumdynamiclights`, `sodiumoptionsapi`, `immersivelanterns`, `particle_core` (Particle Core), `modpack-update-checker` — 아래 Xaero's Minimap 참고 |
 
 참고:
 
 - Zero to Engineering의 Serene Seasons Plus는 실행할 때마다 Sodium 경고 화면을 띄웁니다. 닫고 계속하면 됩니다.
+- Particle Core와 Modpack Update Checker는 이 빌드가 바꾸는 파티클·텍스처 코드를 같이 건드려서 게임 시작 시 크래시를
+  냅니다. Modpack Update Checker는 1.21.1 팩에서도 마찬가지입니다.
+- BMC4: 위 모드를 끄면 팩이 로딩되고 월드에 들어가지만, 몇 초 뒤 Xaero's Minimap 26.6.0(XaeroPlus 포함)이 엔티티
+  레이더 아이콘을 그릴 때 그래픽 드라이버 안에서 크래시가 납니다. 이 빌드의 버그이며 수정 중입니다. 그 전까지는 이
+  빌드로 BMC4를 플레이할 수 없습니다.
+- Crash Assistant는 켜 둬도 됩니다. 크래시가 난 뒤 창을 띄울 뿐입니다.
 - 나중에 추가한 모드가 로드되지 않으면, 비활성화한 모드가 필요한 모드인지 확인하세요(예: Immersive Lanterns는 Sodium
   Dynamic Lights가 필요합니다).
 

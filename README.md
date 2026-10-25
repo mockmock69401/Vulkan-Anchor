@@ -68,20 +68,27 @@ rate.
 
 ## Tested modpacks: mods to disable
 
-Tested on CurseForge with the versions below. "Disable" means renaming the jar to `<name>.jar.disabled` (CurseForge's
-"disable" switch does the same).
+Tested on CurseForge with the versions below, from clean installs (rechecked 2026-10-25: copies of each pack loaded, a new
+world entered). "Disable" means renaming the jar to `<name>.jar.disabled` (CurseForge's "disable" switch does the same).
 
 | Modpack (version tested) | Disable |
 |---|---|
 | Craft to Exile 2 (2.1.4, "2.0 Atlas Update") | `embeddium`, `oculus`, `chloride`, `ModernUI`, `gbf` (GeckoBetterFPS) |
-| DeceasedCraft – Urban Zombie Apocalypse (Beta 5.10.17) | `sodiumextras` |
+| DeceasedCraft – Urban Zombie Apocalypse (Beta 5.10.17) | `embeddium`, `oculus`, `flerovium`, `sodiumextras`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (keep `colorwheel_patcher`), `createbetterfps`, `immersivelanterns` |
 | NightfallCraft – The Casket of Reveries (2.2.9.7) | `embeddium`, `oculus`, `chloride`, `flerovium`, `acceleratedrendering`, `sodiumdynamiclights`, `ModernUI` |
-| Society: Sunlit Valley (4.1.5) | `embeddium`, `oculus`, `flerovium`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (keep `colorwheel_patcher`) |
-| Zero to Engineering (0.5.1) | `embeddium`, `oculus`, `mekalus`, `pfg` (its own OpenGL frame generation), `colorwheel`, `createbetterfps`, `sodiumdynamiclights`, `sodiumoptionsapi`, `sodiumoptionsmodcompat` |
+| Society: Sunlit Valley (4.1.5A) | `embeddium`, `oculus`, `flerovium`, `sodiumdynamiclights`, `sodiumoptionsapi`, `colorwheel` (keep `colorwheel_patcher`) |
+| Zero to Engineering (0.5.1) | `embeddium`, `oculus`, `mekalus`, `pfg` (its own OpenGL frame generation), `colorwheel`, `createbetterfps`, `sodiumdynamiclights`, `sodiumoptionsapi`, `sodiumoptionsmodcompat` (the pack ships it disabled) |
+| Better MC [FORGE] BMC4 (v62hf) | `xenon` (an Embeddium fork), `oculus`, `IrisSearch`, `iris_shader_folder`, `colorwheel`, `sodiumdynamiclights`, `sodiumoptionsapi`, `immersivelanterns`, `particle_core` (Particle Core), `modpack-update-checker` — see the note on Xaero's Minimap below |
 
 Notes:
 
 - Zero to Engineering's Serene Seasons Plus shows a Sodium warning screen on every launch; close it and continue.
+- Particle Core and Modpack Update Checker change the same particle and texture code as this build and stop the game
+  at startup. Modpack Update Checker does the same in the 1.21.1 packs.
+- BMC4: with the mods above disabled the pack loads and enters a world, but a few seconds later the game crashes in the
+  graphics driver while Xaero's Minimap 26.6.0 (with XaeroPlus) draws entity radar icons. This is a bug in this build,
+  being fixed; until then BMC4 is not playable with it.
+- Crash Assistant can stay enabled; it only opens a window after a crash.
 - If a mod you add later fails to load, check whether it needs one of the disabled mods (for example, Immersive
   Lanterns requires Sodium Dynamic Lights).
 
