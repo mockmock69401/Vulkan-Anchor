@@ -53,7 +53,7 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
             return;
         }
 
-        if ((Object) this instanceof MainTarget) {
+        if (this.vulkanmod$isWindowTarget()) {
             try (Renderer.RenderTargetScope ignored = Renderer.getInstance().temporaryRenderTarget()) {
                 RenderTargetBindContext.runInternal(() -> this._bindWrite(false));
                 clearCurrentAttachments(getError);
@@ -87,7 +87,7 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
     public void bindRead(CallbackInfo ci) {
         RenderSystem.assertOnRenderThread();
 
-        if ((Object) this instanceof MainTarget) {
+        if (this.vulkanmod$isWindowTarget()) {
             Renderer.getInstance().getMainPass().bindAsTexture();
             ci.cancel();
             return;
@@ -112,7 +112,7 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
     private void _bindWrite(boolean bl, CallbackInfo ci) {
         RenderSystem.assertOnRenderThreadOrInit();
 
-        if ((Object) this instanceof MainTarget) {
+        if (this.vulkanmod$isWindowTarget()) {
             if (RenderTargetBindContext.isInternal()) Renderer.getInstance().getMainPass().rebindMainTarget();
             else GlStateManager._glBindFramebuffer(GL30.GL_FRAMEBUFFER, 0);
             ci.cancel();
@@ -158,18 +158,18 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
     @Override
     public void vulkanmod$prepareForDepthCopy() {
 
-        if (!((Object) this instanceof MainTarget)) applyClear();
+        if (!(this.vulkanmod$isWindowTarget())) applyClear();
     }
 
     @ModifyExpressionValue(method = "copyDepthFrom", at = @At(value = "FIELD", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;frameBufferId:I", opcode = org.objectweb.asm.Opcodes.GETFIELD, ordinal = 0))
     private int vulkanmod$depthCopySourceFramebuffer(int framebuffer, RenderTarget source) {
 
-        return source instanceof MainTarget ? 0 : framebuffer;
+        return ((ExtendedRenderTarget) source).vulkanmod$isWindowTarget() ? 0 : framebuffer;
     }
 
     @ModifyExpressionValue(method = "copyDepthFrom", at = @At(value = "FIELD", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;frameBufferId:I", opcode = org.objectweb.asm.Opcodes.GETFIELD, ordinal = 1))
     private int vulkanmod$depthCopyDestinationFramebuffer(int framebuffer) {
-        return (Object) this instanceof MainTarget ? 0 : framebuffer;
+        return this.vulkanmod$isWindowTarget() ? 0 : framebuffer;
     }
 
     @Inject(method = "_blitToScreen", at = @At("HEAD"), cancellable = true, order = 2000)
@@ -208,7 +208,7 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
 
     @Inject(method = "getColorTextureId", at = @At(value = "FIELD", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;colorTextureId:I", opcode = org.objectweb.asm.Opcodes.GETFIELD), cancellable = true, order = 2000)
     private void injClear(CallbackInfoReturnable<Integer> cir) {
-        if ((Object) this instanceof MainTarget) {
+        if (this.vulkanmod$isWindowTarget()) {
             cir.setReturnValue(Renderer.getInstance().getMainPass().getColorAttachmentGlId());
             return;
         }
@@ -218,7 +218,7 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
 
     @Inject(method = "getDepthTextureId", at = @At(value = "FIELD", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;depthBufferId:I", opcode = org.objectweb.asm.Opcodes.GETFIELD), cancellable = true, order = 2000)
     private void getDepthTextureId(CallbackInfoReturnable<Integer> cir) {
-        if ((Object) this instanceof MainTarget) {
+        if (this.vulkanmod$isWindowTarget()) {
             cir.setReturnValue(Renderer.getInstance().getMainPass().getDepthAttachmentGlId());
         }
     }
@@ -226,6 +226,18 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
     @Override
     public boolean isBound() {
         return bound;
+    }
+
+    @Unique private boolean vulkanmod$offscreenMainTarget;
+
+    @Override
+    public boolean vulkanmod$isWindowTarget() {
+        return (Object) this instanceof MainTarget && !this.vulkanmod$offscreenMainTarget;
+    }
+
+    @Override
+    public void vulkanmod$markOffscreenMainTarget() {
+        this.vulkanmod$offscreenMainTarget = true;
     }
 
     @Override

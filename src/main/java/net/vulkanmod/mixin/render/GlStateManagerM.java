@@ -125,7 +125,9 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _texSubImage2D(int target, int level, int offsetX, int offsetY, int width, int height, int format, int type, long pixels) {
-
+        //2026-10-26 (BMC5: Wakes' ripple tiles showed uninitialised texture memory): NativeImage uploads through its own overwrite,
+        // so only mods reach this, and it dropped their pixels
+        GlTexture.texSubImage2D(target, level, offsetX, offsetY, width, height, format, type, pixels);
     }
 
     @Overwrite(remap = false)

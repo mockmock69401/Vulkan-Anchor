@@ -58,7 +58,7 @@ public class PostPassM {
             Objects.requireNonNull(this.inTarget);
             this.effect.setSampler("DiffuseSampler", this.inTarget::getColorTextureId);
 
-            if(this.inTarget instanceof MainTarget)
+            if(((net.vulkanmod.interfaces.ExtendedRenderTarget) this.inTarget).vulkanmod$isWindowTarget())
                 this.inTarget.bindRead();
 
             for(int i = 0; i < this.auxAssets.size(); ++i) {
