@@ -68,7 +68,7 @@ rate.
 ## Tested modpacks: mods to disable
 
 Tested on CurseForge with the versions below (copies of the installed packs: a new world, the HUD, maps and the quest
-book checked). "Disable" means renaming the jar to `<name>.jar.disabled` (CurseForge's "disable" switch does the same).
+book checked; rechecked on clean installs 2026-10-25). "Disable" means renaming the jar to `<name>.jar.disabled` (CurseForge's "disable" switch does the same).
 
 | Modpack (version tested) | Disable |
 |---|---|
