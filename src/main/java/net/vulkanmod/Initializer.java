@@ -64,6 +64,7 @@ public class Initializer {
 		VisualsConfig.load();
 		VisualsSettingsPage.register();
 		VisualsPilot.install();
+		net.vulkanmod.render.profiling.FpsOverlay.install();
 		// DhRegistration names DH types, so it must not load without DH
 		switch (DhPresence.current()) {
 			case RENDER_API -> DhRegistration.install();

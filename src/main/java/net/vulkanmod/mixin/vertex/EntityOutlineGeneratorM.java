@@ -3,10 +3,7 @@ package net.vulkanmod.mixin.vertex;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.renderer.OutlineBufferSource;
 import net.vulkanmod.interfaces.ExtendedVertexBuilder;
-import net.vulkanmod.vulkan.util.ColorUtil;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -14,8 +11,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(OutlineBufferSource.EntityOutlineGenerator.class)
 public class EntityOutlineGeneratorM implements ExtendedVertexBuilder {
-
-    @Shadow @Final private int color;
 
     @Unique
     private ExtendedVertexBuilder extDelegate;
@@ -27,13 +22,15 @@ public class EntityOutlineGeneratorM implements ExtendedVertexBuilder {
     private int vulkanmod$outlineColor;
 
     @Inject(method = "<init>*", at = @At("RETURN"))
-    private void getExtBuilder(VertexConsumer vertexConsumer, int i, int j, int k, int l, CallbackInfo ci) {
+    private void getExtBuilder(VertexConsumer vertexConsumer, int r, int g, int b, int a, CallbackInfo ci) {
         if (vertexConsumer instanceof ExtendedVertexBuilder) {
             this.extDelegate = (ExtendedVertexBuilder) vertexConsumer;
             this.canUseFastVertex = true;
         }
 
-        this.vulkanmod$outlineColor = ColorUtil.RGBA.fromArgb32(this.color);
+        //2026-10-26: 1.20.1's generator has no color field (1.21 added it); the shadow kept this mixin from applying and the game
+        // crashed the first time an outlined (glowing) entity was drawn. The colour comes from the constructor's r, g, b, a.
+        this.vulkanmod$outlineColor = (a & 0xFF) << 24 | (b & 0xFF) << 16 | (g & 0xFF) << 8 | (r & 0xFF);
     }
 
     @Override

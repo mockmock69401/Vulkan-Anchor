@@ -211,6 +211,7 @@ public class Renderer {
     }
 
     public void beginFrame() {
+        net.vulkanmod.render.profiling.FpsOverlay.frame();
         if (net.vulkanmod.visuals.dev.FrameRecorder.ON) net.vulkanmod.visuals.dev.FrameRecorder.mark(net.vulkanmod.visuals.dev.FrameRecorder.M_BEGIN_START);
         //FG design 7: a changed setting or a pacer restart is applied before the frame latches the paced state (no-op while off)
         FrameGen.beginFrame();

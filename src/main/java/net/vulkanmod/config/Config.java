@@ -36,6 +36,8 @@ public class Config {
 
     public int ambientOcclusion = 1;
     public boolean textureAnimations = true;
+    /** The top-left FPS overlay: FpsOverlay.OFF, SIMPLE, BASIC or DETAILED. */
+    public int fpsOverlay = 0;
 
     public void write() {
 
