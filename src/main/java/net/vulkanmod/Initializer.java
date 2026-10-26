@@ -71,6 +71,8 @@ public class Initializer {
 			case LEGACY_RENDER_DEF -> DhRegistration.installLegacy();
 			default -> { }
 		}
+		// With Lost Cities, DH's distant generator mode held at INTERNAL_SERVER (names DH types: only with DH)
+		if (DhPresence.current() != DhPresence.State.ABSENT) net.vulkanmod.visuals.dh.DhWorldGenGuard.install();
 		UpdateChecker.checkForUpdates();
 		CompatBootstrap.init();
 		if (RuntimeOptions.diagnosticsEnabled()) {

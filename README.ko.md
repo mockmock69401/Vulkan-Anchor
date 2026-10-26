@@ -51,6 +51,10 @@ Vulkan으로 돌리기 위해 만들어졌고, 그 위에 셰이더 느낌의 �
 - FSR 3.1 프레임 생성: Windows x64와 Vulkan 1.3을 지원하는 GPU
 - 선택, LOD용: Distant Horizons 3.3.1 이상으로, 1.21.1 빌드와 같습니다. 1.20.1용으로는 3.3.2가 그 첫 출시 버전입니다
   (3.3.2, 3.3.3, 3.3.5 개발 빌드에서 테스트). 그보다 오래된 Distant Horizons는 지원하지 않습니다.
+  **Lost Cities**가 설치되어 있으면 Distant Horizons의 먼 지형 생성을 INTERNAL_SERVER 모드로 돌립니다(메모리에서만,
+  `DistantHorizons.toml`은 그대로). 더 빠른 모드에서는 Lost Cities 건물을 만들다 실패해 채팅에 "There was an error
+  generating a chunk"가 뜨고 LOD에 구멍이 생기기 때문입니다. 대신 먼 지형이 더 천천히 채워지고, 생성된 청크가 월드에
+  저장됩니다.
 
 ## 설치
 
