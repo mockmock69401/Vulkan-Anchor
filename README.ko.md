@@ -52,6 +52,10 @@ Forge 1.20.1 빌드는 `main` 브랜치에 있습니다.
 - 선택, LOD용: **Distant Horizons 3.3.1 이상** (3.3.1과 3.3.3에서 테스트).
   1.21.1용 Distant Horizons 3.3.0은 실행은 되지만 LOD가 그려지지 않습니다. 이 버전의 NeoForge 빌드는 대신 맡을 수
   없는 구조여서, 로그에 업데이트하라는 안내가 남습니다. `main`의 1.20.1 빌드도 같은 버전을 요구합니다.
+  **Lost Cities**가 설치되어 있으면 Distant Horizons의 먼 지형 생성을 INTERNAL_SERVER 모드로 돌립니다(메모리에서만,
+  `DistantHorizons.toml`은 그대로). 더 빠른 모드에서는 Lost Cities 건물을 만들다 실패해 채팅에 "There was an error
+  generating a chunk"가 뜨고 LOD에 구멍이 생기기 때문입니다. 대신 먼 지형이 더 천천히 채워지고, 생성된 청크가 월드에
+  저장됩니다.
 
 ## 설치
 

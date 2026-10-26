@@ -54,6 +54,10 @@ It is experimental: compatibility and feature parity are incomplete.
 - Optional, for LODs: **Distant Horizons 3.3.1 or newer** (tested with 3.3.1 and 3.3.3).
   Distant Horizons 3.3.0 for 1.21.1 runs, but its LODs are not drawn: its NeoForge build cannot be taken over, and the
   log asks you to update it. The 1.20.1 build on `main` asks for the same versions.
+  With **Lost Cities** installed, this build runs Distant Horizons' distant generator in INTERNAL_SERVER mode (in
+  memory only; `DistantHorizons.toml` is left alone): the faster modes fail on Lost Cities' buildings ("There was an
+  error generating a chunk" in chat) and leave holes in the LODs. Distant terrain then fills in more slowly, and the
+  generated chunks are saved to the world.
 
 ## Installing
 
