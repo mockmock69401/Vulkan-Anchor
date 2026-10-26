@@ -2,7 +2,6 @@ package net.vulkanmod.render.chunk.build;
 
 import it.unimi.dsi.fastutil.objects.Object2ByteLinkedOpenHashMap;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.color.block.BlockColors;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.RenderType;
@@ -25,7 +24,6 @@ import net.vulkanmod.render.chunk.build.thread.BuilderResources;
 import net.vulkanmod.render.model.quad.QuadUtils;
 import net.vulkanmod.render.model.quad.QuadView;
 import net.vulkanmod.render.vertex.TerrainBufferBuilder;
-import net.vulkanmod.render.vertex.TerrainRenderType;
 import net.vulkanmod.render.vertex.VertexUtil;
 import net.vulkanmod.visuals.render.FoliageMarker;
 import net.vulkanmod.vulkan.util.ColorUtil;
@@ -68,7 +66,22 @@ public class BlockRenderer {
         BlockRenderer.blockColors = blockColors;
     }
 
-    public void renderBatched(BlockState blockState, BlockPos blockPos, Vector3f pos, TerrainBufferBuilder bufferBuilder) {
+    public BakedModel blockModel(BlockState blockState) {
+        return Minecraft.getInstance().getBlockRenderer().getBlockModel(blockState);
+    }
+
+    public ModelData modelData(BakedModel model, BlockState blockState, BlockPos blockPos) {
+        return model.getModelData(resources.region, blockPos, blockState, ModelData.EMPTY);
+    }
+
+    /** The model's render types (Forge's ChunkRenderTypeSet), with the random seeded as for its quads. */
+    public Iterable<RenderType> renderTypes(BakedModel model, BlockState blockState, BlockPos blockPos, ModelData modelData) {
+        randomSource.setSeed(blockState.getSeed(blockPos));
+        return model.getRenderTypes(blockState, randomSource, modelData);
+    }
+
+    public void renderBatched(BlockState blockState, BlockPos blockPos, Vector3f pos, TerrainBufferBuilder bufferBuilder,
+                              BakedModel model, ModelData modelData, RenderType renderType) {
         //The visuals (glow pass): whether this block emits light, for its quads' mark
         FoliageMarker.setEmissive(blockState.getLightEmission() > 0);
         //The visuals (wind): whether its vertices sway, and how
@@ -79,9 +92,8 @@ public class BlockRenderer {
 
         long seed = blockState.getSeed(blockPos);
 
-        BakedModel model = Minecraft.getInstance().getBlockRenderer().getBlockModel(blockState);
-        this.renderType = TerrainRenderType.getRenderType(TerrainRenderType.get(ItemBlockRenderTypes.getChunkRenderType(blockState)));
-        this.modelData = model.getModelData(resources.region, blockPos, blockState, ModelData.EMPTY);
+        this.renderType = renderType;
+        this.modelData = modelData;
         tessellateBlock(model, bufferBuilder, seed);
     }
 

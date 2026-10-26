@@ -2,6 +2,9 @@ package net.vulkanmod.render.chunk.build.task;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.resources.model.BakedModel;
+import net.minecraftforge.client.model.data.ModelData;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.chunk.VisGraph;
 import net.minecraft.core.BlockPos;
@@ -130,13 +133,22 @@ public class BuildTask extends ChunkTask {
                     }
 
                     if (blockState.getRenderShape() == RenderShape.MODEL) {
-                        renderType = TerrainRenderType.get(ItemBlockRenderTypes.getChunkRenderType(blockState));
+                        //2026-10-26 (Another Furniture's benches invisible): the layers are the model's own render types, as Forge's
+                        // chunk builder takes them. ItemBlockRenderTypes.getChunkRenderType said SOLID for a model whose JSON names
+                        // render_type cutout, and a multipart model returns no quads for a type its parts do not have.
+                        BakedModel model = blockRenderer.blockModel(blockState);
+                        ModelData modelData = blockRenderer.modelData(model, blockState, blockPos);
+                        for (RenderType chunkRenderType : blockRenderer.renderTypes(model, blockState, blockPos, modelData)) {
+                            renderType = TerrainRenderType.get(chunkRenderType);
+                            if (renderType == null)
+                                renderType = TerrainRenderType.get(ItemBlockRenderTypes.getChunkRenderType(blockState));
 
-                        bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
-                        bufferBuilder.setBlockAttributes(blockState);
+                            bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
+                            bufferBuilder.setBlockAttributes(blockState);
 
-                        pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
-                        blockRenderer.renderBatched(blockState, blockPos, pos, bufferBuilder);
+                            pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
+                            blockRenderer.renderBatched(blockState, blockPos, pos, bufferBuilder, model, modelData, chunkRenderType);
+                        }
                     }
                 }
             }
