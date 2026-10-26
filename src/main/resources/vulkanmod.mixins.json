@@ -142,6 +142,7 @@
     "compatibility.PostPassM",
 
     "render.block.BakedQuadM",
+    "render.block.ModelBakerImplM",
     "render.block.ModelBlockRendererActivityM",
 
     "optimization.StateHolderMixin",
