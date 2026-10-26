@@ -23,7 +23,14 @@ import java.util.concurrent.atomic.AtomicLongArray;
  * GUI), end (submit and present), display (window update, frame limit). Hooks add from any thread; frames close on the render thread.
  */
 public final class FrameRecorder {
-    public static final boolean ON = System.getProperty(VisualsPilot.PROPERTY) != null || Boolean.getBoolean("vulkanmod.visuals.frames");
+    /**
+     * 2026-10-27 (DeceasedCraft: drops that come and go during ordinary play): -Dvulkanmod.visuals.frames.auto=SECONDS records back to
+     * back for that long each, during normal play and without the pilot (which takes over the pause screen), logging each recording's
+     * figures and slowest frames as frames stop does, without its CSV files.
+     */
+    private static final long AUTO_NS = Long.getLong("vulkanmod.visuals.frames.auto", 0L) * 1_000_000_000L;
+    public static final boolean ON = System.getProperty(VisualsPilot.PROPERTY) != null || Boolean.getBoolean("vulkanmod.visuals.frames") || AUTO_NS > 0;
+    private static long autoStart;
 
     //Nanoseconds a frame
     public static final int TICK = 0, FENCE = 1, ACQUIRE = 2, PRESENT = 3, XFER_WAIT = 4, UPLOAD = 5, GRAPH = 6, LIGHT = 7,
@@ -112,6 +119,11 @@ public final class FrameRecorder {
         gcCount = gcCountNow;
         gcMs = gcMsNow;
         frameStart = now;
+        if (AUTO_NS > 0 && (!recording || now - autoStart >= AUTO_NS)) {
+            if (recording) stop(null, "auto");
+            start();
+            autoStart = now;
+        }
     }
 
     /** The render thread's allocated bytes so far (0 where the JVM does not tell). */
@@ -156,7 +168,7 @@ public final class FrameRecorder {
         if (recording && presentCount < PRESENT_CAPACITY) presents[presentCount++] = record.clone();
     }
 
-    /** The pilot's frames stop NAME: logs the recording's figures and its slowest frames, writes dir/NAME.csv. */
+    /** The pilot's frames stop NAME: logs the recording's figures and its slowest frames, writes dir/NAME.csv (no files with dir null). */
     static void stop(Path dir, String name) {
         recording = false;
         int n = count;
@@ -168,6 +180,10 @@ public final class FrameRecorder {
         for (int i = 0; i < n; i++) order[i] = i;
         java.util.Arrays.sort(order, (a, b) -> Double.compare(ms[b], ms[a]));
         for (int k = 0; k < Math.min(8, n); k++) VisualsLog.info("Visuals frames " + name + " slow #" + (k + 1) + ": frame " + order[k] + " " + describe(order[k]));
+        if (dir == null) {
+            presentCount = 0;
+            return;
+        }
         Path out = dir.resolve(name + ".csv");
         try (Writer w = Files.newBufferedWriter(out, StandardCharsets.UTF_8)) {
             StringBuilder sb = new StringBuilder();
