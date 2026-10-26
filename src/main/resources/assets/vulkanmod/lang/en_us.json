@@ -390,5 +390,10 @@
   "vulkanmod.visuals.dh_lods": "Distant Horizons LODs",
   "vulkanmod.visuals.dh_lods.tooltip": "Draws Distant Horizons' far terrain with the shaders' lighting, fog and shadows. Off draws no LODs; Distant Horizons keeps loading its data",
   "vulkanmod.visuals.dh_shadows": "LOD Shadows",
-  "vulkanmod.visuals.dh_shadows.tooltip": "The far terrain from Distant Horizons also casts sun shadows (with Sun Shadows and Distant Horizons LODs)"
+  "vulkanmod.visuals.dh_shadows.tooltip": "The far terrain from Distant Horizons also casts sun shadows (with Sun Shadows and Distant Horizons LODs)",
+  "vulkanmod.options.fpsOverlay": "FPS Overlay",
+  "vulkanmod.options.fpsOverlay.simple": "Simple",
+  "vulkanmod.options.fpsOverlay.basic": "Basic",
+  "vulkanmod.options.fpsOverlay.detailed": "Detailed",
+  "vulkanmod.options.fpsOverlay.tooltip": "Shows the frame rate in the top-left corner over the last 5 seconds. Simple: average FPS. Basic: average, min and max. Detailed: average, 1% low and 0.1% low (the frame rate of the slowest 1% and 0.1% of frames). Hidden while F3 is open."
 }

@@ -229,6 +229,7 @@ public class Renderer {
     }
 
     public void beginFrame() {
+        net.vulkanmod.render.profiling.FpsOverlay.frame();
         if (recordingCmds)
             return;
         if (recreatingSwapChain)

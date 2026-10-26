@@ -42,6 +42,8 @@ It is experimental: compatibility and feature parity are incomplete.
     elsewhere.
   - **Optical Flow**: a built-in generator that reprojects the last frame by the camera's motion.
 - **Performance**: animated textures only update while visible, and fixes for stalls seen in large modpacks.
+- **FPS overlay** (Video settings → FPS Overlay, off by default): the frame rate in the top-left corner, as the average
+  only, the average with min and max, or the average with the 1% and 0.1% lows, over the last 5 seconds.
 
 ## Requirements
 

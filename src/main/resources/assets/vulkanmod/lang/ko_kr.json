@@ -110,5 +110,10 @@
   "vulkanmod.visuals.dh_lods": "Distant Horizons LOD",
   "vulkanmod.visuals.dh_lods.tooltip": "Distant Horizons의 먼 지형을 셰이더의 조명·안개·그림자와 함께 그립니다. 끄면 LOD를 그리지 않으며, Distant Horizons는 데이터를 계속 불러옵니다",
   "vulkanmod.visuals.dh_shadows": "LOD 그림자",
-  "vulkanmod.visuals.dh_shadows.tooltip": "Distant Horizons의 먼 지형도 태양 그림자를 드리웁니다 (태양 그림자와 Distant Horizons LOD 필요)"
+  "vulkanmod.visuals.dh_shadows.tooltip": "Distant Horizons의 먼 지형도 태양 그림자를 드리웁니다 (태양 그림자와 Distant Horizons LOD 필요)",
+  "vulkanmod.options.fpsOverlay": "FPS 표시",
+  "vulkanmod.options.fpsOverlay.simple": "간단히",
+  "vulkanmod.options.fpsOverlay.basic": "기본",
+  "vulkanmod.options.fpsOverlay.detailed": "자세히",
+  "vulkanmod.options.fpsOverlay.tooltip": "왼쪽 위에 최근 5초의 프레임을 보여줍니다. 간단히: 평균 FPS. 기본: 평균, 최소, 최대. 자세히: 평균, 1% low, 0.1% low(가장 느린 1%와 0.1% 프레임의 FPS). F3 화면에서는 숨겨집니다."
 }

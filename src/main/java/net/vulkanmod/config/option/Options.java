@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.config.Config;
 import net.vulkanmod.config.GraphicsModeCompatibility;
+import net.vulkanmod.render.profiling.FpsOverlay;
 import net.vulkanmod.config.PerformancePreset;
 import net.vulkanmod.config.PerformancePresetApplier;
 import net.vulkanmod.config.Platform;
@@ -194,6 +195,17 @@ public abstract class Options {
                                  value -> minecraftOptions.showAutosaveIndicator().set(value),
                                  () -> minecraftOptions.showAutosaveIndicator().get())
                                 .setTooltip(Component.translatable("vulkanmod.options.autosaveIndicator.tooltip")),
+                        new CyclingOption<>(Component.translatable("vulkanmod.options.fpsOverlay"),
+                                new Integer[]{FpsOverlay.OFF, FpsOverlay.SIMPLE, FpsOverlay.BASIC, FpsOverlay.DETAILED},
+                                value -> config.fpsOverlay = value,
+                                () -> config.fpsOverlay)
+                                .setTranslator(value -> Component.translatable(switch (value) {
+                                    case FpsOverlay.SIMPLE -> "vulkanmod.options.fpsOverlay.simple";
+                                    case FpsOverlay.BASIC -> "vulkanmod.options.fpsOverlay.basic";
+                                    case FpsOverlay.DETAILED -> "vulkanmod.options.fpsOverlay.detailed";
+                                    default -> "options.off";
+                                }))
+                                .setTooltip(Component.translatable("vulkanmod.options.fpsOverlay.tooltip")),
                 })
         };
     }
