@@ -153,6 +153,7 @@
     "compatibility.tensura.TensuraSimpleButtonMixin",
 
     "render.block.BakedQuadM",
+    "render.block.ModelBakerImplM",
     "render.block.ModelBlockRendererActivityM",
 
     "optimization.StateHolderMixin",
