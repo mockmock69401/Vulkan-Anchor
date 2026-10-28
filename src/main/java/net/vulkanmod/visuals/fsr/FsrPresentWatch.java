@@ -32,6 +32,8 @@ public final class FsrPresentWatch {
      * not report one; swapW/H: the swapchain's extent.
      */
     public Verdict check(long presents, int surfaceW, int surfaceH, int swapW, int swapH) {
+        //2026-10-28: a 0x0 surface is a minimized window (FsrSwapchain.pausedMinimized pauses the frames), not a stale swapchain
+        if (surfaceW == 0 && surfaceH == 0) return Verdict.OK;
         if (surfaceW != -1 && (surfaceW != swapW || surfaceH != swapH)) return Verdict.RECREATE;
         if (lastPresents >= 0) {
             if (presents == lastPresents) return ++stalls >= GIVE_UP ? Verdict.GIVE_UP : Verdict.RECREATE;
