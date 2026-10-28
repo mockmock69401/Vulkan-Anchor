@@ -212,6 +212,9 @@ public final class FsrCapture {
         VkContext.MainTarget main = VkContext.captureMainTarget();
         SwapChain sc = Vulkan.getSwapChain();
         if (main == null || main.width() <= 0 || main.height() <= 0 || sc.getWidth() <= 0 || sc.getHeight() <= 0) return;
+        //2026-10-28 (Deceased: the frame joining the world had no perspective yet, "near plane NaN" turned FSR off): skip such a frame
+        float near = nearPlane(now.projection());
+        if (!usableNear(near)) return;
         createResources();
         ensureHudLess(sc.getWidth(), sc.getHeight(), VkContext.framesInFlight());
         inputs.ensure(main.width(), main.height());
@@ -248,8 +251,7 @@ public final class FsrCapture {
                     null, groups(target.width), groups(target.height), 1);
             target.transition(cmd, HUD_LESS_LAYOUT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                     VK_ACCESS_SHADER_READ_BIT);
-            inputs.record(cmd, colourView, mainDepth, lod != null ? lod.depthView() : 0, lod != null, prevFromView, invProj, invLodProj,
-                    nearPlane(now.projection()));
+            inputs.record(cmd, colourView, mainDepth, lod != null ? lod.depthView() : 0, lod != null, prevFromView, invProj, invLodProj, near);
         } finally {
             //the transitions back to attachments (here and at the pass's begin) wait for fragment shaders only
             VkBarriers.mainColourAfterCompute(cmd);
@@ -280,6 +282,11 @@ public final class FsrCapture {
     /** The near plane in blocks of a perspective projection in 0..1 depth (depth 0 at view z = -near): FSR's cameraNear. */
     static float nearPlane(Matrix4fc projection) {
         return projection.m32() / projection.m22();
+    }
+
+    /** Whether a near plane (nearPlane's) is one FSR can take: positive and finite. Pure. */
+    static boolean usableNear(float near) {
+        return near > 0 && Float.isFinite(near);
     }
 
     private static int groups(int pixels) {

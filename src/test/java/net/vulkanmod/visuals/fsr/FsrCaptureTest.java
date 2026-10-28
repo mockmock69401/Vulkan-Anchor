@@ -61,6 +61,11 @@ class FsrCaptureTest {
         assertEquals(0.05f, FsrCapture.nearPlane(ReforgedProjection.vulkanDepth(gl)), 1e-6f);
         gl = new Matrix4f().perspective((float) Math.toRadians(30), 1f, 0.5f, 64f);
         assertEquals(0.5f, FsrCapture.nearPlane(ReforgedProjection.vulkanDepth(gl)), 1e-5f);
+        assertTrue(FsrCapture.usableNear(FsrCapture.nearPlane(ReforgedProjection.vulkanDepth(gl))));
+        //2026-10-28 (Deceased: "near plane NaN" on the frame joining the world turned FSR off for the session): a projection that is
+        // no perspective yet gives no near plane, and that frame is skipped instead
+        assertFalse(FsrCapture.usableNear(FsrCapture.nearPlane(new Matrix4f().zero())));
+        for (float bad : new float[]{Float.NaN, 0, -0.05f, Float.POSITIVE_INFINITY}) assertFalse(FsrCapture.usableNear(bad), "" + bad);
     }
 
     @Test
