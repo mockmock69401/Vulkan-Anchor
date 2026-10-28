@@ -446,6 +446,19 @@ public final class SceneCompositeMath {
             float[] behind = add(AtmosphereMath.skyColour(a, px.dir), AtmosphereMath.sunGlow(a, px.dir));
             for (int i = 0; i < 3; i++) hazed[i] += (behind[i] - hazed[i]) * border;
         }
+        //2026-10-28: the weather fog (BORDER .w): surfaces under the sky fade by distance (Gaussian) into the horizon's fog in vanilla's fog hue
+        float weather = slots[BORDER_FOG][3];
+        if (weather > 0 && a.mode() == AtmosphereMath.ATMOSPHERE_SKY && !cloud) {
+            float k = weather * Math.min(px.dist, AtmosphereMath.HAZE_MAX_DISTANCE);
+            float t = (float) Math.exp(-k * k * amount);
+            float[] vf = slots[VANILLA_FOG], fog = AtmosphereMath.fogColour(a, px.dir);
+            float vl = PostMath.luminance(vf[0], vf[1], vf[2]);
+            if (vf[3] > 0.5f && vl > 1e-4f) {
+                float s = PostMath.luminance(fog[0], fog[1], fog[2]) / vl;
+                fog = new float[]{vf[0] * s, vf[1] * s, vf[2] * s};
+            }
+            for (int i = 0; i < 3; i++) hazed[i] = fog[i] + (hazed[i] - fog[i]) * t;
+        }
         return rgba(scale(farCloudsOver(a, slots, hazed, px.dir, px.cloudMarch), underwaterExposure(look)), passRan && !cloud ? WaterMath.reflectionMark(kind) : 0);
     }
 

@@ -112,6 +112,8 @@ public class VisualsConfig {
     public int fogStrength = 100;
     /** Blocks of height fog scale: the fog hugs valleys and water. */
     public int fogHeight = 40;
+    /** 2026-10-28: how thick the fog of rain and thunderstorms is (AtmosphereUniforms.weatherFog); 0 is the clear-weather fog. */
+    public int weatherFog = 100;
     public int sunGlow = 50;
     public int sunsetLight = 50;
     public int lightShafts = 50;
