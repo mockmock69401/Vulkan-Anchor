@@ -32,6 +32,11 @@ public final class FoliageMarker {
      */
     public static final float ORE_ALPHA = 252.25f / 255f;
     /**
+     * 2026-10-28 (the user: Create's and other tech mods' ores did not glow): 246 for a pale ore's quads (OreKinds.PALE_ORE: whitish
+     * metal specks, zinc, tin, silver), whose specks the composite also tells by their brightness in grey stone.
+     */
+    public static final float PALE_ORE_ALPHA = 246.25f / 255f;
+    /**
      * 2026-10-28: 251 for a fluid that emits light (lava; LiquidRenderer), a light source like EMISSIVE_ALPHA whose glow is
      * FLUID_GLOW_SCALE times as strong (a lava lake is one broad bright surface; next to Complementary Reimagined it stayed orange).
      */
@@ -54,8 +59,8 @@ public final class FoliageMarker {
     public static final float BASE_MARGIN = 0.01f;
     /** Whether the block the chunk build thread is drawing emits light (set as BlockRenderer.renderBatched starts). */
     private static final ThreadLocal<boolean[]> EMISSIVE = ThreadLocal.withInitial(() -> new boolean[1]);
-    /** Whether the block the chunk build thread is drawing is an ore. */
-    private static final ThreadLocal<boolean[]> ORE = ThreadLocal.withInitial(() -> new boolean[1]);
+    /** The ore kind (OreKinds) of the block the chunk build thread is drawing. */
+    private static final ThreadLocal<int[]> ORE = ThreadLocal.withInitial(() -> new int[1]);
     /** The wind kind of the block the chunk build thread is drawing. */
     private static final ThreadLocal<int[]> SWAY = ThreadLocal.withInitial(() -> new int[1]);
 
@@ -66,8 +71,8 @@ public final class FoliageMarker {
         EMISSIVE.get()[0] = emissive;
     }
 
-    public static void setOre(boolean ore) {
-        ORE.get()[0] = ore;
+    public static void setOre(int kind) {
+        ORE.get()[0] = kind;
     }
 
     /** The vertex alpha for this quad: ALPHA for a vanilla quad without directional shade, else the alpha given. */
@@ -85,9 +90,10 @@ public final class FoliageMarker {
         return alpha(quad, alpha, EMISSIVE.get()[0], ORE.get()[0]);
     }
 
-    /** As alpha(quad, alpha, emissive), ORE_ALPHA for an ore's quads that are no light source's. */
-    public static float alpha(Object quad, float alpha, boolean emissive, boolean ore) {
-        return !emissive && ore ? ORE_ALPHA : alpha(quad, alpha, emissive);
+    /** As alpha(quad, alpha, emissive), ORE_ALPHA (PALE_ORE_ALPHA for a pale ore) for an ore's quads that are no light source's. */
+    public static float alpha(Object quad, float alpha, boolean emissive, int oreKind) {
+        if (emissive || oreKind == OreKinds.NONE) return alpha(quad, alpha, emissive);
+        return oreKind == OreKinds.PALE_ORE ? PALE_ORE_ALPHA : ORE_ALPHA;
     }
 
     /** The wind kind of a block: plants (bushes, not lily pads) and the halves of double plants, leaves; anything else still. */

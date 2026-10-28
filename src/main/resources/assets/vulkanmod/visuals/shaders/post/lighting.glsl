@@ -80,6 +80,8 @@ const int EMISSIVE_ALPHA_CODE = 253;
 const int ORE_ALPHA_CODE = 252;
 //2026-10-28: FoliageMarker.EMISSIVE_FLUID_ALPHA (a light-emitting fluid: a light source with a stronger glow)
 const int EMISSIVE_FLUID_ALPHA_CODE = 251;
+//2026-10-28: FoliageMarker.PALE_ORE_ALPHA (a pale ore's quads: whitish metal specks, told by their brightness too)
+const int PALE_ORE_ALPHA_CODE = 246;
 
 //boundary 3.9: the weight of the texel at offset (i, j) whose view distance is sampleDist, for a centre at centreDist. A tent in space
 // ((BLUR_RADIUS+1)^2 at the centre) times a falloff in the distance difference relative to the centre's distance.
