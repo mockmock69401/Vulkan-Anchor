@@ -804,6 +804,19 @@ void main() {
     if (border > 0.0) {
         lit = mix(lit, skyColour(a, dir) + sunGlow(a, dir), border);
     }
+    //2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined): in rain surfaces under the sky fade by distance
+    // (borderFog.w, AtmosphereUniforms.weatherFog), whatever the camera's height, into the horizon's fog colour tinted with vanilla's
+    // fog hue (the biome's blue-grey, as Complementary's rain fog; vanilla's own brightness went navy in thunder). Gaussian in
+    // distance: the street nearby stays clear, a hundred blocks away 70% is fog. The sky is left alone
+    if (borderFog.w > 0.0 && atmosphereSky(a) && !cloud) {
+        vec3 rainFog = fogColour(a, dir);
+        float vl = luminance(vanillaFog.rgb);
+        if (vanillaFog.w > 0.5 && vl > 1e-4) {
+            rainFog = vanillaFog.rgb*(luminance(rainFog)/vl);
+        }
+        float k = borderFog.w*min(dist, HAZE_MAX_DISTANCE);
+        lit = mix(rainFog, lit, exp(-k*k*amount));
+    }
     lit = farCloudsOver(a, lit, dir, dist);
     imageStore(sceneOut, p, vec4(lit*underwaterExposure(), passRan && !cloud ? reflectionMark(kind) : 0.0));
 }

@@ -115,6 +115,14 @@ public final class AtmosphereUniforms {
     public static final float AIR_MASS_BLOCKS = 3000;
     /** Ground fog density per block at sea level at fog strength 100; full rain multiplies it by 1 + RAIN_FOG. */
     public static final float FOG_DENSITY = 0.001f, RAIN_FOG = 1.5f;
+    /**
+     * 2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined, whose rain hides a street's far end at any height):
+     * the weather fog, a Gaussian distance fog on surfaces only (scene_copy.comp, BORDER .w), 1 / range in full rain at the weather fog
+     * setting's 100% (exp(-(d/range)^2): 74% of a surface left at 50 blocks, 30% at 100), a thunderstorm 1 + WEATHER_FOG_THUNDER times
+     * that. Not the
+     * ground fog: that hugs the sea level, and raised it also filled the sky, which Complementary keeps a little darker in rain.
+     */
+    public static final float WEATHER_FOG_RAIN = 0.011f, WEATHER_FOG_THUNDER = 0.5f;
     /** Uniform haze density per block in vanilla's environmental fog (vanilla already fogs; only far LODs need it) and without sky light. */
     public static final float ENV_FOG_DENSITY = 0.005f, NO_SKY_FOG_DENSITY = 0.0007f;
 
@@ -195,7 +203,7 @@ public final class AtmosphereUniforms {
             if (w.has(VANILLA_FOG)) w.putVec4(VANILLA_FOG, this.vanilla[4], this.vanilla[5], this.vanilla[6], this.vanilla[7]);
             if (w.has(STAR_GATE)) w.putVec4(STAR_GATE, this.vanilla[8], this.vanilla[9], this.vanilla[10], this.vanilla[11]);
             if (w.has(LOOK)) w.putVec4(LOOK, this.look[0], this.look[1], this.look[2], this.look[3]);
-            if (w.has(BORDER)) w.putVec4(BORDER, this.border[0], this.border[1], this.border[2], 0);
+            if (w.has(BORDER)) w.putVec4(BORDER, this.border[0], this.border[1], this.border[2], this.border.length > 3 ? this.border[3] : 0);
             for (int s = RESERVED_FIRST; s <= RESERVED_LAST; s++) if (w.has(s)) w.putVec4(s, 0, 0, 0, 0);
         }
 
@@ -210,8 +218,13 @@ public final class AtmosphereUniforms {
 
     /** The border fog's slot (BORDER): on in the sky mode with no LODs drawn and a known render distance (blocks). */
     public static float[] border(boolean lodValid, float mode, float renderDistance) {
+        return border(lodValid, mode, renderDistance, 0);
+    }
+
+    /** The BORDER slot: the border fog, and in .w the weather fog's density (weatherFog). */
+    public static float[] border(boolean lodValid, float mode, float renderDistance, float weatherFog) {
         boolean on = !lodValid && mode == AtmosphereMath.ATMOSPHERE_SKY && renderDistance > 0 && Float.isFinite(renderDistance);
-        return on ? new float[]{renderDistance * BORDER_START_SHARE, renderDistance * BORDER_END_SHARE, 1} : new float[3];
+        return on ? new float[]{renderDistance * BORDER_START_SHARE, renderDistance * BORDER_END_SHARE, 1, weatherFog} : new float[]{0, 0, 0, weatherFog};
     }
 
     public static boolean active(AtmosphereFrame frame, long serial, boolean hasSky) {
@@ -238,7 +251,13 @@ public final class AtmosphereUniforms {
         }
         boolean lodValid = lodSizeMatches && frame.lodDrawn();
         return new Values(lodValid, frame.invVanillaProjection(), frame.invLodProjection(), frame.invModelView(), block,
-                shafts, colour, screen[0], screen[1], vanillaColours(frame, block), look, border(lodValid, block[3], frame.skyFogEnd()));
+                shafts, colour, screen[0], screen[1], vanillaColours(frame, block), look, border(lodValid, block[3], frame.skyFogEnd(),
+                block[3] == AtmosphereMath.ATMOSPHERE_SKY ? weatherFog(frame.rain(), frame.thunder(), settings.weatherFog()) : 0));
+    }
+
+    /** 2026-10-28: the weather fog's 1 / range per block (BORDER .w): WEATHER_FOG_RAIN x rain x the setting, thunder adding its share. */
+    public static float weatherFog(float rain, float thunder, float setting) {
+        return WEATHER_FOG_RAIN * clamp01(rain) * Math.max(0, finite(setting)) * (1 + WEATHER_FOG_THUNDER * clamp01(thunder));
     }
 
     /** Final fix R1: true when every setting that makes the atmosphere draw something is 0 (the composite then keeps vanilla's sky). */

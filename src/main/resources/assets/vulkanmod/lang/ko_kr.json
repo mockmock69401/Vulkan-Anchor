@@ -19,6 +19,8 @@
   "vulkanmod.visuals.fog_strength.tooltip": "먼 거리의 연무와 낮은 땅·물 위에 깔리는 지면 안개로, 비가 오면 짙어집니다. 가까운 지형은 맑고 수백 블록 밖에서부터 짙어집니다. 0이면 끕니다",
   "vulkanmod.visuals.fog_height": "안개 높이 (블록)",
   "vulkanmod.visuals.fog_height.tooltip": "해수면 위로 올라갈수록 안개가 얼마나 빨리 옅어지는지",
+  "vulkanmod.visuals.weather_fog": "날씨 안개",
+  "vulkanmod.visuals.weather_fog.tooltip": "비와 뇌우가 오면 먼 곳이 푸른 회색 안개로 흐려집니다(셰이더 팩처럼). 0이면 맑은 날의 안개 그대로",
   "vulkanmod.visuals.sun_glow": "태양 산란광",
   "vulkanmod.visuals.sun_glow.tooltip": "해 쪽 안개에 퍼지는 따뜻한 빛",
   "vulkanmod.visuals.sunset_light": "노을빛",

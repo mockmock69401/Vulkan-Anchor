@@ -79,6 +79,7 @@ public final class VisualsOptionLayout {
                     new Block("fog", List.of(
                             percent("fog_strength", 0, FOG_STRENGTH_MAX, Impact.NONE),
                             new Item("fog_height", Kind.BLOCKS, FOG_HEIGHT_MIN, FOG_HEIGHT_MAX, Impact.NONE, null),
+                            percent("weather_fog", 0, FOG_STRENGTH_MAX, Impact.NONE),
                             percent("sun_glow", STRENGTH_MAX))),
                     new Block("sky", List.of(
                             percent("sunset_light", STRENGTH_MAX),
@@ -140,6 +141,7 @@ public final class VisualsOptionLayout {
             case FSR_FRAME_GENERATION -> c.fsrFrameGeneration ? 1 : 0;
             case "fog_strength" -> c.fogStrength;
             case "fog_height" -> c.fogHeight;
+            case "weather_fog" -> c.weatherFog;
             case "sun_glow" -> c.sunGlow;
             case "sunset_light" -> c.sunsetLight;
             case "light_shafts" -> c.lightShafts;
@@ -188,6 +190,7 @@ public final class VisualsOptionLayout {
             case FRAME_GENERATION, FSR_FRAME_GENERATION -> FsrSettings.onToggle(c, item.key(), v != 0);
             case "fog_strength" -> c.fogStrength = v;
             case "fog_height" -> c.fogHeight = v;
+            case "weather_fog" -> c.weatherFog = v;
             case "sun_glow" -> c.sunGlow = v;
             case "sunset_light" -> c.sunsetLight = v;
             case "light_shafts" -> c.lightShafts = v;
