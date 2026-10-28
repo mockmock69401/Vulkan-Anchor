@@ -146,8 +146,10 @@ const float HELD_FALLOFF = 1.7;
 // 0.8 in full rain (slot 29 .z), times the day seen from under the open sky: slot 11 .w) it rises toward OVERCAST_EXPOSURE (refs/S4 lights rainy
 // terrain about 3x vanilla: 1 + (3.6 - 1) x 0.8 = 3.1); at night (1 - slot 11 .z) it falls to NIGHT_SKY_EXPOSURE (refs/S3: the moonlit
 // terrain was 1.34x; 2026-10-28: 0.7 left the moonlit terrain 0.77x Complementary Reimagined's, 0.85). Block light is not touched; without
-// sky (slot 29 .w not ATMOSPHERE_SKY) and underground both are 1
-const float OVERCAST_EXPOSURE = 3.6;
+// sky (slot 29 .w not ATMOSPHERE_SKY) and underground both are 1. 2026-10-28 (DeceasedCraft: rain and thunder too bright, the snow
+// glaring, next to Oculus + Complementary Reimagined whose rainy street was 0.85x its clear one, ours 1.03x; 2.2 still 0.93x): 1.8, full
+// rain 1.64x
+const float OVERCAST_EXPOSURE = 1.8;
 const float NIGHT_SKY_EXPOSURE = 0.85;
 //Tuning round 3 (refs/S13): with the camera inside vanilla's cloud layer (cloudShape x below CLOUD_CAMERA_MARGIN and its top above
 // -CLOUD_CAMERA_MARGIN) the far clouds start FAR_CLOUD_NEAR blocks out: the march from inside a cloud cell veiled every surface (a ray down
