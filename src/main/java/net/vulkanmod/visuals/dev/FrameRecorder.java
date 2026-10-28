@@ -31,6 +31,9 @@ public final class FrameRecorder {
     private static final long AUTO_NS = Long.getLong("vulkanmod.visuals.frames.auto", 0L) * 1_000_000_000L;
     public static final boolean ON = System.getProperty(VisualsPilot.PROPERTY) != null || Boolean.getBoolean("vulkanmod.visuals.frames") || AUTO_NS > 0;
     private static long autoStart;
+    /** 2026-10-27 (SSV unloaded-terrain lows): -Dvulkanmod.visuals.frames.dir=DIR also writes each automatic recording as DIR/autoN.csv. */
+    private static final String AUTO_DIR = System.getProperty("vulkanmod.visuals.frames.dir");
+    private static int autoIndex;
 
     //Nanoseconds a frame
     public static final int TICK = 0, FENCE = 1, ACQUIRE = 2, PRESENT = 3, XFER_WAIT = 4, UPLOAD = 5, GRAPH = 6, LIGHT = 7,
@@ -120,7 +123,7 @@ public final class FrameRecorder {
         gcMs = gcMsNow;
         frameStart = now;
         if (AUTO_NS > 0 && (!recording || now - autoStart >= AUTO_NS)) {
-            if (recording) stop(null, "auto");
+            if (recording) stop(AUTO_DIR == null ? null : Path.of(AUTO_DIR), "auto" + ++autoIndex);
             start();
             autoStart = now;
         }

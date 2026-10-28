@@ -201,6 +201,7 @@ public class VulkanImage {
         }
         if (net.vulkanmod.visuals.dev.FrameRecorder.ON) net.vulkanmod.visuals.dev.FrameRecorder.add(net.vulkanmod.visuals.dev.FrameRecorder.TEX_KB, imageSize >> 10);
 
+        DeviceManager.getGraphicsQueue().deferUploads(net.vulkanmod.vulkan.Renderer.getInstance() != null && net.vulkanmod.vulkan.Renderer.isRecording());
         CommandPool.CommandBuffer commandBuffer = DeviceManager.getGraphicsQueue().getCommandBuffer();
         try (MemoryStack stack = stackPush()) {
             transferDstLayout(stack, commandBuffer.getHandle());
