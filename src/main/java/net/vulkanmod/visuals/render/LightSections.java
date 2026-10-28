@@ -63,21 +63,75 @@ public final class LightSections {
         }
     }
 
-    /** Up to budget queued sections, nearest first, taken off the queue; those that left the range are dropped. */
+    /**
+     * Up to budget queued sections, nearest first (ties in queue order), taken off the queue; those that left the range are dropped.
+     * 2026-10-28 (NightfallCraft, a taller world, so tens of thousands of queued sections while new chunks come in): one pass keeps
+     * the budget nearest in a bounded max-heap instead of sorting the whole queue each frame, which took a fifth of the render thread.
+     */
     public List<int[]> next(int budget) {
-        List<int[]> in = new ArrayList<>();
-        for (Iterator<Long> it = this.dirty.iterator(); it.hasNext(); ) {
-            int[] s = unpack(it.next());
-            if (this.layout.inRange(s[0], s[1], s[2], this.cameraSx, this.cameraSz)) in.add(s);
-            else {
+        int cap = Math.max(0, Math.min(budget, this.dirty.size()));
+        long[] keys = new long[cap], order = new long[cap];//order: distance in the high bits, queue position in the low 24
+        int size = 0, position = 0;
+        for (Iterator<Long> it = this.dirty.iterator(); it.hasNext(); position++) {
+            long key = it.next();
+            int sx = (int) (key >> 42), sy = (int) (key << 44 >> 44), sz = (int) (key << 22 >> 42);
+            if (!this.layout.inRange(sx, sy, sz, this.cameraSx, this.cameraSz)) {
                 it.remove();
-                this.unready(s[0], s[1], s[2]);
+                this.unready(sx, sy, sz);
+                continue;
+            }
+            if (cap == 0) continue;
+            long rank = this.distance(sx, sy, sz) << 24 | (position & 0xFFFFFF);
+            if (size < cap) {
+                keys[size] = key;
+                order[size] = rank;
+                siftUp(keys, order, size++);
+            } else if (rank < order[0]) {
+                keys[0] = key;
+                order[0] = rank;
+                siftDown(keys, order, size);
             }
         }
-        in.sort(Comparator.comparingLong(this::distance));
-        List<int[]> out = new ArrayList<>(in.subList(0, Math.min(budget, in.size())));
-        for (int[] s : out) this.dirty.remove(pack(s[0], s[1], s[2]));
+        Integer[] picked = new Integer[size];
+        for (int i = 0; i < size; i++) picked[i] = i;
+        Arrays.sort(picked, Comparator.comparingLong(i -> order[i]));
+        List<int[]> out = new ArrayList<>(size);
+        for (int i : picked) {
+            long key = keys[i];
+            this.dirty.remove(key);
+            out.add(unpack(key));
+        }
         return out;
+    }
+
+    /** Max-heap on order (the farthest kept section at the root). */
+    private static void siftUp(long[] keys, long[] order, int i) {
+        while (i > 0) {
+            int parent = (i - 1) >> 1;
+            if (order[parent] >= order[i]) return;
+            swap(keys, order, parent, i);
+            i = parent;
+        }
+    }
+
+    private static void siftDown(long[] keys, long[] order, int size) {
+        int i = 0;
+        while (true) {
+            int l = 2 * i + 1, r = l + 1, largest = i;
+            if (l < size && order[l] > order[largest]) largest = l;
+            if (r < size && order[r] > order[largest]) largest = r;
+            if (largest == i) return;
+            swap(keys, order, largest, i);
+            i = largest;
+        }
+    }
+
+    private static void swap(long[] keys, long[] order, int a, int b) {
+        long k = keys[a], o = order[a];
+        keys[a] = keys[b];
+        order[a] = order[b];
+        keys[b] = k;
+        order[b] = o;
     }
 
     public void uploaded(int sx, int sy, int sz) {
@@ -104,8 +158,8 @@ public final class LightSections {
         return this.held.length;
     }
 
-    private long distance(int[] s) {
-        long dx = s[0] - this.cameraSx, dy = s[1] - this.cameraSy, dz = s[2] - this.cameraSz;
+    private long distance(int sx, int sy, int sz) {
+        long dx = sx - this.cameraSx, dy = sy - this.cameraSy, dz = sz - this.cameraSz;
         return dx * dx + dy * dy + dz * dz;
     }
 
