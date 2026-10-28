@@ -24,8 +24,11 @@ import org.joml.Vector4f;
 public final class TaaMath {
     /** The jitter sequence length: TaaJitter repeats every JITTER_PHASES frames. */
     public static final int JITTER_PHASES = 8;
-    /** The width of the jitter pattern in pixels (1: the offsets span one whole pixel). */
-    public static final float JITTER_SCALE = 1f;
+    /**
+     * The width of the jitter pattern in pixels (1: the offsets span one whole pixel). 2026-10-28: 0.5, half the box the history
+     * averages over (with SHARPEN_TAA 1.2 the canopy's detail 13.8 -> 16.7, Complementary Reimagined 20.9).
+     */
+    public static final float JITTER_SCALE = 0.5f;
     /** The current frame's share of the result while the image stands still (the rest is history). */
     public static final float CURRENT_WEIGHT = 0.1f;
     /** The current frame's share once the image moves MOTION_RAMP_PIXELS pixels a frame or more (resampled history is softer). */

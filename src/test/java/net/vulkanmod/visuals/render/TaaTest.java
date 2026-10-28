@@ -67,8 +67,9 @@ class TaaTest {
             minY = Math.min(minY, o[1]);
             maxY = Math.max(maxY, o[1]);
         }
-        assertTrue(maxX - minX > 0.6f && maxY - minY > 0.6f);
-        assertTrue(maxX - minX < 1f && maxY - minY < 1f, "within one pixel");
+        //2026-10-28: the pattern spans JITTER_SCALE of a pixel (0.5: half the box, a sharper canopy)
+        assertTrue(maxX - minX > 0.6f * TaaMath.JITTER_SCALE && maxY - minY > 0.6f * TaaMath.JITTER_SCALE);
+        assertTrue(maxX - minX < TaaMath.JITTER_SCALE && maxY - minY < TaaMath.JITTER_SCALE, "within JITTER_SCALE of a pixel");
     }
 
     @Test

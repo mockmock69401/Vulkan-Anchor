@@ -48,8 +48,11 @@ public final class PostMath {
     public static final float BLOOM_MIX = 0.45f;
     /** The light shafts' scale at light shafts 100 (shaftLight is the colour at full strength). */
     public static final float SHAFT_SCALE = 1.0f;
-    /** Sharpening after TAA; SMAA alone keeps edges sharp and gets a plain copy. */
-    public static final float SHARPEN_TAA = 0.5f;
+    /**
+     * Sharpening after TAA; SMAA alone keeps edges sharp and gets a plain copy. 2026-10-28 (the user: the day's shadows lacked depth
+     * next to Complementary Reimagined; the canopy's texture detail was 13.8 against 20.9, 20.2 with TAA off): 1.2, was 0.5.
+     */
+    public static final float SHARPEN_TAA = 1.2f;
     /** Bloom pyramid: at most this many levels; a level is added while its shorter side keeps at least BLOOM_MIN_SIDE texels. */
     public static final int BLOOM_MAX_LEVELS = 8, BLOOM_MIN_SIDE = 8;
 

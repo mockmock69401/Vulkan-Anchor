@@ -17,8 +17,11 @@ public final class LightingMath {
     public static final int BLUR_RADIUS = 2;
     /** The blur's depth tolerance: (BLUR_DEPTH_SHARE x centre distance + BLUR_DEPTH_MIN) blocks per factor e. */
     public static final float BLUR_DEPTH_SHARE = 0.05f, BLUR_DEPTH_MIN = 0.1f;
-    /** The sky-lit light's factor in full shade and on sunlit flat ground with a high sun (sun term 1). Tuning round 1: 0.55, 1.1. */
-    public static final float SHADE_LEVEL = 0.72f, SUN_LEVEL = 2.5f;
+    /**
+     * The sky-lit light's factor in full shade and on sunlit flat ground with a high sun (sun term 1). Tuning round 1: 0.55, 1.1.
+     * 2026-10-28: the sun 3.2 (was 2.5), sunlit leaves next to Complementary Reimagined's were a quarter darker.
+     */
+    public static final float SHADE_LEVEL = 0.72f, SUN_LEVEL = 3.2f;
     /** The same with a low sun (sun term 0): round 1's levels, which the sunset (S2) matched with. */
     public static final float LOW_SUN_SHADE_LEVEL = 0.55f, LOW_SUN_SUN_LEVEL = 1.1f;
     /** The sun term (sunHeightTerm) runs from 0 at sin(elevation) SUN_TERM_LOW to 1 at SUN_TERM_HIGH. */
