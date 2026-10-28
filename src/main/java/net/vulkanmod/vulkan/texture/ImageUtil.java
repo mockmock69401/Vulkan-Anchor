@@ -350,6 +350,8 @@ public abstract class ImageUtil {
                             srcX0, srcY0, srcX1, srcY1, dstX0, dstY0, dstX1, dstY1, aspectMask);
                     case BLIT -> blitImage(commandBuffer, source, destination, srcX0, srcY0, srcX1, srcY1,
                             dstX0, dstY0, dstX1, dstY1, aspectMask, vulkanBlitFilter(filter, aspectMask));
+                    case MIRROR_BLIT -> blitImage(commandBuffer, source, destination, srcX0, srcY0, srcX1, srcY1,
+                            dstX0, dstY0, dstX1, dstY1, aspectMask, VK_FILTER_NEAREST);
                     default -> throw new IllegalStateException("Unexpected empty image transfer");
                 }
             } finally {
@@ -369,7 +371,17 @@ public abstract class ImageUtil {
         }
     }
 
-    private enum TransferKind { NO_OP, COPY, ROW_COPY, BLIT }
+    enum TransferKind { NO_OP, COPY, ROW_COPY, MIRROR_BLIT, BLIT }
+
+    /**
+     * Two images of one format and one size, columns in the same direction. Mirrored rows are one nearest blit, exact at 1:1, when
+     * the format can be blitted: a copy per row costs about 2 ms of GPU time for a 1920x1080 depth buffer (2026-10-28, Tensura:
+     * KubeJS's highlight and Lodestone each copy the main depth flipped every frame).
+     */
+    static TransferKind sameSizeTransfer(boolean sameYDirection, boolean blitSupported) {
+        if (sameYDirection) return TransferKind.COPY;
+        return blitSupported ? TransferKind.MIRROR_BLIT : TransferKind.ROW_COPY;
+    }
 
 
     private static TransferKind preflightTransfer(VulkanImage source, VulkanImage destination,
@@ -407,7 +419,7 @@ public abstract class ImageUtil {
         boolean sameXDirection = (srcX1 > srcX0) == (dstX1 > dstX0);
         boolean sameYDirection = (srcY1 > srcY0) == (dstY1 > dstY0);
         if (source.format == destination.format && equalExtent && sameXDirection)
-            return sameYDirection ? TransferKind.COPY : TransferKind.ROW_COPY;
+            return sameSizeTransfer(sameYDirection, !sameYDirection && supportsBlit(source.format));
 
         int filter = vulkanBlitFilter(glFilter, aspectMask);
         if (aliased && filter == VK_FILTER_LINEAR && transferRegionsOverlap(
@@ -429,6 +441,15 @@ public abstract class ImageUtil {
                                                    long dstX0, long dstY0, long dstX1, long dstY1) {
         return Math.min(srcX0, srcX1) < Math.max(dstX0, dstX1) && Math.min(dstX0, dstX1) < Math.max(srcX0, srcX1)
                 && Math.min(srcY0, srcY1) < Math.max(dstY0, dstY1) && Math.min(dstY0, dstY1) < Math.max(srcY0, srcY1);
+    }
+
+    private static boolean supportsBlit(int format) {
+        try (MemoryStack stack = stackPush()) {
+            VkFormatProperties properties = VkFormatProperties.calloc(stack);
+            vkGetPhysicalDeviceFormatProperties(DeviceManager.physicalDevice, format, properties);
+            int blit = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT;
+            return (properties.optimalTilingFeatures() & blit) == blit;
+        }
     }
 
     private static void requireBlitFeatures(int sourceFormat, int destinationFormat, int filter) {
