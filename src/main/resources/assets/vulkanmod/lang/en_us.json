@@ -342,7 +342,7 @@
   "vulkanmod.visuals.block_glow": "Block Glow",
   "vulkanmod.visuals.block_glow.tooltip": "Lava, magma, glowstone and other light blocks glow brighter, and the bloom spreads their light. 0 keeps vanilla's brightness",
   "vulkanmod.visuals.ore_glow": "Ore Glow",
-  "vulkanmod.visuals.ore_glow.tooltip": "The coloured or bright specks of ores glow faintly, even in the dark. 0 leaves ores like any other block",
+  "vulkanmod.visuals.ore_glow.tooltip": "Nether quartz ore's white specks glow faintly, even in the dark. 0 leaves it like any other block",
   "vulkanmod.visuals.held_light": "Held Light",
   "vulkanmod.visuals.held_light.tooltip": "A torch, lantern, glowstone or lava bucket in your hand lights the blocks around you (with Per-pixel Light); walls stop it as they stop block light",
   "vulkanmod.visuals.anti_aliasing": "Anti-aliasing",

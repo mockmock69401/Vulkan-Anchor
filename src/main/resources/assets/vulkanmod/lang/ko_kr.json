@@ -62,7 +62,7 @@
   "vulkanmod.visuals.block_glow": "블록 발광",
   "vulkanmod.visuals.block_glow.tooltip": "용암, 마그마, 발광석 등 빛 블록이 더 밝게 빛나고 블룸으로 번집니다. 0이면 바닐라 밝기 그대로",
   "vulkanmod.visuals.ore_glow": "광석 발광",
-  "vulkanmod.visuals.ore_glow.tooltip": "광석의 색이 있거나 밝은 알갱이가 어두운 곳에서도 은은하게 빛납니다. 0이면 다른 블록과 같게",
+  "vulkanmod.visuals.ore_glow.tooltip": "네더 석영 광석의 흰 알갱이가 어두운 곳에서도 은은하게 빛납니다. 0이면 다른 블록과 같게",
   "vulkanmod.visuals.held_light": "손에 든 광원",
   "vulkanmod.visuals.held_light.tooltip": "손에 든 횃불·랜턴·발광석·용암 양동이가 주변 블록을 비춥니다 (픽셀 단위 조명 필요). 블록빛처럼 벽에 막힙니다",
   "vulkanmod.visuals.anti_aliasing": "안티에일리어싱",
