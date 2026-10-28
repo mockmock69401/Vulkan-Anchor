@@ -117,6 +117,8 @@ public class Renderer {
     private final FramePreparationState framePreparation = new FramePreparationState();
     private VkCommandBuffer currentCmdBuffer;
     private boolean recordingCmds = false;
+    /** 2026-10-28: frames are paused because FSR is live and the window is minimized (FsrSwapchain.pausedMinimized). */
+    private boolean fsrMinimized = false;
     private boolean acquiredImageWaitPending;
     private boolean recreatingSwapChain;
     private boolean internalResizeDisplayNotification;
@@ -236,6 +238,22 @@ public class Renderer {
             return;
 
         if (net.vulkanmod.visuals.dev.FrameRecorder.ON) net.vulkanmod.visuals.dev.FrameRecorder.mark(net.vulkanmod.visuals.dev.FrameRecorder.M_BEGIN_START);
+        //2026-10-28 (fullscreen with FSR froze on alt-tab): while FSR is live and the window is minimized nothing is drawn and a pending
+        // recreation waits (its wait for FSR's presents would never return); restored, the frames resume as they were
+        if (net.vulkanmod.visuals.fsr.FsrSwapchain.pausedMinimized()) {
+            if (!fsrMinimized) {
+                fsrMinimized = true;
+                skipRendering = true;
+                Minecraft.getInstance().noRender = true;
+            }
+            return;
+        }
+        if (fsrMinimized) {
+            fsrMinimized = false;
+            net.vulkanmod.visuals.fsr.FsrSwapchain.resumed();
+            skipRendering = getSwapChain().getWidth() == 0 && getSwapChain().getHeight() == 0;
+            Minecraft.getInstance().noRender = skipRendering;
+        }
         if (swapChainUpdate) {
             recreatingSwapChain = true;
             swapChainUpdate = false;
@@ -860,6 +878,8 @@ public class Renderer {
         FrameGen.beginFrame();
         //FSR design 4.4: turning FSR on or off is applied by the same recreation
         net.vulkanmod.visuals.fsr.FsrSwapchain.beginFrame();
+        //2026-10-28: no frame is prepared while FSR is live and the window is minimized (beginFrame pauses; no idle wait here either)
+        if (net.vulkanmod.visuals.fsr.FsrSwapchain.pausedMinimized()) return;
 
         net.vulkanmod.compat.observer.CompatProfiler.cpuFrameStart = System.nanoTime();
 

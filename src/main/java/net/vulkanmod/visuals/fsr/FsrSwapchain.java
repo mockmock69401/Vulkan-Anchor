@@ -100,9 +100,27 @@ public final class FsrSwapchain {
 
     // ---- Renderer hooks ----
 
+    /**
+     * 2026-10-28 (DeceasedCraft: in fullscreen with FSR live, switching to another window froze the game): whether FSR's swapchain is
+     * live and the window is minimized. Renderer.beginFrame then draws nothing and leaves a pending recreation for later: FSR's
+     * presenter thread cannot present to the minimized fullscreen window, so a recreation's wait for FSR's presents (Vulkan.waitIdle)
+     * would never return. Render thread.
+     */
+    public static boolean pausedMinimized() {
+        if (state != State.LIVE) return false;
+        return org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(net.minecraft.client.Minecraft.getInstance().getWindow().getWindow(),
+                org.lwjgl.glfw.GLFW.GLFW_ICONIFIED) == org.lwjgl.glfw.GLFW.GLFW_TRUE;
+    }
+
+    /** Renderer.beginFrame, when the window is restored after {@link #pausedMinimized}: the present count starts over. */
+    public static void resumed() {
+        WATCH.reset();
+    }
+
     /** Renderer.beginFrame, next to FrameGen.beginFrame: a toggled setting or a failure schedules the recreation that applies it. */
     public static void beginFrame() {
         if (state == State.OFF && !VisualsConfig.get().fsrFrameGeneration) return;
+        if (pausedMinimized()) return;
         SwapChain sc = Vulkan.getSwapChain();
         Action a = FsrLifecycle.next(state, wanted(), sc.getWidth(), sc.getHeight(), false);
         if (a == Action.START || a == Action.STOP) {

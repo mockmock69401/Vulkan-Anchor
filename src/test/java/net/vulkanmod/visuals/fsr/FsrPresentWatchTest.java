@@ -28,6 +28,15 @@ class FsrPresentWatchTest {
         assertEquals(Verdict.OK, w.check(50, -1, -1, W, H));
     }
 
+    @Test void aMinimizedWindowIsNoStaleSwapchain() {
+        //2026-10-28 (fullscreen with FSR froze on alt-tab: the 0x0 surface scheduled a recreation, whose wait for FSR's presents never
+        // returned): a 0x0 surface is a minimized window, which pauses the frames instead (FsrSwapchain.pausedMinimized)
+        FsrPresentWatch w = new FsrPresentWatch();
+        assertEquals(Verdict.OK, w.check(10, W, H, W, H));
+        assertEquals(Verdict.OK, w.check(30, 0, 0, W, H));
+        assertEquals(Verdict.OK, w.check(30, 0, 0, W, H), "nor are its stalled presents");
+    }
+
     @Test void stalledPresentsRecreateThenGiveUp() {
         FsrPresentWatch w = new FsrPresentWatch();
         assertEquals(Verdict.OK, w.check(100, W, H, W, H));
