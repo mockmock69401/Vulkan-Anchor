@@ -91,7 +91,9 @@ public final class PostMath {
         x = Math.max(x, 0);
         if (x <= knee) return Math.min(x, 1);
         float w = Math.max(1 - knee, 1e-6f);
-        float y = knee + w * (1 - (float) Math.exp(-(x - knee) / w));
+        //2026-10-28: Reinhard's shoulder (postmath.glsl's), was 1 - exp(-d/w)
+        float d = x - knee;
+        float y = knee + w * (d / (d + w));
         return Math.min(y, 1);
     }
 
