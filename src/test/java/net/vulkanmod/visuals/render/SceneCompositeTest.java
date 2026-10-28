@@ -1088,7 +1088,7 @@ class SceneCompositeTest {
         float full = 1 + (SceneCompositeMath.OVERCAST_EXPOSURE - 1) * AtmosphereUniforms.RAIN_GREY;
         assertEquals(1f, SceneCompositeMath.skyWeatherExposure(0, 1, 1, 1), 1e-6f, "clear day");
         assertEquals(full, SceneCompositeMath.skyWeatherExposure(AtmosphereUniforms.RAIN_GREY, 1, 1, 1), 1e-5f, "full rain at noon");
-        assertTrue(full > 2.8f && full < 3.4f, "refs/S4: about 3x vanilla");
+        assertTrue(full > 1.5f && full < 1.8f, "2026-10-28: about 1.6x vanilla (refs/S4's 3x was brighter than clear weather; Complementary Reimagined's rain is darker)");
         assertEquals(1f, SceneCompositeMath.skyWeatherExposure(AtmosphereUniforms.RAIN_GREY, 1, 0, 1), 1e-6f, "underground");
         assertEquals(SceneCompositeMath.NIGHT_SKY_EXPOSURE, SceneCompositeMath.skyWeatherExposure(AtmosphereUniforms.RAIN_GREY, 0, 0, 1), 1e-6f,
                 "night: no overcast lift");

@@ -16,15 +16,16 @@ public final class BloomFog {
      * Scene units: the soft threshold. With the knee (BloomMath.KNEE) the glow begins at THRESHOLD - KNEE = 0.5. 2026-10-21 (CTE2: the
      * bloom did not show): it began at 1 (a white surface in full daylight), so by day only the sun's disc glowed; now the bright
      * horizon sky (about 0.65) and pale sunlit surfaces glow softly too, quadratically from the knee's start. 2026-10-24 (CTE2: still no
-     * haze at bloom 100): 0.7, so the glow begins at 0.2 and the sunlit ground and the sky behind the trees bleed too.
+     * haze at bloom 100): 0.7, so the glow begins at 0.2 and the sunlit ground and the sky behind the trees bleed too. 2026-10-28
+     * (DeceasedCraft: snow glared, 1.7% of a snowy street above 240 against Complementary Reimagined's 0.2%): 0.85, from 0.35.
      */
-    public static final float THRESHOLD = 0.7f;
+    public static final float THRESHOLD = 0.85f;
     /** Extra gain of the glow image at full distance in clear noon light: P = c*(1 + gain). The final mix w = 0.45 at bloom 100 turns it into a brightening of w*gain = 9%, at most 13.5% in rain. */
     public static final float MAX_AMOUNT = 0.2f;
     /** At night (no sun) the glow keeps this share of its daytime amount. */
     public static final float NIGHT_FLOOR = 0.3f;
     /** Full rain raises the amount by this share and brings the glow nearer by RAIN_NEAR. */
-    public static final float RAIN_BOOST = 0.5f, RAIN_NEAR = 0.25f;
+    public static final float RAIN_BOOST = 0.2f, RAIN_NEAR = 0.25f;//2026-10-28: 0.2 (was 0.5): rain and thunder bloomed too much
     /** The glow begins at this share of the sky fog end and is full 1.5 fog ends later (blocks, clear weather). */
     public static final float START_SHARE = 0.5f, SPAN_SHARE = 1.5f;
 
