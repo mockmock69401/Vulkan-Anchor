@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.level.BlockAndTintGetter;
@@ -24,6 +25,7 @@ import net.vulkanmod.render.model.quad.ModelQuadFlags;
 import net.vulkanmod.render.model.quad.QuadUtils;
 import net.vulkanmod.render.vertex.TerrainBufferBuilder;
 import net.vulkanmod.render.vertex.VertexUtil;
+import net.vulkanmod.visuals.render.FoliageMarker;
 import net.vulkanmod.vulkan.util.ColorUtil;
 import org.joml.Vector3f;
 
@@ -39,6 +41,8 @@ public class LiquidRenderer {
     BuilderResources resources;
 
     private final int[] quadColors = new int[4];
+    /** The visuals (2026-10-28): the vertex alpha, the light-emitting fluid's mark (lava), water's mark, else 1. */
+    private float markAlpha = 1.0f;
 
     public void setResources(BuilderResources resources) {
         this.resources = resources;
@@ -86,6 +90,8 @@ public class LiquidRenderer {
 
     public void tessellate(BlockState blockState, FluidState fluidState, BlockPos blockPos, TerrainBufferBuilder vertexConsumer) {
         BlockAndTintGetter region = this.resources.region;
+        this.markAlpha = blockState.getLightEmission() > 0 ? FoliageMarker.EMISSIVE_FLUID_ALPHA
+                : fluidState.is(FluidTags.WATER) ? FoliageMarker.WATER_ALPHA : 1.0f;
 
         IClientFluidTypeExtensions extensions = IClientFluidTypeExtensions.of(fluidState);
         int color = extensions.getTintColor(fluidState, region, blockPos);
@@ -482,7 +488,7 @@ public class LiquidRenderer {
             float g1 = g * br;
             float b1 = b * br;
 
-            this.quadColors[i] = ColorUtil.RGBA.pack(r1, g1, b1, 1.0f);
+            this.quadColors[i] = ColorUtil.RGBA.pack(r1, g1, b1, this.markAlpha);
         }
     }
 }

@@ -14,6 +14,8 @@ layout(binding = 1) uniform UBO {
     float FogEnd;
     float AlphaCutout;
     float LightOut;
+    //The visuals (2026-10-28): water's texture opacity scale (WaterMath.surfaceAlpha; 1 with the visuals off)
+    float WaterAlpha;
 };
 
 
@@ -29,6 +31,10 @@ layout(location = 0) out vec4 fragColor;
 void main() {
     vec4 texel = texture(Sampler0, texCoord0);
     vec4 color = texel * vertexColor;
+    //Water (terrain.vsh's WATER_FLAG in the vertex alpha): its texture at WaterAlpha of its opacity
+    if (vertexColor.a > 1.5) {
+        color.a = texel.a * WaterAlpha;
+    }
     if (LightOut > 0.5) {
         writeSceneLight(lightLevels, vec4(texel.rgb * albedoTint, texel.a), vertexDistance <= FogStart);
     }

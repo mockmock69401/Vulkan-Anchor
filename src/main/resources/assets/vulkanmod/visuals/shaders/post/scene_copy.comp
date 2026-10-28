@@ -94,7 +94,8 @@ layout(location = 30) uniform vec4 borderFog;
 // strength on the sky-lit light (the light colour setting x the night)
 layout(location = 31) uniform vec4 blockLightColour;
 layout(location = 32) uniform vec4 moonLightColour;
-layout(location = 33) uniform vec4 reserved33;
+//2026-10-28, clean LightingUniforms: x the block glow, y the ore glow settings
+layout(location = 33) uniform vec4 glowParams;
 layout(location = 34) uniform vec4 reserved34;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
@@ -162,6 +163,28 @@ const float CLOUD_CAMERA_MARGIN = 1.0;
 const float BLOCK_LIGHT_FALLOFF = 1.0;
 const float BLOCK_LIGHT_KNEE = 0.62;
 const float BLOCK_LIGHT_GAIN_MAX = 16.0;
+//2026-10-28 (the user: next to Complementary Reimagined lava, magma and ores glow): a light source's texel is multiplied by up to
+// 1 + LIGHT_GLOW_GAIN x the block glow where its brightest channel (display) passes LIGHT_GLOW_LOW..LIGHT_GLOW_HIGH, so lava, magma's
+// cracks and glowstone reach the tone curve's shoulder (yellower) and the bloom. An ore's specks (its texels that are coloured, chroma
+// ORE_CHROMA_LOW..HIGH, or ORE_CONTRAST_LOW..HIGH times as bright in vanilla's colour as the darkest of the ore's pixels
+// ORE_HOST_STEP around, its host stone: they share the light and the face shade, which the ratio cancels; vanilla's stone,
+// deepslate and netherrack have no chroma above 0.26 and texels at most about 1.9 times as bright as their darkest) add
+// ORE_GLOW_LEVEL of their full-bright colour x the ore glow, whatever light reaches them
+const float LIGHT_GLOW_GAIN = 3.0;
+const float LIGHT_GLOW_LOW = 0.3;
+const float LIGHT_GLOW_HIGH = 0.8;
+//A light-emitting fluid (lava) glows this many times the block glow: one broad bright surface, it stayed orange at the block's gain
+const float FLUID_GLOW_SCALE = 2.0;
+const float ORE_GLOW_LEVEL = 1.5;
+const float ORE_CHROMA_LOW = 0.28;
+const float ORE_CHROMA_HIGH = 0.45;
+const float ORE_CONTRAST_LOW = 2.0;
+const float ORE_CONTRAST_HIGH = 3.0;
+const float ORE_HOST_MIN = 0.02;
+const int ORE_HOST_STEP = 2;
+//Without the albedo an ore's colour is vanilla's over vanilla's lightmap, only where the lightmap (display, brightest channel) is at
+// least this: in the dark vanilla's colour is a few 8-bit steps and tells no speck from its host
+const float ORE_LIGHTMAP_MIN = 0.15;
 //Below this a lightmap difference counts as no light (the sky/block split)
 const float LIGHT_SPLIT_MIN = 0.00001;
 //B18: the light debug views (lightMode.x; 4 is W6's reflective view)
@@ -236,6 +259,38 @@ vec3 blockLightFactor(vec3 blockLit, vec3 blockFloor, vec3 blockOnly, vec3 full,
     float level = clamp(luminance(max(blockOnly - dark, vec3(0.0)))/max(luminance(full - dark), LIGHT_SPLIT_MIN), 0.0, 1.0);
     vec3 target = blockLit - above + mix(above, l*warm, s)*pow(level/BLOCK_LIGHT_KNEE, BLOCK_LIGHT_FALLOFF*s);
     return min(target/max(blockLit, vec3(LIGHT_SPLIT_MIN)), vec3(BLOCK_LIGHT_GAIN_MAX));
+}
+
+//2026-10-28: a light source's gain on its texel colour (display values) at the block glow strength
+float lightGlow(vec3 colour, float strength) {
+    return 1.0 + LIGHT_GLOW_GAIN*max(strength, 0.0)*smoothstep(LIGHT_GLOW_LOW, LIGHT_GLOW_HIGH, max(colour.r, max(colour.g, colour.b)));
+}
+
+//2026-10-28: how much an ore texel (albedo, display values) is a speck, contrast its oreContrast
+float oreSpeck(vec3 albedo, float contrast) {
+    float chroma = max(albedo.r, max(albedo.g, albedo.b)) - min(albedo.r, min(albedo.g, albedo.b));
+    return max(smoothstep(ORE_CHROMA_LOW, ORE_CHROMA_HIGH, chroma), smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast));
+}
+
+//2026-10-28: the light an ore texel adds (scene units) at the ore glow strength
+vec3 oreGlow(vec3 albedo, float contrast, float strength) {
+    return vanillaToScene(albedo)*ORE_GLOW_LEVEL*oreSpeck(albedo, contrast)*max(strength, 0.0);
+}
+
+//2026-10-28: vanilla's colour at p (own) over the darkest of the ore's own pixels ORE_HOST_STEP around it (straight and diagonal)
+float oreContrast(ivec2 p, ivec2 size, vec3 own) {
+    float lum = luminance(own);
+    float host = lum;
+    for (int i = -1; i <= 1; i++) {
+        for (int j = -1; j <= 1; j++) {
+            ivec2 q = clamp(p + ORE_HOST_STEP*ivec2(i, j), ivec2(0), size - 1);
+            vec4 c = texelFetch(mainColour, q, 0);
+            if ((i != 0 || j != 0) && alphaCode(c.a) == ORE_ALPHA_CODE) {
+                host = min(host, luminance(c.rgb));
+            }
+        }
+    }
+    return lum/max(host, ORE_HOST_MIN);
 }
 
 //Final fix R1: the look weight every added exposure is blended toward 1 by (W4's slot 29 .x)
@@ -384,9 +439,10 @@ vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist) {
 //2026-10-21 (CTE2: light dots and dashes on far water): vanilla's water texture has bright streaks, which under the water colour and the
 // reflection stood out where a texel is about a pixel. A vanilla water pixel takes up to WATER_FLATTEN of the mean of its eight
 // neighbours WATER_FLATTEN_RADIUS pixels away that lie on the same surface (view distance within WATER_SAME_SURFACE of its own), fading
-// in from WATER_FLATTEN_NEAR to WATER_FLATTEN_FAR blocks (near water keeps its texture)
-const float WATER_FLATTEN = 0.75;
-const int WATER_FLATTEN_RADIUS = 2;
+// in from WATER_FLATTEN_NEAR to WATER_FLATTEN_FAR blocks (near water keeps its texture). 2026-10-28 (the user: next to Complementary
+// Reimagined the lakes were opaque): 0.75 two pixels out also blurred the floor seen through the water; 0.4 one pixel out
+const float WATER_FLATTEN = 0.4;
+const int WATER_FLATTEN_RADIUS = 1;
 const float WATER_SAME_SURFACE = 0.03;
 const float WATER_FLATTEN_NEAR = 24.0;
 const float WATER_FLATTEN_FAR = 64.0;
@@ -512,6 +568,7 @@ void main() {
     float look = lookWeight();
     bool plant = isPlant(colour.a);
     bool emissive = isEmissive(colour.a);
+    bool ore = alphaCode(colour.a) == ORE_ALPHA_CODE;
     bool cloud = !fromLod && vanillaCloud(world, dir, dist);
     //The pixel's own normal, made as W5's pass makes it (lightingAt's normal); none for plants, light sources and clouds
     vec3 east = vec3(invView[0][0], invView[1][0], invView[2][0]);
@@ -654,6 +711,23 @@ void main() {
         if (water) {
             //W6: the water's colour over its depth, lit by what a white texel here receives (before the haze)
             lit = waterColour(lit, kind*waterParams.x, lightAll*perLight*ao*waterParams.y);
+        }
+    }
+    //2026-10-28: light sources glow; an ore's specks add their own light (its albedo, or vanilla's colour over vanilla's lightmap)
+    if (emissive && !cloud && !fromLod) {
+        lit = scene*lightGlow(colour.rgb, glowParams.x*(alphaCode(colour.a) == EMISSIVE_FLUID_ALPHA_CODE ? FLUID_GLOW_SCALE : 1.0));
+    } else if (ore && !cloud && !fromLod && glowParams.y > 0.0) {
+        vec3 base = colour.rgb;
+        bool readable = true;
+        if (hasAlbedo) {
+            base = albedo;
+        } else if (known) {
+            vec3 lmd = lightmapDisplay(block, sky);
+            readable = max(lmd.r, max(lmd.g, lmd.b)) >= ORE_LIGHTMAP_MIN;
+            base = min(colour.rgb/max(lmd, vec3(ORE_LIGHTMAP_MIN)), vec3(1.0));
+        }
+        if (readable) {
+            lit += oreGlow(base, oreContrast(p, size, colour.rgb), glowParams.y);
         }
     }
     int debug = int(lightMode.x + 0.5);

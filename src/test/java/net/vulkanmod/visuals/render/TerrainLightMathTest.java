@@ -112,10 +112,13 @@ class TerrainLightMathTest {
         for (String f : new String[]{fsh, fshZ}) {
             assertTrue(f.contains("if (LightOut > 0.5) {"));
             //Both read the fragment block as terrain.json lays it out (terrain_z's skipped AlphaCutout keeps LightOut's offset)
-            assertTrue(f.replace("\r\n", "\n").contains("float FogEnd;\n    float AlphaCutout;\n    float LightOut;\n};"));
+            assertTrue(f.replace("\r\n", "\n").contains("float FogEnd;\n    float AlphaCutout;\n    float LightOut;\n"));
+            //2026-10-28: water's opacity scale after LightOut, as terrain.json lays it out
+            assertTrue(f.replace("\r\n", "\n").contains("    float WaterAlpha;\n};"));
             assertTrue(f.replace("\r\n", "\n").contains("#define SCENE_LIGHT_BINDING 4\n#include \"terrain_light.glsl\""));
         }
         assertTrue(json.indexOf("\"AlphaCutout\"") < json.indexOf("\"LightOut\""));
+        assertTrue(json.indexOf("\"LightOut\"") < json.indexOf("\"WaterAlpha\""));
         assertTrue(json.replace("\r\n", "\n").contains("\"storageImages\": [\n        { \"name\": \"TerrainLight\" },\n        { \"name\": \"TerrainAlbedo\" }\n    ]"));
         assertTrue(json.indexOf("\"samplers\"") < json.indexOf("\"storageImages\""));
         assertTrue(vsh.contains("lightLevels = vec2(bitfieldExtract(packedLight, 12, 4), bitfieldExtract(packedLight, 4, 4));"));

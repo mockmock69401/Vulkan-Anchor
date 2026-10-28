@@ -38,6 +38,10 @@ const vec3 POSITION_OFFSET = vec3(4.0);
 // 254 at its base (still), 250 one plant block up, 249 two (a double plant's top); leaves 248. The marks leave this stage as the
 // plant mark (254.25 / 255) and 1, which the post-processing reads
 const int WIND_PLANT_BASE = 254;
+//2026-10-28: FoliageMarker.WATER_ALPHA, water's quads; they leave this stage as WATER_FLAG (above any colour's alpha), which the
+// fragment turns into its texture's alpha times WaterAlpha
+const int WATER_MARK = 247;
+const float WATER_FLAG = 2.0;
 const int WIND_PLANT_ONE = 250;
 const int WIND_PLANT_TWO = 249;
 const int WIND_LEAF = 248;
@@ -110,6 +114,8 @@ void main() {
     vertexColor = Color * sample_lightmap2(Sampler2, Position.a);
     if (mark >= WIND_LEAF && mark <= WIND_PLANT_ONE) {
         vertexColor.a = mark == WIND_LEAF ? 1.0 : WIND_PLANT_ALPHA;
+    } else if (mark == WATER_MARK) {
+        vertexColor.a = WATER_FLAG;
     }
     texCoord0 = UV0 * UV_INV;
     //As sample_lightmap2 reads the packed light: block in bits 4..7, sky in bits 12..15
