@@ -188,6 +188,15 @@ const float ORE_SAT_HIGH = 0.3;
 // coloured (netherrack, its median saturation ORE_HOST_SAT_LOW..HIGH); in grey stone and deepslate a speck is told by its colour
 const float ORE_HOST_SAT_LOW = 0.2;
 const float ORE_HOST_SAT_HIGH = 0.4;
+//2026-10-28 (the user: Create's and other tech mods' ores did not glow; their zinc, tin, silver specks are whitish): in a pale ore
+// (OreKinds.PALE_ORE) a texel ORE_PALE_LOW + ORE_PALE_SPREAD x the host's spread .. + ORE_PALE_WIDTH times as bright as the host
+// median is a speck in any host. The spread (second brightest less second darkest neighbour, over the median) lifts the bar in noisy
+// deepslate, whose own light streaks reach 2x its median. Across 47 pale ores of the nine test packs 58% of stone hosts' and 68% of
+// deepslate hosts' bright specks glow, none and 3.5% of their host texels. (Against the upper median clustered specks, deepslate
+// silver's, glowed only in thin lines: half their neighbours are specks too; ores with dark specks, lead's, are no pale ores)
+const float ORE_PALE_LOW = 1.15;
+const float ORE_PALE_SPREAD = 0.5;
+const float ORE_PALE_WIDTH = 0.3;
 const float ORE_HOST_MIN = 0.02;
 //A pixel whose brightest channel (display) is below this is too dark to tell (a few 8-bit steps): no speck
 const float ORE_VALUE_MIN = 0.03;
@@ -285,9 +294,8 @@ float saturation(vec3 c) {
     return m > 0.0 ? (m - min(c.r, min(c.g, c.b)))/m : 0.0;
 }
 
-//2026-10-28: the lower median of the first n values
-float lowerMedian(float v[8], int n) {
-    int k = (n - 1)/2;
+//2026-10-28: the k-th smallest (from 0) of the first n values
+float rankOf(float v[8], int n, int k) {
     float best = v[0];
     for (int i = 0; i < n; i++) {
         int below = 0;
@@ -303,9 +311,52 @@ float lowerMedian(float v[8], int n) {
     return best;
 }
 
+//2026-10-28: the lower median of the first n values
+float lowerMedian(float v[8], int n) {
+    return rankOf(v, n, (n - 1)/2);
+}
+
+//2026-10-28: whether a main-colour alpha is an ore's mark (either kind)
+bool isOreCode(int code) {
+    return code == ORE_ALPHA_CODE || code == PALE_ORE_ALPHA_CODE;
+}
+
+//2026-10-28: a pale ore pixel's brightness rule (ORE_PALE_*) against the ore's own pixels stride around it (SceneCompositeMath.oreSpeck
+// with pale, its brightness part)
+float palePart(ivec2 p, ivec2 size, vec3 own, int stride) {
+    float lums[8];
+    int n = 0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            if (i == 0 && j == 0) {
+                continue;
+            }
+            vec4 c = texelFetch(mainColour, clamp(p + stride*ivec2(i, j), ivec2(0), size - 1), 0);
+            if (isOreCode(alphaCode(c.a))) {
+                lums[n] = luminance(c.rgb);
+                n++;
+            }
+        }
+    }
+    if (n == 0) {
+        return 0.0;
+    }
+    //the second darkest and second brightest neighbour (none with under three)
+    float lo2 = 1e9, lo1 = 1e9, hi1 = -1e9, hi2 = -1e9;
+    for (int k = 0; k < n; k++) {
+        float v = lums[k];
+        if (v < lo1) { lo2 = lo1; lo1 = v; } else if (v < lo2) { lo2 = v; }
+        if (v > hi1) { hi2 = hi1; hi1 = v; } else if (v > hi2) { hi2 = v; }
+    }
+    float spread = n >= 3 ? max(hi2 - lo2, 0.0)/max(lowerMedian(lums, n), ORE_HOST_MIN) : 0.0;
+    float bar = ORE_PALE_LOW + ORE_PALE_SPREAD*spread;
+    float contrast = luminance(own)/max(lowerMedian(lums, n), ORE_HOST_MIN);
+    return smoothstep(bar, bar + ORE_PALE_WIDTH, contrast);
+}
+
 //2026-10-28: how much an ore pixel with vanilla colour own is a speck, against the ore's own pixels stride around it (straight and
-// diagonal; none: no speck)
-float oreSpeckAt(ivec2 p, ivec2 size, vec3 own, int stride) {
+// diagonal; none: no speck); pale: a pale ore's (its brightness rule in any host, palePart)
+float oreSpeckAt(ivec2 p, ivec2 size, vec3 own, int stride, bool pale) {
     if (max(own.r, max(own.g, own.b)) < ORE_VALUE_MIN) {
         return 0.0;
     }
@@ -318,7 +369,7 @@ float oreSpeckAt(ivec2 p, ivec2 size, vec3 own, int stride) {
                 continue;
             }
             vec4 c = texelFetch(mainColour, clamp(p + stride*ivec2(i, j), ivec2(0), size - 1), 0);
-            if (alphaCode(c.a) == ORE_ALPHA_CODE) {
+            if (isOreCode(alphaCode(c.a))) {
                 lums[n] = luminance(c.rgb);
                 sats[n] = saturation(c.rgb);
                 n++;
@@ -328,11 +379,16 @@ float oreSpeckAt(ivec2 p, ivec2 size, vec3 own, int stride) {
     if (n == 0) {
         return 0.0;
     }
-    float contrast = luminance(own)/max(lowerMedian(lums, n), ORE_HOST_MIN);
+    float median = lowerMedian(lums, n);
+    float contrast = luminance(own)/max(median, ORE_HOST_MIN);
     float hostSat = lowerMedian(sats, n);
     float satDiff = saturation(own) - hostSat;
-    return max(smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast)*smoothstep(ORE_HOST_SAT_LOW, ORE_HOST_SAT_HIGH, hostSat),
+    float speck = max(smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast)*smoothstep(ORE_HOST_SAT_LOW, ORE_HOST_SAT_HIGH, hostSat),
             smoothstep(ORE_SAT_LOW, ORE_SAT_HIGH, satDiff));
+    if (pale) {
+        speck = max(speck, palePart(p, size, own, stride));
+    }
+    return speck;
 }
 
 //2026-10-28: the pixels ORE_HOST_BLOCKS of a block covers at view distance dist (vanilla's projection), 1..ORE_HOST_STEP_MAX
@@ -623,7 +679,8 @@ void main() {
     float look = lookWeight();
     bool plant = isPlant(colour.a);
     bool emissive = isEmissive(colour.a);
-    bool ore = alphaCode(colour.a) == ORE_ALPHA_CODE;
+    bool ore = isOreCode(alphaCode(colour.a));
+    bool paleOre = alphaCode(colour.a) == PALE_ORE_ALPHA_CODE;
     bool cloud = !fromLod && vanillaCloud(world, dir, dist);
     //The pixel's own normal, made as W5's pass makes it (lightingAt's normal); none for plants, light sources and clouds
     vec3 east = vec3(invView[0][0], invView[1][0], invView[2][0]);
@@ -782,7 +839,7 @@ void main() {
             base = min(colour.rgb/max(lmd, vec3(ORE_LIGHTMAP_MIN)), vec3(1.0));
         }
         if (readable) {
-            float speck = oreSpeckAt(p, size, colour.rgb, oreHostStep(size, dist));
+            float speck = oreSpeckAt(p, size, colour.rgb, oreHostStep(size, dist), paleOre);
             lit += oreGlow(base, speck, bakedShade(normalWorld), glowParams.y);
         }
     }
