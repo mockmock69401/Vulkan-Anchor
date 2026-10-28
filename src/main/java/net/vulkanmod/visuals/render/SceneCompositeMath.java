@@ -32,7 +32,7 @@ public final class SceneCompositeMath {
     /** Tuning round 1: the held light loses HELD_FALLOFF levels per level of vanilla's spread. */
     public static final float HELD_FALLOFF = 1.7f;
     /** Tuning round 3: the sky-lit light under an overcast day sky and at night. */
-    public static final float OVERCAST_EXPOSURE = 3.6f, NIGHT_SKY_EXPOSURE = 0.7f;
+    public static final float OVERCAST_EXPOSURE = 3.6f, NIGHT_SKY_EXPOSURE = 0.85f;
     /** Tuning round 3: the far clouds start this far out with the camera inside vanilla's cloud layer (within the margin). */
     public static final float FAR_CLOUD_NEAR = 16.0f, CLOUD_CAMERA_MARGIN = 1.0f;
     /** 2026-10-28: the block-lit light's steeper falloff at full block light colour strength, and the most a channel is lifted. */

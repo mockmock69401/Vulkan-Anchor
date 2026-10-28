@@ -497,7 +497,9 @@ class SceneCompositeTest {
             float[] shade = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), coloured, LIGHTMAP);
             float[] shadePlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), plain, LIGHTMAP);
             assertTrue(sun[0] / sun[2] > sunPlain[0] / sunPlain[2] * 1.01f, "sunlit warmer " + Arrays.toString(sun));
-            assertTrue(shade[2] / shade[0] > shadePlain[2] / shadePlain[0] * 1.02f, "shade cooler " + Arrays.toString(shade));
+            //2026-10-28: a low sun's warmth reaches the shade too (ColourMath.warmthAt); it stays cooler than the sunlit side
+            if (time == NOON) assertTrue(shade[2] / shade[0] > shadePlain[2] / shadePlain[0] * 1.02f, "shade cooler " + Arrays.toString(shade));
+            assertTrue(shade[2] / shade[0] > sun[2] / sun[0] * 1.02f, "shade cooler than the sun " + Arrays.toString(shade));
             //Torch light (no sky light) keeps its own colour
             float[] torch = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 14, 1}), coloured, LIGHTMAP);
             float[] torchPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 14, 1}), plain, LIGHTMAP);

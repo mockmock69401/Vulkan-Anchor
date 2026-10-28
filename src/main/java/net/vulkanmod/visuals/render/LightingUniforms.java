@@ -101,7 +101,7 @@ public final class LightingUniforms {
         return new Values(true, frame.invVanillaProjection(), frame.invLodProjection(), new Matrix4f(frame.invVanillaProjection()).invert(),
                 new float[]{view.x, view.y, view.z}, lodValid, choice.ao() ? s.aoStrength() : 0, sunWeight, new float[]{up.x, up.y, up.z},
                 vanillaCopies, choice.water() ? s.waterDepth() : 0, WaterMath.ambient(day), (float) (frame.cameraY() - Math.floor(frame.cameraY())),
-                lightSun(ColourMath.sunLight(sun.y, s.sunWarmth()), ColourMath.skyShade(s.sunWarmth()), choice.sun() ? s.lightColour() : 0, choice.sun() ? sunDay : 0), LightingMath.sunHeightTerm(sun.y),
+                lightSun(ColourMath.sunLight(sun.y, s.sunWarmth()), ColourMath.skyShade(s.sunWarmth(), sun.y), choice.sun() ? s.lightColour() : 0, choice.sun() ? sunDay : 0), LightingMath.sunHeightTerm(sun.y),
                 SunMath.dayFactor(sun.y, 0), SunMath.dayFactor(sun.y, 0) * Math.max(0, Math.min(1, skyExposure)), new float[]{east.x, east.y, east.z},
                 s.blockLightColour(), choice.sun() && hasSky ? moonStrength(s.lightColour(), sun.y) : 0);
     }
