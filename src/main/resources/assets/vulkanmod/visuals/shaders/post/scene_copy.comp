@@ -156,8 +156,11 @@ const float CLOUD_CAMERA_MARGIN = 1.0;
 //2026-10-28 (the user: next to Complementary Reimagined the night's torch light looked like vanilla's): the block-lit light takes the
 // warm colour at its own luminance (vanilla's lightmap is near white beside a torch) and falls off faster from the source, its
 // luminance times (its block level's luminance / the full level's)^(BLOCK_LIGHT_FALLOFF x strength); per channel it is never lifted
-// more than BLOCK_LIGHT_GAIN_MAX times
+// more than BLOCK_LIGHT_GAIN_MAX times. The falloff is measured from BLOCK_LIGHT_KNEE of the full level's luminance (about level 13 on
+// vanilla's curve), so the light right at the source is lifted, up to (1/BLOCK_LIGHT_KNEE)^BLOCK_LIGHT_FALLOFF at full (the user: the
+// centre looked darker than Complementary Reimagined's; there the torch-lit wall was 0.87x as bright)
 const float BLOCK_LIGHT_FALLOFF = 1.0;
+const float BLOCK_LIGHT_KNEE = 0.62;
 const float BLOCK_LIGHT_GAIN_MAX = 16.0;
 //Below this a lightmap difference counts as no light (the sky/block split)
 const float LIGHT_SPLIT_MIN = 0.00001;
@@ -229,7 +232,7 @@ vec3 blockLightFactor(vec3 blockLit, vec3 blockOnly, vec3 full, vec3 dark, vec3 
         return vec3(1.0);
     }
     float level = clamp(luminance(max(blockOnly - dark, vec3(0.0)))/max(luminance(full - dark), LIGHT_SPLIT_MIN), 0.0, 1.0);
-    vec3 target = mix(blockLit, l*warm, s)*pow(level, BLOCK_LIGHT_FALLOFF*s);
+    vec3 target = mix(blockLit, l*warm, s)*pow(level/BLOCK_LIGHT_KNEE, BLOCK_LIGHT_FALLOFF*s);
     return min(target/max(blockLit, vec3(LIGHT_SPLIT_MIN)), vec3(BLOCK_LIGHT_GAIN_MAX));
 }
 

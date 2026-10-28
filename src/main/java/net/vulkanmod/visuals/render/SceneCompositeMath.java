@@ -36,7 +36,7 @@ public final class SceneCompositeMath {
     /** Tuning round 3: the far clouds start this far out with the camera inside vanilla's cloud layer (within the margin). */
     public static final float FAR_CLOUD_NEAR = 16.0f, CLOUD_CAMERA_MARGIN = 1.0f;
     /** 2026-10-28: the block-lit light's steeper falloff at full block light colour strength, and the most a channel is lifted. */
-    public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
+    public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_KNEE = 0.62f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
     public static final float LIGHT_SPLIT_MIN = 0.00001f;
     public static final int DEBUG_SKY_VIEW = 1, DEBUG_BLOCK_VIEW = 2, DEBUG_SHARE_VIEW = 3;
     /** 2026-10-23: where each pixel's light came from. */
@@ -108,7 +108,8 @@ public final class SceneCompositeMath {
 
     /**
      * 2026-10-28: the factor per channel on the block-lit light (lightAll x its block-lit share): its colour moved toward warm at its
-     * luminance and its falloff steepened by (level luminance / full level's)^(BLOCK_LIGHT_FALLOFF x strength); 1 at strength 0.
+     * luminance and its falloff steepened by (level luminance / full level's / BLOCK_LIGHT_KNEE)^(BLOCK_LIGHT_FALLOFF x strength), which
+     * lifts the light right at the source; 1 at strength 0.
      */
     public static float[] blockLightFactor(float[] blockLit, float[] blockOnly, float[] full, float[] dark, float[] warm, float strength) {
         float s = clamp01(strength);
@@ -116,7 +117,7 @@ public final class SceneCompositeMath {
         if (s <= 0 || l <= LIGHT_SPLIT_MIN) return new float[]{1, 1, 1};
         float level = clamp01(PostMath.luminance(Math.max(blockOnly[0] - dark[0], 0), Math.max(blockOnly[1] - dark[1], 0), Math.max(blockOnly[2] - dark[2], 0))
                 / Math.max(PostMath.luminance(full[0] - dark[0], full[1] - dark[1], full[2] - dark[2]), LIGHT_SPLIT_MIN));
-        float falloff = (float) Math.pow(level, BLOCK_LIGHT_FALLOFF * s);
+        float falloff = (float) Math.pow(level / BLOCK_LIGHT_KNEE, BLOCK_LIGHT_FALLOFF * s);
         float[] out = new float[3];
         for (int i = 0; i < 3; i++) out[i] = Math.min(mix(blockLit[i], l * warm[i], s) * falloff / Math.max(blockLit[i], LIGHT_SPLIT_MIN), BLOCK_LIGHT_GAIN_MAX);
         return out;

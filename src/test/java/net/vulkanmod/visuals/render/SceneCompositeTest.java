@@ -435,10 +435,11 @@ class SceneCompositeTest {
         night[SceneCompositeMath.HELD_ORIGIN][3] = 1;
         float[] on = SceneCompositeMath.composite(surface(stone, NORTH, shaded, -1, dark, 14, false, 3), night, LIGHTMAP);
         assertTrue(on[0] > off[0] * 4, Arrays.toString(on) + " " + Arrays.toString(off));
-        //Never brighter than a white surface under the held light
+        //Never brighter than a white surface under the held light (2026-10-28: times the torch light's centre gain at most)
         float[] white = SceneCompositeMath.composite(surface(new float[]{0.04f, 0.04f, 0.04f, 1}, NORTH, shaded, -1, dark, 14, false, 3), night, LIGHTMAP);
         float[] heldColour = LIGHTMAP.linear(14, 0);
-        for (int i = 0; i < 3; i++) assertTrue(white[i] <= Math.max(heldColour[0], Math.max(heldColour[1], heldColour[2])) * 1.0001f, Arrays.toString(white));
+        float centreGain = (float) Math.pow(1 / SceneCompositeMath.BLOCK_LIGHT_KNEE, SceneCompositeMath.BLOCK_LIGHT_FALLOFF);
+        for (int i = 0; i < 3; i++) assertTrue(white[i] <= Math.max(heldColour[0], Math.max(heldColour[1], heldColour[2])) * centreGain * 1.0001f, Arrays.toString(white));
         //Without the light volume's camera there is no held light either
         night[SceneCompositeMath.LIGHT_CAMERA][3] = 0;
         assertArrayEquals(off, SceneCompositeMath.composite(surface(stone, NORTH, shaded, -1, dark, 14, false, 3), night, LIGHTMAP), 1e-6f);
@@ -560,11 +561,13 @@ class SceneCompositeTest {
         assertEquals(0f, plain[SceneCompositeMath.BLOCK_LIGHT][3]);
         float[] near = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 15, 1}), warm, LIGHTMAP);
         float[] nearPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 15, 1}), plain, LIGHTMAP);
-        //Beside the source (level 15, no falloff) the light takes the warm colour at its own luminance: per channel the factor from the
-        // lightmap's colour (the fixture's is already orange) to warm x its luminance
+        //Beside the source (level 15) the light takes the warm colour at its own luminance: per channel the factor from the lightmap's
+        // colour (the fixture's is already orange) to warm x its luminance, lifted by the knee's centre gain (1/BLOCK_LIGHT_KNEE)^FALLOFF
         float[] lm = LIGHTMAP.linear(15, 0), warmColour = ColourMath.BLOCK_LIGHT;
         float l = PostMath.luminance(lm[0], lm[1], lm[2]);
-        for (int i = 0; i < 3; i++) assertEquals(l * warmColour[i] / lm[i], near[i] / nearPlain[i], 1e-3f, Arrays.toString(near));
+        float centre = (float) Math.pow(1 / SceneCompositeMath.BLOCK_LIGHT_KNEE, SceneCompositeMath.BLOCK_LIGHT_FALLOFF);
+        assertTrue(centre > 1.3f, "brighter right at the source");
+        for (int i = 0; i < 3; i++) assertEquals(l * warmColour[i] / lm[i] * centre, near[i] / nearPlain[i], 1e-3f, Arrays.toString(near));
         assertTrue(near[0] / near[2] > nearPlain[0] / nearPlain[2] * 1.5f, "warmer " + Arrays.toString(near));
         float[] far = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 7, 1}), warm, LIGHTMAP);
         float[] farPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 7, 1}), plain, LIGHTMAP);
