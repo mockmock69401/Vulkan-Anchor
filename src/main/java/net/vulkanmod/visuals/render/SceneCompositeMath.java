@@ -39,7 +39,8 @@ public final class SceneCompositeMath {
     public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_KNEE = 0.62f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
     /** 2026-10-28: scene_copy.comp's glow constants (lightGlow, oreSpeck, oreGlow). */
     public static final float LIGHT_GLOW_GAIN = 3.0f, LIGHT_GLOW_LOW = 0.3f, LIGHT_GLOW_HIGH = 0.8f, FLUID_GLOW_SCALE = 2.0f;
-    public static final float ORE_GLOW_LEVEL = 1.5f, ORE_CONTRAST_LOW = 2.0f, ORE_CONTRAST_HIGH = 3.0f, ORE_SAT_LOW = 0.15f, ORE_SAT_HIGH = 0.3f,
+    public static final float ORE_GLOW_LEVEL = 0.8f, ORE_CONTRAST_LOW = 2.0f, ORE_CONTRAST_HIGH = 3.0f, ORE_SAT_LOW = 0.15f, ORE_SAT_HIGH = 0.3f,
+            ORE_HOST_SAT_LOW = 0.2f, ORE_HOST_SAT_HIGH = 0.4f,
             ORE_HOST_MIN = 0.02f, ORE_VALUE_MIN = 0.03f, ORE_SHADE_MIN = 0.2f;
     /** The shader's oreHostStep: the ore's pixels this share of a block around are read, at most ORE_HOST_STEP_MAX pixels (shader only). */
     public static final float ORE_HOST_BLOCKS = 0.3f, ORE_HOST_STEP_MAX = 16.0f;
@@ -168,8 +169,10 @@ public final class SceneCompositeMath {
             sats[i] = saturation(neighbours[i]);
         }
         float contrast = PostMath.luminance(own[0], own[1], own[2]) / Math.max(lowerMedian(lums), ORE_HOST_MIN);
-        float satDiff = saturation(own) - lowerMedian(sats);
-        return Math.max(AtmosphereMath.smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast), AtmosphereMath.smoothstep(ORE_SAT_LOW, ORE_SAT_HIGH, satDiff));
+        float hostSat = lowerMedian(sats), satDiff = saturation(own) - hostSat;
+        //the brightness rule only in a coloured host (netherrack): in grey stone a speck is told by its colour (iron's grey rims stay)
+        return Math.max(AtmosphereMath.smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast) * AtmosphereMath.smoothstep(ORE_HOST_SAT_LOW, ORE_HOST_SAT_HIGH, hostSat),
+                AtmosphereMath.smoothstep(ORE_SAT_LOW, ORE_SAT_HIGH, satDiff));
     }
 
     /**
