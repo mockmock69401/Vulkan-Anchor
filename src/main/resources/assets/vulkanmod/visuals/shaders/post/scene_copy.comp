@@ -177,11 +177,15 @@ const float LIGHT_GLOW_LOW = 0.3;
 const float LIGHT_GLOW_HIGH = 0.8;
 //A light-emitting fluid (lava) glows this many times the block glow: one broad bright surface, it stayed orange at the block's gain
 const float FLUID_GLOW_SCALE = 2.0;
-const float ORE_GLOW_LEVEL = 1.5;
+const float ORE_GLOW_LEVEL = 0.8;
 const float ORE_CONTRAST_LOW = 2.0;
 const float ORE_CONTRAST_HIGH = 3.0;
 const float ORE_SAT_LOW = 0.15;
 const float ORE_SAT_HIGH = 0.3;
+//2026-10-28 (in game, close: iron's grey rims and redstone's pink highlights went white): the brightness rule only where the host is
+// coloured (netherrack, its median saturation ORE_HOST_SAT_LOW..HIGH); in grey stone and deepslate a speck is told by its colour
+const float ORE_HOST_SAT_LOW = 0.2;
+const float ORE_HOST_SAT_HIGH = 0.4;
 const float ORE_HOST_MIN = 0.02;
 //A pixel whose brightest channel (display) is below this is too dark to tell (a few 8-bit steps): no speck
 const float ORE_VALUE_MIN = 0.03;
@@ -323,8 +327,10 @@ float oreSpeckAt(ivec2 p, ivec2 size, vec3 own, int stride) {
         return 0.0;
     }
     float contrast = luminance(own)/max(lowerMedian(lums, n), ORE_HOST_MIN);
-    float satDiff = saturation(own) - lowerMedian(sats, n);
-    return max(smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast), smoothstep(ORE_SAT_LOW, ORE_SAT_HIGH, satDiff));
+    float hostSat = lowerMedian(sats, n);
+    float satDiff = saturation(own) - hostSat;
+    return max(smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast)*smoothstep(ORE_HOST_SAT_LOW, ORE_HOST_SAT_HIGH, hostSat),
+            smoothstep(ORE_SAT_LOW, ORE_SAT_HIGH, satDiff));
 }
 
 //2026-10-28: the pixels ORE_HOST_BLOCKS of a block covers at view distance dist (vanilla's projection), 1..ORE_HOST_STEP_MAX

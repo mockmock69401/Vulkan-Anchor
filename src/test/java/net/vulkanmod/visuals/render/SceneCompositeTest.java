@@ -683,6 +683,11 @@ class SceneCompositeTest {
         assertEquals(1f, SceneCompositeMath.oreSpeck(redstone, around.apply(stone, null)), 1e-6f, "redstone");
         assertEquals(1f, SceneCompositeMath.oreSpeck(copper, around.apply(stone, null)), 1e-6f, "copper");
         assertTrue(SceneCompositeMath.oreSpeck(iron, around.apply(stone, null)) > 0.9f, "iron");
+        //2026-10-28 (close up, iron's grey rims and redstone's pale highlights went white): a pale texel in grey stone or deepslate is
+        // no speck, however bright; in netherrack it is (quartz)
+        float[] rim = {0.75f, 0.73f, 0.7f}, deepslate = {0.3f, 0.3f, 0.31f};
+        assertEquals(0f, SceneCompositeMath.oreSpeck(rim, around.apply(stone, null)), 1e-6f, "iron's rim in stone");
+        assertEquals(0f, SceneCompositeMath.oreSpeck(rim, around.apply(deepslate, null)), 1e-6f, "iron's rim in deepslate");
         //A speck is one on any face: the face shade scales the pixel and its neighbours alike (copper glowed on three faces only)
         for (float shade : new float[]{0.8f, 0.6f, 0.5f}) {
             float[] c = {copper[0] * shade, copper[1] * shade, copper[2] * shade}, s = {stone[0] * shade, stone[1] * shade, stone[2] * shade};
