@@ -24,9 +24,18 @@ public final class ColourMath {
      * to about 4000 K (screen check: 68 mireds, 4500 K, moved the backlit morning view's red/green from 0.66 to only 0.72). The shade
      * colour takes SHADE_WARMTH_SHARE of the shift (the morning's shade sides were the bluest part of the view) and stays cooler than white.
      */
-    public static final float SUN_WARMTH_MIRED = 96f, SHADE_WARMTH_SHARE = 0.2f;
-    /** 2026-10-28: torch light's colour (slot 31), a flame-like 3000 K, and the moonlight's on the sky-lit light at night (slot 32). */
-    public static final float BLOCK_LIGHT_KELVIN = 3000f, MOON_LIGHT_KELVIN = 10000f;
+    public static final float SUN_WARMTH_MIRED = 96f, SHADE_WARMTH_SHARE = 0.4f;
+    /**
+     * 2026-10-28 (side by side with Complementary Reimagined: its low morning sun gave the whole view, shade sides too, a golden cast,
+     * red/green 0.98 against our 0.87, while at noon ours was the warmer one, 0.78 against 0.74): the warmth is scaled by the sun's
+     * height, SUN_WARMTH_LOW times at the horizon to SUN_WARMTH_NOON times overhead, linear in the height.
+     */
+    public static final float SUN_WARMTH_LOW = 2.5f, SUN_WARMTH_NOON = 0.5f;
+    /**
+     * 2026-10-28: torch light's colour (slot 31), a flame-like 3000 K, and the moonlight's on the sky-lit light at night (slot 32; 10000 K
+     * made the moonlit terrain bluer than Complementary Reimagined's, blue/green 1.37 against 1.25).
+     */
+    public static final float BLOCK_LIGHT_KELVIN = 3000f, MOON_LIGHT_KELVIN = 8000f;
     public static final float[] BLOCK_LIGHT = temperatureTint(BLOCK_LIGHT_KELVIN);
     public static final float[] MOON_LIGHT = temperatureTint(MOON_LIGHT_KELVIN);
 
@@ -48,13 +57,13 @@ public final class ColourMath {
     }
 
     /**
-     * 2026-10-28: sunLight(sunHeight) warmed by the sun warmth setting (1 = 100%): times temperatureTint at warmth x SUN_WARMTH_MIRED
-     * below WHITE_KELVIN, luminance 1. Warmth 0 (or less) is sunLight(sunHeight) itself.
+     * 2026-10-28: sunLight(sunHeight) warmed by the sun warmth setting (1 = 100%) at that height (warmthAt): times temperatureTint at
+     * that x SUN_WARMTH_MIRED below WHITE_KELVIN, luminance 1. Warmth 0 (or less) is sunLight(sunHeight) itself.
      */
     public static float[] sunLight(float sunHeight, float warmth) {
         float[] c = sunLight(sunHeight);
         if (!(warmth > 0)) return c;
-        float[] t = temperatureTint(warmKelvin(warmth));
+        float[] t = temperatureTint(warmKelvin(warmthAt(warmth, sunHeight)));
         return normalised(new float[]{c[0] * t[0], c[1] * t[1], c[2] * t[2]});
     }
 
@@ -63,6 +72,17 @@ public final class ColourMath {
         if (!(warmth > 0)) return SKY_SHADE.clone();
         float[] t = temperatureTint(warmKelvin(warmth * SHADE_WARMTH_SHARE));
         return normalised(new float[]{SKY_SHADE[0] * t[0], SKY_SHADE[1] * t[1], SKY_SHADE[2] * t[2]});
+    }
+
+    /** 2026-10-28: skyShade at the sun warmth (1 = 100%) the sun's height gives it (warmthAt). */
+    public static float[] skyShade(float warmth, float sunHeight) {
+        return skyShade(warmthAt(warmth, sunHeight));
+    }
+
+    /** 2026-10-28: the sun warmth (1 = 100%) at a sun height: SUN_WARMTH_LOW times at or below the horizon to SUN_WARMTH_NOON overhead. */
+    public static float warmthAt(float warmth, float sunHeight) {
+        float h = Float.isNaN(sunHeight) ? 0 : Math.max(0, Math.min(1, sunHeight));
+        return warmth * (SUN_WARMTH_LOW + (SUN_WARMTH_NOON - SUN_WARMTH_LOW) * h);
     }
 
     /** The colour temperature the sun warmth (1 = 100%) gives: warmth x SUN_WARMTH_MIRED mireds below WHITE_KELVIN. */
