@@ -26,9 +26,9 @@ public final class FoliageMarker {
      */
     public static final float EMISSIVE_ALPHA = 253.25f / 255f;
     /**
-     * 2026-10-28 (the user: Complementary Reimagined's ores glow): 252 for every quad of an ore block (the ores tag), lit as any block;
-     * the composite adds the glow of its specks (the texels that stand out from the host stone). After the emissive mark, before the
-     * plant mark.
+     * 2026-10-28 (the user: Complementary Reimagined's ores glow): 252 for every quad of an ore block, lit as any block; the composite
+     * adds the glow of its specks (the texels that stand out from the host stone). After the emissive mark, before the plant mark.
+     * 2026-10-29 (the user: the ores' glow looked odd however tuned): nether quartz ore only (BlockRenderer.renderBatched).
      */
     public static final float ORE_ALPHA = 252.25f / 255f;
     /**

@@ -138,7 +138,7 @@ public class VisualsConfig {
     public int blockLightColour = 70;
     /** 2026-10-28: how much light sources' bright texels glow (lava, magma, glowstone...; slot 33 .x); 0 is vanilla's brightness. */
     public int blockGlow = 100;
-    /** 2026-10-28: how much ores' specks glow (slot 33 .y); 0 leaves ores as any block. */
+    /** 2026-10-28: how much ores' specks glow (slot 33 .y); 2026-10-29 nether quartz ore only. 0 leaves it as any block. */
     public int oreGlow = 100;
     public boolean heldLight = true;
     /** 0 off, 1..4 increasing quality: 2 is affordable on a mid-range GPU. */
