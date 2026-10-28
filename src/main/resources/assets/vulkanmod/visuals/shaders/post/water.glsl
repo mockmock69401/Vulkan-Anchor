@@ -35,10 +35,12 @@
 // ---- water colour (Beer-Lambert: transmittance exp(-sigma L) per channel, and the in-scattered body colour for the rest) ----
 
 //Extinction per block of water, red absorbed most (pure water absorbs red far more than blue; Minecraft's lakes are clearer than
-// the ocean floor would allow at these numbers, so they are a game look, not measured)
-const float WATER_EXTINCTION_RED = 0.30;
-const float WATER_EXTINCTION_GREEN = 0.10;
-const float WATER_EXTINCTION_BLUE = 0.065;
+// the ocean floor would allow at these numbers, so they are a game look, not measured). 2026-10-28 (the user: next to Complementary
+// Reimagined the lakes were opaque): a third of 0.30 / 0.10 / 0.065, so a floor 3 blocks down seen 25 degrees below the horizon
+// (about 7 blocks of water) keeps half its red and three quarters of its green and blue; vanilla's water is already tinted
+const float WATER_EXTINCTION_RED = 0.10;
+const float WATER_EXTINCTION_GREEN = 0.035;
+const float WATER_EXTINCTION_BLUE = 0.025;
 //The colour deep water tends to under a white light of 1 (scene units per unit light). 2026-10-21 (CTE2: deep sea seen from above was
 // too dark, a navy of about sRGB 38 71 94 by day): raised to about sRGB 48 89 130, an ocean blue
 const float WATER_BODY_RED = 0.03;

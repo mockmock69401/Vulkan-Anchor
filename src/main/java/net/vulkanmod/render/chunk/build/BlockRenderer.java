@@ -19,6 +19,7 @@ import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.client.model.data.ModelData;
+import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.common.util.TriState;
 import net.vulkanmod.render.chunk.build.light.LightPipeline;
 import net.vulkanmod.render.chunk.build.light.data.QuadLightData;
@@ -74,6 +75,8 @@ public class BlockRenderer {
                             BakedModel model, ModelData modelData, RenderType renderType) {
         //The visuals (glow pass): whether this block emits light, for its quads' mark
         FoliageMarker.setEmissive(blockState.getLightEmission() > 0);
+        //The visuals (2026-10-28): whether it is an ore, whose specks glow
+        FoliageMarker.setOre(blockState.is(Tags.Blocks.ORES));
         //The visuals (wind): whether its vertices sway, and how
         FoliageMarker.setSway(FoliageMarker.swayKind(blockState));
         this.pos = pos;

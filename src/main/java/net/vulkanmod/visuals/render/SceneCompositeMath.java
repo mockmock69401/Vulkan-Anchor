@@ -37,6 +37,13 @@ public final class SceneCompositeMath {
     public static final float FAR_CLOUD_NEAR = 16.0f, CLOUD_CAMERA_MARGIN = 1.0f;
     /** 2026-10-28: the block-lit light's steeper falloff at full block light colour strength, and the most a channel is lifted. */
     public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_KNEE = 0.62f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
+    /** 2026-10-28: scene_copy.comp's glow constants (lightGlow, oreSpeck, oreGlow). */
+    public static final float LIGHT_GLOW_GAIN = 3.0f, LIGHT_GLOW_LOW = 0.3f, LIGHT_GLOW_HIGH = 0.8f, FLUID_GLOW_SCALE = 2.0f;
+    public static final float ORE_GLOW_LEVEL = 1.5f, ORE_CHROMA_LOW = 0.28f, ORE_CHROMA_HIGH = 0.45f, ORE_CONTRAST_LOW = 2.0f, ORE_CONTRAST_HIGH = 3.0f,
+            ORE_HOST_MIN = 0.02f;
+    /** The shader's oreHost reads the ore's pixels this far around (shader only). */
+    public static final int ORE_HOST_STEP = 2;
+    public static final float ORE_LIGHTMAP_MIN = 0.15f;
     public static final float LIGHT_SPLIT_MIN = 0.00001f;
     public static final int DEBUG_SKY_VIEW = 1, DEBUG_BLOCK_VIEW = 2, DEBUG_SHARE_VIEW = 3;
     /** 2026-10-23: where each pixel's light came from. */
@@ -49,10 +56,10 @@ public final class SceneCompositeMath {
     public static final int SLOTS = 35;
     public static final int LIGHTING = 10, WATER = 11, CLOUD_SHAPE = 12, CLOUD_LIT = 14, CLOUD_AMBIENT = 15, CLOUD_LIGHT_DIR = 16, LIGHT_CAMERA = 18,
             LIGHT_FRAC = 19, LIGHT_MODE = 21, LIGHT_SUN = 22, LIGHT_SHADE = 23, HELD_ORIGIN = 24, VANILLA_SKY = 26, VANILLA_FOG = 27, STAR_GATE = 28,
-            LOOK = 29, BORDER_FOG = 30, BLOCK_LIGHT = 31, MOON_LIGHT = 32;
+            LOOK = 29, BORDER_FOG = 30, BLOCK_LIGHT = 31, MOON_LIGHT = 32, GLOW = 33;
     /** 2026-10-21: scene_copy.comp's flattenWaterTexture (far water's texture streaks; a neighbourhood filter, shader only). */
-    public static final float WATER_FLATTEN = 0.75f, WATER_SAME_SURFACE = 0.03f, WATER_FLATTEN_NEAR = 24.0f, WATER_FLATTEN_FAR = 64.0f;
-    public static final int WATER_FLATTEN_RADIUS = 2;
+    public static final float WATER_FLATTEN = 0.4f, WATER_SAME_SURFACE = 0.03f, WATER_FLATTEN_NEAR = 24.0f, WATER_FLATTEN_FAR = 64.0f;
+    public static final int WATER_FLATTEN_RADIUS = 1;
 
     private SceneCompositeMath() {
     }
@@ -127,6 +134,29 @@ public final class SceneCompositeMath {
             out[i] = Math.min(target / Math.max(blockLit[i], LIGHT_SPLIT_MIN), BLOCK_LIGHT_GAIN_MAX);
         }
         return out;
+    }
+
+    /** 2026-10-28: a light source's gain on its texel colour (display values) at the block glow strength (slot 33 .x). */
+    public static float lightGlow(float[] colour, float strength) {
+        float m = Math.max(colour[0], Math.max(colour[1], colour[2]));
+        return 1 + LIGHT_GLOW_GAIN * Math.max(strength, 0) * AtmosphereMath.smoothstep(LIGHT_GLOW_LOW, LIGHT_GLOW_HIGH, m);
+    }
+
+    /**
+     * 2026-10-28: how much an ore texel (albedo, display values) is a speck: coloured, or contrast (its vanilla colour's luminance over
+     * the darkest of the ore's pixels around it, the shader's oreContrast: they share the light and the face shade, which the ratio
+     * cancels) ORE_CONTRAST_LOW..HIGH.
+     */
+    public static float oreSpeck(float[] albedo, float contrast) {
+        float mx = Math.max(albedo[0], Math.max(albedo[1], albedo[2])), mn = Math.min(albedo[0], Math.min(albedo[1], albedo[2]));
+        return Math.max(AtmosphereMath.smoothstep(ORE_CHROMA_LOW, ORE_CHROMA_HIGH, mx - mn),
+                AtmosphereMath.smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast));
+    }
+
+    /** 2026-10-28: the light an ore texel adds (scene units) at the ore glow strength (slot 33 .y), whatever light reaches it. */
+    public static float[] oreGlow(float[] albedo, float contrast, float strength) {
+        float k = ORE_GLOW_LEVEL * oreSpeck(albedo, contrast) * Math.max(strength, 0);
+        return new float[]{PostMath.displayToLinear(albedo[0]) * k, PostMath.displayToLinear(albedo[1]) * k, PostMath.displayToLinear(albedo[2]) * k};
     }
 
     /** Final fix R1: an exposure as the composite applies it, mix(1, e, look) (look: slot 29 .x, the sun-shading setting). */
@@ -258,7 +288,7 @@ public final class SceneCompositeMath {
         boolean passRan = lighting[2] > 0.5f;
         float weight = clamp01(look[0]);
         int code = LightingMath.alphaCode(px.colour[3]);
-        boolean plant = code == LightingMath.PLANT_ALPHA_CODE, emissive = code == LightingMath.EMISSIVE_ALPHA_CODE;
+        boolean plant = code == LightingMath.PLANT_ALPHA_CODE, emissive = LightingMath.isEmissiveCode(code), ore = code == LightingMath.ORE_ALPHA_CODE;
         boolean cloud = !px.fromLod && px.cloud;
         float[] lt = passRan ? px.lt : new float[]{1, 1, 0, 1};
         float plantSun = passRan && plant ? px.plantSun : -1;
@@ -360,6 +390,23 @@ public final class SceneCompositeMath {
                 for (int i = 0; i < 3; i++) lit[i] = Math.max(lit[i], lightAll[i] * perLight[i] * RelightMath.WATER_ALBEDO);
             }
             if (isWater) lit = WaterMath.waterColour(lit, kind * water[0], scale(mul(mul(lightAll, perLight), ao), water[1]));
+        }
+        //2026-10-28: light sources glow; an ore's specks add their own light (its albedo, or vanilla's colour over vanilla's lightmap)
+        float[] glow = slots[GLOW];
+        if (emissive && !cloud && !px.fromLod) {
+            lit = scale(scene, lightGlow(px.colour, glow[0] * (code == LightingMath.EMISSIVE_FLUID_ALPHA_CODE ? FLUID_GLOW_SCALE : 1)));
+        } else if (ore && !cloud && !px.fromLod && glow[1] > 0) {
+            float[] base = new float[]{px.colour[0], px.colour[1], px.colour[2]};
+            boolean readable = true;
+            if (hasAlbedo) {
+                base = px.albedo;
+            } else if (known) {
+                float[] lmd = lightmapDisplay(lm, block, sky);
+                readable = Math.max(lmd[0], Math.max(lmd[1], lmd[2])) >= ORE_LIGHTMAP_MIN;
+                for (int i = 0; i < 3; i++) base[i] = Math.min(px.colour[i] / Math.max(lmd[i], ORE_LIGHTMAP_MIN), 1);
+            }
+            //One pixel has no neighbours here: contrast 1 (the colour rule alone; the shader's oreContrast looks around)
+            if (readable) lit = add(lit, oreGlow(base, 1, glow[1]));
         }
         int debug = (int) Math.floor(lightMode[0] + 0.5f);
         if (debug >= DEBUG_SKY_VIEW && debug <= DEBUG_SHARE_VIEW) return rgba(debugView(debug, known, skyT, blockT, share, sunPart), 0);

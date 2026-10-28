@@ -32,6 +32,15 @@ public final class LightingMath {
     public static final float UPSAMPLE_DEPTH_SHARE = 0.03f, UPSAMPLE_DEPTH_MIN = 0.1f, UPSAMPLE_NORMAL_POWER = 8.0f;
     /** FoliageMarker's marks in the 8-bit main colour, round(alpha x 255). */
     public static final int PLANT_ALPHA_CODE = 254, EMISSIVE_ALPHA_CODE = 253;
+    /** 2026-10-28: FoliageMarker.ORE_ALPHA, an ore block's quads (their bright specks glow in the composite). */
+    public static final int ORE_ALPHA_CODE = 252;
+    /** 2026-10-28: FoliageMarker.EMISSIVE_FLUID_ALPHA, a light-emitting fluid's quads (a light source with a stronger glow). */
+    public static final int EMISSIVE_FLUID_ALPHA_CODE = 251;
+
+    /** Whether a mark is a light source's (a block's or a fluid's). */
+    public static boolean isEmissiveCode(int code) {
+        return code == EMISSIVE_ALPHA_CODE || code == EMISSIVE_FLUID_ALPHA_CODE;
+    }
 
     // ---- lighting.comp ----
     public static final float FACING_WRAP = 0.0f;

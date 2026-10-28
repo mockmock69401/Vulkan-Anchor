@@ -75,6 +75,10 @@ const float UPSAMPLE_NORMAL_POWER = 8.0;
 //FoliageMarker's alpha marks in the 8-bit main colour: plant quads and light sources (round(alpha*255))
 const int PLANT_ALPHA_CODE = 254;
 const int EMISSIVE_ALPHA_CODE = 253;
+//2026-10-28: FoliageMarker.ORE_ALPHA (an ore's quads; lit as any block, the composite adds its specks' glow)
+const int ORE_ALPHA_CODE = 252;
+//2026-10-28: FoliageMarker.EMISSIVE_FLUID_ALPHA (a light-emitting fluid: a light source with a stronger glow)
+const int EMISSIVE_FLUID_ALPHA_CODE = 251;
 
 //boundary 3.9: the weight of the texel at offset (i, j) whose view distance is sampleDist, for a centre at centreDist. A tent in space
 // ((BLUR_RADIUS+1)^2 at the centre) times a falloff in the distance difference relative to the centre's distance.
@@ -93,7 +97,8 @@ bool isPlant(float alpha) {
 }
 
 bool isEmissive(float alpha) {
-    return alphaCode(alpha) == EMISSIVE_ALPHA_CODE;
+    int code = alphaCode(alpha);
+    return code == EMISSIVE_ALPHA_CODE || code == EMISSIVE_FLUID_ALPHA_CODE;
 }
 
 //Direct sun only where the sky reaches

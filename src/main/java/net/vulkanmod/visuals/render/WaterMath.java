@@ -11,9 +11,20 @@ public final class WaterMath {
     // ---- Java only ----
     /** ambient(day) at night and in full rain: the water body's in-scatter is half its daylight share of the surface's light. */
     public static final float WATER_NIGHT_AMBIENT = 0.5f;
+    /**
+     * 2026-10-28 (the user: next to Complementary Reimagined the lakes were opaque): the terrain's WaterAlpha (Uniforms; terrain.fsh
+     * scales water's texture opacity by it) is this at the water depth setting's 100% with the visuals on (vanilla's 0.71 -> 0.43).
+     */
+    public static final float WATER_SURFACE_ALPHA = 0.6f;
+
+    /** The terrain's WaterAlpha: 1 with the visuals off, else from 1 at water depth 0 to WATER_SURFACE_ALPHA at 100% and beyond. */
+    public static float surfaceAlpha(boolean on, float waterDepth) {
+        if (!on || !(waterDepth > 0)) return 1;
+        return 1 - (1 - WATER_SURFACE_ALPHA) * Math.min(waterDepth, 1);
+    }
 
     // ---- water.glsl ----
-    public static final float WATER_EXTINCTION_RED = 0.30f, WATER_EXTINCTION_GREEN = 0.10f, WATER_EXTINCTION_BLUE = 0.065f;
+    public static final float WATER_EXTINCTION_RED = 0.10f, WATER_EXTINCTION_GREEN = 0.035f, WATER_EXTINCTION_BLUE = 0.025f;
     public static final float WATER_BODY_RED = 0.03f, WATER_BODY_GREEN = 0.10f, WATER_BODY_BLUE = 0.22f;
     public static final float WATER_LONGEST = 1024.0f;
     public static final float WATER_F0 = 0.02f, FRESNEL_POWER = 5.0f;

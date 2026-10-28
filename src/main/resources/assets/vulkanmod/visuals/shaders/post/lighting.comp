@@ -372,7 +372,7 @@ void main() {
                 //B13: lit as if facing the sun, its own visibility
                 used = sunView.xyz;
                 v = sunVisibility(view, used, sf, wide);
-            } else if (centreMark != EMISSIVE_ALPHA_CODE) {
+            } else if (centreMark != EMISSIVE_ALPHA_CODE && centreMark != EMISSIVE_FLUID_ALPHA_CODE) {
                 float cf = kind != 0.0 ? 0.0 : contrastFade(bpp);
                 float nl = grazingNDotL(dot(n, sunView.xyz));
                 if (kind == 0.0) {

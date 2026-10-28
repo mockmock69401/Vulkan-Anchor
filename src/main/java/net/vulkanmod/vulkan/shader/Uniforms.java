@@ -57,6 +57,9 @@ public class Uniforms {
         vec4f_uniformMap.put("WindPhase", FoliageWind::phase);
         vec4f_uniformMap.put("WindParams", FoliageWind::params);
         vec1f_uniformMap.put("LightOut", net.vulkanmod.visuals.render.TerrainLightTarget::lightOut);
+        //The visuals (2026-10-28): water's opacity in the terrain (WaterMath.surfaceAlpha)
+        vec1f_uniformMap.put("WaterAlpha", () -> net.vulkanmod.visuals.render.WaterMath.surfaceAlpha(
+                net.vulkanmod.visuals.config.VisualsConfig.get().enabled, net.vulkanmod.visuals.config.VisualsConfig.get().waterDepth / 100f));
         if (ExternalRenderPathSupport.isExternalLodBridgeEnabled()) {
             vec4f_uniformMap.put("ExternalLodModelOffsetAndYOffset", ExternalTerrainRenderBridge::getModelOffsetAndYOffset);
             vec4f_uniformMap.put("ExternalLodRenderParams", ExternalTerrainRenderBridge::getRenderParams);
