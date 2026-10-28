@@ -42,8 +42,8 @@ public final class AtmosphereUniforms {
     public static final int BORDER = 30;
     /** The border fog starts at this share of the render distance and is full at its end. */
     public static final float BORDER_START_SHARE = 0.75f, BORDER_END_SHARE = 1.0f;
-    /** Reserved composite slots, written as 0. */
-    public static final int RESERVED_FIRST = 31, RESERVED_LAST = 34;
+    /** Reserved composite slots, written as 0 (2026-10-28: 31 and 32 are LightingUniforms' block and moon light now). */
+    public static final int RESERVED_FIRST = 33, RESERVED_LAST = 34;
     public static final int BLOCK_FLOATS = AtmosphereMath.Atmosphere.VEC4S * 4;
 
     // ---- the air (Java only; each is one tuning knob) ----

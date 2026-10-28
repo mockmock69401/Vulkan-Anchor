@@ -166,7 +166,7 @@ class LightingUniformsTest {
     @Test
     void theLightColourFollowsTheSunAndTheChoice() {
         float[] noon = LightingUniforms.compute(FULL, BOTH, frame(SERIAL, NOON, lookingUp()), SERIAL, true, 1, true).lightSun();
-        assertArrayEquals(ColourMath.sunLight(1), new float[]{noon[0], noon[1], noon[2]}, 1e-5f);
+        assertArrayEquals(ColourMath.sunLight(1, 1), new float[]{noon[0], noon[1], noon[2]}, 1e-5f, "warmed by the default Sun Warmth (2026-10-28)");
         assertEquals(0.7f, noon[3], 1e-6f, "the default Light Colour is 70% (final fix R3)");
         assertEquals(1f, noon[4], 1e-6f, "the colour's sun weight is day x exposure, not the 50% Sun Shading");
         float[] dim = LightingUniforms.compute(FULL, BOTH, frame(SERIAL, NOON, lookingUp()), SERIAL, true, 0.5f, true).lightSun();
@@ -175,6 +175,17 @@ class LightingUniformsTest {
         assertEquals(0f, aoOnly.lightSun()[3], "sun shading off: everything would read as shade");
         assertEquals(0f, aoOnly.lightSun()[4]);
         assertEquals(0f, LightingUniforms.off().lightSun()[3]);
+        //2026-10-28: the moonlight's strength is the light colour as far as it is night; torch light needs no pass
+        LightingUniforms.Values midnight = LightingUniforms.compute(FULL, BOTH, frame(SERIAL, MIDNIGHT, lookingUp()), SERIAL, true, 1, true, true);
+        assertEquals(0.7f, midnight.moonLight(), 1e-5f);
+        assertEquals(0f, noonValues().moonLight(), 1e-5f);
+        assertEquals(0f, LightingUniforms.compute(FULL, BOTH, frame(SERIAL, MIDNIGHT, lookingUp()), SERIAL, true, 1, true, false).moonLight(), "no sky: no moon");
+        assertEquals(0.7f, aoOnly.blockLightColour(), 1e-6f);
+        assertEquals(0f, LightingUniforms.off().blockLightColour());
+    }
+
+    private static LightingUniforms.Values noonValues() {
+        return LightingUniforms.compute(FULL, BOTH, frame(SERIAL, NOON, lookingUp()), SERIAL, true, 1, true, true);
     }
 
     @Test

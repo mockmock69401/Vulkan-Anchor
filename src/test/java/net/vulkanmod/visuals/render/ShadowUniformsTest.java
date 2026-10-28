@@ -26,7 +26,7 @@ class ShadowUniformsTest {
 
     private static LightingUniforms.Values lighting(boolean on, float sunWeight) {
         return new LightingUniforms.Values(on, new Matrix4f(), new Matrix4f(), new Matrix4f(), new float[]{0, 1, 0}, true, 1, sunWeight,
-                new float[]{0, 1, 0}, true, 1, 1, 0, new float[]{1, 1, 1, 0, 0}, 0, 1, 0, new float[]{1, 0, 0});
+                new float[]{0, 1, 0}, true, 1, 1, 0, new float[]{1, 1, 1, 0, 0, 1, 1, 1}, 0, 1, 0, new float[]{1, 0, 0}, 0, 0);
     }
 
     @Test

@@ -350,7 +350,7 @@ class SceneCompositeTest {
         AtmosphereFrame f = frame(NOON, 0, false, NETHER_FOG, new Matrix4f());
         float[] fog = {PostMath.displayToLinear(NETHER_FOG[0]), PostMath.displayToLinear(NETHER_FOG[1]), PostMath.displayToLinear(NETHER_FOG[2])};
         for (boolean volume : new boolean[]{false, true}) {
-            float[][] s = scene(DEFAULT, f, false, volume, 0);
+            float[][] s = scene(settings(c -> c.blockLightColour = 0), f, false, volume, 0);
             AtmosphereMath.Atmosphere a = SceneCompositeMath.atmosphere(s);
             assertEquals(AtmosphereMath.ATMOSPHERE_NO_SKY, a.mode());
             float[] sun = {a.sun()[0], a.sun()[1], a.sun()[2]};
@@ -522,6 +522,81 @@ class SceneCompositeTest {
         assertTrue(COMP.contains("lightTint(directShare, lightSun.w*lightShade.w, lightSun.rgb, lightShade.rgb)"));
     }
 
+    // ---- 6b. 2026-10-28: sun warmth, torch light colour (slot 31) and moonlight colour (slot 32) ----
+
+    @Test
+    void sunWarmthLowersTheSunlightsColourTemperatureAtLuminanceOne() {
+        for (float h : new float[]{0.05f, 0.3f, 1}) {
+            float[] plain = ColourMath.sunLight(h), warm = ColourMath.sunLight(h, 1), warmer = ColourMath.sunLight(h, 2);
+            assertArrayEquals(plain, ColourMath.sunLight(h, 0), 0f);
+            assertTrue(warm[0] / warm[2] > plain[0] / plain[2] * 1.3f && warmer[0] / warmer[2] > warm[0] / warm[2], Arrays.toString(warm));
+            assertEquals(1f, PostMath.luminance(warm[0], warm[1], warm[2]), 1e-4f);
+        }
+        assertEquals(4000f, ColourMath.warmKelvin(1), 20f);
+        float[] shade = ColourMath.skyShade(1);
+        assertTrue(shade[0] / shade[2] > ColourMath.SKY_SHADE[0] / ColourMath.SKY_SHADE[2] && shade[0] < shade[2] * 1.2f, "a warmer shade " + Arrays.toString(shade));
+        assertArrayEquals(ColourMath.SKY_SHADE, ColourMath.skyShade(0), 0f);
+        assertArrayEquals(new float[]{1, 1, 1}, ColourMath.temperatureTint(ColourMath.WHITE_KELVIN), 1e-5f);
+        float[] torch = ColourMath.BLOCK_LIGHT, moon = ColourMath.MOON_LIGHT;
+        assertTrue(torch[0] > torch[1] && torch[1] > torch[2], "torch light is orange " + Arrays.toString(torch));
+        assertTrue(moon[2] > moon[1] && moon[1] > moon[0], "moonlight is blue " + Arrays.toString(moon));
+    }
+
+    @Test
+    void torchLightTurnsWarmFallsOffFasterAndStrengthZeroIsVanilla() {
+        float[] grey = {0.6f, 0.6f, 0.6f, 1};
+        float[] shaded = {1, 0, 0, 0};
+        float[][] warm = scene(settings(c -> {
+            c.fogStrength = 0;
+            c.blockLightColour = 100;
+        }), frame(MIDNIGHT), true, true, 1);
+        float[][] plain = scene(settings(c -> {
+            c.fogStrength = 0;
+            c.blockLightColour = 0;
+        }), frame(MIDNIGHT), true, true, 1);
+        assertEquals(1f, warm[SceneCompositeMath.BLOCK_LIGHT][3]);
+        assertEquals(0f, plain[SceneCompositeMath.BLOCK_LIGHT][3]);
+        float[] near = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 15, 1}), warm, LIGHTMAP);
+        float[] nearPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 15, 1}), plain, LIGHTMAP);
+        //Beside the source (level 15, no falloff) the light takes the warm colour at its own luminance: per channel the factor from the
+        // lightmap's colour (the fixture's is already orange) to warm x its luminance
+        float[] lm = LIGHTMAP.linear(15, 0), warmColour = ColourMath.BLOCK_LIGHT;
+        float l = PostMath.luminance(lm[0], lm[1], lm[2]);
+        for (int i = 0; i < 3; i++) assertEquals(l * warmColour[i] / lm[i], near[i] / nearPlain[i], 1e-3f, Arrays.toString(near));
+        assertTrue(near[0] / near[2] > nearPlain[0] / nearPlain[2] * 1.5f, "warmer " + Arrays.toString(near));
+        float[] far = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 7, 1}), warm, LIGHTMAP);
+        float[] farPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 7, 1}), plain, LIGHTMAP);
+        assertTrue(PostMath.luminance(far[0], far[1], far[2]) < PostMath.luminance(farPlain[0], farPlain[1], farPlain[2]) * 0.9f, "darker away from it");
+        for (float[] px : new float[][]{near, far}) for (float c : px) assertTrue(Float.isFinite(c) && c >= 0);
+        //Sky light alone is not touched
+        float[] open = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), warm, LIGHTMAP);
+        assertArrayEquals(SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), plain, LIGHTMAP), open, 1e-6f);
+        assertArrayEquals(new float[]{1, 1, 1}, SceneCompositeMath.blockLightFactor(new float[]{0.2f, 0.1f, 0.05f}, new float[]{0.2f, 0.1f, 0.05f},
+                new float[]{1, 1, 1}, new float[3], ColourMath.BLOCK_LIGHT, 0), 0f);
+        assertTrue(COMP.contains("blockShare*floorShare"));
+    }
+
+    @Test
+    void moonlightTurnsTheNightsSkyLitLightBlueAndLeavesTheDay() {
+        float[] grey = {0.6f, 0.6f, 0.6f, 1};
+        float[] shaded = {1, 0, 0, 0};
+        float[][] night = scene(settings(c -> {
+            c.fogStrength = 0;
+            c.lightColour = 100;
+        }), frame(MIDNIGHT), true, true, 1);
+        float[][] nightPlain = scene(settings(c -> {
+            c.fogStrength = 0;
+            c.lightColour = 0;
+        }), frame(MIDNIGHT), true, true, 1);
+        assertEquals(1f, night[SceneCompositeMath.MOON_LIGHT][3], 1e-5f);
+        float[] moonlit = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), night, LIGHTMAP);
+        float[] plain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), nightPlain, LIGHTMAP);
+        assertTrue(moonlit[2] / moonlit[0] > plain[2] / plain[0] * 1.3f, Arrays.toString(moonlit) + " " + Arrays.toString(plain));
+        float[][] noon = scene(settings(c -> c.lightColour = 100), frame(NOON), true, true, 1);
+        assertEquals(0f, noon[SceneCompositeMath.MOON_LIGHT][3], 1e-5f, "no moonlight by day");
+        assertArrayEquals(new float[]{1, 1, 1}, SceneCompositeMath.moonTint(new float[]{0.5f, 1, 2, 0}), 0f);
+    }
+
     // ---- the other required behaviours ----
 
     /** B11, B12, W6's contract: water keeps the sun shadow but no face shading, keeps its side sky, takes W6's colour and its mark in alpha. */
@@ -655,9 +730,9 @@ class SceneCompositeTest {
         assertEquals(SceneCompositeMath.DAY_BLOCK_EXPOSURE, SceneCompositeMath.blockExposure(1, 1), 1e-6f);
         //Tuning round 1 (refs/S8): by day block light is at DAY_BLOCK_EXPOSURE wherever the camera is; at night at full
         float[] stone = {0.5f, 0.5f, 0.5f, 1};
-        float[][] cave = scene(settings(c -> c.fogStrength = 0), frame(NOON), true, true, 0);
-        float[][] open = scene(settings(c -> c.fogStrength = 0), frame(NOON), true, true, 1);
-        float[][] night = scene(settings(c -> c.fogStrength = 0), frame(MIDNIGHT), true, true, 0);
+        float[][] cave = scene(settings(SceneCompositeTest::plainColours), frame(NOON), true, true, 0);
+        float[][] open = scene(settings(SceneCompositeTest::plainColours), frame(NOON), true, true, 1);
+        float[][] night = scene(settings(SceneCompositeTest::plainColours), frame(MIDNIGHT), true, true, 0);
         float[] shaded = {1, 0, 0, 0};
         float[] torchCave = SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{0, 14, 1}), cave, LIGHTMAP);
         float[] torchOpen = SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{0, 14, 1}), open, LIGHTMAP);
@@ -770,8 +845,9 @@ class SceneCompositeTest {
             float[] down = SceneCompositeMath.composite(surface(glass, new float[]{0, -1, 0}, lt, light), s, LIGHTMAP);
             assertArrayEquals(up, east, 1e-6f, "an east window is lit like a flat pane");
             assertArrayEquals(up, down, 1e-6f, "a glass ceiling likewise");
-            //At most the sun level (W5) and a slightly warm tint: no 1/shade on top (east 3.1x, down 4.7x)
-            assertTrue(east[0] <= linear(glass)[0] * LightingMath.sunLevel(s[SceneCompositeMath.LIGHTING][3]) * 1.1f, "not brightened by 1/shade: " + Arrays.toString(east));
+            //At most the sun level (W5) and the warm tint (2026-10-28: about 1.35 in red at the default Sun Warmth): no 1/shade on top (east
+            // 3.1x, down 4.7x)
+            assertTrue(east[0] <= linear(glass)[0] * LightingMath.sunLevel(s[SceneCompositeMath.LIGHTING][3]) * 1.5f, "not brightened by 1/shade: " + Arrays.toString(east));
         }
         //An opaque east face at full weight is unshaded (the reference)
         float[] stone = SceneCompositeMath.composite(surface(glass, EAST, new float[]{1, 1, 0, 1}, light), s, LIGHTMAP);
@@ -875,17 +951,17 @@ class SceneCompositeTest {
                 "night: no overcast lift");
         float[] stone = {0.5f, 0.5f, 0.5f, 1};
         float[] shaded = {1, 0, 0, 0};
-        float[][] rain = scene(settings(c -> c.fogStrength = 0), frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 1);
+        float[][] rain = scene(settings(SceneCompositeTest::plainColours), frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 1);
         AtmosphereMath.Atmosphere a = SceneCompositeMath.atmosphere(rain);
         assertEquals(AtmosphereUniforms.RAIN_GREY, a.sunLight()[3], 1e-6f);
         assertEquals(1f, rain[SceneCompositeMath.LIGHTING][2], "the pass runs in rain");
         float[] wet = SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{15, 0, 1}), rain, LIGHTMAP);
         for (int i = 0; i < 3; i++) assertEquals(linear(stone)[i] * full, wet[i], 1e-4f, "soft overcast light, no sun shading");
         //Block light keeps its exposure; underground the overcast lift is gone
-        float[][] clear = scene(settings(c -> c.fogStrength = 0), frame(NOON), true, true, 1);
+        float[][] clear = scene(settings(SceneCompositeTest::plainColours), frame(NOON), true, true, 1);
         assertArrayEquals(SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{0, 14, 1}), clear, LIGHTMAP),
                 SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{0, 14, 1}), rain, LIGHTMAP), 1e-6f);
-        float[][] rainCave = scene(settings(c -> c.fogStrength = 0), frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 0);
+        float[][] rainCave = scene(settings(SceneCompositeTest::plainColours), frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 0);
         float[] caveMouth = SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{15, 0, 1}), rainCave, LIGHTMAP);
         assertTrue(caveMouth[0] < wet[0] / 2);
         //The post-processing settings that disable the lighting: no exposure
@@ -898,7 +974,7 @@ class SceneCompositeTest {
         }), frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 1);
         assertArrayEquals(linear(stone), rgb(SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{15, 0, 1}), off, LIGHTMAP)), 1e-6f);
         //Night: moonlit terrain at NIGHT_SKY_EXPOSURE, the village's block light at full
-        float[][] night = scene(settings(c -> c.fogStrength = 0), frame(MIDNIGHT), true, true, 1);
+        float[][] night = scene(settings(SceneCompositeTest::plainColours), frame(MIDNIGHT), true, true, 1);
         float[] moonlit = SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{15, 0, 1}), night, LIGHTMAP);
         for (int i = 0; i < 3; i++) assertEquals(linear(stone)[i] * SceneCompositeMath.NIGHT_SKY_EXPOSURE, moonlit[i], 1e-5f);
         assertArrayEquals(linear(stone), rgb(SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{0, 14, 1}), night, LIGHTMAP)), 1e-5f);
@@ -920,6 +996,13 @@ class SceneCompositeTest {
     // ---- final fix R1, R2: the look weight, the camera's fluid, every setting at 0 ----
 
     /** Every strength setting at 0 and every switch off; exposure, contrast and saturation at their neutral 100. */
+    /** The exposure tests' settings: no fog and none of the 2026-10-28 colours (torch light colour, moonlight), which move the hue. */
+    private static void plainColours(VisualsConfig c) {
+        c.fogStrength = 0;
+        c.blockLightColour = 0;
+        c.lightColour = 0;
+    }
+
     private static final Consumer<VisualsConfig> ALL_ZERO = c -> {
         c.toneStrength = 0;
         c.gradeStrength = 0;
@@ -939,6 +1022,8 @@ class SceneCompositeTest {
         c.waterRippleSpeed = 0;
         c.skyLightAmbient = 0;
         c.lightColour = 0;
+        c.sunWarmth = 0;
+        c.blockLightColour = 0;
         c.farClouds = false;
         c.sunShadows = false;
         c.vanillaShadows = false;
@@ -1068,19 +1153,20 @@ class SceneCompositeTest {
         float[][] half = scene(settings(c -> {
             c.sunShading = 50;
             c.fogStrength = 0;
+            c.blockLightColour = 0;
         }), nether, false, true, 0);
         assertEquals(0f, half[SceneCompositeMath.LIGHTING][2]);
         float[] lit = SceneCompositeMath.composite(surface(stone, NORTH, NAN4, -1, torch, 0, false, 10), half, LIGHTMAP);
         for (int i = 0; i < 3; i++) assertEquals(linear(stone)[i] * (1 + (SceneCompositeMath.NO_SKY_EXPOSURE - 1) * 0.5f), lit[i], 1e-5f);
         //Under water by day the lighting pass does not run: torch light still takes the day's block exposure, the view the underwater one
-        float[][] water = scene(DEFAULT, underWater(NOON, WATER_FOG), true, true, 1);
+        float[][] water = scene(settings(c -> c.blockLightColour = 0), underWater(NOON, WATER_FOG), true, true, 1);
         assertEquals(0f, water[SceneCompositeMath.LIGHTING][2]);
         float[] torchLit = SceneCompositeMath.composite(surface(stone, UP, NAN4, -1, torch, 0, false, 10), water, LIGHTMAP);
         for (int i = 0; i < 3; i++) {
             assertEquals(linear(stone)[i] * SceneCompositeMath.DAY_BLOCK_EXPOSURE * SceneCompositeMath.UNDERWATER_EXPOSURE, torchLit[i], 1e-5f);
         }
         //At night the known sky-lit light takes the night exposure; unknown light (a section not loaded yet, the volume off) none
-        float[][] night = scene(settings(c -> c.fogStrength = 0), frame(MIDNIGHT), true, true, 1);
+        float[][] night = scene(settings(SceneCompositeTest::plainColours), frame(MIDNIGHT), true, true, 1);
         float[] known = SceneCompositeMath.composite(surface(stone, UP, new float[]{1, 0, 0, 0}, -1, open, 0, false, 10), night, LIGHTMAP);
         float[] notKnown = SceneCompositeMath.composite(surface(stone, UP, new float[]{1, 0, 0, 0}, -1, unknown, 0, false, 10), night, LIGHTMAP);
         for (int i = 0; i < 3; i++) {
@@ -1104,7 +1190,7 @@ class SceneCompositeTest {
         float[] shaded = {1, 0, 0, 0};
         AtmosphereFrame rain = frame(NOON, 1, false, FOG, new Matrix4f()), night = frame(MIDNIGHT);
         for (AtmosphereFrame f : new AtmosphereFrame[]{rain, night}) {
-            float[][] s = scene(settings(c -> c.fogStrength = 0), f, true, false, 1);
+            float[][] s = scene(settings(SceneCompositeTest::plainColours), f, true, false, 1);
             assertEquals(0f, s[SceneCompositeMath.LIGHT_CAMERA][3], "the volume is off");
             float[] vanilla = SceneCompositeMath.composite(surface(stone, UP, shaded, -1, new float[]{0, 0, 0}, 0, false, 40), s, LIGHTMAP);
             float[] lod = SceneCompositeMath.composite(surface(stone, UP, shaded, -1, new float[]{15, 0, 1}, 0, true, 40), s, LIGHTMAP);
@@ -1112,7 +1198,7 @@ class SceneCompositeTest {
             float e = f == rain ? 1 + (SceneCompositeMath.OVERCAST_EXPOSURE - 1) * AtmosphereUniforms.RAIN_GREY : SceneCompositeMath.NIGHT_SKY_EXPOSURE;
             for (int i = 0; i < 3; i++) assertEquals(linear(stone)[i] * e, vanilla[i], 1e-4f, "the sky-light exposure");
             //Inside an active volume a section not loaded yet stays unexposed
-            float[][] on = scene(settings(c -> c.fogStrength = 0), f, true, true, 1);
+            float[][] on = scene(settings(SceneCompositeTest::plainColours), f, true, true, 1);
             assertArrayEquals(linear(stone), rgb(SceneCompositeMath.composite(surface(stone, UP, shaded, -1, new float[]{0, 0, 0}, 0, false, 40), on, LIGHTMAP)), 1e-6f);
         }
     }
@@ -1147,7 +1233,7 @@ class SceneCompositeTest {
     // ---- the mirror ----
 
     private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
-            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG");
+            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT");
 
     @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {

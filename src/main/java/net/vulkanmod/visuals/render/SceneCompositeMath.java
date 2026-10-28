@@ -35,6 +35,8 @@ public final class SceneCompositeMath {
     public static final float OVERCAST_EXPOSURE = 3.6f, NIGHT_SKY_EXPOSURE = 0.7f;
     /** Tuning round 3: the far clouds start this far out with the camera inside vanilla's cloud layer (within the margin). */
     public static final float FAR_CLOUD_NEAR = 16.0f, CLOUD_CAMERA_MARGIN = 1.0f;
+    /** 2026-10-28: the block-lit light's steeper falloff at full block light colour strength, and the most a channel is lifted. */
+    public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
     public static final float LIGHT_SPLIT_MIN = 0.00001f;
     public static final int DEBUG_SKY_VIEW = 1, DEBUG_BLOCK_VIEW = 2, DEBUG_SHARE_VIEW = 3;
     /** 2026-10-23: where each pixel's light came from. */
@@ -47,7 +49,7 @@ public final class SceneCompositeMath {
     public static final int SLOTS = 35;
     public static final int LIGHTING = 10, WATER = 11, CLOUD_SHAPE = 12, CLOUD_LIT = 14, CLOUD_AMBIENT = 15, CLOUD_LIGHT_DIR = 16, LIGHT_CAMERA = 18,
             LIGHT_FRAC = 19, LIGHT_MODE = 21, LIGHT_SUN = 22, LIGHT_SHADE = 23, HELD_ORIGIN = 24, VANILLA_SKY = 26, VANILLA_FOG = 27, STAR_GATE = 28,
-            LOOK = 29, BORDER_FOG = 30;
+            LOOK = 29, BORDER_FOG = 30, BLOCK_LIGHT = 31, MOON_LIGHT = 32;
     /** 2026-10-21: scene_copy.comp's flattenWaterTexture (far water's texture streaks; a neighbourhood filter, shader only). */
     public static final float WATER_FLATTEN = 0.75f, WATER_SAME_SURFACE = 0.03f, WATER_FLATTEN_NEAR = 24.0f, WATER_FLATTEN_FAR = 64.0f;
     public static final int WATER_FLATTEN_RADIUS = 2;
@@ -95,6 +97,28 @@ public final class SceneCompositeMath {
         float s = clamp01(share), k = clamp01(strength);
         float[] out = new float[3];
         for (int i = 0; i < 3; i++) out[i] = mix(1, mix(shadeColour[i], sunColour[i], s), k);
+        return out;
+    }
+
+    /** 2026-10-28: the moonlight's colour on the sky-lit light (slot 32), white at strength 0. */
+    public static float[] moonTint(float[] moon) {
+        float k = clamp01(moon[3]);
+        return new float[]{mix(1, moon[0], k), mix(1, moon[1], k), mix(1, moon[2], k)};
+    }
+
+    /**
+     * 2026-10-28: the factor per channel on the block-lit light (lightAll x its block-lit share): its colour moved toward warm at its
+     * luminance and its falloff steepened by (level luminance / full level's)^(BLOCK_LIGHT_FALLOFF x strength); 1 at strength 0.
+     */
+    public static float[] blockLightFactor(float[] blockLit, float[] blockOnly, float[] full, float[] dark, float[] warm, float strength) {
+        float s = clamp01(strength);
+        float l = PostMath.luminance(blockLit[0], blockLit[1], blockLit[2]);
+        if (s <= 0 || l <= LIGHT_SPLIT_MIN) return new float[]{1, 1, 1};
+        float level = clamp01(PostMath.luminance(Math.max(blockOnly[0] - dark[0], 0), Math.max(blockOnly[1] - dark[1], 0), Math.max(blockOnly[2] - dark[2], 0))
+                / Math.max(PostMath.luminance(full[0] - dark[0], full[1] - dark[1], full[2] - dark[2]), LIGHT_SPLIT_MIN));
+        float falloff = (float) Math.pow(level, BLOCK_LIGHT_FALLOFF * s);
+        float[] out = new float[3];
+        for (int i = 0; i < 3; i++) out[i] = Math.min(mix(blockLit[i], l * warm[i], s) * falloff / Math.max(blockLit[i], LIGHT_SPLIT_MIN), BLOCK_LIGHT_GAIN_MAX);
         return out;
     }
 
@@ -289,14 +313,23 @@ public final class SceneCompositeMath {
             float directShare = direct * LightingMath.skyGate(skyLight);
             float shadeL = LightingMath.shadeLevel(lighting[3]), sunL = LightingMath.sunLevel(lighting[3]);
             sunPart = (sunL - shadeL) * directShare / (shadeL + (sunL - shadeL) * directShare);
-            float[] tint = passRan ? lightTint(directShare, slots[LIGHT_SUN][3] * slots[LIGHT_SHADE][3], slots[LIGHT_SUN], slots[LIGHT_SHADE]) : new float[]{1, 1, 1};
+            float[] tint = mul(passRan ? lightTint(directShare, slots[LIGHT_SUN][3] * slots[LIGHT_SHADE][3], slots[LIGHT_SUN], slots[LIGHT_SHADE]) : new float[]{1, 1, 1},
+                    moonTint(slots[MOON_LIGHT]));
             //Final fix R1: none of the exposures gated by the lighting pass; the sky-light ones not on light an active volume does not
             // know yet (follow-up 1: with the volume off every pixel takes them)
             boolean exposed = known || slots[LIGHT_CAMERA][3] < 0.5f;
             float se = exposed ? skyExposure(water[2], water[3], weight) : 1, be = blockExposure(water[2], weight);
             if (exposed && exposureMode(look, AtmosphereMath.ATMOSPHERE_SKY)) se *= skyWeatherExposure(look[2], water[2], water[3], weight);
+            //2026-10-28: the block-lit light's colour and falloff
+            float[] blockShare = new float[3];
+            for (int i = 0; i < 3; i++) blockShare[i] = (1 - share[i]) * be;
+            if (known && slots[BLOCK_LIGHT][3] > 0) {
+                float[] blockLit = new float[3];
+                for (int i = 0; i < 3; i++) blockLit[i] = (1 - share[i]) * lightAll[i];
+                blockShare = mul(blockShare, blockLightFactor(blockLit, blockOnly, lightmapLinear(lm, 15, 0), dark, slots[BLOCK_LIGHT], slots[BLOCK_LIGHT][3]));
+            }
             float[] perLight = new float[3];
-            for (int i = 0; i < 3; i++) perLight[i] = share[i] * skyFactor * tint[i] * se + (1 - share[i]) * be;
+            for (int i = 0; i < 3; i++) perLight[i] = share[i] * skyFactor * tint[i] * se + blockShare[i];
             //W10: the ambient occlusion takes the sky light's ambient part and the lightmap's floor (AmbientOcclusion.occludedLight)
             float[] ao = {1, 1, 1};
             if (passRan && lighting[0] > 0) {
@@ -305,7 +338,7 @@ public final class SceneCompositeMath {
                     float[] floorShare = known ? AmbientOcclusion.floorShare(skyOnly, blockOnly, dark) : new float[3];
                     float ambient = LightingMath.sunShadingAt(0, skyLight, sunWeight, lighting[3]) * faceUnshade(shade, sunWeight);
                     float[] occludable = new float[3];
-                    for (int i = 0; i < 3; i++) occludable[i] = share[i] * ambient * tint[i] * se + (1 - share[i]) * be * floorShare[i];
+                    for (int i = 0; i < 3; i++) occludable[i] = share[i] * ambient * tint[i] * se + blockShare[i] * floorShare[i];
                     ao = AmbientOcclusion.occludedLight(perLight, occludable, occlusion);
                 }
             }
