@@ -664,49 +664,54 @@ class SceneCompositeTest {
     @Test
     void oreSpecksGlowAndTheirHostStoneDoesNot() {
         assertEquals(LightingMath.ORE_ALPHA_CODE, LightingMath.alphaCode(FoliageMarker.ORE_ALPHA));
-        //Vanilla's hosts (stone, deepslate, netherrack) are no specks: no chroma above 0.26, and their brightest texels at most about
-        // 1.9 times their darkest. Gold, redstone and diamond specks are by their colour; a quartz speck by its contrast with the
-        // netherrack around it (about 0.65 / 0.13), whatever light and face shade both share
-        for (float[] host : new float[][]{{0.56f, 0.56f, 0.56f}, {0.39f, 0.39f, 0.40f}, {0.45f, 0.20f, 0.19f}}) {
-            assertEquals(0f, SceneCompositeMath.oreSpeck(host, 1), 1e-6f, Arrays.toString(host));
-            assertEquals(0f, SceneCompositeMath.oreSpeck(host, 1.9f), 1e-6f, "its brightest texel " + Arrays.toString(host));
-        }
-        for (float[] speck : new float[][]{{0.98f, 0.85f, 0.30f}, {0.95f, 0.05f, 0.05f}, {0.45f, 0.93f, 0.88f}}) {
-            assertEquals(1f, SceneCompositeMath.oreSpeck(speck, 1), 1e-6f, Arrays.toString(speck));
-        }
-        assertEquals(1f, SceneCompositeMath.oreSpeck(new float[]{0.92f, 0.88f, 0.84f}, 0.65f / 0.13f), 1e-6f, "quartz");
-        //The iron speck's pale beige in stone (contrast about 1.4, chroma about 0.25) is no speck
-        assertEquals(0f, SceneCompositeMath.oreSpeck(new float[]{0.85f, 0.7f, 0.6f}, 1.4f), 1e-6f);
-        float[][] on = glowScene(100, 100), off = glowScene(100, 0);
-        on[SceneCompositeMath.LIGHT_CAMERA][3] = 2;
-        off[SceneCompositeMath.LIGHT_CAMERA][3] = 2;
-        float[] shaded = {1, 0, 0, 0};
-        float[] gold = {0.98f, 0.85f, 0.30f}, stone = {0.5f, 0.5f, 0.5f};
-        java.util.function.BiFunction<float[], Float, float[]> vanilla = (albedo, block) -> {
-            float[] lmd = SceneCompositeMath.lightmapDisplay(LIGHTMAP, block, 0);
-            return new float[]{albedo[0] * lmd[0], albedo[1] * lmd[1], albedo[2] * lmd[2], FoliageMarker.ORE_ALPHA};
+        float[] stone = {0.5f, 0.5f, 0.5f}, coal = {0.15f, 0.15f, 0.15f}, redstone = {0.9f, 0.08f, 0.06f}, netherrack = {0.42f, 0.19f, 0.18f};
+        float[] quartz = {0.86f, 0.82f, 0.77f}, gold = {0.98f, 0.85f, 0.3f}, iron = {0.85f, 0.7f, 0.6f}, copper = {0.85f, 0.45f, 0.3f};
+        java.util.function.BiFunction<float[], float[], float[][]> around = (host, speck) -> {
+            float[][] n = new float[8][];
+            for (int i = 0; i < 8; i++) n[i] = i < 2 && speck != null ? speck : host;
+            return n;
         };
-        java.util.function.BiFunction<float[][], float[][], float[]> at = (s, pixel) -> SceneCompositeMath.composite(new SceneCompositeMath.Pixel(
-                pixel[0], false, dir(0.3f, -0.4f, -1), 3, false, UP, shaded, -1, pixel[1], 0, 0, false, new float[3], 1, pixel[2]), s, LIGHTMAP);
-        //In the dark, with the albedo, a gold speck adds ORE_GLOW_LEVEL of its full-bright colour to what vanilla's light gives it
-        float[][] darkGold = {vanilla.apply(gold, 0f), {0, 0, 2}, gold};
-        float[] lit = at.apply(on, darkGold), unlit = at.apply(off, darkGold), add = SceneCompositeMath.oreGlow(gold, 1, 1);
-        for (int i = 0; i < 3; i++) assertEquals(unlit[i] + add[i], lit[i], 1e-4f, Arrays.toString(lit));
-        assertTrue(PostMath.luminance(lit[0], lit[1], lit[2]) > PostMath.luminance(unlit[0], unlit[1], unlit[2]) * 2, "visible in the dark");
-        //Without the albedo: vanilla's colour over vanilla's lightmap where that is bright enough to read, nothing in the dark
-        float[][] litGold = {vanilla.apply(gold, 12f), {0, 12, 1}, null};
-        float[] near = at.apply(on, litGold), nearOff = at.apply(off, litGold);
-        assertTrue(near[0] > nearOff[0] * 1.05f, Arrays.toString(near) + " vs " + Arrays.toString(nearOff));
-        float[][] darkNoAlbedo = {vanilla.apply(gold, 0f), {0, 0, 1}, null};
-        assertArrayEquals(at.apply(off, darkNoAlbedo), at.apply(on, darkNoAlbedo), 1e-6f);
-        //The host stone of the same ore block, and a gold-coloured texel without the ore mark, are lit as before
-        float[][] host = {vanilla.apply(stone, 0f), {0, 0, 2}, stone};
-        assertArrayEquals(at.apply(off, host), at.apply(on, host), 1e-6f);
-        float[] unmarked = vanilla.apply(gold, 0f);
-        unmarked[3] = 1;
-        float[][] plainGold = {unmarked, {0, 0, 2}, gold};
-        assertArrayEquals(at.apply(off, plainGold), at.apply(on, plainGold), 1e-6f);
-        assertTrue(COMP.contains("lit += oreGlow(base, oreContrast(p, size, colour.rgb), glowParams.y);"));
+        //2026-10-28 (in game: white outlines around coal, redstone and nether gold): stone beside dark or coloured specks is no speck,
+        // nor a coal speck itself, nor netherrack among netherrack
+        assertEquals(0f, SceneCompositeMath.oreSpeck(stone, around.apply(stone, coal)), 1e-6f, "stone beside coal");
+        assertEquals(0f, SceneCompositeMath.oreSpeck(stone, around.apply(stone, redstone)), 1e-6f, "stone beside redstone");
+        assertEquals(0f, SceneCompositeMath.oreSpeck(coal, around.apply(stone, null)), 1e-6f, "coal");
+        assertEquals(0f, SceneCompositeMath.oreSpeck(netherrack, around.apply(netherrack, quartz)), 1e-6f, "netherrack beside quartz");
+        //Specks: quartz by its brightness against netherrack, gold, redstone, copper and iron (2026-10-28: was dark) by their saturation
+        assertEquals(1f, SceneCompositeMath.oreSpeck(quartz, around.apply(netherrack, null)), 1e-6f, "quartz");
+        assertEquals(1f, SceneCompositeMath.oreSpeck(gold, around.apply(netherrack, null)), 1e-6f, "nether gold");
+        assertEquals(1f, SceneCompositeMath.oreSpeck(redstone, around.apply(stone, null)), 1e-6f, "redstone");
+        assertEquals(1f, SceneCompositeMath.oreSpeck(copper, around.apply(stone, null)), 1e-6f, "copper");
+        assertTrue(SceneCompositeMath.oreSpeck(iron, around.apply(stone, null)) > 0.9f, "iron");
+        //A speck is one on any face: the face shade scales the pixel and its neighbours alike (copper glowed on three faces only)
+        for (float shade : new float[]{0.8f, 0.6f, 0.5f}) {
+            float[] c = {copper[0] * shade, copper[1] * shade, copper[2] * shade}, s = {stone[0] * shade, stone[1] * shade, stone[2] * shade};
+            assertEquals(1f, SceneCompositeMath.oreSpeck(c, around.apply(s, null)), 1e-6f, "copper at face shade " + shade);
+        }
+        //No neighbours, or too dark to tell: no speck
+        assertEquals(0f, SceneCompositeMath.oreSpeck(redstone, new float[0][]), 0f);
+        assertEquals(0f, SceneCompositeMath.oreSpeck(new float[]{0.02f, 0.001f, 0.001f}, around.apply(new float[]{0.01f, 0.01f, 0.01f}, null)), 0f);
+        //The glow divides the face's vanilla shade out, so a bottom face glows as a top face does (lower faces were darker)
+        float[] top = SceneCompositeMath.oreGlow(gold, 1, SceneCompositeMath.bakedShade(UP), 1);
+        float[] down = {0, -1, 0};
+        float shadeDown = SceneCompositeMath.FACE_SHADE_DOWN;
+        float[] bottom = SceneCompositeMath.oreGlow(new float[]{gold[0] * shadeDown, gold[1] * shadeDown, gold[2] * shadeDown}, 1,
+                SceneCompositeMath.bakedShade(down), 1);
+        //(by luminance: a dark channel sits on sRGB's linear toe, where half the display value is not half the light)
+        assertEquals(PostMath.luminance(top[0], top[1], top[2]), PostMath.luminance(bottom[0], bottom[1], bottom[2]),
+                PostMath.luminance(top[0], top[1], top[2]) * 0.03f, Arrays.toString(bottom) + " vs " + Arrays.toString(top));
+        for (float v : SceneCompositeMath.oreGlow(new float[]{1, 1, 1}, 1, SceneCompositeMath.bakedShade(down), 1)) {
+            assertTrue(v <= SceneCompositeMath.ORE_GLOW_LEVEL * PostMath.SCENE_WHITE + 1e-6f, "never above white");
+        }
+        assertArrayEquals(new float[3], SceneCompositeMath.oreGlow(gold, 0, 1, 1), 0f);
+        //The mirror composite has no neighbours: an ore pixel is lit as any block there (the shader reads the ore around it)
+        float[][] on = glowScene(100, 100), off = glowScene(100, 0);
+        float[] shaded = {1, 0, 0, 0};
+        float[] marked = {gold[0] * 0.3f, gold[1] * 0.3f, gold[2] * 0.3f, FoliageMarker.ORE_ALPHA};
+        assertArrayEquals(SceneCompositeMath.composite(surface(marked, UP, shaded, new float[]{0, 12, 1}), off, LIGHTMAP),
+                SceneCompositeMath.composite(surface(marked, UP, shaded, new float[]{0, 12, 1}), on, LIGHTMAP), 1e-6f);
+        assertTrue(COMP.contains("float speck = oreSpeckAt(p, size, colour.rgb, oreHostStep(size, dist));"));
+        assertTrue(COMP.contains("lit += oreGlow(base, speck, bakedShade(normalWorld), glowParams.y);"));
     }
 
     @Test

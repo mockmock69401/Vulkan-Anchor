@@ -39,10 +39,10 @@ public final class SceneCompositeMath {
     public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_KNEE = 0.62f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
     /** 2026-10-28: scene_copy.comp's glow constants (lightGlow, oreSpeck, oreGlow). */
     public static final float LIGHT_GLOW_GAIN = 3.0f, LIGHT_GLOW_LOW = 0.3f, LIGHT_GLOW_HIGH = 0.8f, FLUID_GLOW_SCALE = 2.0f;
-    public static final float ORE_GLOW_LEVEL = 1.5f, ORE_CHROMA_LOW = 0.28f, ORE_CHROMA_HIGH = 0.45f, ORE_CONTRAST_LOW = 2.0f, ORE_CONTRAST_HIGH = 3.0f,
-            ORE_HOST_MIN = 0.02f;
-    /** The shader's oreHost reads the ore's pixels this far around (shader only). */
-    public static final int ORE_HOST_STEP = 2;
+    public static final float ORE_GLOW_LEVEL = 1.5f, ORE_CONTRAST_LOW = 2.0f, ORE_CONTRAST_HIGH = 3.0f, ORE_SAT_LOW = 0.15f, ORE_SAT_HIGH = 0.3f,
+            ORE_HOST_MIN = 0.02f, ORE_VALUE_MIN = 0.03f, ORE_SHADE_MIN = 0.2f;
+    /** The shader's oreHostStep: the ore's pixels this share of a block around are read, at most ORE_HOST_STEP_MAX pixels (shader only). */
+    public static final float ORE_HOST_BLOCKS = 0.3f, ORE_HOST_STEP_MAX = 16.0f;
     public static final float ORE_LIGHTMAP_MIN = 0.15f;
     public static final float LIGHT_SPLIT_MIN = 0.00001f;
     public static final int DEBUG_SKY_VIEW = 1, DEBUG_BLOCK_VIEW = 2, DEBUG_SHARE_VIEW = 3;
@@ -142,21 +142,45 @@ public final class SceneCompositeMath {
         return 1 + LIGHT_GLOW_GAIN * Math.max(strength, 0) * AtmosphereMath.smoothstep(LIGHT_GLOW_LOW, LIGHT_GLOW_HIGH, m);
     }
 
-    /**
-     * 2026-10-28: how much an ore texel (albedo, display values) is a speck: coloured, or contrast (its vanilla colour's luminance over
-     * the darkest of the ore's pixels around it, the shader's oreContrast: they share the light and the face shade, which the ratio
-     * cancels) ORE_CONTRAST_LOW..HIGH.
-     */
-    public static float oreSpeck(float[] albedo, float contrast) {
-        float mx = Math.max(albedo[0], Math.max(albedo[1], albedo[2])), mn = Math.min(albedo[0], Math.min(albedo[1], albedo[2]));
-        return Math.max(AtmosphereMath.smoothstep(ORE_CHROMA_LOW, ORE_CHROMA_HIGH, mx - mn),
-                AtmosphereMath.smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast));
+    /** 2026-10-28: a colour's saturation (display values), 0 grey .. 1 a pure hue; the face shade and the light's brightness leave it. */
+    public static float saturation(float[] c) {
+        float m = Math.max(c[0], Math.max(c[1], c[2]));
+        return m > 0 ? (m - Math.min(c[0], Math.min(c[1], c[2]))) / m : 0;
     }
 
-    /** 2026-10-28: the light an ore texel adds (scene units) at the ore glow strength (slot 33 .y), whatever light reaches it. */
-    public static float[] oreGlow(float[] albedo, float contrast, float strength) {
-        float k = ORE_GLOW_LEVEL * oreSpeck(albedo, contrast) * Math.max(strength, 0);
-        return new float[]{PostMath.displayToLinear(albedo[0]) * k, PostMath.displayToLinear(albedo[1]) * k, PostMath.displayToLinear(albedo[2]) * k};
+    /** 2026-10-28: the lower median of values (the shader's lowerMedian). */
+    static float lowerMedian(float[] values) {
+        float[] s = values.clone();
+        java.util.Arrays.sort(s);
+        return s[(s.length - 1) / 2];
+    }
+
+    /**
+     * 2026-10-28: how much an ore pixel with vanilla colour own (display) is a speck, against the ore's own pixels around it (the
+     * shader's oreSpeckAt reads eight about ORE_HOST_BLOCKS of a block away; none: no speck). Against their medians: ORE_CONTRAST_LOW..HIGH
+     * times as bright, or ORE_SAT_LOW..HIGH more saturated.
+     */
+    public static float oreSpeck(float[] own, float[][] neighbours) {
+        if (Math.max(own[0], Math.max(own[1], own[2])) < ORE_VALUE_MIN || neighbours.length == 0) return 0;
+        float[] lums = new float[neighbours.length], sats = new float[neighbours.length];
+        for (int i = 0; i < neighbours.length; i++) {
+            lums[i] = PostMath.luminance(neighbours[i][0], neighbours[i][1], neighbours[i][2]);
+            sats[i] = saturation(neighbours[i]);
+        }
+        float contrast = PostMath.luminance(own[0], own[1], own[2]) / Math.max(lowerMedian(lums), ORE_HOST_MIN);
+        float satDiff = saturation(own) - lowerMedian(sats);
+        return Math.max(AtmosphereMath.smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast), AtmosphereMath.smoothstep(ORE_SAT_LOW, ORE_SAT_HIGH, satDiff));
+    }
+
+    /**
+     * 2026-10-28: the light an ore texel adds (scene units) at the ore glow strength (slot 33 .y), whatever light reaches it: its colour
+     * base (display) with the face's vanilla shade (bakedShade, linear) divided out, never above white, x speck.
+     */
+    public static float[] oreGlow(float[] base, float speck, float shade, float strength) {
+        float k = ORE_GLOW_LEVEL * speck * Math.max(strength, 0), s = Math.max(shade, ORE_SHADE_MIN);
+        float[] out = new float[3];
+        for (int i = 0; i < 3; i++) out[i] = Math.min(PostMath.displayToLinear(base[i]) * PostMath.SCENE_WHITE / s, PostMath.SCENE_WHITE) * k;
+        return out;
     }
 
     /** Final fix R1: an exposure as the composite applies it, mix(1, e, look) (look: slot 29 .x, the sun-shading setting). */
@@ -405,8 +429,8 @@ public final class SceneCompositeMath {
                 readable = Math.max(lmd[0], Math.max(lmd[1], lmd[2])) >= ORE_LIGHTMAP_MIN;
                 for (int i = 0; i < 3; i++) base[i] = Math.min(px.colour[i] / Math.max(lmd[i], ORE_LIGHTMAP_MIN), 1);
             }
-            //One pixel has no neighbours here: contrast 1 (the colour rule alone; the shader's oreContrast looks around)
-            if (readable) lit = add(lit, oreGlow(base, 1, glow[1]));
+            //One pixel has no neighbours here, so no speck (the shader's oreSpeckAt reads the ore's pixels around it)
+            if (readable) lit = add(lit, oreGlow(base, oreSpeck(px.colour, new float[0][]), bakedShade(px.normal), glow[1]));
         }
         int debug = (int) Math.floor(lightMode[0] + 0.5f);
         if (debug >= DEBUG_SKY_VIEW && debug <= DEBUG_SHARE_VIEW) return rgba(debugView(debug, known, skyT, blockT, share, sunPart), 0);
