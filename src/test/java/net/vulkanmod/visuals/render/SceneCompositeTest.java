@@ -165,6 +165,12 @@ class SceneCompositeTest {
         return new float[]{PostMath.displayToLinear(rgba[0]), PostMath.displayToLinear(rgba[1]), PostMath.displayToLinear(rgba[2])};
     }
 
+    /** linear(rgba), times a light source's glow (2026-10-28: the glow needs no lighting pass) at the slots' block glow. */
+    private static float[] glowed(float[] rgba, float[][] s) {
+        float g = rgba[3] == FoliageMarker.EMISSIVE_ALPHA ? SceneCompositeMath.lightGlow(rgba, s[SceneCompositeMath.GLOW][0]) : 1;
+        return scale(linear(rgba), g);
+    }
+
     private static float[] scale(float[] c, float k) {
         return new float[]{c[0] * k, c[1] * k, c[2] * k};
     }
@@ -272,7 +278,7 @@ class SceneCompositeTest {
                 for (float[] n : new float[][]{UP, NORTH, EAST, NONE}) {
                     //Whatever the lighting images hold, they are not read; the light is unknown without the volume
                     float[] out = SceneCompositeMath.composite(surface(c, n, NAN4, 0.2f, new float[]{3, 9, 0}, 15, false, 60), s, LIGHTMAP);
-                    assertArrayEquals(linear(c), rgb(out), 1e-6f, Arrays.toString(c));
+                    assertArrayEquals(glowed(c, s), rgb(out), 1e-5f, Arrays.toString(c));
                     assertEquals(0f, out[3], "alpha");
                 }
             }
@@ -309,7 +315,7 @@ class SceneCompositeTest {
                 SceneCompositeMath.Pixel vanilla = surface(c, UP, NAN4, -1, new float[]{15, 0, 1}, 0, false, dist);
                 float[] out = SceneCompositeMath.composite(vanilla, s, LIGHTMAP);
                 assertEquals(0f, AtmosphereMath.hazeAmount(a, 1, false));
-                assertArrayEquals(scale(linear(c), e), rgb(out), 1e-6f);
+                assertArrayEquals(scale(glowed(c, s), e), rgb(out), 1e-5f);
                 //LOD pixels get W4's weak uniform fog in vanilla's fog colour
                 SceneCompositeMath.Pixel lod = surface(c, UP, NAN4, -1, new float[]{15, 0, 1}, 0, true, dist);
                 float[] lit = SceneCompositeMath.composite(lod, s, LIGHTMAP);
@@ -376,7 +382,8 @@ class SceneCompositeTest {
                 }
                 if (c[3] == FoliageMarker.EMISSIVE_ALPHA) {
                     float[] lamp = SceneCompositeMath.composite(surface(c, NORTH, NAN4, -1, new float[]{0, 15, 1}, 0, false, 0), s, LIGHTMAP);
-                    assertArrayEquals(linear(c), rgb(lamp), 1e-6f);
+                    float g = SceneCompositeMath.lightGlow(c, s[SceneCompositeMath.GLOW][0]);
+                    for (int i = 0; i < 3; i++) assertEquals(linear(c)[i] * g, lamp[i], 1e-5f);
                 }
                 //Far away a surface turns into the fog colour
                 float[] far = SceneCompositeMath.composite(surface(c, UP, NAN4, -1, new float[]{0, 0, 1}, 0, false, 1e6f), s, LIGHTMAP);
@@ -412,12 +419,13 @@ class SceneCompositeTest {
         //Plants are lit as if facing the light: no face shade is divided out of them (as of flat ground)
         float[] ground = {0.3f, 0.6f, 0.2f, 1};
         assertArrayEquals(SceneCompositeMath.composite(surface(ground, UP, sunlit, -1, light, 0, false, 20), s, LIGHTMAP), inSun, 1e-5f);
-        //A light source keeps its brightness: no sun shading, no tint, no relighting, whatever the inputs
+        //A light source keeps its brightness (times its glow, 2026-10-28): no sun shading, no tint, no relighting, whatever the inputs
         float[] lamp = {1, 0.9f, 0.5f, FoliageMarker.EMISSIVE_ALPHA};
+        float lampGlow = SceneCompositeMath.lightGlow(lamp, s[SceneCompositeMath.GLOW][0]);
         for (float[] lt : new float[][]{sunlit, shaded}) {
             for (float held : new float[]{0, 15}) {
                 float[] out = SceneCompositeMath.composite(surface(lamp, NORTH, lt, -1, new float[]{0, 15, 1}, held, false, 20), s, LIGHTMAP);
-                assertArrayEquals(linear(lamp), rgb(out), 1e-6f);
+                for (int i = 0; i < 3; i++) assertEquals(linear(lamp)[i] * lampGlow, out[i], 1e-5f);
             }
         }
         assertTrue(COMP.contains("bool plant = isPlant(colour.a);") && COMP.contains("bool emissive = isEmissive(colour.a);"));
@@ -613,6 +621,92 @@ class SceneCompositeTest {
         float lit = PostMath.luminance(dim[0], dim[1], dim[2]) / PostMath.luminance(dimPlain[0], dimPlain[1], dimPlain[2])
                 * PostMath.luminance(lm3[0], lm3[1], lm3[2]);
         assertTrue(lit >= PostMath.luminance(lm0[0], lm0[1], lm0[2]) * 0.999f, lit + " vs floor " + Arrays.toString(lm0));
+    }
+
+    // ---- 6c. 2026-10-28: block glow and ore glow (slot 33) ----
+
+    private static float[][] glowScene(int blockGlow, int oreGlow) {
+        return scene(settings(c -> {
+            c.fogStrength = 0;
+            c.blockGlow = blockGlow;
+            c.oreGlow = oreGlow;
+        }), frame(MIDNIGHT), false, true, 1);
+    }
+
+    @Test
+    void lightSourcesGlowBrightTexelsAndStrengthZeroIsVanilla() {
+        float[][] on = glowScene(100, 100), off = glowScene(0, 100);
+        assertEquals(1f, on[SceneCompositeMath.GLOW][0]);
+        assertEquals(0f, off[SceneCompositeMath.GLOW][0]);
+        float[] shaded = {1, 0, 0, 0};
+        float[] lava = {0.85f, 0.40f, 0.08f, FoliageMarker.EMISSIVE_ALPHA}, rock = {0.20f, 0.08f, 0.06f, FoliageMarker.EMISSIVE_ALPHA};
+        float[] bright = SceneCompositeMath.composite(surface(lava, UP, shaded, new float[]{0, 15, 1}), on, LIGHTMAP);
+        float[] plain = SceneCompositeMath.composite(surface(lava, UP, shaded, new float[]{0, 15, 1}), off, LIGHTMAP);
+        assertArrayEquals(linear(lava), rgb(plain), 1e-6f);
+        float g = SceneCompositeMath.lightGlow(lava, 1);
+        assertTrue(g > 2.2f && g <= 1 + SceneCompositeMath.LIGHT_GLOW_GAIN, "lava glows " + g);
+        for (int i = 0; i < 3; i++) assertEquals(linear(lava)[i] * g, bright[i], 1e-5f);
+        //Dark texels of a light source (magma's rock) stay as they are
+        float[] dark = SceneCompositeMath.composite(surface(rock, UP, shaded, new float[]{0, 15, 1}), on, LIGHTMAP);
+        assertArrayEquals(linear(rock), rgb(dark), 1e-6f);
+        //2026-10-28: a light-emitting fluid's mark is a light source's with FLUID_GLOW_SCALE times the glow
+        assertEquals(LightingMath.EMISSIVE_FLUID_ALPHA_CODE, LightingMath.alphaCode(FoliageMarker.EMISSIVE_FLUID_ALPHA));
+        float[] fluid = {lava[0], lava[1], lava[2], FoliageMarker.EMISSIVE_FLUID_ALPHA};
+        float[] lake = SceneCompositeMath.composite(surface(fluid, UP, shaded, new float[]{0, 15, 1}), on, LIGHTMAP);
+        float gf = SceneCompositeMath.lightGlow(lava, SceneCompositeMath.FLUID_GLOW_SCALE);
+        assertTrue(gf > g * 1.5f, gf + " vs " + g);
+        for (int i = 0; i < 3; i++) assertEquals(linear(lava)[i] * gf, lake[i], 1e-4f);
+        assertArrayEquals(linear(lava), rgb(SceneCompositeMath.composite(surface(fluid, UP, shaded, new float[]{0, 15, 1}), off, LIGHTMAP)), 1e-6f);
+        assertTrue(COMP.contains("lit = scene*lightGlow(colour.rgb, glowParams.x*(alphaCode(colour.a) == EMISSIVE_FLUID_ALPHA_CODE ? FLUID_GLOW_SCALE : 1.0));"));
+        assertTrue(COMP.contains("layout(location = 33) uniform vec4 glowParams;"));
+    }
+
+    @Test
+    void oreSpecksGlowAndTheirHostStoneDoesNot() {
+        assertEquals(LightingMath.ORE_ALPHA_CODE, LightingMath.alphaCode(FoliageMarker.ORE_ALPHA));
+        //Vanilla's hosts (stone, deepslate, netherrack) are no specks: no chroma above 0.26, and their brightest texels at most about
+        // 1.9 times their darkest. Gold, redstone and diamond specks are by their colour; a quartz speck by its contrast with the
+        // netherrack around it (about 0.65 / 0.13), whatever light and face shade both share
+        for (float[] host : new float[][]{{0.56f, 0.56f, 0.56f}, {0.39f, 0.39f, 0.40f}, {0.45f, 0.20f, 0.19f}}) {
+            assertEquals(0f, SceneCompositeMath.oreSpeck(host, 1), 1e-6f, Arrays.toString(host));
+            assertEquals(0f, SceneCompositeMath.oreSpeck(host, 1.9f), 1e-6f, "its brightest texel " + Arrays.toString(host));
+        }
+        for (float[] speck : new float[][]{{0.98f, 0.85f, 0.30f}, {0.95f, 0.05f, 0.05f}, {0.45f, 0.93f, 0.88f}}) {
+            assertEquals(1f, SceneCompositeMath.oreSpeck(speck, 1), 1e-6f, Arrays.toString(speck));
+        }
+        assertEquals(1f, SceneCompositeMath.oreSpeck(new float[]{0.92f, 0.88f, 0.84f}, 0.65f / 0.13f), 1e-6f, "quartz");
+        //The iron speck's pale beige in stone (contrast about 1.4, chroma about 0.25) is no speck
+        assertEquals(0f, SceneCompositeMath.oreSpeck(new float[]{0.85f, 0.7f, 0.6f}, 1.4f), 1e-6f);
+        float[][] on = glowScene(100, 100), off = glowScene(100, 0);
+        on[SceneCompositeMath.LIGHT_CAMERA][3] = 2;
+        off[SceneCompositeMath.LIGHT_CAMERA][3] = 2;
+        float[] shaded = {1, 0, 0, 0};
+        float[] gold = {0.98f, 0.85f, 0.30f}, stone = {0.5f, 0.5f, 0.5f};
+        java.util.function.BiFunction<float[], Float, float[]> vanilla = (albedo, block) -> {
+            float[] lmd = SceneCompositeMath.lightmapDisplay(LIGHTMAP, block, 0);
+            return new float[]{albedo[0] * lmd[0], albedo[1] * lmd[1], albedo[2] * lmd[2], FoliageMarker.ORE_ALPHA};
+        };
+        java.util.function.BiFunction<float[][], float[][], float[]> at = (s, pixel) -> SceneCompositeMath.composite(new SceneCompositeMath.Pixel(
+                pixel[0], false, dir(0.3f, -0.4f, -1), 3, false, UP, shaded, -1, pixel[1], 0, 0, false, new float[3], 1, pixel[2]), s, LIGHTMAP);
+        //In the dark, with the albedo, a gold speck adds ORE_GLOW_LEVEL of its full-bright colour to what vanilla's light gives it
+        float[][] darkGold = {vanilla.apply(gold, 0f), {0, 0, 2}, gold};
+        float[] lit = at.apply(on, darkGold), unlit = at.apply(off, darkGold), add = SceneCompositeMath.oreGlow(gold, 1, 1);
+        for (int i = 0; i < 3; i++) assertEquals(unlit[i] + add[i], lit[i], 1e-4f, Arrays.toString(lit));
+        assertTrue(PostMath.luminance(lit[0], lit[1], lit[2]) > PostMath.luminance(unlit[0], unlit[1], unlit[2]) * 2, "visible in the dark");
+        //Without the albedo: vanilla's colour over vanilla's lightmap where that is bright enough to read, nothing in the dark
+        float[][] litGold = {vanilla.apply(gold, 12f), {0, 12, 1}, null};
+        float[] near = at.apply(on, litGold), nearOff = at.apply(off, litGold);
+        assertTrue(near[0] > nearOff[0] * 1.05f, Arrays.toString(near) + " vs " + Arrays.toString(nearOff));
+        float[][] darkNoAlbedo = {vanilla.apply(gold, 0f), {0, 0, 1}, null};
+        assertArrayEquals(at.apply(off, darkNoAlbedo), at.apply(on, darkNoAlbedo), 1e-6f);
+        //The host stone of the same ore block, and a gold-coloured texel without the ore mark, are lit as before
+        float[][] host = {vanilla.apply(stone, 0f), {0, 0, 2}, stone};
+        assertArrayEquals(at.apply(off, host), at.apply(on, host), 1e-6f);
+        float[] unmarked = vanilla.apply(gold, 0f);
+        unmarked[3] = 1;
+        float[][] plainGold = {unmarked, {0, 0, 2}, gold};
+        assertArrayEquals(at.apply(off, plainGold), at.apply(on, plainGold), 1e-6f);
+        assertTrue(COMP.contains("lit += oreGlow(base, oreContrast(p, size, colour.rgb), glowParams.y);"));
     }
 
     @Test
@@ -1063,6 +1157,8 @@ class SceneCompositeTest {
         c.lightColour = 0;
         c.sunWarmth = 0;
         c.blockLightColour = 0;
+        c.blockGlow = 0;
+        c.oreGlow = 0;
         c.farClouds = false;
         c.sunShadows = false;
         c.vanillaShadows = false;
@@ -1272,7 +1368,7 @@ class SceneCompositeTest {
     // ---- the mirror ----
 
     private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
-            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT");
+            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW");
 
     @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {

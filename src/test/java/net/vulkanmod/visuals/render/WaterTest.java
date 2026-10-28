@@ -118,6 +118,17 @@ class WaterTest {
         //Shallow (2 blocks): the floor still shows (S14)
         float[] shallow = WaterMath.waterTransmittance(2);
         assertTrue(shallow[2] > 0.8f && shallow[0] > 0.5f, "a shallow floor is seen");
+        //2026-10-28: the terrain draws water at WaterAlpha of its texture's opacity: vanilla's with the visuals off or water depth 0
+        assertEquals(1f, WaterMath.surfaceAlpha(false, 1), 0);
+        assertEquals(1f, WaterMath.surfaceAlpha(true, 0), 0);
+        assertEquals(1f, WaterMath.surfaceAlpha(true, Float.NaN), 0);
+        assertEquals(WaterMath.WATER_SURFACE_ALPHA, WaterMath.surfaceAlpha(true, 1), 1e-6f);
+        assertEquals(WaterMath.WATER_SURFACE_ALPHA, WaterMath.surfaceAlpha(true, 2), 1e-6f);
+        assertTrue(WaterMath.surfaceAlpha(true, 0.5f) < 1 && WaterMath.surfaceAlpha(true, 0.5f) > WaterMath.WATER_SURFACE_ALPHA);
+        assertEquals(247, LightingMath.alphaCode(FoliageMarker.WATER_ALPHA));
+        //2026-10-28: a floor 3 blocks down seen 25 degrees below the horizon (about 7 blocks of water) still shows, as in Complementary
+        float[] lake = WaterMath.waterTransmittance(3 / (float) Math.sin(Math.toRadians(25)));
+        assertTrue(lake[0] > 0.45f && lake[1] > 0.75f && lake[2] > 0.8f, java.util.Arrays.toString(lake));
         //ambient: 1 by day, lower at night and in full rain, monotonic
         assertEquals(1, WaterMath.ambient(1), 0);
         assertEquals(WaterMath.WATER_NIGHT_AMBIENT, WaterMath.ambient(0), 0);
@@ -489,7 +500,7 @@ class WaterTest {
     // ---- the mirror ----
 
     /** Java-only tuning values: not shader consts. */
-    private static final Set<String> JAVA_ONLY = Set.of("WATER_NIGHT_AMBIENT", "RAIN_SPEED", "OCTAVES");
+    private static final Set<String> JAVA_ONLY = Set.of("WATER_NIGHT_AMBIENT", "WATER_SURFACE_ALPHA", "RAIN_SPEED", "OCTAVES");
 
     @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {
