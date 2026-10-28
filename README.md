@@ -35,6 +35,9 @@ It is experimental: compatibility and feature parity are incomplete.
   water reflections and ripples, fog and light shafts, bloom, clouds, ambient occlusion, foliage wind, held-item
   lights, anti-aliasing (SMAA, TAA). It needs no shader pack and no LOD mod. Its passes and shaders were written
   for this build from requirement documents and published graphics literature; they contain no shader-pack code.
+- **Light colours** (Shaders → Lighting page): direct sunlight that is warmest at sunrise and sunset (Sun Warmth),
+  orange light from torches and other light blocks that is brighter near the source and falls off faster (Torch Light
+  Colour), and blue moonlight at night (part of Light Colour). Each has its own slider; 0 keeps the earlier colours.
 - **Distant Horizons support**: Distant Horizons LODs drawn by the Vulkan renderer, composited under vanilla terrain and
   lit and shadowed by the shaders. Works with the released Distant Horizons 3.3.1 and newer (it takes over Distant
   Horizons' internal render definition) and with Distant Horizons' render API once that is released (3.3.5).
