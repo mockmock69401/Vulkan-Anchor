@@ -261,8 +261,6 @@ public class WorldRenderer {
     }
 
     public void allChanged() {
-        //The visuals (2026-10-28): ore kinds follow the tags and sprites, which a reload or another world changes
-        net.vulkanmod.visuals.render.OreKinds.clear();
         AdaptiveChunkUploadBudget.reset();
         if (this.level != null) {
             AeronauticsWorldLayers.initialize();

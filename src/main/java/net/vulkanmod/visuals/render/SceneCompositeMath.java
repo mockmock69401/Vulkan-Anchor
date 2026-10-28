@@ -42,8 +42,6 @@ public final class SceneCompositeMath {
     public static final float ORE_GLOW_LEVEL = 0.8f, ORE_CONTRAST_LOW = 2.0f, ORE_CONTRAST_HIGH = 3.0f, ORE_SAT_LOW = 0.15f, ORE_SAT_HIGH = 0.3f,
             ORE_HOST_SAT_LOW = 0.2f, ORE_HOST_SAT_HIGH = 0.4f,
             ORE_HOST_MIN = 0.02f, ORE_VALUE_MIN = 0.03f, ORE_SHADE_MIN = 0.2f;
-    /** 2026-10-28: a pale ore's brightness rule (oreSpeck with pale): ORE_PALE_LOW + ORE_PALE_SPREAD x the host's spread .. + ORE_PALE_WIDTH. */
-    public static final float ORE_PALE_LOW = 1.15f, ORE_PALE_SPREAD = 0.5f, ORE_PALE_WIDTH = 0.3f;
     /** The shader's oreHostStep: the ore's pixels this share of a block around are read, at most ORE_HOST_STEP_MAX pixels (shader only). */
     public static final float ORE_HOST_BLOCKS = 0.3f, ORE_HOST_STEP_MAX = 16.0f;
     public static final float ORE_LIGHTMAP_MIN = 0.15f;
@@ -164,15 +162,6 @@ public final class SceneCompositeMath {
      * times as bright, or ORE_SAT_LOW..HIGH more saturated.
      */
     public static float oreSpeck(float[] own, float[][] neighbours) {
-        return oreSpeck(own, neighbours, false);
-    }
-
-    /**
-     * 2026-10-28: oreSpeck, and for a pale ore (OreKinds.PALE_ORE; pale) also ORE_PALE_LOW + ORE_PALE_SPREAD x spread .. + ORE_PALE_WIDTH
-     * times as bright as the median in any host, the spread being the second brightest less the second darkest neighbour over the
-     * median (the shader's palePart).
-     */
-    public static float oreSpeck(float[] own, float[][] neighbours, boolean pale) {
         if (Math.max(own[0], Math.max(own[1], own[2])) < ORE_VALUE_MIN || neighbours.length == 0) return 0;
         float[] lums = new float[neighbours.length], sats = new float[neighbours.length];
         for (int i = 0; i < neighbours.length; i++) {
@@ -182,15 +171,8 @@ public final class SceneCompositeMath {
         float contrast = PostMath.luminance(own[0], own[1], own[2]) / Math.max(lowerMedian(lums), ORE_HOST_MIN);
         float hostSat = lowerMedian(sats), satDiff = saturation(own) - hostSat;
         //the brightness rule only in a coloured host (netherrack): in grey stone a speck is told by its colour (iron's grey rims stay)
-        float speck = Math.max(AtmosphereMath.smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast) * AtmosphereMath.smoothstep(ORE_HOST_SAT_LOW, ORE_HOST_SAT_HIGH, hostSat),
+        return Math.max(AtmosphereMath.smoothstep(ORE_CONTRAST_LOW, ORE_CONTRAST_HIGH, contrast) * AtmosphereMath.smoothstep(ORE_HOST_SAT_LOW, ORE_HOST_SAT_HIGH, hostSat),
                 AtmosphereMath.smoothstep(ORE_SAT_LOW, ORE_SAT_HIGH, satDiff));
-        if (!pale) return speck;
-        float[] s = lums.clone();
-        java.util.Arrays.sort(s);
-        float median = s[(s.length - 1) / 2];
-        float spread = s.length >= 3 ? Math.max(s[s.length - 2] - s[1], 0) / Math.max(median, ORE_HOST_MIN) : 0;
-        float bar = ORE_PALE_LOW + ORE_PALE_SPREAD * spread;
-        return Math.max(speck, AtmosphereMath.smoothstep(bar, bar + ORE_PALE_WIDTH, contrast));
     }
 
     /**
@@ -333,7 +315,7 @@ public final class SceneCompositeMath {
         boolean passRan = lighting[2] > 0.5f;
         float weight = clamp01(look[0]);
         int code = LightingMath.alphaCode(px.colour[3]);
-        boolean plant = code == LightingMath.PLANT_ALPHA_CODE, emissive = LightingMath.isEmissiveCode(code), ore = code == LightingMath.ORE_ALPHA_CODE || code == LightingMath.PALE_ORE_ALPHA_CODE;
+        boolean plant = code == LightingMath.PLANT_ALPHA_CODE, emissive = LightingMath.isEmissiveCode(code), ore = code == LightingMath.ORE_ALPHA_CODE;
         boolean cloud = !px.fromLod && px.cloud;
         float[] lt = passRan ? px.lt : new float[]{1, 1, 0, 1};
         float plantSun = passRan && plant ? px.plantSun : -1;
