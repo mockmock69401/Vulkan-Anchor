@@ -26,9 +26,9 @@ import net.vulkanmod.render.model.quad.QuadView;
 import net.vulkanmod.render.vertex.TerrainBufferBuilder;
 import net.vulkanmod.render.vertex.VertexUtil;
 import net.vulkanmod.visuals.render.FoliageMarker;
-import net.vulkanmod.visuals.render.OreKinds;
 import net.vulkanmod.vulkan.util.ColorUtil;
 import net.minecraftforge.client.model.data.ModelData;
+import net.minecraftforge.common.Tags;
 import org.joml.Vector3f;
 
 import java.util.List;
@@ -85,8 +85,8 @@ public class BlockRenderer {
                               BakedModel model, ModelData modelData, RenderType renderType) {
         //The visuals (glow pass): whether this block emits light, for its quads' mark
         FoliageMarker.setEmissive(blockState.getLightEmission() > 0);
-        //The visuals (2026-10-28): whether it is an ore, whose specks glow, and of which kind (OreKinds)
-        FoliageMarker.setOre(OreKinds.kind(blockState));
+        //The visuals (2026-10-28): whether it is an ore, whose specks glow
+        FoliageMarker.setOre(blockState.is(Tags.Blocks.ORES));
         //The visuals (wind): whether its vertices sway, and how
         FoliageMarker.setSway(FoliageMarker.swayKind(blockState));
         this.pos = pos;
