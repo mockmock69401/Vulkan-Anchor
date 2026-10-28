@@ -68,10 +68,14 @@ vec3 vanillaToScene(vec3 vanillaColour) {
 
 //Per channel: identity below the knee, exponential shoulder above it toward 1 (C1 at the knee); after the linear section and
 // shoulder of Uchimura 2017 ("HDR theory and practice", CEDEC) without the toe. knee 1 = the identity clipped at 1.
+// 2026-10-28 (DeceasedCraft: sunlit snow clipped, 1.7% of a clear street above 240 against Complementary Reimagined's 0.2%): the
+// shoulder is Reinhard's d/(d + w) above the knee instead of 1 - exp(-d/w): the same slope 1 at the knee and the same asymptote, but
+// highlights approach white far more slowly (scene 2.0: display 0.95, was 0.99), so snow keeps its texture
 vec3 toneMap(vec3 x, float knee) {
     x = max(x, vec3(0.0));
     float w = max(1.0 - knee, 1e-6);
-    vec3 shoulder = knee + w*(1.0 - exp(-(x - knee)/w));
+    vec3 d = max(x - knee, vec3(0.0));
+    vec3 shoulder = knee + w*d/(d + w);
     return min(mix(x, shoulder, greaterThan(x, vec3(knee))), vec3(1.0));
 }
 
