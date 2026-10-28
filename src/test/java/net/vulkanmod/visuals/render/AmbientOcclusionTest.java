@@ -442,7 +442,7 @@ class AmbientOcclusionTest {
     @Test
     void theCompositeOccludesOnlyTheSkyLightsAmbientPartAndTheFloor() {
         assertTrue(COMPOSITE.contains("vec3 occludable = share*sunShadingAt(0.0, skyLight, sunWeight, lighting.w)*faceUnshade(shade, sunWeight)*tint*se\n"
-                + "                        + (vec3(1.0) - share)*be*floorShare;"));
+                + "                        + blockShare*floorShare;"));
         assertTrue(COMPOSITE.contains("ao = aoOccludedLight(perLight, occludable, occlusion);"));
         //The ambient part of W5's factor is the factor without direct sun; the direct part is never taken
         float ambient = LightingMath.sunShadingAt(0, 1, 1, 1), sunlit = LightingMath.sunShadingAt(1, 1, 1, 1);

@@ -582,9 +582,9 @@ class AtmosphereTest {
         owned.add(AtmosphereUniforms.LOOK);
         owned.add(AtmosphereUniforms.BORDER);
         for (int s = AtmosphereUniforms.RESERVED_FIRST; s <= AtmosphereUniforms.RESERVED_LAST; s++) owned.add(s);
-        assertEquals(List.of(26, 27, 28, 29, 30, 31, 34), List.of(AtmosphereUniforms.VANILLA_SKY, AtmosphereUniforms.VANILLA_FOG, AtmosphereUniforms.STAR_GATE,
+        assertEquals(List.of(26, 27, 28, 29, 30, 33, 34), List.of(AtmosphereUniforms.VANILLA_SKY, AtmosphereUniforms.VANILLA_FOG, AtmosphereUniforms.STAR_GATE,
                 AtmosphereUniforms.LOOK, AtmosphereUniforms.BORDER, AtmosphereUniforms.RESERVED_FIRST, AtmosphereUniforms.RESERVED_LAST),
-                "25..34 are W4's: 25 the struct, 26..28 the stars' inputs, 29 the look slot (final fix R1, R2), 30 the border fog (2026-10-21), 31..34 reserved");
+                "25..34 are W4's: 25 the struct, 26..28 the stars' inputs, 29 the look slot (final fix R1, R2), 30 the border fog (2026-10-21), 31 and 32 LightingUniforms' (2026-10-28), 33..34 reserved");
         assertEquals(List.of(3, 4, 5, 6, 7, 9, 25), Arrays.stream(AtmosphereUniforms.COPY_SLOTS).boxed().toList(), "boundary 3.2: 3..7, 9, 25..34");
         assertWrites("postSceneCopy", v::write, owned);
         //The values: depthParams (fixed meaning) and the block

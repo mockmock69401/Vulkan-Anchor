@@ -49,7 +49,8 @@ class VisualsConfigTest {
 
     /** Final fix R3: the look the screen checks were tuned with (the player's settings); every other percentage is 100. */
     private static final java.util.Map<String, Integer> TUNED_DEFAULTS = java.util.Map.of("saturation", 94, "grade_strength", 0,
-            "bloom_strength", 45, "sun_glow", 50, "sunset_light", 50, "light_shafts", 50, "moonlight", 50, "light_colour", 70);
+            "bloom_strength", 45, "sun_glow", 50, "sunset_light", 50, "light_shafts", 50, "moonlight", 50, "light_colour", 70,
+            "block_light_colour", 70);
 
     @Test
     void percentagesDefaultToTheTunedLookAndSwitchesToOn() {
