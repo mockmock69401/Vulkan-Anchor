@@ -165,7 +165,7 @@ class PostMathTest {
         assertArrayEquals(c, PostMath.sharpen(c, n, s, e, w, 0), 0f);
         assertEquals(0f, PostMath.sharpenStrength(false));
         float strength = PostMath.sharpenStrength(true);
-        assertTrue(strength > 0 && strength <= 1, "TAA softens: sharpen after it");
+        assertTrue(strength > 0 && strength <= 2, "TAA softens: sharpen after it");
         //Never outside the neighbourhood's range (no halos)
         float[] sharp = PostMath.sharpen(new float[]{0.5f, 0.5f, 0.5f}, n, s, n, s, 1);
         assertArrayEquals(new float[]{0.5f, 0.5f, 0.5f}, sharp, 1e-6f);

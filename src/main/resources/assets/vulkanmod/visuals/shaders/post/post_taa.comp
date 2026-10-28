@@ -27,7 +27,7 @@ layout(location = 4) uniform vec4 taaParams;//x 1 when the history is valid, y v
 #import <vulkanmod:visuals/post/viewpos.glsl>
 
 const int JITTER_PHASES = 8;//TaaJitter's sequence length (Java side only)
-const float JITTER_SCALE = 1.0;//the jitter pattern's width in pixels (Java side only)
+const float JITTER_SCALE = 0.5;//the jitter pattern's width in pixels (Java side only; 2026-10-28: 0.5, was 1, a sharper image)
 const float CURRENT_WEIGHT = 0.1;
 const float MOVING_CURRENT_WEIGHT = 0.2;
 const float MOTION_RAMP_PIXELS = 4.0;

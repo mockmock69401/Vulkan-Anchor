@@ -56,8 +56,9 @@ const float BLUR_DEPTH_MIN = 0.1;
 // per-frame sun term t (LightingMath.sunHeightTerm, slot 10 .w): SHADE_LEVEL / SUN_LEVEL with a high sun (t = 1: noon, S1 S6 S14),
 // LOW_SUN_SHADE_LEVEL / LOW_SUN_SUN_LEVEL with a low one (t = 0 below sin(elevation) SUN_TERM_LOW: the sunset of S2), smoothly between
 // up to SUN_TERM_HIGH. Tuning round 1: noon terrain was half as bright as the references with too little sun/shade contrast.
+//2026-10-28: SUN_LEVEL 3.2 (was 2.5): sunlit leaves next to Complementary Reimagined's were a quarter darker
 const float SHADE_LEVEL = 0.72;
-const float SUN_LEVEL = 2.5;
+const float SUN_LEVEL = 3.2;
 const float LOW_SUN_SHADE_LEVEL = 0.55;
 const float LOW_SUN_SUN_LEVEL = 1.1;
 const float SUN_TERM_LOW = 0.2;
