@@ -37,6 +37,36 @@ class LightSectionsTest {
         assertEquals(77, s.queued());
     }
 
+    /**
+     * 2026-10-28 (NightfallCraft): next picks the budget nearest without sorting the whole queue. Each call takes exactly the
+     * sections a full stable sort by distance would (ties in queue order), nearest first, until the queue is empty.
+     */
+    @Test
+    void eachCallTakesTheNearestOfTheQueueInDistanceThenQueueOrder() {
+        LightVolumeMath.Layout big = LightVolumeMath.layout(8, 0, 24);//17 x 24 x 17 slots
+        LightSections s = new LightSections();
+        s.reset(big);
+        s.centre(3, 7, -2, false, (x, z) -> true);
+        java.util.List<int[]> expected = new java.util.ArrayList<>();
+        for (int slot = 0; slot < big.slots(); slot++) {
+            int[] p = big.sectionAt(slot, 3, -2);
+            if (big.inRange(p[0], p[1], p[2], 3, -2)) expected.add(p);//out-of-range slots are dropped, not taken
+        }
+        //the queue order is the centre scan's slot order; a stable sort by distance keeps it for ties
+        expected.sort(java.util.Comparator.comparingLong(p -> {
+            long dx = p[0] - 3, dy = p[1] - 7, dz = p[2] - (-2);
+            return dx * dx + dy * dy + dz * dz;
+        }));
+        int taken = 0;
+        for (int budget : new int[]{64, 1, 300, 64, 1000, 10000}) {
+            List<int[]> got = s.next(budget);
+            assertEquals(Math.min(budget, expected.size() - taken), got.size());
+            for (int[] p : got) assertArrayEquals(expected.get(taken++), p);
+        }
+        assertEquals(expected.size(), taken);
+        assertEquals(0, s.queued());
+    }
+
     /** Review focus 1: moving one section along x re-queues only the new column of slots. */
     @Test
     void movingQueuesTheSectionsThatEnteredOnly() {
