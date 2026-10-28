@@ -111,15 +111,21 @@ public final class SceneCompositeMath {
      * luminance and its falloff steepened by (level luminance / full level's / BLOCK_LIGHT_KNEE)^(BLOCK_LIGHT_FALLOFF x strength), which
      * lifts the light right at the source; 1 at strength 0.
      */
-    public static float[] blockLightFactor(float[] blockLit, float[] blockOnly, float[] full, float[] dark, float[] warm, float strength) {
+    public static float[] blockLightFactor(float[] blockLit, float[] blockFloor, float[] blockOnly, float[] full, float[] dark, float[] warm,
+                                           float strength) {
         float s = clamp01(strength);
-        float l = PostMath.luminance(blockLit[0], blockLit[1], blockLit[2]);
+        float[] above = new float[3];
+        for (int i = 0; i < 3; i++) above[i] = Math.max(blockLit[i] - blockFloor[i], 0);
+        float l = PostMath.luminance(above[0], above[1], above[2]);
         if (s <= 0 || l <= LIGHT_SPLIT_MIN) return new float[]{1, 1, 1};
         float level = clamp01(PostMath.luminance(Math.max(blockOnly[0] - dark[0], 0), Math.max(blockOnly[1] - dark[1], 0), Math.max(blockOnly[2] - dark[2], 0))
                 / Math.max(PostMath.luminance(full[0] - dark[0], full[1] - dark[1], full[2] - dark[2]), LIGHT_SPLIT_MIN));
         float falloff = (float) Math.pow(level / BLOCK_LIGHT_KNEE, BLOCK_LIGHT_FALLOFF * s);
         float[] out = new float[3];
-        for (int i = 0; i < 3; i++) out[i] = Math.min(mix(blockLit[i], l * warm[i], s) * falloff / Math.max(blockLit[i], LIGHT_SPLIT_MIN), BLOCK_LIGHT_GAIN_MAX);
+        for (int i = 0; i < 3; i++) {
+            float target = blockLit[i] - above[i] + mix(above[i], l * warm[i], s) * falloff;
+            out[i] = Math.min(target / Math.max(blockLit[i], LIGHT_SPLIT_MIN), BLOCK_LIGHT_GAIN_MAX);
+        }
         return out;
     }
 
@@ -325,9 +331,13 @@ public final class SceneCompositeMath {
             float[] blockShare = new float[3];
             for (int i = 0; i < 3; i++) blockShare[i] = (1 - share[i]) * be;
             if (known && slots[BLOCK_LIGHT][3] > 0) {
-                float[] blockLit = new float[3];
-                for (int i = 0; i < 3; i++) blockLit[i] = (1 - share[i]) * lightAll[i];
-                blockShare = mul(blockShare, blockLightFactor(blockLit, blockOnly, lightmapLinear(lm, 15, 0), dark, slots[BLOCK_LIGHT], slots[BLOCK_LIGHT][3]));
+                float[] blockLit = new float[3], blockFloor = new float[3];
+                for (int i = 0; i < 3; i++) {
+                    blockLit[i] = (1 - share[i]) * lightAll[i];
+                    blockFloor[i] = (1 - share[i]) * dark[i];
+                }
+                blockShare = mul(blockShare, blockLightFactor(blockLit, blockFloor, blockOnly, lightmapLinear(lm, 15, 0), dark, slots[BLOCK_LIGHT],
+                        slots[BLOCK_LIGHT][3]));
             }
             float[] perLight = new float[3];
             for (int i = 0; i < 3; i++) perLight[i] = share[i] * skyFactor * tint[i] * se + blockShare[i];

@@ -224,15 +224,17 @@ vec3 moonTint(vec4 moon) {
 
 //2026-10-28: the factor per channel on the block-lit light blockLit (lightAll x its block-lit share): its colour moved toward warm (slot
 // 31) at its luminance and its falloff steepened, by strength (0: 1). blockOnly and full are the lightmap at the block level alone and at
-// level 15, dark the no-light floor
-vec3 blockLightFactor(vec3 blockLit, vec3 blockOnly, vec3 full, vec3 dark, vec3 warm, float strength) {
+// level 15, dark the no-light floor. The colour and falloff take only the light above blockFloor (the floor's block-lit share): with no
+// sky light all of a dimension's ambient light is block-lit, and the nether's went black (2026-10-28 nether shots)
+vec3 blockLightFactor(vec3 blockLit, vec3 blockFloor, vec3 blockOnly, vec3 full, vec3 dark, vec3 warm, float strength) {
     float s = clamp(strength, 0.0, 1.0);
-    float l = luminance(blockLit);
+    vec3 above = max(blockLit - blockFloor, vec3(0.0));
+    float l = luminance(above);
     if (s <= 0.0 || l <= LIGHT_SPLIT_MIN) {
         return vec3(1.0);
     }
     float level = clamp(luminance(max(blockOnly - dark, vec3(0.0)))/max(luminance(full - dark), LIGHT_SPLIT_MIN), 0.0, 1.0);
-    vec3 target = mix(blockLit, l*warm, s)*pow(level/BLOCK_LIGHT_KNEE, BLOCK_LIGHT_FALLOFF*s);
+    vec3 target = blockLit - above + mix(above, l*warm, s)*pow(level/BLOCK_LIGHT_KNEE, BLOCK_LIGHT_FALLOFF*s);
     return min(target/max(blockLit, vec3(LIGHT_SPLIT_MIN)), vec3(BLOCK_LIGHT_GAIN_MAX));
 }
 
@@ -624,8 +626,8 @@ void main() {
         //2026-10-28: the block-lit light's colour and falloff (1 where nothing is block-lit)
         vec3 blockShare = (vec3(1.0) - share)*be;
         if (known && blockLightColour.w > 0.0) {
-            blockShare *= blockLightFactor((vec3(1.0) - share)*lightAll, blockOnly, lightmapLinear(15.0, 0.0), dark, blockLightColour.rgb,
-                    blockLightColour.w);
+            blockShare *= blockLightFactor((vec3(1.0) - share)*lightAll, (vec3(1.0) - share)*dark, blockOnly, lightmapLinear(15.0, 0.0), dark,
+                    blockLightColour.rgb, blockLightColour.w);
         }
         //What the lighting does to a white texel's light here, per channel
         vec3 perLight = share*skyFactor*tint*se + blockShare;

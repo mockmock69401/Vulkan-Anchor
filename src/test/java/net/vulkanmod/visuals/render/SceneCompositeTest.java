@@ -563,11 +563,12 @@ class SceneCompositeTest {
         float[] nearPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 15, 1}), plain, LIGHTMAP);
         //Beside the source (level 15) the light takes the warm colour at its own luminance: per channel the factor from the lightmap's
         // colour (the fixture's is already orange) to warm x its luminance, lifted by the knee's centre gain (1/BLOCK_LIGHT_KNEE)^FALLOFF
-        float[] lm = LIGHTMAP.linear(15, 0), warmColour = ColourMath.BLOCK_LIGHT;
-        float l = PostMath.luminance(lm[0], lm[1], lm[2]);
+        float[] lm = LIGHTMAP.linear(15, 0), dark = LIGHTMAP.linear(0, 0), warmColour = ColourMath.BLOCK_LIGHT;
+        //The no-light floor stays as it is; the light above it is recoloured and lifted
+        float l = PostMath.luminance(lm[0] - dark[0], lm[1] - dark[1], lm[2] - dark[2]);
         float centre = (float) Math.pow(1 / SceneCompositeMath.BLOCK_LIGHT_KNEE, SceneCompositeMath.BLOCK_LIGHT_FALLOFF);
         assertTrue(centre > 1.3f, "brighter right at the source");
-        for (int i = 0; i < 3; i++) assertEquals(l * warmColour[i] / lm[i] * centre, near[i] / nearPlain[i], 1e-3f, Arrays.toString(near));
+        for (int i = 0; i < 3; i++) assertEquals((dark[i] + l * warmColour[i] * centre) / lm[i], near[i] / nearPlain[i], 1e-3f, Arrays.toString(near));
         assertTrue(near[0] / near[2] > nearPlain[0] / nearPlain[2] * 1.5f, "warmer " + Arrays.toString(near));
         float[] far = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 7, 1}), warm, LIGHTMAP);
         float[] farPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 7, 1}), plain, LIGHTMAP);
@@ -576,9 +577,42 @@ class SceneCompositeTest {
         //Sky light alone is not touched
         float[] open = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), warm, LIGHTMAP);
         assertArrayEquals(SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{15, 0, 1}), plain, LIGHTMAP), open, 1e-6f);
-        assertArrayEquals(new float[]{1, 1, 1}, SceneCompositeMath.blockLightFactor(new float[]{0.2f, 0.1f, 0.05f}, new float[]{0.2f, 0.1f, 0.05f},
+        assertArrayEquals(new float[]{1, 1, 1}, SceneCompositeMath.blockLightFactor(new float[]{0.2f, 0.1f, 0.05f}, new float[3], new float[]{0.2f, 0.1f, 0.05f},
                 new float[]{1, 1, 1}, new float[3], ColourMath.BLOCK_LIGHT, 0), 0f);
         assertTrue(COMP.contains("blockShare*floorShare"));
+    }
+
+    @Test
+    void torchLightKeepsTheNoLightFloor() {
+        //2026-10-28 (nether shots: soul sand valley and cave walls went black): a dimension's ambient light is the lightmap's no-light
+        // floor; with no sky light all of it is the block-lit share, and the falloff must not take it away
+        SceneCompositeMath.Lightmap nether = (block, sky) -> {
+            float b = brightness(block);
+            float[] warm = {1, 0.85f, 0.6f};
+            float[] out = new float[3];
+            for (int i = 0; i < 3; i++) out[i] = PostMath.displayToLinear(Math.min(1, 0.35f + 0.65f * b * warm[i]));
+            return out;
+        };
+        float[] grey = {0.6f, 0.6f, 0.6f, 1};
+        float[] shaded = {1, 0, 0, 0};
+        float[][] warm = scene(settings(c -> {
+            c.fogStrength = 0;
+            c.blockLightColour = 100;
+        }), frame(MIDNIGHT), true, true, 1);
+        float[][] plain = scene(settings(c -> {
+            c.fogStrength = 0;
+            c.blockLightColour = 0;
+        }), frame(MIDNIGHT), true, true, 1);
+        float[] unlit = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 0, 1}), warm, nether);
+        assertArrayEquals(SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 0, 1}), plain, nether), unlit, 1e-6f);
+        //A dim block light still gives at least the floor: the fixture's scene does not follow the level, so the pixel's factor times
+        // vanilla's light at level 3 is compared with vanilla's light at level 0
+        float[] dim = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 3, 1}), warm, nether);
+        float[] dimPlain = SceneCompositeMath.composite(surface(grey, UP, shaded, new float[]{0, 3, 1}), plain, nether);
+        float[] lm3 = nether.linear(3, 0), lm0 = nether.linear(0, 0);
+        float lit = PostMath.luminance(dim[0], dim[1], dim[2]) / PostMath.luminance(dimPlain[0], dimPlain[1], dimPlain[2])
+                * PostMath.luminance(lm3[0], lm3[1], lm3[2]);
+        assertTrue(lit >= PostMath.luminance(lm0[0], lm0[1], lm0[2]) * 0.999f, lit + " vs floor " + Arrays.toString(lm0));
     }
 
     @Test
