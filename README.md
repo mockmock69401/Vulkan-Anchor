@@ -39,7 +39,7 @@ It is experimental: compatibility and feature parity are incomplete.
   orange light from torches and other light blocks that is brighter near the source and falls off faster (Torch Light
   Colour), and blue moonlight at night (part of Light Colour). Each has its own slider; 0 keeps the earlier colours.
 - **Glow** (Shaders → Lighting page): lava, magma, glowstone and other light blocks glow into the bloom (Block Glow), and
-  the coloured or bright specks of ores glow faintly even in the dark (Ore Glow; blocks in the ores tag). Water is clearer too,
+  nether quartz ore's white specks glow faintly even in the dark (Ore Glow; other ores look as in vanilla). Water is clearer too,
   so lake and river floors show through (Water Depth at 0 keeps vanilla's water).
 - **Weather fog** (Shaders → Atmosphere page): in rain and thunderstorms the distance fades into a blue-grey fog at any
   height, as with shader packs; nearby stays clear (Weather Fog; 0 keeps the clear-weather fog). Sunlit snow and other
