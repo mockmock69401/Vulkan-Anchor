@@ -36,6 +36,10 @@ public class ParticleEngineMixin {
         if (cullingMode == 0) {
             return false;
         }
+        //2026-10-28 (DeceasedCraft: no rain or snow): weather particle mods keep their own limit
+        if (net.vulkanmod.render.culling.ParticleCullingExemptions.exempt(particle.getClass())) {
+            return false;
+        }
 
         Minecraft mc = Minecraft.getInstance();
         Camera camera = mc.gameRenderer.getMainCamera();
