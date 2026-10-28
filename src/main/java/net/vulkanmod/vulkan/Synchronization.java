@@ -38,6 +38,10 @@ public class Synchronization {
     }
 
     public synchronized void waitFences() {
+        //uploads deferred on the render thread are submitted first, so waiting for every transfer includes them
+        net.vulkanmod.vulkan.queue.GraphicsQueue queue = net.vulkanmod.vulkan.device.DeviceManager.getGraphicsQueue();
+        if (queue != null) queue.flushDeferred();
+
         if (idx == 0)
             return;
 
