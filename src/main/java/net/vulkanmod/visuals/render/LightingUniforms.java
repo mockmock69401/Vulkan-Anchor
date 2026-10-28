@@ -17,10 +17,14 @@ public final class LightingUniforms {
     // scene_copy.comp, P7n design 4.2: the sun's colour and the light colour strength; the sky shade's colour and the sun's weight for
     // the colour (day x sky exposure, gate G7n: not the Sun Shading strength, which kept full sun at a share of 0.37)
     public static final int COPY_LIGHT_SUN = 22, COPY_LIGHT_SHADE = 23;
+    // scene_copy.comp, 2026-10-28: torch light's colour (ColourMath.BLOCK_LIGHT) and the block light colour setting; the moonlight's colour
+    // (ColourMath.MOON_LIGHT) and its strength on the sky-lit light (light colour setting x the night)
+    public static final int COPY_BLOCK_LIGHT = 31, COPY_MOON_LIGHT = 32;
 
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f projection, float[] sunView,
                          boolean lodValid, float aoStrength, float sunWeight, float[] upView, boolean vanillaCopies, float waterStrength,
-                         float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView) {
+                         float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView,
+                         float blockLightColour, float moonLight) {
         public void writeLighting(LooseUniformWriter w) {
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection).putMat4(INV_LOD_PROJ, this.invLodProjection).putMat4(PROJ, this.projection);
             w.putVec4(SUN, this.sunView[0], this.sunView[1], this.sunView[2], this.sunWeight > 0 ? 1 : 0);
@@ -33,7 +37,9 @@ public final class LightingUniforms {
             w.putVec4(COPY_LIGHTING, this.aoStrength, this.sunWeight, this.on ? 1 : 0, this.sunHeightTerm);
             w.putVec4(COPY_WATER, this.waterStrength, this.waterAmbient, this.sunUp, this.blockDay);
             w.putVec4(COPY_LIGHT_SUN, this.lightSun[0], this.lightSun[1], this.lightSun[2], this.lightSun[3]);
-            w.putVec4(COPY_LIGHT_SHADE, ColourMath.SKY_SHADE[0], ColourMath.SKY_SHADE[1], ColourMath.SKY_SHADE[2], this.lightSun[4]);
+            w.putVec4(COPY_LIGHT_SHADE, this.lightSun[5], this.lightSun[6], this.lightSun[7], this.lightSun[4]);
+            w.putVec4(COPY_BLOCK_LIGHT, ColourMath.BLOCK_LIGHT[0], ColourMath.BLOCK_LIGHT[1], ColourMath.BLOCK_LIGHT[2], this.blockLightColour);
+            w.putVec4(COPY_MOON_LIGHT, ColourMath.MOON_LIGHT[0], ColourMath.MOON_LIGHT[1], ColourMath.MOON_LIGHT[2], this.moonLight);
         }
     }
 
@@ -44,19 +50,22 @@ public final class LightingUniforms {
      * P7n design 4.2: the sun's light colour, the strength and the sun's weight for the colour; without the sun shading nothing is
      * coloured (all would read as shade).
      */
-    static float[] lightSun(float[] sunLight, float strength, float weight) {
-        return new float[]{sunLight[0], sunLight[1], sunLight[2], strength, weight};
+    static float[] lightSun(float[] sunLight, float[] shade, float strength, float weight) {
+        return new float[]{sunLight[0], sunLight[1], sunLight[2], strength, weight, shade[0], shade[1], shade[2]};
     }
 
     /** No lighting: the copy multiplies by 1, colours no water and the pass is skipped. */
     public static Values off() {
-        return off(1, 0);
+        return off(1, 0, 0);
     }
 
-    /** No lighting pass, with the frame's sun-up factor and its product with the camera's sky exposure for the copy's exposures. */
-    static Values off(float sunUp, float sunUpExposed) {
-        return new Values(false, new Matrix4f(), new Matrix4f(), new Matrix4f(), new float[]{0, 1, 0}, false, 0, 0, new float[]{0, 1, 0}, false, 0, 1, 0, new float[]{1, 1, 1, 0, 0}, 0, sunUp,
-                sunUpExposed, new float[]{1, 0, 0});
+    /**
+     * No lighting pass, with the frame's sun-up factor and its product with the camera's sky exposure for the copy's exposures, and the
+     * block light colour setting (torch light needs no pass).
+     */
+    static Values off(float sunUp, float sunUpExposed, float blockLightColour) {
+        return new Values(false, new Matrix4f(), new Matrix4f(), new Matrix4f(), new float[]{0, 1, 0}, false, 0, 0, new float[]{0, 1, 0}, false, 0, 1, 0, new float[]{1, 1, 1, 0, 0, 1, 1, 1}, 0, sunUp,
+                sunUpExposed, new float[]{1, 0, 0}, blockLightColour, 0);
     }
 
     /**
@@ -76,10 +85,10 @@ public final class LightingUniforms {
      */
     public static Values compute(PostProcessSettings s, LightingChoice choice, AtmosphereFrame frame, long serial, boolean lodValid, float skyExposure,
                                  boolean vanillaCopies, boolean hasSky) {
-        if (frame == null || frame.serial() != serial) return off();
+        if (frame == null || frame.serial() != serial) return off(1, 0, s.blockLightColour());
         if (choice.serial() != serial || !choice.any()) {
             float up = hasSky ? SunMath.dayFactor(SunMath.sunDirection(frame.timeOfDay()).y, 0) : 0;
-            return off(up, up * Math.max(0, Math.min(1, skyExposure)));
+            return off(up, up * Math.max(0, Math.min(1, skyExposure)), s.blockLightColour());
         }
         Vector3f sun = SunMath.sunDirection(frame.timeOfDay());
         Matrix4f modelView = new Matrix4f(frame.invModelView()).invert();
@@ -92,7 +101,16 @@ public final class LightingUniforms {
         return new Values(true, frame.invVanillaProjection(), frame.invLodProjection(), new Matrix4f(frame.invVanillaProjection()).invert(),
                 new float[]{view.x, view.y, view.z}, lodValid, choice.ao() ? s.aoStrength() : 0, sunWeight, new float[]{up.x, up.y, up.z},
                 vanillaCopies, choice.water() ? s.waterDepth() : 0, WaterMath.ambient(day), (float) (frame.cameraY() - Math.floor(frame.cameraY())),
-                lightSun(ColourMath.sunLight(sun.y), choice.sun() ? s.lightColour() : 0, choice.sun() ? sunDay : 0), LightingMath.sunHeightTerm(sun.y),
-                SunMath.dayFactor(sun.y, 0), SunMath.dayFactor(sun.y, 0) * Math.max(0, Math.min(1, skyExposure)), new float[]{east.x, east.y, east.z});
+                lightSun(ColourMath.sunLight(sun.y, s.sunWarmth()), ColourMath.skyShade(s.sunWarmth()), choice.sun() ? s.lightColour() : 0, choice.sun() ? sunDay : 0), LightingMath.sunHeightTerm(sun.y),
+                SunMath.dayFactor(sun.y, 0), SunMath.dayFactor(sun.y, 0) * Math.max(0, Math.min(1, skyExposure)), new float[]{east.x, east.y, east.z},
+                s.blockLightColour(), choice.sun() && hasSky ? moonStrength(s.lightColour(), sun.y) : 0);
+    }
+
+    /**
+     * 2026-10-28: the moonlight colour's strength on the sky-lit light: the light colour setting as far as the sun is below the horizon,
+     * fading in as the day factor fades out above it (SunMath.dayFactor of the sun's depth), so a setting sun's light stays warm.
+     */
+    static float moonStrength(float lightColour, float sunHeight) {
+        return lightColour * SunMath.dayFactor(-sunHeight, 0);
     }
 }

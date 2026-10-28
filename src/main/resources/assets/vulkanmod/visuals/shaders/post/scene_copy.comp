@@ -90,8 +90,10 @@ layout(location = 28) uniform vec4 starGate;
 layout(location = 29) uniform vec4 lookParams;
 //2026-10-21: the border fog (AtmosphereUniforms.BORDER): x where it starts, y where it is full (horizontal blocks), z 1 when on (no LODs)
 layout(location = 30) uniform vec4 borderFog;
-layout(location = 31) uniform vec4 reserved31;
-layout(location = 32) uniform vec4 reserved32;
+//2026-10-28, clean LightingUniforms: rgb ColourMath.BLOCK_LIGHT, w the block light colour setting; rgb ColourMath.MOON_LIGHT, w its
+// strength on the sky-lit light (the light colour setting x the night)
+layout(location = 31) uniform vec4 blockLightColour;
+layout(location = 32) uniform vec4 moonLightColour;
 layout(location = 33) uniform vec4 reserved33;
 layout(location = 34) uniform vec4 reserved34;
 
@@ -150,6 +152,12 @@ const float NIGHT_SKY_EXPOSURE = 0.7;
 // crosses the cell around the camera), which vanilla does not show
 const float FAR_CLOUD_NEAR = 16.0;
 const float CLOUD_CAMERA_MARGIN = 1.0;
+//2026-10-28 (the user: next to Complementary Reimagined the night's torch light looked like vanilla's): the block-lit light takes the
+// warm colour at its own luminance (vanilla's lightmap is near white beside a torch) and falls off faster from the source, its
+// luminance times (its block level's luminance / the full level's)^(BLOCK_LIGHT_FALLOFF x strength); per channel it is never lifted
+// more than BLOCK_LIGHT_GAIN_MAX times
+const float BLOCK_LIGHT_FALLOFF = 1.0;
+const float BLOCK_LIGHT_GAIN_MAX = 16.0;
 //Below this a lightmap difference counts as no light (the sky/block split)
 const float LIGHT_SPLIT_MIN = 0.00001;
 //B18: the light debug views (lightMode.x; 4 is W6's reflective view)
@@ -203,6 +211,25 @@ vec3 skyLitShare(vec3 skyOnly, vec3 lightAll, vec3 dark) {
 vec3 lightTint(float share, float strength, vec3 sunColour, vec3 shadeColour) {
     vec3 blend = mix(shadeColour, sunColour, clamp(share, 0.0, 1.0));
     return mix(vec3(1.0), blend, clamp(strength, 0.0, 1.0));
+}
+
+//2026-10-28: the moonlight's colour on the sky-lit light (slot 32: 0 strength by day; luminance 1, it moves the hue)
+vec3 moonTint(vec4 moon) {
+    return mix(vec3(1.0), moon.rgb, clamp(moon.w, 0.0, 1.0));
+}
+
+//2026-10-28: the factor per channel on the block-lit light blockLit (lightAll x its block-lit share): its colour moved toward warm (slot
+// 31) at its luminance and its falloff steepened, by strength (0: 1). blockOnly and full are the lightmap at the block level alone and at
+// level 15, dark the no-light floor
+vec3 blockLightFactor(vec3 blockLit, vec3 blockOnly, vec3 full, vec3 dark, vec3 warm, float strength) {
+    float s = clamp(strength, 0.0, 1.0);
+    float l = luminance(blockLit);
+    if (s <= 0.0 || l <= LIGHT_SPLIT_MIN) {
+        return vec3(1.0);
+    }
+    float level = clamp(luminance(max(blockOnly - dark, vec3(0.0)))/max(luminance(full - dark), LIGHT_SPLIT_MIN), 0.0, 1.0);
+    vec3 target = mix(blockLit, l*warm, s)*pow(level, BLOCK_LIGHT_FALLOFF*s);
+    return min(target/max(blockLit, vec3(LIGHT_SPLIT_MIN)), vec3(BLOCK_LIGHT_GAIN_MAX));
 }
 
 //Final fix R1: the look weight every added exposure is blended toward 1 by (W4's slot 29 .x)
@@ -580,7 +607,7 @@ void main() {
         float shadeL = shadeLevel(lighting.w);
         float sunL = sunLevel(lighting.w);
         sunPart = (sunL - shadeL)*directShare/(shadeL + (sunL - shadeL)*directShare);
-        vec3 tint = passRan ? lightTint(directShare, lightSun.w*lightShade.w, lightSun.rgb, lightShade.rgb) : vec3(1.0);
+        vec3 tint = (passRan ? lightTint(directShare, lightSun.w*lightShade.w, lightSun.rgb, lightShade.rgb) : vec3(1.0))*moonTint(moonLightColour);
         //The exposures (final fix R1): the sky-light ones not on light the active volume does not know yet (a section still loading);
         // with the volume off every vanilla pixel takes them on its lightmap share (all sky-lit), as its LOD neighbours do (follow-up 1).
         // The block light's falls on the known block-lit share alone
@@ -590,8 +617,14 @@ void main() {
             se *= skyWeatherExposure(lookParams.z, waterParams.z, waterParams.w, look);
         }
         float be = blockExposure(waterParams.z, look);
+        //2026-10-28: the block-lit light's colour and falloff (1 where nothing is block-lit)
+        vec3 blockShare = (vec3(1.0) - share)*be;
+        if (known && blockLightColour.w > 0.0) {
+            blockShare *= blockLightFactor((vec3(1.0) - share)*lightAll, blockOnly, lightmapLinear(15.0, 0.0), dark, blockLightColour.rgb,
+                    blockLightColour.w);
+        }
         //What the lighting does to a white texel's light here, per channel
-        vec3 perLight = share*skyFactor*tint*se + (vec3(1.0) - share)*be;
+        vec3 perLight = share*skyFactor*tint*se + blockShare;
         //W10: per channel, the share of perLight the ambient occlusion leaves. It takes the sky light's ambient part (the sun shading at
         // no direct sun, with the face unshade, tint and exposure the sky-lit share gets) and the lightmap's floor in the block-lit share
         vec3 ao = vec3(1.0);
@@ -600,7 +633,7 @@ void main() {
             if (occlusion < 1.0) {
                 vec3 floorShare = known ? aoFloorShare(skyOnly, blockOnly, dark) : vec3(0.0);
                 vec3 occludable = share*sunShadingAt(0.0, skyLight, sunWeight, lighting.w)*faceUnshade(shade, sunWeight)*tint*se
-                        + (vec3(1.0) - share)*be*floorShare;
+                        + blockShare*floorShare;
                 ao = aoOccludedLight(perLight, occludable, occlusion);
             }
         }

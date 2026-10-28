@@ -130,6 +130,10 @@ public class VisualsConfig {
     public int skyLightAmbient = 100;
     public boolean perPixelLight = true;
     public int lightColour = 70;
+    /** 2026-10-28: the direct sunlight's colour temperature (ColourMath.sunLight): 100 is 4500 K, 0 the physical sky's white. */
+    public int sunWarmth = 100;
+    /** 2026-10-28: torch light's warm colour and its faster falloff (slot 31); 0 is vanilla's lightmap colour. */
+    public int blockLightColour = 70;
     public boolean heldLight = true;
     /** 0 off, 1..4 increasing quality: 2 is affordable on a mid-range GPU. */
     public int antiAliasing = 2;

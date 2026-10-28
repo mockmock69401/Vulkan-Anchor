@@ -90,6 +90,8 @@ public final class VisualsOptionLayout {
                             percent("sun_shading", STRENGTH_MAX),
                             percent("ao_strength", 0, STRENGTH_MAX, Impact.MEDIUM),
                             percent("light_colour", STRENGTH_MAX),
+                            percent("sun_warmth", SUN_WARMTH_MAX),
+                            percent("block_light_colour", STRENGTH_MAX),
                             toggle("edge_cover", Impact.NONE, null))),
                     new Block(DH_BLOCK, List.of(
                             toggle("dh_lods", Impact.HIGH, null),
@@ -144,6 +146,8 @@ public final class VisualsOptionLayout {
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
             case "light_colour" -> c.lightColour;
+            case "sun_warmth" -> c.sunWarmth;
+            case "block_light_colour" -> c.blockLightColour;
             case "edge_cover" -> c.edgeCover ? 1 : 0;
             case "sun_shadows" -> c.sunShadows ? 1 : 0;
             case "vanilla_shadows" -> c.vanillaShadows ? 1 : 0;
@@ -188,6 +192,8 @@ public final class VisualsOptionLayout {
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;
             case "light_colour" -> c.lightColour = v;
+            case "sun_warmth" -> c.sunWarmth = v;
+            case "block_light_colour" -> c.blockLightColour = v;
             case "edge_cover" -> c.edgeCover = v != 0;
             case "sun_shadows" -> c.sunShadows = v != 0;
             case "vanilla_shadows" -> c.vanillaShadows = v != 0;
