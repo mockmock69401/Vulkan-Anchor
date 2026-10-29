@@ -40,6 +40,7 @@ class DhShadowCastersTest {
         assertEquals(64f, DhShadowCasters.cutoff("shadows.far", true, 12, 4));
         assertEquals(160f, DhShadowCasters.cutoff("shadows.far", true, 32, 10));
         assertEquals(64f, DhShadowCasters.cutoff("shadows.near", true, 12, 4));
+        assertEquals(128f, DhShadowCasters.cutoff("shadows.far", true, 8, 10));
         //Without the vanilla shadows the LODs are the only casters
         assertEquals(0f, DhShadowCasters.cutoff("shadows.near", false, 12));
         assertEquals(0f, DhShadowCasters.cutoff("shadows.far", false, 32));

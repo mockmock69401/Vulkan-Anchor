@@ -649,6 +649,14 @@ void main() {
     }
     float kind = passRan && !cloud ? lt.z : 0.0;
     bool water = kind > 0.0;
+    //2026-10-29 (audit): translucent terrain blends the alpha (a + dst(1 - a)), so over a marked block (a smooth block's 245/246, an
+    // ore's 252...) the code shifts into another mark's: gold under ice read as a light source. Where the lighting pass found a
+    // translucent surface, the block marks mean nothing
+    if (kind != 0.0) {
+        plant = false;
+        emissive = false;
+        ore = false;
+    }
     vec3 lightNormal = water ? vec3(0.0, 1.0, 0.0) : normalWorld;
     //The light levels at the surface: the light volume or the LOD light (unknown: full sky light, no block light, nothing relit)
     vec3 pl = pixelLight(p, size, world, lightNormal);
@@ -792,7 +800,7 @@ void main() {
     //2026-10-29: polished and metal blocks catch the sun's and the moon's light (blockreflect.glsl; block reflections 1 and 2, slot 33
     // .z): the sun's at its visibility and this frame's day (slot 23 .w), the moon's at its strength (slot 32 .w), both where the sky
     // reaches. At 2 the reflection pass adds what they mirror (the mark below)
-    int smoothClass = passRan && !cloud && !fromLod && !emissive && !plant && glowParams.z > 0.5 ? blockCodeClass(alphaCode(colour.a)) : 0;
+    int smoothClass = passRan && !cloud && !fromLod && !emissive && !plant && kind == 0.0 && glowParams.z > 0.5 ? blockCodeClass(alphaCode(colour.a)) : 0;
     if (smoothClass > 0 && dot(normalWorld, normalWorld) > 0.25) {
         float gate = skyGate(clamp(skyT/15.0, 0.0, 1.0));
         vec3 tint = smoothClass == 2 ? metalTint(colour.rgb) : vec3(1.0);

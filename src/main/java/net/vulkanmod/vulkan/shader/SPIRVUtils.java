@@ -90,7 +90,7 @@ public class SPIRVUtils {
         long startTime = System.nanoTime();
 
         source = rewriteLegacyReservedIdentifiers(source);
-        long result = shaderc_compile_into_spv(compiler, source, shaderKind.kind, filename, "main", options);
+        long result = compileIntoSpv(source, shaderKind.kind, filename);
 
         if(result == NULL) {
             throw new RuntimeException("Failed to compile shader " + filename + " into SPIR-V");
@@ -106,6 +106,24 @@ public class SPIRVUtils {
         recordCompileForProfiler(elapsed);
 
         return new SPIRV(result, shaderc_result_get_bytes(result));
+    }
+
+    /**
+     * shaderc_compile_into_spv with the strings encoded off-heap. 2026-10-29: the CharSequence overload encodes the source on LWJGL's
+     * thread stack (64 KB): the visuals' composite shader with its imports outgrew it ("OutOfMemoryError: Out of stack space" while
+     * the world opened, then Minecraft's out-of-memory screen).
+     */
+    private static long compileIntoSpv(String source, int kind, String filename) {
+        ByteBuffer text = memUTF8(source, false);
+        ByteBuffer name = memUTF8(filename);
+        ByteBuffer entry = memUTF8("main");
+        try {
+            return shaderc_compile_into_spv(compiler, text, kind, name, entry, options);
+        } finally {
+            memFree(entry);
+            memFree(name);
+            memFree(text);
+        }
     }
 
     private static void recordCompileForProfiler(long elapsed) {

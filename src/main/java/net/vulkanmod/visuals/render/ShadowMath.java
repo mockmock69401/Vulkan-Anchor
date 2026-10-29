@@ -105,6 +105,14 @@ public final class ShadowMath {
         return Math.max(SHADOW_DISTANCE_MIN, Math.min(SHADOW_DISTANCE_MAX, shadowDistanceChunks)) * 16f;
     }
 
+    /**
+     * 2026-10-29 (audit): the same, never past the render distance. No vanilla section exists beyond it, while the LODs stop casting
+     * inside the reach: a shadow distance of 10 chunks at a render distance of 8 left 128..160 blocks with no caster at all.
+     */
+    public static float nearReach(int shadowDistanceChunks, int renderDistanceChunks) {
+        return Math.min(nearReach(shadowDistanceChunks), Math.max(SHADOW_DISTANCE_MIN, renderDistanceChunks) * 16f);
+    }
+
     /** A cascade: projection (Vulkan depth 0..1) and light view (rotation), the texel and depth range in blocks, the camera it was centred on. */
     public record Cascade(Matrix4f projection, Matrix4f view, float radius, float texel, float depthRange, double cameraX, double cameraY,
                           double cameraZ) {

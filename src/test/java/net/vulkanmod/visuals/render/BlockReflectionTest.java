@@ -52,6 +52,12 @@ class BlockReflectionTest {
             assertTrue(water > 0 && block > water);
         }
         assertTrue(COPY.contains("blockReflectionMark(smoothClass, glowParams.z)"));
+        //audit: under a translucent surface the blended alpha is no mark (gold under ice read as a light source)
+        String copy = COPY.replace("\r\n", "\n");
+        int kind = copy.indexOf("bool water = kind > 0.0;");
+        int reset = copy.indexOf("if (kind != 0.0) {\n        plant = false;\n        emissive = false;\n        ore = false;");
+        assertTrue(kind > 0 && reset > kind, "the marks are cleared right after the kind");
+        assertTrue(COPY.contains("&& kind == 0.0 && glowParams.z > 0.5 ? blockCodeClass("));
         assertTrue(COMP.contains("blockReflectClass(mark) > 0"));
     }
 

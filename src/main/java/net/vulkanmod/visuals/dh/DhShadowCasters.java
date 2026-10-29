@@ -32,7 +32,7 @@ final class DhShadowCasters {
      * terrain ends at the shadow distance (ShadowMath.vanillaRadius's lodBeyond) and the LODs cast past it.
      */
     static float cutoff(String cascade, boolean vanillaShadows, int renderDistanceChunks, int shadowDistanceChunks) {
-        return vanillaShadows ? ShadowMath.vanillaRadius(which(cascade), renderDistanceChunks, ShadowMath.nearReach(shadowDistanceChunks), true) : 0;
+        return vanillaShadows ? ShadowMath.vanillaRadius(which(cascade), renderDistanceChunks, ShadowMath.nearReach(shadowDistanceChunks, renderDistanceChunks), true) : 0;
     }
 
     /**
