@@ -203,6 +203,7 @@ class SceneCompositeTest {
         //2026-10-23: the terrain light, a storage image read in GENERAL
         expected.put("COPY_TERRAIN_LIGHT", VulkanShaderMeta.Kind.IMAGE);
         expected.put("COPY_TERRAIN_ALBEDO", VulkanShaderMeta.Kind.IMAGE);
+        expected.put("COPY_COLOUR_AFTER", VulkanShaderMeta.Kind.SAMPLER);//2026-10-29
         Set<String> want = new TreeSet<>();
         for (Map.Entry<String, VulkanShaderMeta.Kind> e : expected.entrySet()) {
             Integer binding = fields.get(e.getKey());
@@ -216,7 +217,7 @@ class SceneCompositeTest {
             have.add(b.binding() + ":" + b.kind());
         }
         assertEquals(want, have);
-        assertEquals(16, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15");
+        assertEquals(17, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16");
         //Every slot 0..34 with the type its writer uses: the three matrices, then vec4
         for (int loc = 0; loc <= 34; loc++) assertEquals(loc <= 2 ? "mat4" : "vec4", member(loc).type(), "location " + loc);
         //The clean writers and W4 fill every slot but the held light's (HeldLightSystem needs a device buffer: its slot is checked by value)
@@ -294,7 +295,7 @@ class SceneCompositeTest {
         assertEquals(1, count(COMP, "lightingAt("), "one read of lightTex/sunTex");
         assertEquals(1, count(COMP, "texelFetch(plantSunTex"));
         assertFalse(COMP.contains("texelFetch(lightTex") || COMP.contains("texelFetch(sunTex"), "only through W5's lightingAt");
-        assertTrue(COMP.contains("passRan && !cloud ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0"),
+        assertTrue(COMP.contains("passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0"),
                 "alpha 0 without the pass");
     }
 

@@ -73,6 +73,15 @@ const float GLASS_REFLECTION = 0.5;
 //|alpha| below this is "no reflection" (rgba16f keeps 0 exactly; NaN counts as none)
 const float REFLECT_MARK_MIN = 0.001;
 
+//2026-10-29: a colour channel that moved more than this (1.5 steps of the 8-bit main colour) between the copy right after the translucent terrain and
+// the final colour was drawn over (overdrawnAfterTranslucent)
+const float OVERDRAW_MIN = 0.0058824;
+
+//Whether the final colour differs from the copy taken right after the translucent terrain: something (rain, snow) was drawn over it
+bool overdrawnAfterTranslucent(vec3 afterTranslucent, vec3 colour) {
+    return any(greaterThan(abs(afterTranslucent - colour), vec3(OVERDRAW_MIN)));
+}
+
 //The composite's output alpha for a translucent kind (W5's lightOut.a / lightingAt's z)
 float reflectionMark(float kind) {
     return kind > 0.0 ? WATER_REFLECTION : (kind < 0.0 ? -GLASS_REFLECTION : 0.0);

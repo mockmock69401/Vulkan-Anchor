@@ -27,7 +27,8 @@ layout(binding = 9, r32ui) uniform readonly restrict uimage2D terrainLight;
 //0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
 // view; 14..18 W4's cloud block; 19..22 the clean light volume; 24 (2026-10-29) x the block reflections setting, y the frame number
-// (blockReflection's rough rays); 25..29 reserved (written 0)
+// (blockReflection's rough rays); 25 (2026-10-29) x seconds (rainripple.glsl's time), y the rain on the water (rain level x ripple
+// setting); 26..29 reserved (written 0)
 layout(location = 0) uniform mat4 invVanillaProj;
 layout(location = 1) uniform mat4 invLodProj;
 layout(location = 2) uniform mat4 proj;
@@ -53,7 +54,7 @@ layout(location = 21) uniform vec4 lightSize;
 layout(location = 22) uniform vec4 lightMode;
 layout(location = 23) uniform vec4 atmosphereFog;
 layout(location = 24) uniform vec4 blockParams;
-layout(location = 25) uniform vec4 reserved25;
+layout(location = 25) uniform vec4 rainParams;
 layout(location = 26) uniform vec4 reserved26;
 layout(location = 27) uniform vec4 reserved27;
 layout(location = 28) uniform vec4 reserved28;
@@ -66,6 +67,7 @@ layout(location = 29) uniform vec4 reserved29;
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
+#import <vulkanmod:visuals/post/rainripple.glsl>
 
 //The march: REFLECT_STEPS steps in screen space up to the screen's edge, denser near the start (t^REFLECT_STEP_POWER), then
 // REFLECT_REFINE halvings between the last step in front and the first behind
@@ -442,6 +444,15 @@ void main() {
     float footprint = bpp/max(cosGeom, RIPPLE_MIN_COS);
     float strength = mark > 0.0 ? reflectParams.x : 0.0;
     vec3 n = mark > 0.0 ? rippleNormal(world.xz, rippleOffsetsA, rippleOffsetsB, strength, footprint) : nGeom;
+    //2026-10-29: raindrops ring the water where it sees the sky (rainripple.glsl; slot 25), anchored as the first ripple octave
+    float rainShine = 0.0;
+    if (mark > 0.0 && rainParams.y > 0.0) {
+        vec3 rl = pixelLight(p, size, world, nGeom);
+        float open = rl.z > 0.5 ? skyVisibility(rl.x) : clamp(reflectParams.z, 0.0, 1.0);
+        vec2 drops = rainRippleSlope(world.xz + rippleOffsetsA.xy, rainParams.x, rainParams.y*open, footprint);
+        n = normalize(n + vec3(-drops.x, 0.0, -drops.y)*n.y);
+        rainShine = rainRippleShine(drops);
+    }
     float ripple = mark > 0.0 ? rippleAmount(strength, footprint) : 0.0;
     float f = reflectivity(mark, -dot(d, n))*clamp(reflectParams.y, 0.0, 1.0);
     vec3 r = reflect(d, n);
@@ -491,5 +502,6 @@ void main() {
             reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
         }
     }
-    imageStore(sceneOut, p, vec4(mix(own, reflection, clamp(f, 0.0, 1.0)), 1.0));
+    //2026-10-29: the rings' crests catch a share of the mirrored light
+    imageStore(sceneOut, p, vec4(mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine, 1.0));
 }

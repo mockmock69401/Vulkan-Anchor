@@ -68,7 +68,9 @@ public final class VkPostProcess {
     //2026-10-23: the copy reads the terrain light at 14, the reflection at 9 (TerrainLightTarget, storage images in GENERAL)
     COPY_TERRAIN_LIGHT = 14, REFLECTION_TERRAIN_LIGHT = 9,
     //and the copy the albedo at 15
-    COPY_TERRAIN_ALBEDO = 15;
+    COPY_TERRAIN_ALBEDO = 15,
+    //2026-10-29: the copy reads the main colour right after the translucent terrain at 16 (VkDepthCapture.captureColour)
+    COPY_COLOUR_AFTER = 16;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     /**
@@ -113,6 +115,8 @@ public final class VkPostProcess {
     private long cloudMapSerial = -1;
     //2026-10-29: this frame's entity shadow map (0: none, the main depth stands in)
     private long entityShadowView;
+    //2026-10-29: this frame's colour right after the translucent terrain (0: none, the main colour stands in: nothing differs)
+    private long colourAfterView;
     private VkImage2D scene, sceneLit, shaftMaskImage, shaftImage, lightImage, lightBlurImage, sunImage, plantSunImage;
     private VkImage2D[] bloom;
     private int width, height;
@@ -321,6 +325,11 @@ public final class VkPostProcess {
      * CPU side, before the upload commit that precedes compute(): the copy's atmosphere and lighting, the lighting pass's block,
      * the reflection pass's block, the sun position.
      */
+    /** 2026-10-29: before compute(), this frame's colour right after the translucent terrain (0: none). */
+    public void colourAfterTranslucent(long view) {
+        this.colourAfterView = view;
+    }
+
     /** 2026-10-29: before prepare(), this frame's entity shadow map (view 0 and entity off: none). */
     public void prepareEntityShadows(EntityShadowUniforms.Values entity, long view) {
         entity.write(this.lightingUniforms);
@@ -402,7 +411,8 @@ public final class VkPostProcess {
                 .storage(COPY_LIGHT_DATA, data).storage(COPY_LIGHT_READY, ready).sampledView(COPY_LIGHTMAP, light.lightmap(), this.linear)
                 .sampled(COPY_SUN, this.sunImage, this.nearest).sampledView(COPY_LOD_LIGHT, lodLight, this.nearest).storage(COPY_HELD_LIGHT, held)
                 .sampled(COPY_PLANT_SUN, this.plantSunImage, this.nearest).sampled(COPY_AO, this.ao.output(), this.nearest)
-                .storageImage(COPY_TERRAIN_LIGHT, light.terrainLight()).storageImage(COPY_TERRAIN_ALBEDO, light.terrainAlbedo());
+                .storageImage(COPY_TERRAIN_LIGHT, light.terrainLight()).storageImage(COPY_TERRAIN_ALBEDO, light.terrainAlbedo())
+                .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         this.copy.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
