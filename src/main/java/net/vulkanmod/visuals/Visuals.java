@@ -56,7 +56,14 @@ public final class Visuals {
 
     /** WorldRenderer.renderSectionLayer, after the cutout terrain. */
     public static void frame(Matrix4fc projection, Matrix4fc modelView, double cameraX, double cameraY, double cameraZ) {
-        if (current != null) current.frame(projection, modelView, cameraX, cameraY, cameraZ);
+        VisualsRenderer r = current;
+        if (r != null && r.runsFrames()) {
+            r.frame(projection, modelView, cameraX, cameraY, cameraZ);
+            return;
+        }
+        //2026-10-30 (audit): no visuals frame (the renderer failed or there is none): DH's staged uploads are still recorded, else
+        // they piled up (up to 320 MB) and were then refused, leaving LOD holes after a reload
+        if (net.vulkanmod.visuals.dh.DhPresence.isActive()) net.vulkanmod.visuals.dh.DhStaging.INSTANCE.flushOutsideVisuals();
     }
 
     /** WorldRenderer.renderSectionLayer: the main depth right before (VkDepthCapture.BEFORE) or after (AFTER) the translucent terrain. */

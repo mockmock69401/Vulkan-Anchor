@@ -131,14 +131,18 @@ public final class VkVanillaShadows {
 
     /**
      * The grid's sections that can cast, as the collector sees them: compiled, not empty, within the caster radius of the camera
-     * (checked before any object is made: the grid holds every section of the render distance).
+     * (checked before any object is made: the grid holds every section of the render distance). 2026-10-30 (audit): and over a chunk
+     * VulkanMod draws (ChunkStatusMap.chunkRenderReady, as the edge cover checks): a section over a chunk not ready can hold an old
+     * build, which VulkanMod does not draw and so should not cast either.
      */
     private static List<VanillaShadowCasters.Section> sections(RenderSection[] grid, double camX, double camZ, float casterRadius) {
         List<VanillaShadowCasters.Section> out = new ArrayList<>();
         float reach = casterRadius + 16;
+        net.vulkanmod.render.chunk.ChunkStatusMap ready = net.vulkanmod.render.chunk.ChunkStatusMap.INSTANCE;
         for (RenderSection s : grid) {
             if (s == null || !s.isCompiled() || s.isCompletelyEmpty()) continue;
             if (Math.abs(s.xOffset() + 8 - camX) > reach || Math.abs(s.zOffset() + 8 - camZ) > reach) continue;
+            if (ready != null && !ready.chunkRenderReady(s.xOffset() >> 4, s.zOffset() >> 4)) continue;
             out.add(new SectionView(s));
         }
         return out;

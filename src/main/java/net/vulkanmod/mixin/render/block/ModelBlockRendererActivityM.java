@@ -31,6 +31,7 @@ public class ModelBlockRendererActivityM {
     private void vulkanmod$markTesselatedSprite(BlockAndTintGetter level, BlockState state, BlockPos pos, VertexConsumer consumer, PoseStack.Pose pose,
                                                 BakedQuad quad, float b0, float b1, float b2, float b3, int l0, int l1, int l2, int l3, int overlay,
                                                 CallbackInfo ci) {
-        SpriteActivity.markSprite(quad.getSprite());
+        //2026-10-30 (audit): a tesselated block often goes into a mesh drawn for many frames (contraptions): its sprite keeps ticking
+        SpriteActivity.keepSprite(quad.getSprite());
     }
 }

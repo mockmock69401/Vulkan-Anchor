@@ -74,7 +74,7 @@ public final class DhRegistration {
             DhRenderDefinition.offerToDh().whenComplete((result, error) -> {
                 boolean accepted = error == null && result != null ? onResult(result.success, result.message)
                         : onResult(false, error != null ? error.toString() : "no result");
-                if (accepted) activate(DhRegistration::activateSteps);
+                if (accepted) activateOnRenderThread();
             });
         } catch (RuntimeException | LinkageError e) {
             onResult(false, e.toString());
@@ -85,7 +85,15 @@ public final class DhRegistration {
     static void acceptLegacy() {
         DhPresence.markActive(true);
         VisualsLog.info("Distant Horizons started with its render definition taken over by VulkanMod; DH's hook runs from now on");
-        activate(DhRegistration::activateSteps);
+        activateOnRenderThread();
+    }
+
+    /**
+     * 2026-10-30 (audit): the steps run on the render thread: DH's completion callback (and the legacy hand-over) can come on DH's
+     * worker thread, where they bound the culling frustum and held DH's config values while frames were drawn.
+     */
+    private static void activateOnRenderThread() {
+        net.minecraft.client.Minecraft.getInstance().execute(() -> activate(DhRegistration::activateSteps));
     }
 
     /** Whether DH draws through the fork from now on; a refusal leaves DH off with one warning. */

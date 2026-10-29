@@ -83,6 +83,7 @@ public final class FramePacer {
     public static final int RENDER_WAIT_STAGES = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
             | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     private static final long FOREVER = -1L;
+    private static final long FAILED_STOP_WAIT_NS = 2_000_000_000L;
     /** Timestamps per pacer frame: start, after the warp, end. */
     private static final int QUERIES = 3;
 
@@ -258,7 +259,14 @@ public final class FramePacer {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             //a failed run may have left a fence reset and never submitted; its reservations were released on the timeline
             if (!this.failed) vkWaitForFences(this.device, stack.longs(this.fences), true, FOREVER);
-            this.waitPacerTimeline(stack, this.ledger.lastValue());
+            //2026-10-30 (audit): after a failure the release itself may have failed (device lost): a bounded wait, not forever
+            if (this.failed) {
+                int r = vkWaitSemaphores(this.device, VkSemaphoreWaitInfo.calloc(stack).sType$Default().semaphoreCount(1)
+                        .pSemaphores(stack.longs(this.pacerTimeline)).pValues(stack.longs(this.ledger.lastValue())), FAILED_STOP_WAIT_NS);
+                if (r != VK_SUCCESS) VisualsLog.warn("Frame generation pacer: its timeline did not reach its last value after the failure (" + r + ")");
+            } else {
+                this.waitPacerTimeline(stack, this.ledger.lastValue());
+            }
         }
         //every pacer frame is done: the records held for their GPU times
         for (int i = 0; i < FRAMES; i++) this.flushUnlogged(i);
@@ -532,6 +540,8 @@ public final class FramePacer {
     private RealFrame warpSource(RealFrame f) {
         RealFrame p = this.previous;
         if (p == null || !canGenerate(p) || !canGenerate(f) || p.slot() == f.slot() || p.renderValue() + 1 != f.renderValue()) return null;
+        //2026-10-30 (audit): and the render thread has not begun the next frame into p's slot (its submit did not wait for this read)
+        if (this.ledger.lastWrittenSlot() != f.slot()) return null;
         return p;
     }
 

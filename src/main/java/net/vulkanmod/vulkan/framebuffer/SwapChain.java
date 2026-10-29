@@ -220,13 +220,24 @@ public class SwapChain extends Framebuffer {
         createGlIds();
     }
 
+    /**
+     * 2026-10-30 (audit): the ids of the previous images are reused (every recreation and adopt made new ones and kept the old,
+     * pointing at destroyed images); ids beyond the new image count are deleted.
+     */
     private void createGlIds() {
+        int[] old = this.glIds;
         this.glIds = new int[this.swapChainImages.size()];
 
         for (int i = 0; i < this.swapChainImages.size(); i++) {
-            int id = GlTexture.genTextureId();
+            int id = old != null && i < old.length ? old[i] : GlTexture.genTextureId();
             this.glIds[i] = id;
             GlTexture.bindIdToImage(id, this.swapChainImages.get(i));
+        }
+        if (old != null) {
+            for (int i = this.glIds.length; i < old.length; i++) {
+                GlTexture.setVulkanImage(old[i], null);
+                GlTexture.glDeleteTextures(old[i]);
+            }
         }
     }
 

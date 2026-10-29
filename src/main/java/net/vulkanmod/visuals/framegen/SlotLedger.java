@@ -12,6 +12,8 @@ package net.vulkanmod.visuals.framegen;
 public final class SlotLedger {
     private final long[] reads;
     private long last;
+    //2026-10-30 (audit): the slot the render thread last asked to write (readValue), -1 before any
+    private int lastWritten = -1;
 
     public SlotLedger(int slots) {
         this.reads = new long[slots];
@@ -25,7 +27,16 @@ public final class SlotLedger {
 
     /** Render thread: the value its submit waits on before writing slot (0, always reached, when the pacer never read it). */
     public synchronized long readValue(int slot) {
+        this.lastWritten = slot;
         return this.reads[slot];
+    }
+
+    /**
+     * 2026-10-30 (audit): the slot the render thread's latest submit writes. Under this monitor a pacer read of any other slot is
+     * still safe to reserve: the render thread's next write of it asks readValue afterwards and waits for that read.
+     */
+    public synchronized int lastWrittenSlot() {
+        return this.lastWritten;
     }
 
     /** The highest value reserved so far: once the pacer timeline reaches it, the pacer has no GPU work left. */

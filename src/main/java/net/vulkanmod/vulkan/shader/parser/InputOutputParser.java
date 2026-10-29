@@ -15,6 +15,8 @@ public class InputOutputParser {
 
     private final AttributeSet vertInAttributes = new AttributeSet();
     private final AttributeSet vertOutAttributes = new AttributeSet();
+    //2026-10-30 (audit): the fragment stage's own interpolation qualifiers by input name (they were dropped; only the vertex's counted)
+    private final java.util.Map<String, String> fragInQualifiers = new java.util.HashMap<>();
 
     private GlslConverter.ShaderStage shaderStage;
 
@@ -56,9 +58,7 @@ public class InputOutputParser {
             }
             else {
                 switch (this.ioType) {
-                    case "in" -> {
-
-                    }
+                    case "in" -> this.fragInQualifiers.put(this.name, this.qualifier);
                     case "out" -> {
 
                     }
@@ -97,7 +97,8 @@ public class InputOutputParser {
         else {
 
             for(Attribute attribute : this.vertOutAttributes.attributes) {
-                builder.append(String.format("layout(location = %d) %sin %s %s;\n", attribute.location, attribute.qualifier, attribute.type, attribute.name));
+                builder.append(String.format("layout(location = %d) %sin %s %s;\n", attribute.location,
+                        fragmentQualifier(attribute, this.fragInQualifiers.get(attribute.name)), attribute.type, attribute.name));
             }
             builder.append("\n");
 
@@ -105,6 +106,17 @@ public class InputOutputParser {
         }
 
         return builder.toString();
+    }
+
+    /**
+     * 2026-10-30 (audit): a fragment input's qualifiers: the fragment's own when it declares some (only the fragment stage's count in
+     * Vulkan), else the vertex output's; an integer input is always flat (GL and Vulkan require it; a vertex "out int x" paired with
+     * the fragment's "flat in int x" failed to compile).
+     */
+    static String fragmentQualifier(Attribute attribute, String fragmentOwn) {
+        String q = fragmentOwn != null && !fragmentOwn.isEmpty() ? fragmentOwn : attribute.qualifier;
+        if (attribute.type.matches("u?int|[iu]vec[234]") && !q.contains("flat")) q = "flat " + q;
+        return q;
     }
 
     public void setShaderStage(GlslConverter.ShaderStage shaderStage) {

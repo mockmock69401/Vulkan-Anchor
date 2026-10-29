@@ -52,6 +52,21 @@ class ConverterBackportTest {
         assertNull(error, error + "\n" + fragment);
     }
 
+    /** 2026-10-30 (audit): the fragment's own flat counts, and an integer input is flat even when the vertex output was not. */
+    @Test
+    void theFragmentsFlatIsKept() {
+        String vertex = VERTEX.replace("flat out int power;", "out int power;");
+        GlslConverter converter = new GlslConverter();
+        converter.process(vertex, FRAGMENT.replace("flat in int power;", "in int power;"));
+        String fragment = converter.getFshConverted();
+        assertTrue(fragment.matches("(?s).*layout\\(location = \\d+\\) flat in int power;.*"), fragment);
+        String error = ShadercTestUtil.compile("f.fsh", fragment, Shaderc.shaderc_glsl_fragment_shader, true);
+        assertNull(error, error + "\n" + fragment);
+        converter = new GlslConverter();
+        converter.process(VERTEX.replace("flat out vec2 corner;", "out vec2 corner;"), FRAGMENT);
+        assertTrue(converter.getFshConverted().matches("(?s).*layout\\(location = \\d+\\) flat in vec2 corner;.*"), converter.getFshConverted());
+    }
+
     /** Mods' 1.20.1 shaders call fog_distance(ModelViewMat, Position, FogShape); VulkanMod's fog.glsl is found before the game's. */
     @Test
     void fogIncludeHasBothForms() throws Exception {

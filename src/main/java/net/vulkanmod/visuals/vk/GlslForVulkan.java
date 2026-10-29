@@ -128,7 +128,12 @@ public final class GlslForVulkan {
     private static final Pattern EXPLICIT_VARYING = Pattern.compile(
             "layout\\s*\\([^)]*\\blocation\\s*=\\s*(\\d+)[^)]*\\)[ \\t]*(?:\\w+[ \\t]+)*?(in|out)\\b");
 
-    /** SPIR-V needs a location on every user in/out; implicit ones get the next location not used explicitly, in declaration order. */
+    /**
+     * SPIR-V needs a location on every user in/out; implicit ones get the next locations not used explicitly, in declaration order.
+     * Vulkan matches a vertex output to a fragment input by location, not by name as GL does, so a program's stages declare their
+     * implicit varyings in the same order (ShaderCatalogTest checks every visuals program). 2026-10-30 (audit): a matrix or an
+     * array takes as many locations as it fills (it overlapped the next varying before).
+     */
     public static String varyingLocations(String source) {
         Set<Integer> usedIn = new HashSet<>();
         Set<Integer> usedOut = new HashSet<>();
@@ -141,15 +146,50 @@ public final class GlslForVulkan {
         int last = 0;
         while (m.find()) {
             Set<Integer> used = m.group(3).equals("in") ? usedIn : usedOut;
+            int count = locationCount(m.group(4));
             int location = 0;
-            while (used.contains(location)) location++;
-            used.add(location);
+            while (!free(used, location, count)) location++;
+            for (int i = 0; i < count; i++) used.add(location + i);
             out.append(source, last, m.start()).append(m.group(1)).append("layout(location = ").append(location).append(") ")
                     .append(m.group(2)).append(m.group(3)).append(m.group(4));
             last = m.end();
         }
         out.append(source.substring(last));
         return out.toString();
+    }
+
+    private static boolean free(Set<Integer> used, int location, int count) {
+        for (int i = 0; i < count; i++) {
+            if (used.contains(location + i)) return false;
+        }
+        return true;
+    }
+
+    private static final Pattern VARYING_DECL = Pattern.compile("(\\w+)[ \\t]+(\\w+)(?:\\[(\\w*)\\])?[ \\t]*;\\s*$");
+
+    /** The locations an implicit varying's declaration (" type name[n];") fills: a matrix one per column, an array n times. */
+    static int locationCount(String declaration) {
+        Matcher d = VARYING_DECL.matcher(declaration.trim());
+        if (!d.find()) return 1;
+        String type = d.group(1);
+        int each = 1;
+        Matcher mat = Pattern.compile("^d?mat([234])(?:x[234])?$").matcher(type);
+        if (mat.find()) each = Integer.parseInt(mat.group(1));
+        String size = d.group(3);
+        int n = size != null && size.matches("\\d+") ? Integer.parseInt(size) : 1;
+        return Math.max(1, each * n);
+    }
+
+    /** The names of the implicit (no layout) varyings in direction ("in" or "out"), in declaration order. */
+    public static List<String> implicitVaryings(String source, String direction) {
+        List<String> names = new ArrayList<>();
+        Matcher m = IMPLICIT_VARYING.matcher(source);
+        while (m.find()) {
+            if (!m.group(3).equals(direction)) continue;
+            Matcher d = VARYING_DECL.matcher(m.group(4).trim());
+            if (d.find()) names.add(d.group(2));
+        }
+        return names;
     }
 
     private static final Pattern LOOSE_UNIFORM = Pattern.compile(
@@ -304,15 +344,21 @@ public final class GlslForVulkan {
         return null;
     }
 
-    /** GL built-ins with no Vulkan GLSL equivalent, rewritten to keep GL's meaning. */
+    /**
+     * GL built-ins with no Vulkan GLSL equivalent, rewritten to keep GL's meaning. 2026-10-30 (audit): without the draw parameters
+     * capability where it can (a device without shaderDrawParameters could not make the edge cover's and the vanilla shadows'
+     * pipelines): the visuals' instanced draws start at instance 0, so gl_InstanceID is gl_InstanceIndex, and the vanilla shadows'
+     * gl_InstanceID + gl_BaseInstance is gl_InstanceIndex whatever the first instance. Only a gl_BaseInstance left on its own takes
+     * the extension.
+     */
     public static String vulkanBuiltins(String source) {
-        boolean usesInstanceId = source.matches("(?s).*\\bgl_InstanceID\\b.*");
-        String out = source.replaceAll("\\bgl_VertexID\\b", "gl_VertexIndex")
-                .replaceAll("\\bgl_InstanceID\\b", "(gl_InstanceIndex - gl_BaseInstance)")
+        String out = source.replaceAll("\\bgl_InstanceID\\s*\\+\\s*gl_BaseInstance\\b", "gl_InstanceIndex")
+                .replaceAll("\\bgl_VertexID\\b", "gl_VertexIndex")
+                .replaceAll("\\bgl_InstanceID\\b", "gl_InstanceIndex")
                 .replace("gl_DepthRange.diff", "1.0")
                 .replace("gl_DepthRange.near", "0.0")
                 .replace("gl_DepthRange.far", "1.0");
-        if (usesInstanceId && !out.contains("GL_ARB_shader_draw_parameters")) {
+        if (out.matches("(?s).*\\bgl_BaseInstance\\b.*") && !out.contains("GL_ARB_shader_draw_parameters")) {
             int firstLine = out.indexOf('\n') + 1;
             out = out.substring(0, firstLine) + "#extension GL_ARB_shader_draw_parameters : require\n" + out.substring(firstLine);
         }

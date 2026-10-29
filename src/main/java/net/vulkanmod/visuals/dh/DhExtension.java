@@ -137,6 +137,8 @@ public final class DhExtension implements VisualsExtension {
      * frames DH gives none for: casterSource draws from it within CASTER_REUSE_FRAMES (R26b).
      */
     private DhFrameCapture.Frame casterFrame;
+    //2026-10-30 (audit): the level casterFrame was given in; another level drops it (it cast the old dimension's LODs for frames)
+    private Object casterLevel;
     /** Cascade redraws on frames DH gave no frame for: drawn from the latest one, or without LOD casters (it was too old). */
     private long reusedCasterRedraws, emptyCasterRedraws;
     /** The serial whose staged copies recordOffscreen has recorded: DH buffers are drawable from then on in that frame (R15). */
@@ -257,6 +259,11 @@ public final class DhExtension implements VisualsExtension {
     @Override
     public void prepare(FrameContext ctx) {
         this.frame = null;
+        Object level = net.minecraft.client.Minecraft.getInstance().level;
+        if (level != this.casterLevel) {
+            this.casterFrame = null;
+            this.casterLevel = level;
+        }
         boolean lods = drawsLods(VisualsConfig.get().dhLods, DhRegistration.disabled());
         this.vanillaFog.update(lods);
         if (!lods) {
@@ -270,7 +277,16 @@ public final class DhExtension implements VisualsExtension {
         }
         DhFrameCapture.Frame f = DhFrameCapture.INSTANCE.take(ctx.serial());
         //No frame from DH: the casters keep the latest one (casterSource)
-        if (f == null) return;
+        if (f == null) {
+            //2026-10-30 (audit): whose buffers may have grown since; the shared index buffer follows (they cast only part of their quads)
+            DhFrameCapture.Frame kept = this.casterFrame;
+            if (kept != null && this.quads != null) {
+                int most = 0;
+                for (DhFrameCapture.Draw d : kept.opaque()) most = Math.max(most, d.buffer().quadCount());
+                if (most > this.quads.capacityQuads()) this.ensureQuads(most);
+            }
+            return;
+        }
         try {
             this.ensureResources();
             this.target.ensureSize(ctx.width(), ctx.height());
@@ -278,7 +294,7 @@ public final class DhExtension implements VisualsExtension {
             for (DhFrameCapture.Draw d : f.opaque()) most = Math.max(most, d.buffer().quadCount());
             for (DhFrameCapture.Draw d : f.transparent()) most = Math.max(most, d.buffer().quadCount());
             //Its upload is staged like DH's own and recorded by the flush at the start of recordOffscreen
-            if (most > 0) this.quads.ensure(most);
+            if (most > 0 && !this.ensureQuads(most)) return;
             //Ruling R20: this frame's vanilla fog (after DH's MixinFogRenderer), through compositeFog
             FogParameters fog = compositeFog(FogParameters.fromRenderSystem(), environmentalFogNow(), VisualsRenderer.vanillaRenderDistance());
             this.composite.prepare(ctx.upload(), LodCompositeUniforms.compute(f.dhProjectionVk(), DhDepth.toVulkan(ctx.projection()), fog));
@@ -566,6 +582,22 @@ public final class DhExtension implements VisualsExtension {
         if (this.target != null) this.target.tick();
         this.deferred.tick(VkFrames.completedSerial());
     }
+
+    /** 2026-10-30 (audit): a quad index buffer that cannot grow skips this frame's LODs (it turned DH off for the session). */
+    private boolean ensureQuads(int quads) {
+        try {
+            this.quads.ensure(quads);
+            return true;
+        } catch (RuntimeException e) {
+            if (!this.quadsWarned) {
+                this.quadsWarned = true;
+                VisualsLog.warn("Distant Horizons: the quad index buffer could not grow to " + quads + " quads (" + e + "); LOD frames skipped");
+            }
+            return false;
+        }
+    }
+
+    private boolean quadsWarned;
 
     private void fail(String what, Throwable e) {
         this.frame = null;

@@ -319,6 +319,7 @@ public abstract class DeviceManager {
             transferQueue = new TransferQueue(stack, indices.transferFamily);
             presentQueue = new PresentQueue(stack, indices.presentFamily);
             computeQueue = new ComputeQueue(stack, indices.computeFamily);
+            net.vulkanmod.vulkan.queue.QueueLock.presentQueue(presentQueue.queue(), graphicsQueue.queue(), transferQueue.queue(), computeQueue.queue());
 
             //FSR's game queue is VulkanMod's graphics queue (index 0)
             fsrQueues = fsrPlan.map(p -> new FsrQueues(graphicsQueue.queue(), indices.graphicsFamily,

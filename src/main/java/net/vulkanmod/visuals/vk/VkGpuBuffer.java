@@ -16,6 +16,7 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class VkGpuBuffer {
     private final long buffer;
     private final long allocation;
+    private boolean freed;
     private final long size;
     private final ByteBuffer mapped;
 
@@ -40,7 +41,11 @@ public final class VkGpuBuffer {
             if (host) {
                 PointerBuffer pData = stack.mallocPointer(1);
                 result = Vma.vmaMapMemory(VkContext.allocator(), this.allocation, pData);
-                if (result != VK_SUCCESS) throw new IllegalStateException("vmaMapMemory failed: " + result);
+                if (result != VK_SUCCESS) {
+                    //2026-10-30 (audit): the buffer no longer leaks when it cannot be mapped
+                    Vma.vmaDestroyBuffer(VkContext.allocator(), this.buffer, this.allocation);
+                    throw new IllegalStateException("vmaMapMemory failed: " + result);
+                }
                 this.mapped = MemoryUtil.memByteBuffer(pData.get(0), (int) size);
             } else {
                 this.mapped = null;
@@ -76,9 +81,16 @@ public final class VkGpuBuffer {
         return this.mapped;
     }
 
-    /** Only once no submitted frame can still use it. */
+    /** Only once no submitted frame can still use it. 2026-10-30 (audit): a second call does nothing. */
     public void free() {
+        if (this.freed) return;
+        this.freed = true;
         if (this.mapped != null) Vma.vmaUnmapMemory(VkContext.allocator(), this.allocation);
         Vma.vmaDestroyBuffer(VkContext.allocator(), this.buffer, this.allocation);
+    }
+
+    /** 2026-10-30 (audit): whether free ran (VkUploadStream drops copies into a freed buffer). */
+    public boolean freed() {
+        return this.freed;
     }
 }

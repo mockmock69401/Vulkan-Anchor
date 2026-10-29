@@ -115,4 +115,14 @@ class SpriteActivityTest {
         assertTrue(SpriteActivity.active(a.frame, SpriteActivity.frame()));
         assertTrue(SpriteActivity.active(b.frame, SpriteActivity.frame()));
     }
+
+    /** 2026-10-30 (audit): a sprite tesselated into a mesh drawn for many frames (a contraption) keeps ticking unseen. */
+    @Test void aTesselatedSpriteKeepsTicking() {
+        Sprite kept = new Sprite(), seen = new Sprite();
+        SpriteActivity.keep(kept);
+        SpriteActivity.mark(seen);
+        for (int i = 0; i < 5; i++) SpriteActivity.nextFrame();
+        assertTrue(SpriteActivity.shouldTick(kept));
+        assertFalse(SpriteActivity.shouldTick(seen));
+    }
 }

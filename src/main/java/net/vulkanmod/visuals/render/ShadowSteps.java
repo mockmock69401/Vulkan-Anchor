@@ -12,6 +12,8 @@ final class ShadowSteps {
     static final double STEP_DEGREES = 0.05;
     /** The same in time of day (a full turn is 1). */
     static final double STEP = STEP_DEGREES / 360.0;
+    /** 2026-10-30 (audit): steps in a full turn; step 7200's sun is step 0's (time of day wraps at 1), so steps compare modulo it. */
+    static final long STEPS_PER_TURN = Math.round(1.0 / STEP);
 
     private ShadowSteps() {
     }
@@ -58,7 +60,7 @@ final class ShadowSteps {
 
     private static int find(long step, long[] steps, boolean[] valid) {
         for (int i = 0; i < 2; i++) {
-            if (valid[i] && steps[i] == step) return i;
+            if (valid[i] && Math.floorMod(steps[i] - step, STEPS_PER_TURN) == 0) return i;
         }
         return -1;
     }

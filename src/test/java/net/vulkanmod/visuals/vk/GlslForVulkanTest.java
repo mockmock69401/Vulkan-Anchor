@@ -36,14 +36,18 @@ class GlslForVulkanTest {
 
     @Test
     void vertexAndInstanceIdsKeepTheirGlMeaning() {
+        //2026-10-30 (audit): no draw parameters needed (the visuals' instanced draws start at instance 0)
         String out = GlslForVulkan.vulkanBuiltins("#version 460 core\nvoid main(){ uint a = gl_VertexID + gl_InstanceID; }\n");
-        assertEquals("#version 460 core\n#extension GL_ARB_shader_draw_parameters : require\n"
-                + "void main(){ uint a = gl_VertexIndex + (gl_InstanceIndex - gl_BaseInstance); }\n", out);
+        assertEquals("#version 460 core\nvoid main(){ uint a = gl_VertexIndex + gl_InstanceIndex; }\n", out);
+        assertEquals("#version 460 core\nvoid main(){ int b = gl_InstanceIndex; }\n",
+                GlslForVulkan.vulkanBuiltins("#version 460 core\nvoid main(){ int b = gl_InstanceID + gl_BaseInstance; }\n"));
+        assertEquals("#version 460 core\n#extension GL_ARB_shader_draw_parameters : require\nvoid main(){ int c = gl_BaseInstance; }\n",
+                GlslForVulkan.vulkanBuiltins("#version 460 core\nvoid main(){ int c = gl_BaseInstance; }\n"));
     }
 
     @Test
     void drawParametersExtensionIsNotDuplicated() {
-        String src = "#version 460 core\n#extension GL_ARB_shader_draw_parameters : require\nvoid main(){ uint a = gl_InstanceID; }\n";
+        String src = "#version 460 core\n#extension GL_ARB_shader_draw_parameters : require\nvoid main(){ uint a = gl_BaseInstance; }\n";
         String out = GlslForVulkan.vulkanBuiltins(src);
         assertEquals(1, out.split("GL_ARB_shader_draw_parameters", -1).length - 1);
     }

@@ -17,7 +17,10 @@ import net.vulkanmod.visuals.VisualsLog;
  */
 public final class DhWorldGenGuard {
     private static final String LOST_CITIES = "lostcities";
-    private static boolean done, warned;
+    /** 2026-10-30 (audit): how often the player's mode is looked at again (ticks). */
+    static final int CHECK_TICKS = 20;
+    private static boolean gaveUp, warned, holding;
+    private static int ticks;
 
     private DhWorldGenGuard() {
     }
@@ -26,7 +29,7 @@ public final class DhWorldGenGuard {
     public static void install() {
         if (!ModList.get().isLoaded(LOST_CITIES)) return;
         MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> {
-            if (event.phase == TickEvent.Phase.END && !done) apply();
+            if (event.phase == TickEvent.Phase.END && !gaveUp && ticks++ % CHECK_TICKS == 0) apply();
         });
     }
 
@@ -35,20 +38,30 @@ public final class DhWorldGenGuard {
         return mode == EDhApiDistantGeneratorMode.FEATURES || mode == EDhApiDistantGeneratorMode.SURFACE;
     }
 
+    /**
+     * 2026-10-30 (audit): held while the player's own mode (DH's true value: DistantHorizons.toml, DH's screen) runs features on a
+     * partial region, and let go once the player picks one that does not (it was held for the session, over the player's choice).
+     */
     private static void apply() {
         try {
-            //DH's API is filled in after its own setup: until then, try again next tick
+            //DH's API is filled in after its own setup: until then, try again later
             if (DhApi.Delayed.configs == null) return;
-            done = true;
             IDhApiConfigValue<EDhApiDistantGeneratorMode> mode = generatorMode();
-            EDhApiDistantGeneratorMode before = mode.getValue();
-            if (!partialRegion(before)) return;
-            boolean accepted = hold(mode);
-            VisualsLog.info("Distant Horizons: Lost Cities is installed, so the distant generator mode is held at INTERNAL_SERVER in memory"
-                    + " (DistantHorizons.toml says " + before + (accepted ? "" : "; not accepted by DH") + ")");
+            EDhApiDistantGeneratorMode chosen = mode.getTrueValue();
+            boolean hold = partialRegion(chosen);
+            if (hold == holding) return;
+            holding = hold;
+            if (hold) {
+                boolean accepted = hold(mode);
+                VisualsLog.info("Distant Horizons: Lost Cities is installed, so the distant generator mode is held at INTERNAL_SERVER in memory"
+                        + " (DistantHorizons.toml says " + chosen + (accepted ? "" : "; not accepted by DH") + ")");
+            } else {
+                mode.clearValue();
+                VisualsLog.info("Distant Horizons: the distant generator mode " + chosen + " is safe with Lost Cities; no longer held");
+            }
         } catch (RuntimeException | LinkageError e) {
             //Also a DH whose API classes are renamed (DH 3.3.0 for NeoForge 1.21.1): give up after the first try
-            done = true;
+            gaveUp = true;
             if (!warned) {
                 warned = true;
                 VisualsLog.warn("Distant Horizons: could not set the distant generator mode (" + e + "); with Lost Cities, set "

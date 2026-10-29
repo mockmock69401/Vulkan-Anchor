@@ -575,6 +575,11 @@ public final class VkPostProcess {
     }
 
     /** Whether TAA can run this frame when asked (the jitter follows this). */
+    /** 2026-10-30 (audit): whether TAA resolved this frame (antiAlias ran it without failing). */
+    public boolean taaDrawn() {
+        return this.taaDrawn;
+    }
+
     public boolean taaAvailable() {
         return this.taa != null && !this.taaFailed && this.smaa != null && !this.smaaFailed;
     }

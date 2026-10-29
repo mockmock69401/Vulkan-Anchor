@@ -93,9 +93,10 @@ class VanillaShadowCastersTest {
         String v = read("assets/vulkanmod/visuals/shaders/shadow/vanilla.vert"), f = read("assets/vulkanmod/visuals/shaders/shadow/vanilla.frag");
         assertTrue(v.contains("ivec3 baseOffset = bitfieldExtract(ivec3(gl_InstanceID + gl_BaseInstance) >> ivec3(0, 16, 8), 0, 8);"));
         assertTrue(v.contains("vec3 pos = fma(vec3(Position.xyz), vec3(1.0/2048.0), areaOffset.xyz + vec3(baseOffset));"));
-        //Review focus 3: GlslForVulkan turns gl_InstanceID into gl_InstanceIndex - gl_BaseInstance, so the sum is the full index
+        //Review focus 3: the sum is the full index; 2026-10-30 (audit): GlslForVulkan makes it gl_InstanceIndex, with no draw parameters
         String vk = net.vulkanmod.visuals.vk.GlslForVulkan.toVulkan(v, java.util.Map.of()).source();
-        assertTrue(vk.replace(" ", "").contains("ivec3((gl_InstanceIndex-gl_BaseInstance)+gl_BaseInstance)"), vk);
+        assertTrue(vk.replace(" ", "").contains("ivec3(gl_InstanceIndex)"), vk);
+        assertFalse(vk.contains("gl_BaseInstance"), vk);
         assertTrue(f.contains("if (textureLod(atlas, uv, 0.0).a < cutout) {"), "cutouts cast their own shape, by the layer's cutout");
         assertTrue(v.contains("cutout = areaOffset.w;"), "final review I1: the layer's cutout comes with the area offset");
     }

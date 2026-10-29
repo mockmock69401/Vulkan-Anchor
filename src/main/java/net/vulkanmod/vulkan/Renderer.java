@@ -111,6 +111,8 @@ public class Renderer {
     private static int lastReset = -1;
     private VkCommandBuffer currentCmdBuffer;
     private boolean recordingCmds = false;
+    //2026-10-30 (audit): flushCmds submitted part of this frame (a screenshot), so it is not dropped (VkFrames would undo what ran)
+    private boolean flushedThisFrame = false;
     /** 2026-10-28: frames are paused because FSR is live and the window is minimized (FsrSwapchain.pausedMinimized). */
     private boolean fsrMinimized = false;
     /** This frame is recorded for the frame generation pacer (FrameGen.paced, latched in beginFrame): no acquire, no present. */
@@ -214,6 +216,7 @@ public class Renderer {
 
     public void beginFrame() {
         net.vulkanmod.render.profiling.FpsOverlay.frame();
+        net.vulkanmod.render.target.MainTargets.onFrameStart(Minecraft.getInstance().getMainRenderTarget());
         if (net.vulkanmod.visuals.dev.FrameRecorder.ON) net.vulkanmod.visuals.dev.FrameRecorder.mark(net.vulkanmod.visuals.dev.FrameRecorder.M_BEGIN_START);
         //FG design 7: a changed setting or a pacer restart is applied before the frame latches the paced state (no-op while off)
         FrameGen.beginFrame();
@@ -323,6 +326,7 @@ public class Renderer {
         }
 
         recordingCmds = true;
+        flushedThisFrame = false;
         VkFrames.onFrameStart(getCommandBuffer(), currentFrame);
         mainPass.begin(commandBuffer, stack);
 
@@ -362,8 +366,12 @@ public class Renderer {
             return;
         }
 
-        if (swapChainUpdate)
+        //a frame flushCmds submitted part of is submitted whole (without its present below), so it is never half run and half dropped
+        if (swapChainUpdate && !flushedThisFrame) {
+            //2026-10-30 (audit): FSR was told about this frame's generation, which never runs
+            if (net.vulkanmod.visuals.fsr.FsrSwapchain.live()) net.vulkanmod.visuals.fsr.FsrFrame.forgetHistory();
             return;
+        }
 
         try (MemoryStack stack = stackPush()) {
             int vkResult;
@@ -392,7 +400,19 @@ public class Renderer {
             VkFrames.onSubmitted();
             if (vkResult != VK_SUCCESS) {
                 vkResetFences(device, inFlightFences.get(currentFrame));
+                //2026-10-30 (audit): with FSR's fence the empty submit after the present signals it; the frame failed before that, so
+                // it is signalled here, else the next wait on it never returned (a hang instead of the crash below)
+                if (fsrFence) {
+                    try {
+                        signalAfterFsr(inFlightFences.get(currentFrame));
+                    } catch (RuntimeException ignored) {
+                    }
+                }
                 throw new RuntimeException("Failed to submit draw command buffer: %s".formatted(VkResult.decode(vkResult)));
+            }
+            if (swapChainUpdate) {
+                if (fsrFence) signalAfterFsr(inFlightFences.get(currentFrame));
+                return;
             }
 
             VkPresentInfoKHR presentInfo = VkPresentInfoKHR.calloc(stack);
@@ -523,6 +543,7 @@ public class Renderer {
             }
 
             vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
+            flushedThisFrame = true;
 
             this.beginRenderPass(stack);
         }
@@ -660,6 +681,7 @@ public class Renderer {
             Pipeline.recreateDescriptorSets(framesNum);
 
             drawer.createResources(framesNum);
+            net.vulkanmod.visuals.vk.VkFrames.onFrameCountChanged();
         }
 
         createSyncObjects();

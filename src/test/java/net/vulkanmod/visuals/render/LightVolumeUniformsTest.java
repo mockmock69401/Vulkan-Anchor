@@ -47,4 +47,17 @@ class LightVolumeUniformsTest {
         assertEquals(0, LightVolumeUniforms.compute(PostProcessSettings.from(c), L, 0, 0, 0, null, 1, true, true).debug(),
                 "the reflective view is the reflection pass's: the copy draws the scene as usual");
     }
+
+    /** 2026-10-30 (audit): far from the origin the camera block a float carries is exact (even past 2^24), with the rest in the fraction. */
+    @Test
+    void theCameraBlockStaysExactFarOut() {
+        assertEquals(100.0, LightVolumeUniforms.exactBlock(100.7));
+        assertEquals(-101.0, LightVolumeUniforms.exactBlock(-100.2));
+        double far = 20_000_001.5;
+        double b = LightVolumeUniforms.exactBlock(far);
+        assertEquals(20_000_000.0, b);
+        assertEquals(b, (double) (float) b, "a float holds it");
+        assertTrue(far - b >= 0 && far - b < 2);
+        assertEquals(-20_000_002.0, LightVolumeUniforms.exactBlock(-20_000_001.5));
+    }
 }

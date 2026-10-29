@@ -43,7 +43,7 @@ public final class VkEntityShadows {
     private final long framebuffer;
     private final VkGraphicsProgram program;
     private final LooseUniformWriter loose;
-    private final VkGpuBuffer[] vertices;
+    private VkGpuBuffer[] vertices;
     private ShadowMath.Cascade drawn;
     private long drawnSerial = -1;
 
@@ -78,6 +78,27 @@ public final class VkEntityShadows {
         this.loose = new LooseUniformWriter(program.meta());
     }
 
+    /**
+     * 2026-10-30 (audit): one vertex buffer per frame in flight, also after the frame queue size changed in game (two frames shared
+     * one before). The count changes only in Renderer.recreateSwapChain with the device idle, and this runs at the first draw after
+     * it, so no submitted frame still reads the old buffers.
+     */
+    private void matchFramesInFlight() {
+        int frames = Math.max(1, VkContext.framesInFlight());
+        if (this.vertices.length == frames) return;
+        VkGpuBuffer[] grown = new VkGpuBuffer[frames];
+        try {
+            for (int i = 0; i < frames; i++) {
+                grown[i] = VkGpuBuffer.host((long) EntityShadowCapture.MAX_VERTICES * STRIDE, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+            }
+        } catch (RuntimeException | LinkageError e) {
+            for (VkGpuBuffer b : grown) if (b != null) b.free();
+            throw e;
+        }
+        for (VkGpuBuffer b : this.vertices) b.free();
+        this.vertices = grown;
+    }
+
     /** This frame's map's view of the sun (toSun) around the camera, the same the lighting reads it by. */
     public static ShadowMath.Cascade cascade(Vector3fc toSun, double cameraX, double cameraY, double cameraZ) {
         return ShadowMath.cascade(toSun, cameraX, cameraY, cameraZ, EntityShadowCapture.RADIUS, MAP_SIZE, MAP_SIZE);
@@ -92,6 +113,7 @@ public final class VkEntityShadows {
         this.depth.tick();
         if (cascade == null || data == null || count <= 0) return;
         int n = Math.min(count, EntityShadowCapture.MAX_VERTICES);
+        this.matchFramesInFlight();
         VkGpuBuffer buffer = this.vertices[Math.floorMod(VkFrames.recordingSlot(), this.vertices.length)];
         MemoryUtil.memCopy(MemoryUtil.memAddress(data), MemoryUtil.memAddress(buffer.mapped()), (long) n * STRIDE);
         VkGpuTimer.mark(cmd, "shadows.entities");

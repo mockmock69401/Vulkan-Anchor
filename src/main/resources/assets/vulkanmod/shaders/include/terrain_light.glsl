@@ -37,6 +37,10 @@ layout(binding = SCENE_LIGHT_BINDING + 1, r32ui) uniform writeonly restrict uima
 //light: (sky, block) levels; colour: the fragment's colour before the lightmap and the fog; unfogged: no vanilla fog on it
 void writeSceneLight(vec2 light, vec4 colour, bool unfogged) {
     ivec2 p = ivec2(gl_FragCoord.xy);
+    //2026-10-30 (audit): never past the image (a target larger than the main one)
+    if (any(greaterThanEqual(p, imageSize(TerrainLight)))) {
+        return;
+    }
     uint v = packTerrainLight(gl_FragCoord.z, light);
     uint before = imageAtomicMin(TerrainLight, p, v);
     if (v < before && unfogged && colour.a >= TERRAIN_ALBEDO_MIN_ALPHA) {

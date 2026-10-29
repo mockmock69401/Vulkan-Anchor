@@ -21,6 +21,12 @@ public class MainTargetMixin extends RenderTarget {
     @Unique
     private boolean vulkanmod$offscreen;
 
+    /** Offscreen unless a mod made it Minecraft's main render target for good (MainTargets). */
+    @Unique
+    private boolean vulkanmod$offscreen() {
+        return this.vulkanmod$offscreen && !net.vulkanmod.render.target.MainTargets.adopted(this);
+    }
+
     public MainTargetMixin(boolean useDepth) {
         super(useDepth);
     }
@@ -43,7 +49,7 @@ public class MainTargetMixin extends RenderTarget {
 
     @Override
     public void bindWrite(boolean updateScissor) {
-        if (this.vulkanmod$offscreen) {
+        if (this.vulkanmod$offscreen()) {
             super.bindWrite(updateScissor);
             return;
         }
@@ -52,7 +58,7 @@ public class MainTargetMixin extends RenderTarget {
 
     @Override
     public void bindRead() {
-        if (this.vulkanmod$offscreen) {
+        if (this.vulkanmod$offscreen()) {
             super.bindRead();
             return;
         }
@@ -61,14 +67,14 @@ public class MainTargetMixin extends RenderTarget {
 
     @Override
     public int getColorTextureId() {
-        if (this.vulkanmod$offscreen)
+        if (this.vulkanmod$offscreen())
             return super.getColorTextureId();
         return Renderer.getInstance().getMainPass().getColorAttachmentGlId();
     }
 
     @Override
     public int getDepthTextureId() {
-        if (this.vulkanmod$offscreen)
+        if (this.vulkanmod$offscreen())
             return super.getDepthTextureId();
         return Renderer.getInstance().getMainPass().getDepthAttachmentGlId();
     }

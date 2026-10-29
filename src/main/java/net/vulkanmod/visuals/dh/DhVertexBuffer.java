@@ -77,7 +77,15 @@ public class DhVertexBuffer implements AutoCloseable {
     private static final AtomicLong LIVE_BYTES = new AtomicLong();
     private static final AtomicLong UPLOADS = new AtomicLong(), UPLOAD_BYTES = new AtomicLong(), REUPLOADS = new AtomicLong(),
             INDEX_UPLOADS_IGNORED = new AtomicLong(), CLOSED = new AtomicLong(), REFUSED = new AtomicLong();
-    private static final AtomicBoolean INDEX_WARNED = new AtomicBoolean(), ALLOCATION_WARNED = new AtomicBoolean();
+    private static final AtomicBoolean INDEX_WARNED = new AtomicBoolean(), ALLOCATION_WARNED = new AtomicBoolean(), UPLOAD_WARNED = new AtomicBoolean();
+    /** 2026-10-30 (audit): upload failures in a row; this many turn DH off (one did before, for the session). */
+    static final int UPLOAD_FAILURES_ALLOWED = 32;
+    private static final java.util.concurrent.atomic.AtomicInteger UPLOAD_FAILURES = new java.util.concurrent.atomic.AtomicInteger();
+
+    static void resetUploadFailuresForTest() {
+        UPLOAD_FAILURES.set(0);
+        UPLOAD_WARNED.set(false);
+    }
 
     private final String name;
     private final DhStaging.Gpu gpu;
@@ -116,14 +124,21 @@ public class DhVertexBuffer implements AutoCloseable {
         long start = FrameRecorder.ON ? System.nanoTime() : 0;
         try {
             this.upload(data, vertexCount);
+            UPLOAD_FAILURES.set(0);
             if (FrameRecorder.ON) {
                 FrameRecorder.time(FrameRecorder.DH_UPLOAD, start);
                 FrameRecorder.add(FrameRecorder.DH_UPLOADS, 1);
                 FrameRecorder.add(FrameRecorder.DH_KB, uploadBytes(this.vertexCount) >> 10);
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | OutOfMemoryError e) {
+            //a passing failure (a temporary staging buffer out of memory) leaves this section out; only many in a row turn DH off
             this.empty();
-            DhInternals.disable("a vertex buffer upload failed (" + e + ")", e);
+            REFUSED.incrementAndGet();
+            if (UPLOAD_FAILURES.incrementAndGet() >= UPLOAD_FAILURES_ALLOWED) {
+                DhInternals.disable("vertex buffer uploads failed " + UPLOAD_FAILURES_ALLOWED + " times in a row (" + e + ")", e);
+            } else if (UPLOAD_WARNED.compareAndSet(false, true)) {
+                VisualsLog.warn("Distant Horizons: a vertex buffer upload failed (" + e + "); that LOD section is not drawn");
+            }
         }
     }
 

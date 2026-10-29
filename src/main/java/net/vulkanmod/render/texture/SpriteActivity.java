@@ -42,6 +42,13 @@ public final class SpriteActivity {
 
     //written by the render thread, read by chunk builders through the UV getters
     private static volatile long frame;
+    /**
+     * 2026-10-30 (audit): sprites tesselated into a mesh outside the terrain (ModelBlockRenderer.tesselateBlock: Create's contraptions,
+     * Flywheel and other meshes built once and drawn for many frames) tick from then on: those draws mark nothing, so lava or water
+     * on a moving contraption stood still unless the same sprite showed in the terrain. Weak, so a resource reload's old sprites go.
+     */
+    private static final java.util.Set<Holder> KEPT = java.util.Collections.synchronizedSet(
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
     private static volatile boolean enabled = true;
 
     private SpriteActivity() {
@@ -65,7 +72,18 @@ public final class SpriteActivity {
     }
 
     public static boolean shouldTick(Holder sprite) {
-        return !enabled || active(sprite.vulkanmod$activeFrame(), frame);
+        return !enabled || active(sprite.vulkanmod$activeFrame(), frame) || KEPT.contains(sprite);
+    }
+
+    /** A sprite tesselated into a mesh that may be drawn for many frames without marking it again: it keeps ticking (KEPT). */
+    public static void keepSprite(TextureAtlasSprite sprite) {
+        Holder h = animatedOf(sprite);
+        if (h != null) keep(h);
+    }
+
+    static void keep(Holder sprite) {
+        sprite.vulkanmod$markFrame(frame);
+        KEPT.add(sprite);
     }
 
     public static void mark(Holder sprite) {
@@ -95,6 +113,7 @@ public final class SpriteActivity {
     static void resetForTest() {
         frame = 0;
         enabled = true;
+        KEPT.clear();
     }
 
     /** The animated sprites one section build meets, each once (a builder thread's own). */
