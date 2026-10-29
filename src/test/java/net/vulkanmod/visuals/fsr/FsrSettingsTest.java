@@ -48,22 +48,14 @@ class FsrSettingsTest {
         assertFalse(c.frameGeneration);
     }
 
-    @Test void turningAGeneratorOnLimitsTheFrameRateOnce() {
-        assertEquals(60, FsrSettings.FRAME_LIMIT_ON);
-        assertTrue(FsrSettings.limitsFrameRate(VisualsOptionLayout.FRAME_GENERATION, false, true));
-        assertTrue(FsrSettings.limitsFrameRate(VisualsOptionLayout.FSR_FRAME_GENERATION, false, true));
-        //already on (an Apply of other options), turning off, and other switches leave the user's limit alone
-        assertFalse(FsrSettings.limitsFrameRate(VisualsOptionLayout.FSR_FRAME_GENERATION, true, true));
-        assertFalse(FsrSettings.limitsFrameRate(VisualsOptionLayout.FRAME_GENERATION, true, false));
-        assertFalse(FsrSettings.limitsFrameRate("taa", false, true));
-    }
-
     @Test void theGeneratorBlockHasItsWarningInBothLanguages() throws IOException {
         for (String lang : new String[]{"en_us", "ko_kr"}) {
             JsonObject json = lang(lang);
             String key = "vulkanmod.visuals.block." + VisualsOptionLayout.FRAME_GENERATION_BLOCK;
             assertTrue(json.has(key), lang + " " + key);
-            assertTrue(json.has(key + ".note") && json.get(key + ".note").getAsString().contains("60"), lang + " " + key + ".note");
+            assertTrue(json.has(key + ".note"), lang + " " + key + ".note");
+            //2026-10-29: turning a generator on no longer sets a frame limit, so the note must not say it does
+            assertFalse(json.get(key + ".note").getAsString().contains("60"), lang + " " + key + ".note");
         }
     }
 

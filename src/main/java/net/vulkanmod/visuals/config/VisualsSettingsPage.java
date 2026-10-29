@@ -151,16 +151,9 @@ public final class VisualsSettingsPage {
     private static Option<?> option(Item item) {
         Component name = Component.translatable(KEY_PREFIX + item.key());
         Option<?> o = switch (item.kind()) {
-            case SWITCH -> new SwitchOption(name, v -> {
-                boolean was = VisualsOptionLayout.get(config(), item) != 0;
-                VisualsOptionLayout.set(config(), item, v ? 1 : 0);
-                //2026-10-25 (the user's request): turning either generator on sets the game's frame limit to FsrSettings.FRAME_LIMIT_ON
-                if (FsrSettings.limitsFrameRate(item.key(), was, v)) {
-                    net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
-                    mc.options.framerateLimit().set(FsrSettings.FRAME_LIMIT_ON);
-                    mc.options.save();
-                }
-            }, () -> VisualsOptionLayout.get(config(), item) != 0);
+            //2026-10-29 (the user): turning a generator on no longer sets the frame limit to 60
+            case SWITCH -> new SwitchOption(name, v -> VisualsOptionLayout.set(config(), item, v ? 1 : 0),
+                    () -> VisualsOptionLayout.get(config(), item) != 0);
             case PERCENT -> new RangeOption(name, item.min(), item.max(), 1, v -> Component.literal(v + "%"),
                     v -> VisualsOptionLayout.set(config(), item, v), () -> VisualsOptionLayout.get(config(), item));
             case BLOCKS -> new RangeOption(name, item.min(), item.max(), 1, v -> Component.literal(Integer.toString(v)),
