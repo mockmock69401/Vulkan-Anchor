@@ -512,11 +512,13 @@ public class Renderer {
 
             presentInfo.pImageIndices(stack.ints(imageIndex));
 
-            //FSR hang (2026-10-25): FSR must not get this frame's interpolation before the presenter thread freed its output
-            if (fsrFence) net.vulkanmod.visuals.fsr.FsrSwapchain.beforePresent();
+            //FSR hang (2026-10-25): FSR must not get this frame's interpolation before the presenter thread freed its output;
+            // 2026-10-30 (audit): when that wait times out the frame is not presented (FSR stops at the recreation it scheduled)
             long presentStart = System.nanoTime();
             try {
-                vkResult = net.vulkanmod.vulkan.queue.QueueLock.present(DeviceManager.getPresentQueue().queue(), presentInfo);
+                boolean present = !fsrFence || net.vulkanmod.visuals.fsr.FsrSwapchain.beforePresent();
+                vkResult = present ? net.vulkanmod.vulkan.queue.QueueLock.present(DeviceManager.getPresentQueue().queue(), presentInfo)
+                        : VK_ERROR_OUT_OF_DATE_KHR;
             } finally {
                 if (fsrFence) signalAfterFsr(inFlightFences.get(currentFrame));
             }

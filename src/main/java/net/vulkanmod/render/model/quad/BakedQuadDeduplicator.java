@@ -24,6 +24,11 @@ public class BakedQuadDeduplicator {
         if (depth[0] > 0) depth[0]--;
     }
 
+    /** 2026-10-30 (audit): ModelBakery.bakeModels returned; a bake it caught failing left this thread marked (ModelBakeryM). */
+    public static void resetBake() {
+        BAKE_DEPTH.get()[0] = 0;
+    }
+
     public static int[] deduplicateVertices(int[] vertices) {
         if (vertices == null || BAKE_DEPTH.get()[0] == 0) return vertices;
         return VERTICES_CACHE.computeIfAbsent(new IntArrayKey(vertices), key -> key.array);

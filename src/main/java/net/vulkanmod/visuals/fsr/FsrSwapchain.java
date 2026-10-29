@@ -197,6 +197,15 @@ public final class FsrSwapchain {
     /** Once a check failed the gate stays off for the session (FSR then runs as it did before the gate). */
     private static boolean gateRefused;
     private static final FsrInterpolationGate.Checker GATE = new FsrInterpolationGate.Checker();
+    /**
+     * 2026-10-30 (audit): the interpolation wait that timed out in {@link #beforePresent} (null: none). That frame was not presented,
+     * and the next wait for FSR's presents first gives FSR's presenter thread {@link #STALL_RECOVERY_NS} to free it, then skips FSR's
+     * own wait (which would wait for that thread for good) and leaves the teardown to the device wait.
+     */
+    private static FsrInterpolationGate.Wait stalled;
+    private static final long STALL_RECOVERY_NS = 3_000_000_000L;
+    /** 2026-10-30 (audit): set by {@link #shutdown} when the window stays minimized: FSR's presenter cannot present, so nothing waits for it. */
+    private static boolean presenterUnreachable;
     //with the pilot: frames that had to wait in beforePresent since the last log line, and how long they waited
     private static int gatedFrames;
     private static long gatedNs, gatedMaxNs, nextGateLogNs;
@@ -209,36 +218,62 @@ public final class FsrSwapchain {
      * of FSR's presenter thread and waits for it here. Render thread; outside QueueLock (FSR's presenter thread needs no lock).
      * Never throws (the present and the frame fence come after it): a failed or implausible read turns the gate off for the
      * session, and a wait that times out turns FSR off (the recreation it schedules stops FSR; the game continues).
+     * Returns whether to present the frame: false after a timed-out wait (2026-10-30 audit: presenting it would submit the very
+     * wait-before-signal the gate prevents, and the recreation's wait for FSR's presents would then never return).
      */
-    public static void beforePresent() {
-        if (state != State.LIVE || !FsrFrame.takeGeneratedThisFrame() || !gateOn) return;
+    public static boolean beforePresent() {
+        if (state != State.LIVE || !FsrFrame.takeGeneratedThisFrame() || !gateOn) return true;
         try {
             FsrInterpolationGate.Wait w = GATE.next(FSR_MEMORY, Vulkan.getSwapChain().getId());
             if (w == null) {
                 if (GATE.failure() != null) refuseGate("FSR's swapchain state is implausible (" + GATE.failure() + ")");
-                return;
+                return true;
             }
             VkDevice device = Vulkan.getVkDevice();
             try (MemoryStack stack = MemoryStack.stackPush()) {
                 LongBuffer value = stack.mallocLong(1);
-                if (VK12.vkGetSemaphoreCounterValue(device, w.semaphore(), value) == VK_SUCCESS && value.get(0) >= w.value()) return;
+                if (VK12.vkGetSemaphoreCounterValue(device, w.semaphore(), value) == VK_SUCCESS && value.get(0) >= w.value()) return true;
                 long start = System.nanoTime();
                 VkSemaphoreWaitInfo info = VkSemaphoreWaitInfo.calloc(stack).sType$Default().semaphoreCount(1)
                         .pSemaphores(stack.longs(w.semaphore())).pValues(stack.longs(w.value()));
                 int r = VK12.vkWaitSemaphores(device, info, INTERPOLATION_WAIT_TIMEOUT_NS);
                 long waited = System.nanoTime() - start;
                 if (r != VK_SUCCESS) {
-                    //presenting now submits the very wait-before-signal the gate prevents: FSR stops at the next frame (logged once)
+                    //the frame is not presented (no wait-before-signal); FSR stops at the recreation (logged once)
                     gateOn = false;
+                    stalled = w;
                     FsrSupport.markFailed("FSR's presenter did not free the interpolation output (" + waited / 1_000_000 + " ms, VkResult " + r + ")", null);
                     Renderer.scheduleSwapChainUpdate();
-                    return;
+                    return false;
                 }
                 if (PILOT) tallyGate(start, waited);
             }
         } catch (RuntimeException | LinkageError e) {
             refuseGate("reading FSR's interpolation wait failed: " + e);
         }
+        return true;
+    }
+
+    /**
+     * Whether FSR's own wait for presents can return: false while the window stays minimized at shutdown, or when FSR's presenter
+     * thread did not free the stalled interpolation output within {@link #STALL_RECOVERY_NS} (logged). Render thread.
+     */
+    private static boolean presenterReachable() {
+        if (presenterUnreachable) return false;
+        FsrInterpolationGate.Wait w = stalled;
+        if (w == null) return true;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            VkSemaphoreWaitInfo info = VkSemaphoreWaitInfo.calloc(stack).sType$Default().semaphoreCount(1)
+                    .pSemaphores(stack.longs(w.semaphore())).pValues(stack.longs(w.value()));
+            if (VK12.vkWaitSemaphores(Vulkan.getVkDevice(), info, STALL_RECOVERY_NS) == VK_SUCCESS) {
+                stalled = null;
+                return true;
+            }
+        } catch (RuntimeException | LinkageError e) {
+            VisualsLog.warn("Visuals FSR: waiting for the stalled presenter failed: " + e);
+        }
+        VisualsLog.warn("Visuals FSR: the presenter thread is stuck; not waiting for FSR's presents");
+        return false;
     }
 
     private static void tallyGate(long start, long waited) {
@@ -301,7 +336,7 @@ public final class FsrSwapchain {
      * lock itself. A failure turns FSR off (the recreation that follows stops it).
      */
     public static void waitForPresents() {
-        if (state != State.LIVE) return;
+        if (state != State.LIVE || !presenterReachable()) return;
         try {
             quiescePresents();
             QueueLock.locked(FsrSwapchain::dispatchWaitForPresents);
@@ -340,6 +375,8 @@ public final class FsrSwapchain {
     public static void recreate(SwapChain sc) {
         Bridge bridge = new Bridge(sc, true);
         WATCH.reset();
+        //the device is idle: whatever stalled is over or abandoned (FSR is off after it)
+        stalled = null;
         //turning FSR off: no FSR swapchain is made first only to be destroyed (stop makes VulkanMod's own)
         if (state == State.LIVE && !wanted()) {
             state = FsrLifecycle.run(state, Action.STOP, bridge);
@@ -365,10 +402,31 @@ public final class FsrSwapchain {
         if (state == State.LIVE && a != Action.START) GATE.reset();
     }
 
-    /** Minecraft.close, next to FrameGen.shutdown: FSR's threads stop presenting and both contexts go before the device does. */
+    /**
+     * Minecraft.close, next to FrameGen.shutdown: FSR's threads stop presenting and both contexts go before the device does.
+     * 2026-10-30 (audit: closing the minimized fullscreen game froze it, as the recreation did on 10-28): a minimized window is
+     * restored first so FSR's presenter thread can present; if it stays minimized, FSR's wait for presents is skipped.
+     */
     public static void shutdown() {
         if (state != State.LIVE) return;
+        if (pausedMinimized() && !restoreForShutdown()) {
+            presenterUnreachable = true;
+            VisualsLog.warn("Visuals FSR: the window stays minimized at shutdown; not waiting for FSR's presents");
+        }
         state = FsrLifecycle.run(state, Action.STOP, new Bridge(Vulkan.getSwapChain(), false));
+    }
+
+    /** Restores the minimized window and gives it up to a second to come back; whether it did. */
+    private static boolean restoreForShutdown() {
+        long window = net.minecraft.client.Minecraft.getInstance().getWindow().getWindow();
+        org.lwjgl.glfw.GLFW.glfwRestoreWindow(window);
+        long end = System.nanoTime() + 1_000_000_000L;
+        while (System.nanoTime() < end) {
+            org.lwjgl.glfw.GLFW.glfwPollEvents();
+            if (org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(window, org.lwjgl.glfw.GLFW.GLFW_ICONIFIED) != org.lwjgl.glfw.GLFW.GLFW_TRUE) return true;
+            Thread.onSpinWait();
+        }
+        return false;
     }
 
     private static boolean wanted() {

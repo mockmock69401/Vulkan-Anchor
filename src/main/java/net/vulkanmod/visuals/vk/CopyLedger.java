@@ -49,22 +49,26 @@ public final class CopyLedger<T> {
 
     /**
      * Hands finished copies to done, and copies of dropped frames to onDropped, which returns true to record them again
-     * (keeping their staging region); then releases ring space of completed frames.
+     * (keeping their staging region); then releases ring space of completed frames. 2026-10-30 (audit): copies recorded again go
+     * ahead of the pending ones, in their own order (as FrameWork.tick does): a copy queued after the dropped frame's commit is
+     * newer and lands last when both write the same bytes.
      */
     public void tick(long completedSerial, LongPredicate isDropped, Consumer<T> done, Predicate<T> onDropped) {
+        List<Entry<T>> again = new ArrayList<>();
         for (Iterator<Entry<T>> it = this.inFlight.iterator(); it.hasNext(); ) {
             Entry<T> e = it.next();
             if (isDropped.test(e.serial())) {
                 it.remove();
                 if (onDropped.test(e.item())) {
                     this.ring.stamp(e.ringOffset(), FrameRing.PENDING);
-                    this.pending.add(new Entry<>(e.item(), e.ringOffset(), FrameRing.PENDING));
+                    again.add(new Entry<>(e.item(), e.ringOffset(), FrameRing.PENDING));
                 }
             } else if (e.serial() <= completedSerial) {
                 it.remove();
                 done.accept(e.item());
             }
         }
+        this.pending.addAll(0, again);
         this.ring.retire(completedSerial);
     }
 }

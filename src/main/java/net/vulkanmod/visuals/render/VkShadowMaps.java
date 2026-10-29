@@ -62,6 +62,7 @@ public final class VkShadowMaps {
     private long lastPrepared = Long.MIN_VALUE;
     private int preparedFrameId;
     private long sunStep;//this frame's sun step and the progress through it (ShadowSteps)
+    private float timeOfDay, sunPerFrame;//2026-10-30: and how far the sun moved since the last frame (ShadowSteps.refreshFits)
     private float sunProgress;
 
     /** Built step by step: a failure (VMA out of memory on a cascade) frees what exists and rethrows, as the caller then runs without shadows. */
@@ -217,7 +218,8 @@ public final class VkShadowMaps {
             c.jobSlot = -1;
         }
         if (c.jobSlot < 0) {
-            ShadowSteps.Draw r = refreshDue ? ShadowSteps.plan(this.sunStep, c.step, c.valid, c.drawnSerial, true) : null;
+            boolean fits = ShadowSteps.refreshFits(this.timeOfDay, this.sunPerFrame, c.slices);
+            ShadowSteps.Draw r = refreshDue && fits ? ShadowSteps.plan(this.sunStep, c.step, c.valid, c.drawnSerial, true) : null;
             if (r == null) return;
             c.jobSlot = r.slot();
             c.jobStep = r.step();
@@ -255,6 +257,8 @@ public final class VkShadowMaps {
         this.preparedFrameId = frameId;
         this.sunStep = ShadowSteps.step(frame.timeOfDay());
         this.sunProgress = ShadowSteps.progress(frame.timeOfDay());
+        this.sunPerFrame = fresh ? ShadowSteps.advance(this.timeOfDay, frame.timeOfDay()) : 0f;
+        this.timeOfDay = frame.timeOfDay();
         this.plan(this.near, fresh, frame.near(), ShadowMath.NEAR_MAX_MOVE, Math.floorMod(frameId, ShadowMath.NEAR_INTERVAL) == ShadowMath.NEAR_PHASE,
                 ShadowMath.NEAR_RADIUS);
         this.plan(this.far, fresh, frame.far(), ShadowMath.FAR_MAX_MOVE, frame.farDue(), ShadowMath.FAR_RADIUS);

@@ -279,7 +279,7 @@ public class GlTexture {
         }
 
         if (src != null)
-            boundTexture.uploadSubImage(xOffset, yOffset, width, height, format, type, src, getUnpackLayout(width));
+            boundTexture.uploadSubImage(level, xOffset, yOffset, width, height, format, type, src, getUnpackLayout(width));
     }
 
     private static ByteBuffer unpackBufferView(GlBuffer buffer, long offset) {
@@ -317,7 +317,7 @@ public class GlTexture {
         }
 
         if (src != null)
-            boundTexture.uploadSubImage(xOffset, yOffset, width, height, format, type, src, getUnpackLayout(width));
+            boundTexture.uploadSubImage(level, xOffset, yOffset, width, height, format, type, src, getUnpackLayout(width));
     }
 
     public static void compressedTexImage2D(int target, int level, int internalFormat, int width, int height, int border) {
@@ -737,8 +737,13 @@ public class GlTexture {
         vulkanImage.updateTextureSampler(maxLod, samplerFlags);
     }
 
-    private void uploadSubImage(int xOffset, int yOffset, int width, int height, int format, int type,
+    /** 2026-10-30 (audit): into mip level (it went to level 0 whatever the level, so a mod's smaller mip images overwrote the full one). */
+    private void uploadSubImage(int level, int xOffset, int yOffset, int width, int height, int format, int type,
                                 ByteBuffer pixels, TextureUploadLayout layout) {
+        if (level < 0 || level >= vulkanImage.mipLevels) {
+            GlEmulationLog.warnOnce("texSubImage2D.level", "glTexSubImage2D to mip level " + level + " of a texture with " + vulkanImage.mipLevels + "; upload skipped");
+            return;
+        }
         boolean rgba8Image = vulkanImage.format == VK_FORMAT_R8G8B8A8_UNORM || vulkanImage.format == VK_FORMAT_R8G8B8A8_SRGB;
         int sourcePixelSize = sourcePixelSize(format, type);
         int required = layout.requiredByteSize(width, height, sourcePixelSize);
@@ -790,7 +795,7 @@ public class GlTexture {
                 }
             }
 
-            this.vulkanImage.uploadSubTextureAsync(0, width, height, xOffset, yOffset, 0, 0, width, upload);
+            this.vulkanImage.uploadSubTextureAsync(level, width, height, xOffset, yOffset, 0, 0, width, upload);
         } finally {
             if (normalize) MemoryUtil.memFree(upload);
         }

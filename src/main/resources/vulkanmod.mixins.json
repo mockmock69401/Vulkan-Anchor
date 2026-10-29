@@ -154,6 +154,7 @@
 
     "render.block.BakedQuadM",
     "render.block.ModelBakerImplM",
+    "render.block.ModelBakeryM",
     "render.block.ModelBlockRendererActivityM",
 
     "optimization.StateHolderMixin",
