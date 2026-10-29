@@ -178,7 +178,7 @@
   "vulkanmod.visuals.block.tone": "Tone",
   "vulkanmod.visuals.block.effects": "Effects",
   "vulkanmod.visuals.block.frame_generation": "Frame Generation",
-  "vulkanmod.visuals.block.frame_generation.note": "Warning: frame generation costs GPU time, so the game renders fewer real frames than with it off, and above about 120 real fps it can show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. Turning either one on sets the frame limit to 60 (change it in Video Settings); mobs, particles and the HUD still move at the real frame rate.",
+  "vulkanmod.visuals.block.frame_generation.note": "Warning: frame generation costs GPU time, so the game renders fewer real frames than with it off, and above about 120 real fps it can show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. Mobs, particles and the HUD still move at the real frame rate.",
   "vulkanmod.visuals.block.fog": "Fog",
   "vulkanmod.visuals.block.sky": "Sky",
   "vulkanmod.visuals.block.shading": "Shading",

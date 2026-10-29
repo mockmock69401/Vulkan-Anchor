@@ -103,7 +103,7 @@
   "vulkanmod.visuals.block.tone": "톤",
   "vulkanmod.visuals.block.effects": "효과",
   "vulkanmod.visuals.block.frame_generation": "프레임 생성",
-  "vulkanmod.visuals.block.frame_generation.note": "경고: 프레임 생성은 GPU 시간을 쓰므로, 끈 상태보다 실제로 그리는 프레임 수가 줄어듭니다. 실제 프레임이 약 120 이상이면 오히려 전체 표시 프레임이 줄 수 있습니다. 프레임 속도가 모니터 주사율보다 낮을 때 쓰세요. 둘 중 하나를 켜면 프레임 제한이 60으로 바뀝니다(비디오 설정에서 바꿀 수 있습니다). 몹, 입자, HUD는 여전히 실제 프레임 속도로 움직입니다.",
+  "vulkanmod.visuals.block.frame_generation.note": "경고: 프레임 생성은 GPU 시간을 쓰므로, 끈 상태보다 실제로 그리는 프레임 수가 줄어듭니다. 실제 프레임이 약 120 이상이면 오히려 전체 표시 프레임이 줄 수 있습니다. 프레임 속도가 모니터 주사율보다 낮을 때 쓰세요. 몹, 입자, HUD는 여전히 실제 프레임 속도로 움직입니다.",
   "vulkanmod.visuals.block.fog": "안개",
   "vulkanmod.visuals.block.sky": "하늘",
   "vulkanmod.visuals.block.shading": "음영",

@@ -78,9 +78,8 @@ It is experimental: compatibility and feature parity are incomplete.
    Vulkan renderer.
 
 Frame generation costs GPU time: the game renders fewer real frames than with it off, and at high frame rates it can
-show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. Turning either
-generator on sets the frame limit to 60 (change it in Video Settings). Mobs, particles and the HUD keep the real frame
-rate.
+show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. Mobs, particles
+and the HUD keep the real frame rate.
 
 ## Tested modpacks: mods to disable
 
