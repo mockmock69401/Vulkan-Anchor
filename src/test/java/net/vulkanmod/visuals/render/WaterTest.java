@@ -479,7 +479,10 @@ class WaterTest {
     @Test
     void thePassIsOffWithoutReflectionsOrFrameAndPaintsTheDebugView() {
         assertTrue(on(SETTINGS, null).on());
-        assertFalse(on(settings(c -> c.waterReflections = 0), null).on(), "reflections 0");
+        assertFalse(on(settings(c -> {
+            c.waterReflections = 0;
+            c.blockReflections = 0;
+        }), null).on(), "reflections 0");
         assertFalse(on(settings(c -> c.enabled = false), null).on(), "post-processing off");
         LightingChoice choice = LightingChoice.of(SERIAL, SETTINGS, true, true, false, true);
         AtmosphereFrame f = frame(SUNSET, 0, null, null);

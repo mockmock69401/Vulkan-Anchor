@@ -38,6 +38,11 @@ It is experimental: compatibility and feature parity are incomplete.
 - **Light colours** (Shaders → Lighting page): direct sunlight that is warmest at sunrise and sunset (Sun Warmth),
   orange light from torches and other light blocks that is brighter near the source and falls off faster (Torch Light
   Colour), and blue moonlight at night (part of Light Colour). Each has its own slider; 0 keeps the earlier colours.
+- **Shadows and reflections of a high shader preset**: mobs, players and dropped items within 32 blocks cast sun
+  shadows (Entity Shadows), the sharp shadows of the terrain reach 2 to 10 chunks (Shadow Distance), both on the
+  Lighting page; polished stone, quartz, glazed terracotta, packed ice, gem and metal blocks catch the sun's and the
+  moon's highlights and softly mirror the sky and the scene, metal in its own colour (Block Reflections on the Water
+  page: Off, Highlights, Reflections).
 - **Glow** (Shaders → Lighting page): lava, magma, glowstone and other light blocks glow into the bloom (Block Glow), and
   nether quartz ore's white specks glow faintly even in the dark (Ore Glow; other ores look as in vanilla). Water is clearer too,
   so lake and river floors show through (Water Depth at 0 keeps vanilla's water).

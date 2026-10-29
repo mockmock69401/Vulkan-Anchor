@@ -26,7 +26,7 @@ public final class LightingUniforms {
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f projection, float[] sunView,
                          boolean lodValid, float aoStrength, float sunWeight, float[] upView, boolean vanillaCopies, float waterStrength,
                          float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView,
-                         float blockLightColour, float moonLight, float blockGlow, float oreGlow) {
+                         float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections) {
         public void writeLighting(LooseUniformWriter w) {
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection).putMat4(INV_LOD_PROJ, this.invLodProjection).putMat4(PROJ, this.projection);
             w.putVec4(SUN, this.sunView[0], this.sunView[1], this.sunView[2], this.sunWeight > 0 ? 1 : 0);
@@ -42,7 +42,7 @@ public final class LightingUniforms {
             w.putVec4(COPY_LIGHT_SHADE, this.lightSun[5], this.lightSun[6], this.lightSun[7], this.lightSun[4]);
             w.putVec4(COPY_BLOCK_LIGHT, ColourMath.BLOCK_LIGHT[0], ColourMath.BLOCK_LIGHT[1], ColourMath.BLOCK_LIGHT[2], this.blockLightColour);
             w.putVec4(COPY_MOON_LIGHT, ColourMath.MOON_LIGHT[0], ColourMath.MOON_LIGHT[1], ColourMath.MOON_LIGHT[2], this.moonLight);
-            w.putVec4(COPY_GLOW, this.blockGlow, this.oreGlow, 0, 0);
+            w.putVec4(COPY_GLOW, this.blockGlow, this.oreGlow, this.blockReflections, 0);
         }
     }
 
@@ -59,16 +59,16 @@ public final class LightingUniforms {
 
     /** No lighting: the copy multiplies by 1, colours no water and the pass is skipped. */
     public static Values off() {
-        return off(1, 0, 0, 0, 0);
+        return off(1, 0, 0, 0, 0, 0);
     }
 
     /**
      * No lighting pass, with the frame's sun-up factor and its product with the camera's sky exposure for the copy's exposures, and the
      * block light colour and glow settings (torch light and glow need no pass).
      */
-    static Values off(float sunUp, float sunUpExposed, float blockLightColour, float blockGlow, float oreGlow) {
+    static Values off(float sunUp, float sunUpExposed, float blockLightColour, float blockGlow, float oreGlow, float blockReflections) {
         return new Values(false, new Matrix4f(), new Matrix4f(), new Matrix4f(), new float[]{0, 1, 0}, false, 0, 0, new float[]{0, 1, 0}, false, 0, 1, 0, new float[]{1, 1, 1, 0, 0, 1, 1, 1}, 0, sunUp,
-                sunUpExposed, new float[]{1, 0, 0}, blockLightColour, 0, blockGlow, oreGlow);
+                sunUpExposed, new float[]{1, 0, 0}, blockLightColour, 0, blockGlow, oreGlow, blockReflections);
     }
 
     /**
@@ -88,10 +88,10 @@ public final class LightingUniforms {
      */
     public static Values compute(PostProcessSettings s, LightingChoice choice, AtmosphereFrame frame, long serial, boolean lodValid, float skyExposure,
                                  boolean vanillaCopies, boolean hasSky) {
-        if (frame == null || frame.serial() != serial) return off(1, 0, s.blockLightColour(), s.blockGlow(), s.oreGlow());
+        if (frame == null || frame.serial() != serial) return off(1, 0, s.blockLightColour(), s.blockGlow(), s.oreGlow(), s.blockReflections());
         if (choice.serial() != serial || !choice.any()) {
             float up = hasSky ? SunMath.dayFactor(SunMath.sunDirection(frame.timeOfDay()).y, 0) : 0;
-            return off(up, up * Math.max(0, Math.min(1, skyExposure)), s.blockLightColour(), s.blockGlow(), s.oreGlow());
+            return off(up, up * Math.max(0, Math.min(1, skyExposure)), s.blockLightColour(), s.blockGlow(), s.oreGlow(), s.blockReflections());
         }
         Vector3f sun = SunMath.sunDirection(frame.timeOfDay());
         Matrix4f modelView = new Matrix4f(frame.invModelView()).invert();
@@ -106,7 +106,7 @@ public final class LightingUniforms {
                 vanillaCopies, choice.water() ? s.waterDepth() : 0, WaterMath.ambient(day), (float) (frame.cameraY() - Math.floor(frame.cameraY())),
                 lightSun(ColourMath.sunLight(sun.y, s.sunWarmth()), ColourMath.skyShade(s.sunWarmth(), sun.y), choice.sun() ? s.lightColour() : 0, choice.sun() ? sunDay : 0), LightingMath.sunHeightTerm(sun.y),
                 SunMath.dayFactor(sun.y, 0), SunMath.dayFactor(sun.y, 0) * Math.max(0, Math.min(1, skyExposure)), new float[]{east.x, east.y, east.z},
-                s.blockLightColour(), choice.sun() && hasSky ? moonStrength(s.lightColour(), sun.y) : 0, s.blockGlow(), s.oreGlow());
+                s.blockLightColour(), choice.sun() && hasSky ? moonStrength(s.lightColour(), sun.y) : 0, s.blockGlow(), s.oreGlow(), s.blockReflections());
     }
 
     /**

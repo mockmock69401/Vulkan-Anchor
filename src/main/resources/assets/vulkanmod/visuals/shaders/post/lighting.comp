@@ -29,6 +29,8 @@ layout(binding = 12) uniform sampler2D shadowFarMapB;
 layout(binding = 13) uniform sampler2D shadowCloseMap;
 layout(binding = 14) uniform sampler2D shadowCloseMapB;
 layout(binding = 15) uniform usampler2D lodLight;
+//2026-10-29: the entity shadow map (VkEntityShadows), drawn this frame when entityParams.x is 1
+layout(binding = 16) uniform sampler2D shadowEntityMap;
 
 //Clean LightingUniforms.writeLighting
 layout(location = 0) uniform mat4 invVanillaProj;
@@ -49,6 +51,8 @@ layout(location = 13) uniform mat4 shadowClose;
 layout(location = 14) uniform mat4 shadowCloseB;
 layout(location = 15) uniform vec4 closeParams;//x on, y normal offset (blocks), z depth bias, w the second map's weight
 layout(location = 16) uniform vec4 eastView;//xyz world east (+x, view space)
+layout(location = 17) uniform mat4 shadowEntity;//2026-10-29: view space to the entity shadow map's clip
+layout(location = 18) uniform vec4 entityParams;//x 1 when the entity map was drawn this frame, y normal offset (blocks), z depth bias
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -247,7 +251,17 @@ float sunVisibility(vec3 pos, vec3 n, float fade, float wideBlocks) {
             rest *= 1.0 - w;
         }
     }
-    return acc + rest;
+    float visible = acc + rest;
+    //2026-10-29: the entities this frame drew shade what lies under them (one map around the camera, cleared every frame), fading
+    // out across the map's blend band
+    if (entityParams.x > 0.5 && visible > 0.0) {
+        vec3 clip = (shadowEntity*vec4(pos + n*entityParams.y, 1.0)).xyz;
+        if (insideMap(clip)) {
+            float e = mapVisibility(shadowEntityMap, shadowEntity, clip, n, entityParams.z, fade, wideBlocks);
+            visible *= mix(1.0, e, 1.0 - bandWeight(max(abs(clip.x), abs(clip.y))));
+        }
+    }
+    return visible;
 }
 
 int markAt(ivec2 p) {

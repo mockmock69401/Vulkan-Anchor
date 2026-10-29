@@ -33,6 +33,7 @@ class NoSkyDimensionTest {
         VisualsConfig c = new VisualsConfig();
         c.perPixelLight = false;
         c.waterReflections = 0;
+        c.blockReflections = 0;
         PostProcessSettings s = PostProcessSettings.from(c);
         for (boolean sky : new boolean[]{false, true}) {
             VisualsRenderer.Plan p = VisualsRenderer.Plan.of(sky, s);

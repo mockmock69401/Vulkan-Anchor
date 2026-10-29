@@ -230,7 +230,8 @@ public final class WaterMath {
     }
 
     public static boolean reflectAcceptsHit(float hitMark, float heightAbove, float dist) {
-        return !(Math.abs(hitMark) >= REFLECT_MARK_MIN) && heightAbove > reflectHitClearance(dist);
+        boolean translucent = Math.abs(hitMark) >= REFLECT_MARK_MIN && hitMark >= -WATER_REFLECTION;
+        return !translucent && heightAbove > reflectHitClearance(dist);
     }
 
     public static float reflectCoverWeight(float covered) {

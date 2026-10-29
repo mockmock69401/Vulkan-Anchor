@@ -88,6 +88,8 @@ public class BlockRenderer {
         //The visuals (2026-10-28): whether it is nether quartz ore, whose specks glow (2026-10-29, the user: the other ores' glow looked
         // odd however tuned; only quartz keeps it)
         FoliageMarker.setOre(blockState.is(Blocks.NETHER_QUARTZ_ORE));
+        //The visuals (2026-10-29): whether it is polished or metal, for the sun's highlight and the block reflections
+        FoliageMarker.setSmooth(FoliageMarker.smoothKind(blockState));
         //The visuals (wind): whether its vertices sway, and how
         FoliageMarker.setSway(FoliageMarker.swayKind(blockState));
         this.pos = pos;

@@ -449,7 +449,7 @@ class LightingMathTest {
         assertTrue(COMP.contains("if (shadowParams.x > 0.5 && closeParams.x > 0.5) {"));
         assertTrue(COMP.contains("if (rest > 0.0 && shadowParams.x > 0.5) {"));
         assertTrue(COMP.contains("if (rest > 0.0 && shadowParams.y > 0.5) {"));
-        assertTrue(COMP.contains("return acc + rest;"));
+        assertTrue(COMP.contains("float visible = acc + rest;") && COMP.contains("return visible;"));
         assertEquals(3, count(COMP, "= cascade("));
         //main() returns early only outside the half-resolution image, and stores each output once
         String main = COMP.substring(COMP.indexOf("void main() {"));

@@ -1,5 +1,7 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.VisualsConfig;
+
 import net.vulkanmod.visuals.dev.FrameRecorder;
 import net.vulkanmod.visuals.VisualsLog;
 import net.vulkanmod.visuals.api.ShadowCascadeContext;
@@ -329,7 +331,8 @@ public final class VkShadowMaps {
             // a refresh takes it with its first slice
             if (vanillaOn && this.vanilla != null && slice == 0) {
                 VkGpuTimer.mark(cmd, c.vanillaLabel);
-                this.vanilla.draw(cmd, this.renderPass, c.pending, ShadowMath.vanillaRadius(c.which, renderDistanceChunks));
+                this.vanilla.draw(cmd, this.renderPass, c.pending, ShadowMath.vanillaRadius(c.which, renderDistanceChunks,
+                        ShadowMath.nearReach(VisualsConfig.get().shadowDistance)));
                 c.vanillaStats = this.vanilla.stats();
             }
             vkCmdEndRenderPass(cmd);
@@ -440,7 +443,7 @@ public final class VkShadowMaps {
     }
 
     /** clear: the map is cleared (a whole draw, a refresh's first slice); else loaded from the attachment layout (its later slices). */
-    private static long createRenderPass(int depthFormat, boolean clear) {
+    static long createRenderPass(int depthFormat, boolean clear) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkAttachmentDescription.Buffer attachment = VkAttachmentDescription.calloc(1, stack);
             attachment.get(0).format(depthFormat).samples(VK_SAMPLE_COUNT_1_BIT).loadOp(clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD)
@@ -463,7 +466,7 @@ public final class VkShadowMaps {
         }
     }
 
-    private static long createFramebuffer(long renderPass, long depthView, int width, int height) {
+    static long createFramebuffer(long renderPass, long depthView, int width, int height) {
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkFramebufferCreateInfo info = VkFramebufferCreateInfo.calloc(stack).sType$Default().renderPass(renderPass)
                     .pAttachments(stack.longs(depthView)).width(width).height(height).layers(1);

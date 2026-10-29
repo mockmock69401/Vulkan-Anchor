@@ -88,7 +88,7 @@ public final class VisualsRenderer {
      */
     public record Plan(boolean shadows, boolean clouds, boolean sky, boolean lighting, boolean reflections) {
         public static Plan of(boolean hasSkyLight, PostProcessSettings s) {
-            return new Plan(hasSkyLight && s.sunShadows(), hasSkyLight && s.farClouds(), hasSkyLight, s.perPixelLight(), s.waterReflections() > 0);
+            return new Plan(hasSkyLight && s.sunShadows(), hasSkyLight && s.farClouds(), hasSkyLight, s.perPixelLight(), LightingChoice.reflectionPass(s));
         }
 
         /**
@@ -115,6 +115,8 @@ public final class VisualsRenderer {
     private TerrainLightTarget terrainLight;
     private VkEdgeCover edgeCover;
     private VkShadowMaps shadows;
+    //2026-10-29: the entity shadow map; null without sun shadows or when it could not be built
+    private VkEntityShadows entityShadows;
     private VkPostProcess post;
     private VkDepthCapture depthCapture;
     private LightingChoice lightingChoice = LightingChoice.NONE;
@@ -144,6 +146,8 @@ public final class VisualsRenderer {
             this.edgeCover = createEdgeCover();
             //P7j final review: a dimension without sky light never draws them
             this.shadows = level.dimensionType().hasSkyLight() ? createShadowMaps() : null;
+            //2026-10-29: with the sun shadows only
+            this.entityShadows = this.shadows != null ? VkEntityShadows.create() : null;
             this.post = createPostProcess(this.deferred);
             if (this.post != null) this.post.queueCloudMap(loadCloudMap());
             this.depthCapture = this.post == null ? null : createDepthCapture(this.deferred);
@@ -240,6 +244,8 @@ public final class VisualsRenderer {
             }
             this.shadowFrame = this.shadowsOn() ? ShadowFrame.of(serial, this.lightingChoice.sun(), plan.shadows(), shadowTime,
                     level != null ? level.getRainLevel(partialTick) : 0, this.skyExposure.value(), cameraX, cameraY, cameraZ, this.frameId) : null;
+            //2026-10-29: the entities drawn after this cast into the entity shadow map when this frame has sun shadows
+            EntityShadowCapture.beginFrame(serial, this.shadowFrame != null && this.entityShadows != null && VisualsConfig.get().entityShadows, modelView);
 
             List<VisualsExtension> ext = VisualsExtensions.all();
             long mainDepth = this.mainDepthViews.get(main.identity(), this.deferred, serial);
@@ -616,8 +622,13 @@ public final class VisualsRenderer {
             VkShadowMaps.Maps far = shadowsOn ? this.shadows.far() : null;
             VkShadowMaps.Maps close = shadowsOn ? this.shadows.close() : null;
             ShadowUniforms.Values shadow = ShadowUniforms.compute(lighting, this.atmosphere, shadowNow, near, far, close);
+            //2026-10-29: the entity shadow map, from this frame's sun at the camera, when entities were captured
+            ShadowMath.Cascade entityCascade = shadowNow != null && this.entityShadows != null && EntityShadowCapture.vertexCount(serial) > 0
+                    ? VkEntityShadows.cascade(SunMath.sunDirection(this.shadowFrame.timeOfDay()), shadowNow.cameraX(), shadowNow.cameraY(), shadowNow.cameraZ()) : null;
+            this.post.prepareEntityShadows(EntityShadowUniforms.compute(entityCascade, shadowNow, this.atmosphere, shadow.near() || shadow.far()),
+                    this.entityShadows != null ? this.entityShadows.view() : 0);
             ReflectionUniforms.Values reflection = plan.reflections() ? ReflectionUniforms.compute(settings, this.lightingChoice, lighting,
-                    this.atmosphere, atmosphere.night(), this.skyExposure.value()) : ReflectionUniforms.off();
+                    this.atmosphere, atmosphere.night(), this.skyExposure.value(), this.frameId) : ReflectionUniforms.off();
             CloudUniforms.Values clouds = CloudUniforms.compute(settings, this.atmosphere, atmosphere, serial, hasSkyLight,
                     this.post.cloudMapReady(), farSections);
             if (lighting.on()) {
@@ -672,6 +683,7 @@ public final class VisualsRenderer {
                 VkPostProcess.Depths depths = PostInputs.depths(mainDepth, lod, lighting.on(), before, after, shadow.near() ? near : null,
                         shadow.far() ? far : null, shadow.close() ? close : null);
                 if (terrainFilled) this.terrainLight.toCompute(cmd);
+                if (entityCascade != null) this.entityShadows.draw(cmd, entityCascade, EntityShadowCapture.data(), EntityShadowCapture.vertexCount(serial));
                 this.post.compute(cmd, VkContext.mainColourView(main), depths,
                         new VkPostProcess.LightInputs(lightVolume == null ? null : lightVolume.data(), lightVolume == null ? null : lightVolume.ready(), lightmap,
                                 lod != null ? lod.lightView() : 0, this.heldLight.on() ? this.heldLight.buffer() : null, this.terrainLight.view(),
@@ -751,6 +763,7 @@ public final class VisualsRenderer {
         if (this.depthCapture != null) this.depthCapture.free();
         if (this.edgeCover != null) this.edgeCover.free();
         if (this.shadows != null) this.shadows.free();
+        if (this.entityShadows != null) this.entityShadows.free();
         if (this.lightVolumes != null) this.lightVolumes.free();
         if (this.heldLight != null) this.heldLight.free();
         if (this.terrainLight != null) this.terrainLight.free();

@@ -158,6 +158,8 @@ public final class VisualsSettingsPage {
                     v -> VisualsOptionLayout.set(config(), item, v), () -> VisualsOptionLayout.get(config(), item));
             case BLOCKS -> new RangeOption(name, item.min(), item.max(), 1, v -> Component.literal(Integer.toString(v)),
                     v -> VisualsOptionLayout.set(config(), item, v), () -> VisualsOptionLayout.get(config(), item));
+            case CHUNKS -> new RangeOption(name, item.min(), item.max(), 1, v -> Component.translatable("options.chunks", v),
+                    v -> VisualsOptionLayout.set(config(), item, v), () -> VisualsOptionLayout.get(config(), item));
             case CHOICE -> new CyclingOption<>(name, IntStream.rangeClosed(item.min(), item.max()).boxed().toArray(Integer[]::new),
                     v -> VisualsOptionLayout.set(config(), item, v), () -> VisualsOptionLayout.get(config(), item))
                     .setTranslator(v -> Component.translatable(KEY_PREFIX + item.key() + "." + v));

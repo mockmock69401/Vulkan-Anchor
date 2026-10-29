@@ -21,7 +21,7 @@ class ShaderCatalogTest {
             "vulkanmod:visuals/post/ao_depth.comp", "vulkanmod:visuals/post/ao.comp", "vulkanmod:visuals/post/ao_blur.comp",
             "vulkanmod:visuals/post/bloom.comp", "vulkanmod:visuals/post/post_final.frag", "vulkanmod:visuals/post/shafts.comp",
             "vulkanmod:visuals/post/volumetric.comp", "vulkanmod:visuals/post/volumetric_blur.comp",
-            "vulkanmod:visuals/shadow/vanilla.vert", "vulkanmod:visuals/shadow/vanilla.frag", "vulkanmod:visuals/post/edge_cover.vert", "vulkanmod:visuals/post/edge_cover.frag",
+            "vulkanmod:visuals/shadow/vanilla.vert", "vulkanmod:visuals/shadow/vanilla.frag", "vulkanmod:visuals/shadow/entity.vert", "vulkanmod:visuals/shadow/entity.frag", "vulkanmod:visuals/post/edge_cover.vert", "vulkanmod:visuals/post/edge_cover.frag",
             "vulkanmod:visuals/post/post_ldr.comp", "vulkanmod:visuals/post/smaa_edges.comp", "vulkanmod:visuals/post/smaa_weights.comp",
             "vulkanmod:visuals/post/smaa_blend.comp", "vulkanmod:visuals/post/post_blit.frag", "vulkanmod:visuals/post/post_taa.comp",
             "vulkanmod:visuals/lod/lod_composite.vert", "vulkanmod:visuals/lod/lod_composite.frag",
@@ -36,7 +36,7 @@ class ShaderCatalogTest {
         Set<String> covered = new TreeSet<>();
         ShaderCatalog.visuals().all().forEach(p -> p.stages().forEach(s -> covered.add(s.id())));
         assertEquals(new TreeSet<>(USED_STAGES), covered);
-        assertEquals(34, ShaderCatalog.visuals().all().size());//FSR's inputs and HUD-less copy (2), frame generation (5), the post-process (W10's three AO passes included), SMAA, the shadow caster, the edge cover, the LOD composite, DH's terrain and DH's shadow casters
+        assertEquals(35, ShaderCatalog.visuals().all().size());//2026-10-29: the entity shadow caster; FSR's inputs and HUD-less copy (2), frame generation (5), the post-process (W10's three AO passes included), SMAA, the shadow caster, the edge cover, the LOD composite, DH's terrain and DH's shadow casters
     }
 
 

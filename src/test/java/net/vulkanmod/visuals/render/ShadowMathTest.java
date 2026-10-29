@@ -93,6 +93,16 @@ class ShadowMathTest {
         assertEquals(512f, ShadowMath.FAR_VANILLA_MAX);
     }
 
+    /** 2026-10-29: the shadow distance (chunks) moves the close and near cascades' reach, kept within 2 chunks and the near box; not the far one's. */
+    @Test
+    void theShadowDistanceSetsTheNearReach() {
+        assertEquals(64f, ShadowMath.nearReach(new net.vulkanmod.visuals.config.VisualsConfig().shadowDistance));
+        assertEquals(ShadowMath.NEAR_RADIUS, ShadowMath.nearReach(12));
+        assertEquals(32f, ShadowMath.nearReach(0));
+        assertEquals(128f, ShadowMath.vanillaRadius(ShadowMath.Which.CLOSE, 32, ShadowMath.nearReach(8)));
+        assertEquals(512f, ShadowMath.vanillaRadius(ShadowMath.Which.FAR, 32, ShadowMath.nearReach(8)));
+    }
+
     /** Design 3.2: the far cascade drawn frames ago is read relative to this frame's camera. */
     @Test
     void anOldCascadeIsRebasedToThisCamera() {

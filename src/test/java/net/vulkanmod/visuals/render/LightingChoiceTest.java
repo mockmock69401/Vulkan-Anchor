@@ -50,6 +50,7 @@ class LightingChoiceTest {
         assertTrue(waterOnly.water() && waterOnly.any());
         c.waterDepth = 0;
         c.waterReflections = 0;
+        c.blockReflections = 0;
         assertFalse(LightingChoice.of(7, PostProcessSettings.from(c), true, true, false, true).any());
         assertFalse(LightingChoice.of(7, DEFAULTS, true, true, true, true).water(), "fog covers everything");
         assertFalse(LightingChoice.NONE.any());
@@ -66,6 +67,7 @@ class LightingChoiceTest {
         LightingChoice reflectionsOnly = LightingChoice.of(7, PostProcessSettings.from(c), true, true, false, true);
         assertTrue(reflectionsOnly.reflections() && reflectionsOnly.any());
         c.waterReflections = 0;
+        c.blockReflections = 0;
         assertFalse(LightingChoice.of(7, PostProcessSettings.from(c), true, true, false, true).any());
         assertFalse(LightingChoice.of(7, DEFAULTS, true, true, true, true).reflections(), "fog covers everything");
     }

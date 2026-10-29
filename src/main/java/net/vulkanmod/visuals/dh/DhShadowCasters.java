@@ -27,6 +27,11 @@ final class DhShadowCasters {
         return vanillaShadows ? ShadowMath.vanillaRadius(which(cascade), renderDistanceChunks) : 0;
     }
 
+    /** The same at a shadow distance in chunks (VisualsConfig.shadowDistance). */
+    static float cutoff(String cascade, boolean vanillaShadows, int renderDistanceChunks, int shadowDistanceChunks) {
+        return vanillaShadows ? ShadowMath.vanillaRadius(which(cascade), renderDistanceChunks, ShadowMath.nearReach(shadowDistanceChunks)) : 0;
+    }
+
     /**
      * Whether the box (blocks, relative to the cascade's camera) reaches the orthographic box of viewProjection: false only when
      * all eight corners are past the same side (x or y outside -1..1, depth outside 0..1).
