@@ -54,6 +54,8 @@ public class Initializer {
 	public Initializer(IEventBus modEventBus, ModContainer modContainer) {
 		VERSION = modContainer.getModInfo().getVersion().toString();
 		modEventBus.addListener(this::onInitializeClient);
+		//2026-10-29: Refueled's road markers off the road's depth (RoadMarkerLift)
+		modEventBus.addListener(net.vulkanmod.compat.render.RoadMarkerLift::onModifyBakingResult);
 		modContainer.registerExtensionPoint(ConfigScreenHandler.ConfigScreenFactory.class,
 				() -> new ConfigScreenHandler.ConfigScreenFactory(
 						(minecraft, parent) -> new VOptionScreen(Component.literal("VulkanMod Settings"), parent)));
