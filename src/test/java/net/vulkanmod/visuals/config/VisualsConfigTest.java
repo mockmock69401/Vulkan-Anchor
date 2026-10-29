@@ -180,6 +180,11 @@ class VisualsConfigTest {
         assertEquals(0, back.lightDebug);
         c.lightDebug = 0;
         assertSameValues(c, back);
+        //2026-10-30 (audit): saved through a temporary file moved over the old one, which leaves nothing behind
+        c.exposure = 140;
+        c.write(file);
+        assertEquals(140, VisualsConfig.read(file).exposure);
+        assertFalse(Files.exists(file.resolveSibling("c.json.tmp")));
     }
 
     @Test

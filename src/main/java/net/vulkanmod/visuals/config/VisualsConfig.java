@@ -88,11 +88,18 @@ public class VisualsConfig {
         this.write(path());
     }
 
+    /** 2026-10-30 (audit): through a temporary file moved over the old one, so a crash while saving cannot leave half a file (all defaults on the next load). */
     public void write(Path file) {
         try {
             if (file.getParent() != null) Files.createDirectories(file.getParent());
-            try (Writer w = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+            Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+            try (Writer w = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
                 GSON.toJson(this, w);
+            }
+            try {
+                Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
             LOGGER.warn("Visuals settings cannot be saved to {}: {}", file, e.toString());

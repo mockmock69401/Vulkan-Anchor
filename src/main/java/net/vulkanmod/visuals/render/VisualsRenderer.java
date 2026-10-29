@@ -132,6 +132,9 @@ public final class VisualsRenderer {
     private int frameId;
     private long litFrames, copiedFrames, shadowFrames, lastStats = Long.MIN_VALUE;
     private boolean listening, failed, postFailed, captureFailed, shadowsFailed, atmosphereWarned, closed;
+    //2026-10-30 (audit): post-process failures in a row; a few are skipped frames (a full upload stream, an allocation in a resize)
+    private int postFailures;
+    public static final int POST_FAILURES_ALLOWED = 3;
 
     /** A renderer that holds nothing (no device needed): shutdown and the gates only. */
     private VisualsRenderer() {
@@ -199,6 +202,11 @@ public final class VisualsRenderer {
      * WorldRenderer.renderSectionLayer after the cutout terrain: this frame's shading choice and sun views, the extensions' and
      * the shadows' work outside the main pass, the extensions' composite and the edge cover inside it, then the atmosphere.
      */
+    /** 2026-10-30 (audit): whether frame() runs at all (Visuals.frame otherwise records DH's staged uploads itself). */
+    public boolean runsFrames() {
+        return !this.failed && !this.closed && this.upload != null;
+    }
+
     public void frame(Matrix4fc projection, Matrix4fc modelView, double cameraX, double cameraY, double cameraZ) {
         if (this.failed || this.closed || this.upload == null) return;
         RenderTarget target = Minecraft.getInstance().getMainRenderTarget();
@@ -619,9 +627,10 @@ public final class VisualsRenderer {
                     mc.options.getEffectiveRenderDistance(), plan.lighting());
             //The extensions' LOD inputs of this frame; Task 4: none when the atmosphere does not take the LOD depth this frame
             LodInputs lod = this.lodSerial == serial ? this.lod : null;
-            float farSections = farSections(lod);
             AtmosphereUniforms.Values atmosphere = AtmosphereUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, lod != null && lod.sizeMatches());
             if (!atmosphere.lodValid()) lod = null;
+            //2026-10-30 (audit): after the LOD inputs not drawn this frame are dropped (the far clouds and the shafts used their reach)
+            float farSections = farSections(lod);
             boolean copies = this.depthCapture != null && this.depthCapture.captured(serial, main.width(), main.height());
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
                     atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight);
@@ -669,8 +678,6 @@ public final class VisualsRenderer {
             this.post.prepareTaa(this.upload, taa ? new VkTaa.Frame(this.atmosphere.invVanillaProjection(), this.atmosphere.invLodProjection(),
                     this.atmosphere.invModelView(), camera.x, camera.y, camera.z, atmosphere.lodValid(),
                     mc.options.getEffectiveRenderDistance() * 16f) : null);
-            TaaJitter.setActive(taa);
-            FarClouds.set(clouds.on());
             //P7l design 3.4: with the per-pixel light the lightmap stays vanilla (the copy lifts the sky light where the sun reaches)
             SunShadows.set(light.on() ? 0 : SunShadows.strength(settings, this.lightingChoice, serial, shadowsOn));
             VkContext.endMainPass();
@@ -703,8 +710,10 @@ public final class VisualsRenderer {
                                 this.terrainLight.albedoView()));
                 //P7i: SMAA on the final colour, before the main pass resumes (its result is blitted by post.draw)
                 this.post.antiAlias(cmd, values, settings.antiAliasing());//marks its own intervals
+                //2026-10-30 (audit): the next frame is jittered only when TAA resolved this one (set before it ran, a failed TAA left a frame shaking)
+                TaaJitter.setActive(taa && this.post.taaDrawn());
                 //Read: cleared for the next frame's terrain (which writes only after this clear)
-                this.terrainLight.prepareNext(cmd, terrainOn, main.width(), main.height());
+                this.terrainLight.prepareNext(cmd, terrainOn, main.width(), main.height(), main.identity());
             } finally {
                 VkBarriers.mainColourAfterCompute(cmd);
                 VkContext.mainColourToAttachment(cmd, main);
@@ -714,13 +723,22 @@ public final class VisualsRenderer {
                 VkGpuTimer.mark(cmd, "post.draw");
                 this.post.draw(cmd, values);
                 VkGpuTimer.mark(cmd, "end");
+                //2026-10-30 (audit): vanilla's clouds are left out next frame only after this frame's far clouds were drawn
+                FarClouds.set(clouds.on());
+                this.postFailures = 0;
             } finally {
                 VkContext.invalidatePipelineCache();//the post-process pipeline replaced the one Reforged has cached
             }
         } catch (RuntimeException e) {
-            this.postFailed = true;
             FrameFlags.resetForSkippedPost();
-            VisualsLog.error("Visuals post-process failed; it stays off until the world is reloaded", e);
+            //2026-10-30 (audit): a passing failure (the upload stream full in an LOD burst, an allocation in a resize) skips the frame;
+            // only POST_FAILURES_ALLOWED in a row turn the post-process off
+            if (++this.postFailures >= POST_FAILURES_ALLOWED) {
+                this.postFailed = true;
+                VisualsLog.error("Visuals post-process failed; it stays off until the world is reloaded", e);
+            } else {
+                VisualsLog.warn("Visuals post-process failed, frame skipped (" + this.postFailures + " in a row): " + e);
+            }
         }
         VkGpuTimer.cpu("post", System.nanoTime() - cpuStart);
     }

@@ -23,7 +23,7 @@ public final class DeferredFree {
             Entry e = it.next();
             if (e.serial() <= completedSerial) {
                 it.remove();
-                e.free().run();
+                run(e);
             }
         }
     }
@@ -32,7 +32,16 @@ public final class DeferredFree {
     public void freeAll() {
         List<Entry> all = new ArrayList<>(this.pending);
         this.pending.clear();
-        for (Entry e : all) e.free().run();
+        for (Entry e : all) run(e);
+    }
+
+    /** 2026-10-30 (audit): a free that throws is logged; the rest still run (it threw into Renderer.beginFrame before). */
+    private static void run(Entry e) {
+        try {
+            e.free().run();
+        } catch (RuntimeException ex) {
+            net.vulkanmod.visuals.VisualsLog.error("Visuals: freeing a retired resource failed", ex);
+        }
     }
 
     public int pendingCount() {

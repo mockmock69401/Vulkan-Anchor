@@ -56,9 +56,19 @@ public final class VkFrames {
         TRACKER.recordingStarted(slot);
         VkDescriptorRing.INSTANCE.onRecordingStarted(slot);
         VkGpuTimer.onRecordingStarted(slot);
+        //2026-10-30 (audit): one throwing listener no longer skips the others' tick (layout trackers, rings, deferred frees)
         for (Runnable r : LISTENERS) {
-            r.run();
+            try {
+                r.run();
+            } catch (RuntimeException e) {
+                net.vulkanmod.visuals.VisualsLog.error("Visuals: a frame listener failed", e);
+            }
         }
+    }
+
+    /** 2026-10-30 (audit): Renderer.recreateSwapChain, after it changed the number of frames in flight (device idle). */
+    public static void onFrameCountChanged() {
+        VkGpuTimer.onFrameCountChanged();
     }
 
     public static void onSubmitted() {

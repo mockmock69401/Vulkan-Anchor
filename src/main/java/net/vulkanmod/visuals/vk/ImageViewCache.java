@@ -20,8 +20,11 @@ public final class ImageViewCache {
 
     public long get(Object image, DeferredFree deferred, long serial) {
         if (image != this.image) {
+            //2026-10-30 (audit): the old pair is forgotten before create, so a create that throws cannot retire the same view twice
             if (this.image != null) {
                 long old = this.view;
+                this.image = null;
+                this.view = 0;
                 deferred.retire(() -> this.destroy.accept(old), serial);
             }
             this.view = this.create.applyAsLong(image);

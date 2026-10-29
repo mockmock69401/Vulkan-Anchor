@@ -84,6 +84,12 @@ public final class FsrFrame {
      * when endFrame told FSR this frame and generation was dispatched; false after any early return, a failure, or a second call.
      * FsrSwapchain.beforePresent, render thread.
      */
+    /** 2026-10-30 (audit): FSR's history starts over at the next frame (see Sequencer.forgetHistory). Render thread. */
+    public static void forgetHistory() {
+        SEQUENCER.forgetHistory();
+        generatedThisFrame = false;
+    }
+
     public static boolean takeGeneratedThisFrame() {
         boolean g = generatedThisFrame;
         generatedThisFrame = false;
@@ -199,6 +205,15 @@ public final class FsrFrame {
 
         long frameIntervalNs() {
             return lastIntervalNs;
+        }
+
+        /**
+         * 2026-10-30 (audit): the next frame starts FSR's history over and its frame time is unknown: after a frame FSR was told about
+         * but that was never submitted, a recreation that kept the context, or a minimised stretch (minutes of frame time before).
+         */
+        void forgetHistory() {
+            generatedLast = false;
+            lastNs = -1L;
         }
 
         /** Whether the last frame run dispatched generation. */

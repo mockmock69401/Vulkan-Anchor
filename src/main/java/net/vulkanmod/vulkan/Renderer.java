@@ -117,6 +117,8 @@ public class Renderer {
     private final FramePreparationState framePreparation = new FramePreparationState();
     private VkCommandBuffer currentCmdBuffer;
     private boolean recordingCmds = false;
+    //2026-10-30 (audit): flushCmds submitted part of this frame (a screenshot), so it is not dropped (VkFrames would undo what ran)
+    private boolean flushedThisFrame = false;
     /** 2026-10-28: frames are paused because FSR is live and the window is minimized (FsrSwapchain.pausedMinimized). */
     private boolean fsrMinimized = false;
     private boolean acquiredImageWaitPending;
@@ -232,6 +234,7 @@ public class Renderer {
 
     public void beginFrame() {
         net.vulkanmod.render.profiling.FpsOverlay.frame();
+        net.vulkanmod.render.target.MainTargets.onFrameStart(Minecraft.getInstance().getMainRenderTarget());
         if (recordingCmds)
             return;
         if (recreatingSwapChain)
@@ -422,6 +425,7 @@ public class Renderer {
         }
 
         recordingCmds = true;
+        flushedThisFrame = false;
         boundPipelineHandle = 0;
         blendConstantsApplied = false;
         stencilStateApplied = false;
@@ -460,8 +464,12 @@ public class Renderer {
             return true;
         }
 
-        if (swapChainUpdate)
+        //a frame flushCmds submitted part of is submitted whole (without its present below), so it is never half run and half dropped
+        if (swapChainUpdate && !flushedThisFrame) {
+            //2026-10-30 (audit): FSR was told about this frame's generation, which never runs
+            if (net.vulkanmod.visuals.fsr.FsrSwapchain.live()) net.vulkanmod.visuals.fsr.FsrFrame.forgetHistory();
             return false;
+        }
 
         try (MemoryStack stack = stackPush()) {
             int vkResult;
@@ -494,6 +502,14 @@ public class Renderer {
             VkFrames.onSubmitted();
             if (vkResult != VK_SUCCESS) {
                 vkResetFences(device, inFlightFences.get(currentFrame));
+                //2026-10-30 (audit): with FSR's fence the empty submit after the present signals it; the frame failed before that, so
+                // it is signalled here, else the next wait on it never returned (a hang instead of the crash below)
+                if (fsrFence) {
+                    try {
+                        signalAfterFsr(inFlightFences.get(currentFrame));
+                    } catch (RuntimeException ignored) {
+                    }
+                }
                 throw new RuntimeException("Failed to submit draw command buffer: %s".formatted(VkResult.decode(vkResult)));
             }
             this.acquiredImageWaitPending = false;
@@ -501,6 +517,10 @@ public class Renderer {
 
 
             framePreparation.submitted();
+            if (swapChainUpdate) {
+                if (fsrFence) signalAfterFsr(inFlightFences.get(currentFrame));
+                return false;
+            }
 
             VkPresentInfoKHR presentInfo = VkPresentInfoKHR.calloc(stack);
             presentInfo.sType(VK_STRUCTURE_TYPE_PRESENT_INFO_KHR);
@@ -642,6 +662,7 @@ public class Renderer {
             this.acquiredImageWaitPending = false;
 
             vkWaitForFences(device, inFlightFences.get(currentFrame), true, VUtil.UINT64_MAX);
+            flushedThisFrame = true;
 
             Throwable failure = null;
             try {
@@ -1005,6 +1026,7 @@ public class Renderer {
             Pipeline.recreateDescriptorSets(framesNum);
 
             drawer.createResources(framesNum);
+            net.vulkanmod.visuals.vk.VkFrames.onFrameCountChanged();
         }
 
         createSyncObjects();

@@ -57,9 +57,22 @@ public final class LightSections {
         this.cameraSz = sz;
         this.centred = true;
         if (!moved && !rescan) return;
-        for (int slot = 0; slot < this.held.length; slot++) {
-            int[] s = this.layout.sectionAt(slot, sx, sz);
-            if (this.held[slot] != this.layout.key(s[0], s[1], s[2]) && loaded.test(s[0], s[2])) this.dirty.add(pack(s[0], s[1], s[2]));
+        //2026-10-30 (audit): in slot order as before, but no array per slot and the loaded test once per column (10^5 slots and more
+        // in tall worlds made a render-thread spike every 30 frames)
+        int nx = this.layout.slotsX(), ny = this.layout.slotsY(), nz = this.layout.slotsZ();
+        int x0 = sx - this.layout.half(), z0 = sz - this.layout.half();
+        byte[] columnLoaded = new byte[nx * nz];//0 not asked yet, 1 loaded, 2 not
+        for (int iy = 0; iy < ny; iy++) {
+            int wy = this.layout.minSectionY() + iy;
+            for (int iz = 0; iz < nz; iz++) {
+                int wz = z0 + Math.floorMod(iz - z0, nz);
+                for (int ix = 0; ix < nx; ix++) {
+                    int wx = x0 + Math.floorMod(ix - x0, nx), column = ix + nx * iz;
+                    if (this.held[column + nx * nz * iy] == this.layout.key(wx, wy, wz)) continue;
+                    if (columnLoaded[column] == 0) columnLoaded[column] = (byte) (loaded.test(wx, wz) ? 1 : 2);
+                    if (columnLoaded[column] == 1) this.dirty.add(pack(wx, wy, wz));
+                }
+            }
         }
     }
 

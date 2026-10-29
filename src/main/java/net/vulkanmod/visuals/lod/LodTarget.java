@@ -69,23 +69,40 @@ public final class LodTarget {
         this.loadPass = load;
     }
 
-    /** Recreates the images at a new size; the old ones are freed once the frames that may use them have completed. */
+    /**
+     * Recreates the images at a new size; the old ones are freed once the frames that may use them have completed. 2026-10-30
+     * (audit): the new set is built first and the old one retired only once it exists, so a failed allocation (out of memory at 4K
+     * to 8K) leaves the old target whole instead of a mix that the next call retired a second time.
+     */
     public void ensureSize(int width, int height) {
         if (this.colour != null && this.width == width && this.height == height) return;
+        VkImage2D colour = null, depth = null, bandColour = null, bandDepth = null, light = null;
+        long framebuffer;
+        try {
+            colour = VkImage2D.create(COLOUR_FORMAT, width, height, 1,
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+            depth = VkImage2D.createDepth(this.depthFormat, width, height,
+                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
+            //The snapshot's copies of the LOD before the translucents (snapshotBeforeTranslucents)
+            bandColour = VkImage2D.create(COLOUR_FORMAT, width, height, 1, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+            bandDepth = VkImage2D.createDepth(this.depthFormat, width, height, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+            light = VkImage2D.create(LIGHT_FORMAT, width, height, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+            framebuffer = createFramebuffer(this.clearPass, colour.view(), depth.view(), light.view(), width, height);
+        } catch (RuntimeException | LinkageError e) {
+            destroy(0L, colour, depth, bandColour, bandDepth, light);
+            throw e;
+        }
         if (this.colour != null) {
             VkImage2D oldColour = this.colour, oldDepth = this.depth, oldBandColour = this.bandColour, oldBandDepth = this.bandDepth, oldLight = this.light;
             long oldFramebuffer = this.framebuffer;
             this.deferred.retire(() -> destroy(oldFramebuffer, oldColour, oldDepth, oldBandColour, oldBandDepth, oldLight), VkFrames.serial());
         }
-        this.colour = VkImage2D.create(COLOUR_FORMAT, width, height, 1,
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        this.depth = VkImage2D.createDepth(this.depthFormat, width, height,
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-        //The snapshot's copies of the LOD before the translucents (snapshotBeforeTranslucents)
-        this.bandColour = VkImage2D.create(COLOUR_FORMAT, width, height, 1, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-        this.bandDepth = VkImage2D.createDepth(this.depthFormat, width, height, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-        this.light = VkImage2D.create(LIGHT_FORMAT, width, height, 1, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-        this.framebuffer = createFramebuffer(this.clearPass, this.colour.view(), this.depth.view(), this.light.view(), width, height);
+        this.colour = colour;
+        this.depth = depth;
+        this.bandColour = bandColour;
+        this.bandDepth = bandDepth;
+        this.light = light;
+        this.framebuffer = framebuffer;
         this.width = width;
         this.height = height;
         VisualsLog.info("Visuals LOD target " + width + "x" + height);
@@ -226,13 +243,12 @@ public final class LodTarget {
         return clear ? VK_IMAGE_LAYOUT_UNDEFINED : attachmentLayout;
     }
 
+    /** Frees what exists (null and 0 are skipped: a partly built set). */
     private static void destroy(long framebuffer, VkImage2D colour, VkImage2D depth, VkImage2D bandColour, VkImage2D bandDepth, VkImage2D light) {
-        vkDestroyFramebuffer(VkContext.device(), framebuffer, null);
-        colour.free();
-        depth.free();
-        bandColour.free();
-        bandDepth.free();
-        light.free();
+        if (framebuffer != 0L) vkDestroyFramebuffer(VkContext.device(), framebuffer, null);
+        for (VkImage2D image : new VkImage2D[]{colour, depth, bandColour, bandDepth, light}) {
+            if (image != null) image.free();
+        }
     }
 
     private static long createRenderPass(int depthFormat, boolean clear) {

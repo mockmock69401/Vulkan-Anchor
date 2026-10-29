@@ -68,4 +68,19 @@ class ShadowStepsTest {
         assertEquals(0.02f, ShadowSteps.advance(0.99f, 0.01f), 1e-6f);
         assertEquals(0f, ShadowSteps.advance(0.5f, 0.4f));
     }
+
+    /** 2026-10-30 (audit): at the wrap of the time of day, step 7200's map is step 0's (two whole draws of every cascade before). */
+    @Test
+    void theWrapReusesTheNextStepsMap() {
+        long last = ShadowSteps.STEPS_PER_TURN - 1;
+        long[] steps = {last, last + 1};
+        boolean[] valid = {true, true};
+        long[] drawn = {1, 2};
+        assertNull(ShadowSteps.plan(last, steps, valid, drawn, false));
+        //the day wrapped: step 0 is the map drawn for 7200, so only 1's map is missing
+        ShadowSteps.Draw d = ShadowSteps.plan(0, steps, valid, drawn, false);
+        assertNotNull(d);
+        assertEquals(1, d.step());
+        assertEquals(0, d.slot(), "into the slot of 7199, not the one holding 7200 (= 0)");
+    }
 }

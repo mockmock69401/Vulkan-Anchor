@@ -115,6 +115,8 @@ public final class FsrSwapchain {
     /** Renderer.beginFrame, when the window is restored after {@link #pausedMinimized}: the present count starts over. */
     public static void resumed() {
         WATCH.reset();
+        //2026-10-30 (audit): no interpolation across the minimised stretch
+        FsrFrame.forgetHistory();
     }
 
     /** Renderer.beginFrame, next to FrameGen.beginFrame: a toggled setting or a failure schedules the recreation that applies it. */
@@ -375,6 +377,8 @@ public final class FsrSwapchain {
     public static void recreate(SwapChain sc) {
         Bridge bridge = new Bridge(sc, true);
         WATCH.reset();
+        //2026-10-30 (audit): a recreation that keeps the context still starts FSR's history over (the frame before may not have run)
+        FsrFrame.forgetHistory();
         //the device is idle: whatever stalled is over or abandoned (FSR is off after it)
         stalled = null;
         //turning FSR off: no FSR swapchain is made first only to be destroyed (stop makes VulkanMod's own)
@@ -495,8 +499,19 @@ public final class FsrSwapchain {
                 }
 
                 long query = FfxStructs.queryReplacementFunctions(stack);
-                FfxApi.check(api.query(swapchainContext, query), "ffxQuery (swapchain replacement functions)");
-                functions = new Functions(query, memGetAddress(swapchainContext));
+                try {
+                    FfxApi.check(api.query(swapchainContext, query), "ffxQuery (swapchain replacement functions)");
+                    functions = new Functions(query, memGetAddress(swapchainContext));
+                } catch (RuntimeException | LinkageError e) {
+                    //2026-10-30 (audit): without its functions FSR's swapchain cannot be destroyed through them; its context goes now
+                    // (taking that swapchain with it), so the stop that follows makes VulkanMod's own on a free surface
+                    try {
+                        api.destroyContext(swapchainContext);
+                    } catch (RuntimeException | LinkageError ignored) {
+                    }
+                    memPutAddress(swapchainContext, 0L);
+                    throw e;
+                }
                 SwapchainFunctions.use(functions);
                 sc.adopt(replaced);
             }

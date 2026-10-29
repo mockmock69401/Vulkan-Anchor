@@ -301,9 +301,11 @@ public final class FrameGen {
     private static void dropBurst() {
         if (pacer != null) pacer.arm(null);
         if (activeBurst == null) return;
-        activeBurst.abort();
+        boolean ended = activeBurst.abort();
         activeBurst.report();
-        activeBurst.free();
+        //2026-10-30 (audit): a worker still in its semaphore wait or PNG write keeps its buffers (leaked, not freed under it)
+        if (ended) activeBurst.free();
+        else VisualsLog.warn("Frame generation burst: the writer did not stop; its buffers are left allocated");
         activeBurst = null;
     }
 

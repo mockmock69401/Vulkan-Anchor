@@ -264,8 +264,9 @@ public class VulkanImage {
     public void uploadSubTextureAsync(int mipLevel, int width, int height, int xOffset, int yOffset, int unpackSkipRows, int unpackSkipPixels, int unpackRowLength, ByteBuffer buffer) {
         //Stutter (2026-10-21): only the bytes the region reads go to the staging buffer, not the whole source (an animated
         // sprite's strip of every frame); a range that does not fit the buffer keeps the old whole-buffer copy
-        SubImageRange range = SubImageRange.of(width, height, unpackSkipRows, unpackSkipPixels, unpackRowLength, this.formatSize, buffer.limit());
-        long imageSize = range != null ? range.size() : buffer.limit();
+        //2026-10-30 (audit): the bytes from the buffer's position (a PBO offset sets it; memAddress starts there), not its limit
+        SubImageRange range = SubImageRange.of(width, height, unpackSkipRows, unpackSkipPixels, unpackRowLength, this.formatSize, buffer.remaining());
+        long imageSize = range != null ? range.size() : buffer.remaining();
 
         if (net.vulkanmod.compat.observer.CompatProfiler.ENABLED) {
             net.vulkanmod.compat.observer.CompatProfiler.textureUploadBytes += imageSize;

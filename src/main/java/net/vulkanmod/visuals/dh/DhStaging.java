@@ -194,6 +194,21 @@ public final class DhStaging {
         }, this.backend.serial());
     }
 
+    /** 2026-10-30 (audit): Visuals.frame when no visuals frame runs: the pending copies, recorded outside the main pass. Render thread. */
+    public void flushOutsideVisuals() {
+        synchronized (this) {
+            if (this.pending.isEmpty()) return;
+        }
+        if (!net.vulkanmod.visuals.vk.VkContext.recordingFrame()) return;
+        VkCommandBuffer cmd = net.vulkanmod.visuals.vk.VkContext.frameCommands();
+        net.vulkanmod.visuals.vk.VkContext.endMainPass();
+        try {
+            this.flush(cmd);
+        } finally {
+            net.vulkanmod.visuals.vk.VkContext.resumeMainPass();
+        }
+    }
+
     /** Records the pending copies into the frame being recorded, outside any render pass. */
     public synchronized void flush(VkCommandBuffer cmd) {
         if (this.pending.isEmpty()) return;

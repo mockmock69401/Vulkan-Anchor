@@ -18,8 +18,31 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public final class QueueLock {
     private static final ReentrantLock LOCK = new ReentrantLock();
+    /**
+     * 2026-10-30 (audit): the present queue's own lock when it is a VkQueue VulkanMod never submits to (another family): the frame
+     * generation pacer's present can block for up to a refresh under FIFO, and under LOCK every render-thread submit waited behind
+     * it. Device-wide waits take both, LOCK first; nothing that holds PRESENT_LOCK takes LOCK.
+     */
+    private static final ReentrantLock PRESENT_LOCK = new ReentrantLock();
+    private static volatile long separatePresentQueue;
 
     private QueueLock() {
+    }
+
+    /** DeviceManager, once the queues exist: whether present has a VkQueue of its own (none of the others is the same handle). */
+    public static void presentQueue(VkQueue present, VkQueue... others) {
+        long p = present.address();
+        for (VkQueue o : others) {
+            if (o != null && o.address() == p) {
+                separatePresentQueue = 0L;
+                return;
+            }
+        }
+        separatePresentQueue = p;
+    }
+
+    static boolean separate(long queue) {
+        return queue != 0L && queue == separatePresentQueue;
     }
 
     public static int submit(VkQueue q, VkSubmitInfo info, long fence) {
@@ -66,38 +89,44 @@ public final class QueueLock {
 
     /** vkQueuePresentKHR under the lock ({@link SwapchainFunctions#NATIVE}). */
     public static int presentNative(VkQueue q, VkPresentInfoKHR info) {
-        LOCK.lock();
+        ReentrantLock lock = separate(q.address()) ? PRESENT_LOCK : LOCK;
+        lock.lock();
         try {
             return KHRSwapchain.vkQueuePresentKHR(q, info);
         } finally {
-            LOCK.unlock();
+            lock.unlock();
         }
     }
 
     /** Runs r holding the lock (FSR design 4.4: FSR's wait for presents, which waits on the game queue and the device itself). */
     public static void locked(Runnable r) {
         LOCK.lock();
+        PRESENT_LOCK.lock();
         try {
             r.run();
         } finally {
+            PRESENT_LOCK.unlock();
             LOCK.unlock();
         }
     }
 
     public static int queueWaitIdle(VkQueue q) {
-        LOCK.lock();
+        ReentrantLock lock = separate(q.address()) ? PRESENT_LOCK : LOCK;
+        lock.lock();
         try {
             return VK10.vkQueueWaitIdle(q);
         } finally {
-            LOCK.unlock();
+            lock.unlock();
         }
     }
 
     public static int deviceWaitIdle(VkDevice d) {
         LOCK.lock();
+        PRESENT_LOCK.lock();
         try {
             return VK10.vkDeviceWaitIdle(d);
         } finally {
+            PRESENT_LOCK.unlock();
             LOCK.unlock();
         }
     }

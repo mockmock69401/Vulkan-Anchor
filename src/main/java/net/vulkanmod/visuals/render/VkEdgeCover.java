@@ -128,6 +128,9 @@ public final class VkEdgeCover {
         this.built.clear();
     }
 
+    //2026-10-30 (audit): the level the faces were built in (a dimension change with no frame without a level kept them up to a scan)
+    private ClientLevel facesLevel;
+
     private void prepare0(DeferredFree deferred, boolean on, double cameraX, double cameraY, double cameraZ) {
         this.quadCount = 0;
         if (this.disabled) return;
@@ -142,6 +145,11 @@ public final class VkEdgeCover {
             //Final review I2: vanilla's environmental fog (in water or lava, blindness, darkness) hides the terrain but not the
             // covers, which have no fog of their own; there they would stand out lit, so none are drawn
             if (environmentalFog()) return;
+            if (level != this.facesLevel) {
+                this.clear();
+                this.hasOrigin = false;
+                this.facesLevel = level;
+            }
             net.vulkanmod.render.chunk.graph.SectionGraph graph = world.getSectionGraph();
             if (graph == null) return;
             int cx = (int) Math.floor(cameraX), cy = (int) Math.floor(cameraY), cz = (int) Math.floor(cameraZ);

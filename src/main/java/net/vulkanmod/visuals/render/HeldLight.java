@@ -55,6 +55,8 @@ public final class HeldLight {
                 int next = l - Math.max(1, opacity.at(ox + nx, oy + ny, oz + nz));
                 if (next > cells[n]) {
                     cells[n] = (byte) next;
+                    //2026-10-30 (audit): a cell raised again (step costs 2 to 14) is queued again, so the queue grows past CELLS
+                    if (tail == queue.length) queue = java.util.Arrays.copyOf(queue, queue.length * 2);
                     queue[tail++] = n;
                 }
             }

@@ -26,4 +26,17 @@ class SlotLedgerTest {
         }
         assertEquals(previous, l.lastValue());
     }
+
+    /** 2026-10-30 (audit): the slot the render thread last asked to write; debug view 1 warps the previous frame only while it is the newest's. */
+    @Test
+    void theLastWrittenSlotIsTheRenderThreadsLatestAsk() {
+        SlotLedger l = new SlotLedger(2);
+        assertEquals(-1, l.lastWrittenSlot());
+        l.readValue(0);
+        assertEquals(0, l.lastWrittenSlot());
+        l.reserveRead(1);
+        assertEquals(0, l.lastWrittenSlot(), "a pacer read is no write");
+        l.readValue(1);
+        assertEquals(1, l.lastWrittenSlot());
+    }
 }

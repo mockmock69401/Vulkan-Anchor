@@ -37,16 +37,27 @@ public final class TerrainLightTarget {
     private VkImage2D image, albedo;
     private long clearedSerial = Long.MIN_VALUE;
     private int clearedWidth, clearedHeight;
+    //2026-10-30 (audit): the main target's depth image the image was cleared for; only draws into that target write the light
+    private Object clearedFor;
 
     public TerrainLightTarget(DeferredFree deferred) {
         this.deferred = deferred;
         current = this;
     }
 
-    /** terrain.json's LightOut: 1 while this frame's terrain may write (the last frame cleared the image for it). */
+    /**
+     * terrain.json's LightOut: 1 while this frame's terrain may write (the last frame cleared the image for it) into the main target.
+     * 2026-10-30 (audit): mods drawing into their own target mid-frame (watut, portals, cameras) wrote at their own pixels, hiding
+     * the real fragments, and past the image's edge when their target was larger.
+     */
     public static float lightOut() {
         TerrainLightTarget t = current;
-        return t != null && t.clearedSerial == VkFrames.serial() - 1 && !VkFrames.isDropped(t.clearedSerial) ? 1 : 0;
+        return t != null && t.clearedSerial == VkFrames.serial() - 1 && !VkFrames.isDropped(t.clearedSerial) && t.mainBound() ? 1 : 0;
+    }
+
+    private boolean mainBound() {
+        net.vulkanmod.vulkan.framebuffer.Framebuffer f = net.vulkanmod.vulkan.Renderer.getInstance().getBoundFramebuffer();
+        return f != null && f.getDepthAttachment() == this.clearedFor;
     }
 
     /** At the post-process, before the reads: whether this frame's terrain filled the image for a main target of this size. */
@@ -76,7 +87,7 @@ public final class TerrainLightTarget {
      * Outside a render pass, after this frame's reads (or when nothing reads it): with on, clears the image at the main target's size
      * for the next frame's terrain, recreating it on a resize; without, the terrain stops writing (nothing is cleared).
      */
-    public void prepareNext(VkCommandBuffer cmd, boolean on, int width, int height) {
+    public void prepareNext(VkCommandBuffer cmd, boolean on, int width, int height, Object mainDepth) {
         if (!on || width <= 0 || height <= 0) {
             this.clearedSerial = Long.MIN_VALUE;
             return;
@@ -104,6 +115,7 @@ public final class TerrainLightTarget {
         this.clearedSerial = VkFrames.serial();
         this.clearedWidth = width;
         this.clearedHeight = height;
+        this.clearedFor = mainDepth;
     }
 
     private static VkImage2D create(VkCommandBuffer cmd, int width, int height) {

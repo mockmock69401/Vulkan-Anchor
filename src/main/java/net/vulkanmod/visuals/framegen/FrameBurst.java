@@ -249,7 +249,8 @@ public final class FrameBurst {
     }
 
     /** The pacer is stopped: the worker ends after the items already queued (those are skipped, not written). Joins it. */
-    void abort() {
+    /** Whether the worker ended; false when it still runs after the wait (2026-10-30 audit: its buffers must then not be freed). */
+    boolean abort() {
         this.aborted = true;
         this.queue.add(END);
         try {
@@ -257,6 +258,7 @@ public final class FrameBurst {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+        return !this.worker.isAlive();
     }
 
     /** Logs the outcome. */

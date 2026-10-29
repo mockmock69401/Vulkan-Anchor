@@ -37,10 +37,20 @@ public final class LightVolumeUniforms {
      * On with the setting and a volume (layout not null). The lift is Sunlit Sky Light x day when this frame's sun visibility
      * is valid (lighting pass with shadow maps) in a sky light dimension; else 0.
      */
+    /**
+     * 2026-10-30 (audit): the camera's block as the shaders get it, a float: floor(v), made even past 2^24 blocks, where a float holds
+     * only even integers (lookups were 1-2 blocks off there). The fraction is then up to 2; the shaders add it to the view offset and
+     * take whole blocks, so they need no change.
+     */
+    static double exactBlock(double v) {
+        double b = Math.floor(v);
+        return Math.abs(b) < (1 << 24) ? b : b - Math.floorMod((long) b, 2L);
+    }
+
     public static Values compute(PostProcessSettings s, LightVolumeMath.Layout layout, double x, double y, double z, AtmosphereFrame frame, long serial,
                                  boolean hasSky, boolean sunValid) {
         if (!s.perPixelLight() || layout == null) return off();
-        double bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+        double bx = exactBlock(x), by = exactBlock(y), bz = exactBlock(z);
         boolean sun = sunValid && hasSky;
         float day = sun && frame != null && frame.serial() == serial
                 ? SunMath.dayFactor(SunMath.sunDirection(frame.timeOfDay()).y, frame.rain()) : 0;

@@ -112,6 +112,11 @@ public final class VkGpuTimer {
         }
     }
 
+    /** 2026-10-30 (audit): the frame count changed (onDeviceIdle runs before Renderer updates it): the next reset rebuilds the pool. */
+    static void onFrameCountChanged() {
+        if (tried && VkContext.framesInFlight() != slots) free();
+    }
+
     /** Review 2: the device is idle (swapchain recreated): no slot holds a frame to read; a changed frame count rebuilds the pool. */
     static void onDeviceIdle() {
         if (!on) return;

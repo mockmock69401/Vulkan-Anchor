@@ -78,6 +78,9 @@ public final class VkUploadStream {
     public void commit(VkCommandBuffer cmd) {
         if (!this.ledger.hasPending()) return;
         List<Op> ops = this.ledger.commit(VkFrames.serial());
+        //2026-10-30 (audit): a copy queued or requeued for a destination freed since (retired while no frame committed, e.g. on a
+        // loading screen) is dropped instead of writing freed memory
+        ops.removeIf(op -> op instanceof BufferCopy b && b.dst().freed() || op instanceof ImageCopy i && i.dst().freed());
         Set<VkImage2D> images = new LinkedHashSet<>();
         for (Op op : ops) if (op instanceof ImageCopy c) images.add(c.dst());
         try (MemoryStack stack = MemoryStack.stackPush()) {

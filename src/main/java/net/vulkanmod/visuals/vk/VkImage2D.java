@@ -21,6 +21,7 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class VkImage2D {
     private final long image;
     private final long allocation;
+    private boolean freed;
     private final long view;
     private final long sampledView;
     private final int aspect;
@@ -60,9 +61,17 @@ public final class VkImage2D {
             PointerBuffer pAlloc = stack.mallocPointer(1);
             check(Vma.vmaCreateImage(VkContext.allocator(), info, alloc, pImage, pAlloc, null), "vmaCreateImage " + width + "x" + height);
             long image = pImage.get(0);
-            long view = createView(image, format, aspect, levels);
-            long sampledView = (aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0 ? createView(image, format, VK_IMAGE_ASPECT_DEPTH_BIT, levels) : view;
-            return new VkImage2D(image, pAlloc.get(0), view, sampledView, aspect, width, height, levels);
+            //2026-10-30 (audit): the image and its first view no longer leak when a view cannot be made
+            long view = 0;
+            try {
+                view = createView(image, format, aspect, levels);
+                long sampledView = (aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0 ? createView(image, format, VK_IMAGE_ASPECT_DEPTH_BIT, levels) : view;
+                return new VkImage2D(image, pAlloc.get(0), view, sampledView, aspect, width, height, levels);
+            } catch (RuntimeException e) {
+                if (view != 0) vkDestroyImageView(VkContext.device(), view, null);
+                Vma.vmaDestroyImage(VkContext.allocator(), image, pAlloc.get(0));
+                throw e;
+            }
         }
     }
 
@@ -133,11 +142,18 @@ public final class VkImage2D {
         this.layout.recorded(VkFrames.serial(), newLayout);
     }
 
-    /** Only once no submitted frame can still use it. */
+    /** Only once no submitted frame can still use it. 2026-10-30 (audit): a second call does nothing. */
     public void free() {
+        if (this.freed) return;
+        this.freed = true;
         if (this.sampledView != this.view) vkDestroyImageView(VkContext.device(), this.sampledView, null);
         vkDestroyImageView(VkContext.device(), this.view, null);
         Vma.vmaDestroyImage(VkContext.allocator(), this.image, this.allocation);
+    }
+
+    /** 2026-10-30 (audit): whether free ran (VkUploadStream drops copies into a freed image). */
+    public boolean freed() {
+        return this.freed;
     }
 
     private static void check(int result, String what) {

@@ -19,6 +19,7 @@ class DhVertexBufferTest {
     void freeLeftovers() {
         DhVertexBuffer.closeAllNow();
         DhInternals.resetForTest();
+        DhVertexBuffer.resetUploadFailuresForTest();
     }
 
     static ByteBuffer vertices(int count) {
@@ -142,9 +143,13 @@ class DhVertexBufferTest {
         assertEquals(refusedBefore + 1, DhVertexBuffer.refusedUploads());
     }
 
-    /** M5: an upload that throws (a staging write) switches DH drawing off with one warning; nothing is thrown into DH's task. */
+    /**
+     * M5: an upload that throws (a staging write) leaves that section out with one warning; nothing is thrown into DH's task.
+     * 2026-10-30 (audit): DH drawing is switched off only after UPLOAD_FAILURES_ALLOWED in a row (one did before, for the session),
+     * and a good upload starts the count over.
+     */
     @Test
-    void anUploadThatThrowsSwitchesDhOffAndDoesNotEscape() {
+    void anUploadThatThrowsLeavesTheSectionOutAndManyInARowSwitchDhOff() {
         FakeGpu gpu = new FakeGpu();
         DhVertexBuffer vbo = new DhVertexBuffer("t", gpu);
         gpu.failUpload = true;
@@ -152,9 +157,17 @@ class DhVertexBufferTest {
             assertDoesNotThrow(() -> vbo.uploadVertexBuffer(vertices(8), 8));
             assertDoesNotThrow(() -> vbo.uploadVertexBuffer(vertices(8), 8));
             assertEquals(0, vbo.getVertexCount());
-            assertFalse(DhInternals.ok());
+            assertTrue(DhInternals.ok(), "two failures leave DH on");
             assertEquals(1, log.warnings().size(), log.warnings().toString());
             assertTrue(log.warnings().get(0).contains("vkMapMemory failed"), log.warnings().get(0));
+            gpu.failUpload = false;
+            vbo.uploadVertexBuffer(vertices(8), 8);
+            assertEquals(8, vbo.getVertexCount());
+            gpu.failUpload = true;
+            for (int i = 0; i < DhVertexBuffer.UPLOAD_FAILURES_ALLOWED - 1; i++) vbo.uploadVertexBuffer(vertices(8), 8);
+            assertTrue(DhInternals.ok(), "the good upload started the count over");
+            assertDoesNotThrow(() -> vbo.uploadVertexBuffer(vertices(8), 8));
+            assertFalse(DhInternals.ok());
         }
     }
 

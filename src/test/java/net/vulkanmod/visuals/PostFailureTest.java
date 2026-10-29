@@ -38,7 +38,8 @@ class PostFailureTest {
             }
             if (insn instanceof MethodInsnNode c && Bytecode.name(c).equals("FrameFlags.resetForSkippedPost")) reset = true;
         }
-        assertTrue(failed, "postFailed = true in the handler");
+        assertTrue(failed, "postFailed = true in the handler (2026-10-30: after POST_FAILURES_ALLOWED in a row)");
+        assertEquals(3, net.vulkanmod.visuals.render.VisualsRenderer.POST_FAILURES_ALLOWED);
         assertTrue(reset, "the flags go back to vanilla in the handler");
     }
 

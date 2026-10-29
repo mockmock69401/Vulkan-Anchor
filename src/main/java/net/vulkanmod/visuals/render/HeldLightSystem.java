@@ -45,7 +45,8 @@ public final class HeldLightSystem {
         BlockPos eye = BlockPos.containing(player.getEyePosition());
         long tick = level.getGameTime();
         boolean moved = !this.on || eye.getX() != this.x || eye.getY() != this.y || eye.getZ() != this.z || held != this.level;
-        if (!moved && tick - this.spreadTick < REFRESH_TICKS) return;
+        //2026-10-30 (audit): a game time behind the last spread (another world) spreads again (it never refreshed there)
+        if (!moved && tick >= this.spreadTick && tick - this.spreadTick < REFRESH_TICKS) return;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         byte[] cells = HeldLight.spread(eye.getX(), eye.getY(), eye.getZ(), held,
                 (bx, by, bz) -> level.getBlockState(pos.set(bx, by, bz)).getLightBlock(level, pos));
@@ -78,8 +79,9 @@ public final class HeldLightSystem {
             w.putVec4(COPY_HELD, 0, 0, 0, 0);
             return;
         }
-        w.putVec4(COPY_HELD, this.x - HeldLight.RADIUS - cameraBlock[0], this.y - HeldLight.RADIUS - cameraBlock[1],
-                this.z - HeldLight.RADIUS - cameraBlock[2], 1);
+        //2026-10-30 (audit): in double, so the corner stays exact far from the origin (an int past 2^24 is not a float)
+        w.putVec4(COPY_HELD, (float) (this.x - HeldLight.RADIUS - (double) cameraBlock[0]), (float) (this.y - HeldLight.RADIUS - (double) cameraBlock[1]),
+                (float) (this.z - HeldLight.RADIUS - (double) cameraBlock[2]), 1);
     }
 
     public boolean on() {

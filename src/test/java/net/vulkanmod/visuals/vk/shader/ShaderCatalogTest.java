@@ -40,6 +40,37 @@ class ShaderCatalogTest {
     }
 
 
+    /**
+     * 2026-10-30 (audit): Vulkan matches varyings by location, which GlslForVulkan gives in declaration order, so every program's
+     * fragment stage takes its implicit inputs in the order its vertex stage declares the outputs (GL matched them by name).
+     */
+    @Test
+    void everyProgramsVaryingsMatchInOrder() {
+        int checked = 0;
+        for (ShaderCatalog.Program p : ShaderCatalog.visuals().all()) {
+            ShaderCatalog.Stage vert = null, frag = null;
+            for (ShaderCatalog.Stage s : p.stages()) {
+                if (s.kind() == ShaderCatalog.StageKind.VERTEX) vert = s;
+                if (s.kind() == ShaderCatalog.StageKind.FRAGMENT) frag = s;
+            }
+            if (vert == null || frag == null) continue;
+            List<String> outs = GlslForVulkan.implicitVaryings(GlslForVulkan.stripComments(p.source(vert, ShaderSource.classpath())), "out");
+            List<String> ins = GlslForVulkan.implicitVaryings(GlslForVulkan.stripComments(p.source(frag, ShaderSource.classpath())), "in");
+            //the fragment stage's own outputs are its colours; only the inputs pair with the vertex outputs
+            assertEquals(outs.subList(0, Math.min(outs.size(), ins.size())), ins, p.name());
+            checked++;
+        }
+        assertTrue(checked >= 5, "graphics programs checked: " + checked);
+    }
+
+    @Test
+    void matricesAndArraysTakeAsManyLocationsAsTheyFill() {
+        String out = GlslForVulkan.varyingLocations("out mat3 m;\nout vec2 a[2];\nout vec4 c;\n");
+        assertTrue(out.contains("layout(location = 0) out mat3 m;"), out);
+        assertTrue(out.contains("layout(location = 3) out vec2 a[2];"), out);
+        assertTrue(out.contains("layout(location = 5) out vec4 c;"), out);
+    }
+
     /** Review I4: Shader.Builder.compile always adds IS_INTEL / IS_WINDOWS for the running machine. */
     @Test
     void platformDefinesFollowShaderBuilderCompile() {

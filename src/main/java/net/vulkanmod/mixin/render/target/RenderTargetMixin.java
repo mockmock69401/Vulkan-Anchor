@@ -232,7 +232,8 @@ public abstract class RenderTargetMixin implements ExtendedRenderTarget {
 
     @Override
     public boolean vulkanmod$isWindowTarget() {
-        return (Object) this instanceof MainTarget && !this.vulkanmod$offscreenMainTarget;
+        //2026-10-30 (audit): an offscreen MainTarget a mod keeps as Minecraft's main render target is the window again (MainTargets)
+        return (Object) this instanceof MainTarget && (!this.vulkanmod$offscreenMainTarget || net.vulkanmod.render.target.MainTargets.adopted(this));
     }
 
     @Override
