@@ -51,6 +51,8 @@ public class Initializer {
 
 		VulkanFlywheelBootstrap.registerIfPresent();
 		modEventBus.addListener(this::onInitializeClient);
+		//2026-10-29: Refueled's road markers off the road's depth (RoadMarkerLift)
+		modEventBus.addListener(net.vulkanmod.compat.render.RoadMarkerLift::onModifyBakingResult);
 		modContainer.registerExtensionPoint(IConfigScreenFactory.class,
 				(java.util.function.Supplier<IConfigScreenFactory>) () ->
 						(container, parent) -> new VOptionScreen(Component.literal("VulkanMod Settings"), parent));
