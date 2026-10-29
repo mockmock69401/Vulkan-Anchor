@@ -85,7 +85,18 @@ public final class ShadowMath {
 
     /** The same with nearReach (nearReach(shadowDistance)) for the close and near cascades. */
     public static float vanillaRadius(Which which, int renderDistanceChunks, float nearReach) {
-        if (which == Which.FAR) return Math.min(renderDistanceChunks * 16f, FAR_VANILLA_MAX);
+        return vanillaRadius(which, renderDistanceChunks, nearReach, false);
+    }
+
+    /**
+     * 2026-10-29 (the user: flying from the LODs into loaded chunks, shadows went missing, then moved): with LODs casting past the
+     * vanilla terrain (lodBeyond: VisualsExtension.castsFarTerrain), the far cascade takes the vanilla terrain only out to nearReach
+     * too. Before, its vanilla casters reached the render distance: flying in, the casters changed LOD to vanilla at the render
+     * distance (nothing cast where the chunks were not built yet), back to LOD at the near cascade's edge, and to vanilla again at
+     * the shadow distance. Now they change once, at the shadow distance, where the chunks are built.
+     */
+    public static float vanillaRadius(Which which, int renderDistanceChunks, float nearReach, boolean lodBeyond) {
+        if (which == Which.FAR) return lodBeyond ? nearReach : Math.min(renderDistanceChunks * 16f, FAR_VANILLA_MAX);
         return nearReach;
     }
 

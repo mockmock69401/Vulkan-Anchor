@@ -432,6 +432,14 @@ public final class DhExtension implements VisualsExtension {
         }
     }
 
+    /** 2026-10-29: the LODs cast past the shadow distance while their casters are on and DH has given LODs (the vanilla terrain then stops there). */
+    @Override
+    public boolean castsFarTerrain() {
+        VisualsConfig config = VisualsConfig.get();
+        DhFrameCapture.Frame f = this.casterFrame;
+        return !this.castersFailed && castsShadows(config.dhLods, config.dhShadows, DhRegistration.disabled()) && f != null && !f.opaque().isEmpty();
+    }
+
     /** Each opaque buffer that casts into the cascade (DhShadowCasters), with its corner relative to the cascade's camera. */
     private void drawCasters(VkCommandBuffer cmd, long renderPass, ShadowCascadeContext c, DhFrameCapture.Frame f) {
         ShadowMath.Cascade cascade = c.cascade();
