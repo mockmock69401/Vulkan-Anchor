@@ -45,7 +45,11 @@ public final class DeferredWeather {
         return true;
     }
 
-    /** GameRendererPostMixin, after the post-process (whether or not it drew): the recorded weather and border, in the resumed main pass. */
+    /**
+     * GameRendererPostMixin, after the post-process (whether or not it drew): the recorded weather and border, in the resumed main pass.
+     * 2026-10-30 (audit): with the level's TAA jitter taken off the projection, since TAA does not resolve what is drawn after it
+     * (the rain and the border shook by a fraction of a pixel every frame).
+     */
     public static void replay() {
         if (!pending) return;
         pending = false;
@@ -55,12 +59,19 @@ public final class DeferredWeather {
         stack.pushPose();
         stack.last().pose().set(MODEL_VIEW);
         RenderSystem.applyModelViewMatrix();
+        float[] jitter = TaaJitter.appliedNdc();
+        boolean unjitter = jitter[0] != 0 || jitter[1] != 0;
+        if (unjitter) {
+            RenderSystem.backupProjectionMatrix();
+            RenderSystem.setProjectionMatrix(TaaJitter.unjittered(RenderSystem.getProjectionMatrix(), jitter), RenderSystem.getVertexSorting());
+        }
         RenderSystem.depthMask(false);
         try {
             renderer.visuals$renderSnowAndRain(lightTexture, partialTick, camX, camY, camZ);
             if (border != null) renderer.visuals$renderWorldBorder(border);
         } finally {
             RenderSystem.depthMask(true);
+            if (unjitter) RenderSystem.restoreProjectionMatrix();
             stack.popPose();
             RenderSystem.applyModelViewMatrix();
             replaying = false;

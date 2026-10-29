@@ -90,7 +90,7 @@ public final class VkUploadStream {
             for (Op op : ops) {
                 if (op instanceof BufferCopy c) {
                     if (written.needsBarrier(c.dst().handle(), c.dstOffset(), c.size())) {
-                        //A later copy to the same bytes (e.g. a biome patch inside a model record, or a requeued copy) must land last
+                        //A later copy to the same bytes (e.g. a biome patch inside a model record) must land last; requeued copies come first (CopyLedger)
                         VkMemoryBarrier.Buffer order = VkMemoryBarrier.calloc(1, stack).sType$Default()
                                 .srcAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT).dstAccessMask(VK_ACCESS_TRANSFER_WRITE_BIT);
                         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, order, null, null);

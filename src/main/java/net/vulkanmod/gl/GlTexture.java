@@ -169,14 +169,16 @@ public class GlTexture {
             src = glBuffer.data;
         } else {
             if (pixels != 0L) {
-                src = getByteBuffer(width, height, boundTexture.vulkanImage.formatSize, getUnpackLayout(width), pixels);
+                //2026-10-30 (audit): the caller's pixels are sized by its format and type (GL_RGB is 3 bytes), not the image's
+                int pixelSize = sourcePixelSize(format, type, boundTexture.vulkanImage.formatSize);
+                src = getByteBuffer(width, height, pixelSize, getUnpackLayout(width), pixels);
             } else {
                 src = null;
             }
         }
 
         if (src != null)
-            boundTexture.uploadSubImage(xOffset, yOffset, width, height, format, src, getUnpackLayout(width));
+            boundTexture.uploadSubImage(level, xOffset, yOffset, width, height, format, type, src, getUnpackLayout(width));
     }
 
     private static ByteBuffer getByteBuffer(int width, int height, int formatSize, TextureUploadLayout layout, long pixels) {
@@ -209,7 +211,7 @@ public class GlTexture {
         }
 
         if (src != null)
-            boundTexture.uploadSubImage(xOffset, yOffset, width, height, format, src, getUnpackLayout(width));
+            boundTexture.uploadSubImage(level, xOffset, yOffset, width, height, format, type, src, getUnpackLayout(width));
     }
 
     public static void compressedTexImage2D(int target, int level, int internalFormat, int width, int height, int border) {
@@ -591,8 +593,22 @@ public class GlTexture {
         vulkanImage.updateTextureSampler(maxLod, samplerFlags);
     }
 
-    private void uploadSubImage(int xOffset, int yOffset, int width, int height, int format, ByteBuffer pixels, TextureUploadLayout layout) {
+    /**
+     * 2026-10-30 (audit): into mip level (it went to level 0 whatever the level, so a mod's smaller mip images overwrote the full one);
+     * data whose pixel size is not what the image takes (after the RGB to RGBA conversion) is skipped instead of misread.
+     */
+    private void uploadSubImage(int level, int xOffset, int yOffset, int width, int height, int format, int type, ByteBuffer pixels, TextureUploadLayout layout) {
         boolean rgba8Image = vulkanImage.format == VK_FORMAT_R8G8B8A8_UNORM || vulkanImage.format == VK_FORMAT_R8G8B8A8_SRGB;
+        if (level < 0 || level >= vulkanImage.mipLevels) {
+            GlEmulationLog.warnOnce("texSubImage2D.level", "glTexSubImage2D to mip level " + level + " of a texture with " + vulkanImage.mipLevels + "; upload skipped");
+            return;
+        }
+        int expected = format == GL11.GL_RGB && rgba8Image ? 3 : vulkanImage.formatSize;
+        if (sourcePixelSize(format, type, expected) != expected) {
+            GlEmulationLog.warnOnce("texSubImage2D.type." + format + "." + type, "glTexSubImage2D with format 0x" + Integer.toHexString(format)
+                    + " type 0x" + Integer.toHexString(type) + " into a " + vulkanImage.formatSize + "-byte texture; upload skipped");
+            return;
+        }
 
         ByteBuffer src;
         if (format == GL11.GL_RGB && rgba8Image) {
@@ -603,12 +619,36 @@ public class GlTexture {
             src = pixels;
         }
 
-        this.vulkanImage.uploadSubTextureAsync(0, width, height, xOffset, yOffset,
+        this.vulkanImage.uploadSubTextureAsync(level, width, height, xOffset, yOffset,
                 layout.skipRows(), layout.skipPixels(), layout.rowLength(), src);
 
         if (src != pixels) {
             MemoryUtil.memFree(src);
         }
+    }
+
+    /** Bytes per pixel of client data in format and type; fallback for a pair it does not know. */
+    static int sourcePixelSize(int format, int type, int fallback) {
+        int packed = switch (type) {
+            case GL12.GL_UNSIGNED_INT_8_8_8_8, GL12.GL_UNSIGNED_INT_8_8_8_8_REV, GL12.GL_UNSIGNED_INT_2_10_10_10_REV -> 4;
+            case GL12.GL_UNSIGNED_SHORT_5_6_5, GL12.GL_UNSIGNED_SHORT_4_4_4_4, GL12.GL_UNSIGNED_SHORT_5_5_5_1 -> 2;
+            default -> 0;
+        };
+        if (packed > 0) return packed;
+        int channel = switch (type) {
+            case GL11.GL_UNSIGNED_BYTE, GL11.GL_BYTE -> 1;
+            case GL11.GL_UNSIGNED_SHORT, GL11.GL_SHORT, GL30.GL_HALF_FLOAT -> 2;
+            case GL11.GL_UNSIGNED_INT, GL11.GL_INT, GL11.GL_FLOAT -> 4;
+            default -> 0;
+        };
+        int channels = switch (format) {
+            case GL11.GL_RGBA, GL12.GL_BGRA -> 4;
+            case GL11.GL_RGB, GL12.GL_BGR -> 3;
+            case GL30.GL_RG -> 2;
+            case GL11.GL_RED, GL11.GL_ALPHA, GL11.GL_LUMINANCE, GL11.GL_DEPTH_COMPONENT -> 1;
+            default -> 0;
+        };
+        return channel > 0 && channels > 0 ? channel * channels : fallback;
     }
 
     static TextureUploadLayout getUnpackLayout(int width) {

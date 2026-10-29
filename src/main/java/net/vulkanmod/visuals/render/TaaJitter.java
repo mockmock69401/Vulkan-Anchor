@@ -97,6 +97,11 @@ public final class TaaJitter {
         return framebufferWidth > 0 && framebufferHeight > 0 ? new int[]{framebufferWidth, framebufferHeight} : new int[]{windowWidth, windowHeight};
     }
 
+    /** 2026-10-30 (audit): the projection without the NDC offset jitter that {@link #apply} added to it (a new matrix). */
+    public static Matrix4f unjittered(Matrix4f projection, float[] jitter) {
+        return new Matrix4f(projection).translateLocal(-jitter[0], -jitter[1], 0);
+    }
+
     /** The NDC offset the last {@link #apply} added to the level projection ((0, 0): none). */
     public static float[] appliedNdc() {
         return new float[]{appliedX, appliedY};

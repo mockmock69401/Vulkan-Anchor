@@ -26,6 +26,23 @@ final class ShadowSteps {
         return (float) (s - Math.floor(s));
     }
 
+    /**
+     * 2026-10-30 (audit): whether a sliced refresh of frames frames ends before the sun's step changes, the sun moving perFrame (time
+     * of day) a frame (0 or less: standing still). The step change draws a whole map into the slot a refresh would be redrawing, so a
+     * refresh that cannot end first is not started (at 60 fps three in four were cut off, below about 48 fps all of them).
+     */
+    static boolean refreshFits(float timeOfDay, float perFrame, int frames) {
+        if (!(perFrame > 0)) return true;
+        return (1.0 - progress(timeOfDay)) * STEP / perFrame > frames + 1;
+    }
+
+    /** Time of day passed from last to now, across midnight; 0 for a jump back. */
+    static float advance(float last, float now) {
+        float d = now - last;
+        if (d < -0.5f) d += 1f;
+        return Math.max(0f, d);
+    }
+
     /** The time of day a step's map is drawn for. */
     static float timeOf(long step) {
         return (float) (step * STEP);

@@ -12,7 +12,7 @@ layout(binding = 3) uniform sampler2D lodDepth;
 #import <vulkanmod:visuals/fg/params.glsl>
 
 //LodClamp.CLAMP_THRESHOLD (the post passes' depthParams.x)
-const float LOD_CLAMP_THRESHOLD = 0.99999982;
+const float LOD_CLAMP_THRESHOLD = 0.99999964;
 //viewpos.glsl's inputs, from the parameter block
 #define invVanillaProj invRealProj
 #define depthParams vec4(LOD_CLAMP_THRESHOLD, flags.x, 0.0, 0.0)

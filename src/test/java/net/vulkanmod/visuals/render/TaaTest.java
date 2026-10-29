@@ -393,4 +393,26 @@ class TaaTest {
         TaaMath.Values v = TaaMath.compute(still(), TaaJitter.appliedNdc(), null, false);
         assertTrue(still().invVanillaProjection().equals(v.invVanillaProjection(), 0f));
     }
+
+    /** 2026-10-30 (audit): the weather replayed after the post-process (DeferredWeather) is drawn without the jitter TAA resolved. */
+    @Test
+    void theReplayedWeatherTakesTheJitterOff() {
+        TaaJitter.setActive(true);
+        Matrix4f p = glProjection(70, 0.05f, 512f);
+        Matrix4f jittered = TaaJitter.apply(new Matrix4f(p), W, H);
+        assertFalse(p.equals(jittered, 1e-7f));
+        assertTrue(p.equals(TaaJitter.unjittered(jittered, TaaJitter.appliedNdc()), 1e-6f));
+        String replay = readJava("visuals/render/DeferredWeather.java");
+        int unjitter = replay.indexOf("TaaJitter.unjittered(RenderSystem.getProjectionMatrix(), jitter)");
+        int rain = replay.indexOf("visuals$renderSnowAndRain(");
+        assertTrue(unjitter > 0 && rain > unjitter && replay.indexOf("RenderSystem.restoreProjectionMatrix()") > rain);
+    }
+
+    private static String readJava(String path) {
+        try {
+            return java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/net/vulkanmod/" + path));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
 }

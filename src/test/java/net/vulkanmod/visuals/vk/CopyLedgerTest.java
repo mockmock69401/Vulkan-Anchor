@@ -30,6 +30,19 @@ class CopyLedgerTest {
         assertEquals(0, ring.liveCount());
     }
 
+    /** 2026-10-30 (audit): a copy queued after the dropped frame's commit is newer, so the requeued ones go ahead of it. */
+    @Test
+    void requeuedCopiesGoAheadOfNewerOnes() {
+        FrameRing ring = new FrameRing(256);
+        CopyLedger<String> ledger = new CopyLedger<>(ring);
+        ledger.queue("a1", ledger.reserve(16, 16));
+        ledger.queue("a2", ledger.reserve(16, 16));
+        ledger.commit(5);
+        ledger.queue("b", ledger.reserve(16, 16));
+        ledger.tick(4, s -> s == 5, x -> {}, x -> true);
+        assertEquals(List.of("a1", "a2", "b"), ledger.commit(6));
+    }
+
     /** Review I1: copies recorded into a frame Reforged never submitted did not run. */
     @Test
     void droppedCopiesAreRequeuedWhenAsked() {

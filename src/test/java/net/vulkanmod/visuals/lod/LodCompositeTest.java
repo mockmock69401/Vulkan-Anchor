@@ -103,6 +103,11 @@ class LodCompositeTest {
         String frag = ShaderFiles.read("lod/lod_composite.frag");
         assertTrue(frag.contains("if (depth >= 1.0) {"));
         assertTrue(frag.contains("gl_FragDepth = min(mainDepth, FAR_LIMIT);"));
+        //2026-10-30 (audit): the clamp the shader writes is LodClamp's, and the post passes' threshold is steps below it, not equal
+        assertTrue(frag.contains("const float FAR_LIMIT = 1.0 - 3.0/16777215.0;"));
+        assertEquals(LodClamp.LOD_CLAMP_DEPTH, (float) (1.0 - 3.0 / 16777215.0), 0f);
+        float d24ReadBack = 16777212f * (1f / 16777215f);
+        assertTrue(d24ReadBack >= LodClamp.CLAMP_THRESHOLD && LodClamp.LOD_CLAMP_DEPTH - LodClamp.CLAMP_THRESHOLD >= 2.5f / 16777215f);
         for (String gone : List.of("vanillaDistance", "fadeGrid", "vanillaFade", "bandParams", "FadeGrid", "fadeParams")) {
             assertFalse(frag.contains(gone), gone);
         }
