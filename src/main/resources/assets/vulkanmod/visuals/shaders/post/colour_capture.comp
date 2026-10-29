@@ -1,0 +1,16 @@
+#version 450
+//2026-10-29 (the user: raindrops took the water's reflection): vanilla's main colour copied as it is right after the translucent
+// terrain, beside VkDepthCapture's AFTER depth. scene_copy.comp compares it with the final colour: a pixel that changed was drawn
+// over later (rain and snow particles, splashes, ripples) and keeps no reflection mark.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba8) uniform writeonly restrict image2D colourOut;
+layout(binding = 1) uniform sampler2D colourIn;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(p, imageSize(colourOut)))) {
+        return;
+    }
+    imageStore(colourOut, p, texelFetch(colourIn, p, 0));
+}

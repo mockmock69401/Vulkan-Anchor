@@ -32,7 +32,7 @@ It is experimental: compatibility and feature parity are incomplete.
 - **Xaero's Minimap and Xaero's World Map support**: their map framebuffers, readbacks and projections work on
   Vulkan.
 - **Shaders (post-processing)**, on the "Shaders" pages of VulkanMod's video settings: sun shading and shadows,
-  water reflections and ripples, fog and light shafts, bloom, clouds, ambient occlusion, foliage wind, held-item
+  water reflections and ripples (raindrops ring it in the rain), fog and light shafts, bloom, clouds, ambient occlusion, foliage wind, held-item
   lights, anti-aliasing (SMAA, TAA). It needs no shader pack and no LOD mod. Its passes and shaders were written
   for this build from requirement documents and published graphics literature; they contain no shader-pack code.
 - **Light colours** (Shaders → Lighting page): direct sunlight that is warmest at sunrise and sunset (Sun Warmth),

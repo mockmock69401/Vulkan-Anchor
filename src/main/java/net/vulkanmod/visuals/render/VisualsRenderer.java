@@ -107,6 +107,8 @@ public final class VisualsRenderer {
     private final SmoothDayTime shadowDayTime = new SmoothDayTime();
     private final SkyExposure skyExposure = new SkyExposure();
     private final RippleClock rippleClock = new RippleClock();
+    //2026-10-29: the flow clock's seconds at the last atmosphere capture (the raindrops' rings keep time with the ripples)
+    private double flowSeconds;
     private final FlowClock flowClock = new FlowClock();
     private VkUploadStream upload;
     private VkDownloadStream download;
@@ -421,6 +423,7 @@ public final class VisualsRenderer {
             // real time (stopped while paused), not the game time's bursts
             float rippleSpeed = PostProcessSettings.from(VisualsConfig.get()).waterRippleSpeed();
             double flow = this.flowClock.advance(System.nanoTime(), Minecraft.getInstance().isPaused());
+            this.flowSeconds = flow;
             this.rippleClock.advance(flow, RippleMath.speedFactor(rain, rippleSpeed));
             //2026-10-21: the plants' wind keeps time with the ripples
             FoliageWind.update(flow, RippleMath.speedFactor(rain, rippleSpeed), VisualsConfig.get().foliageWind / 100f, rain);
@@ -557,6 +560,14 @@ public final class VisualsRenderer {
                 VkContext.mainDepthToShaderRead(cmd, main);
                 VkBarriers.mainDepthForCompute(cmd);
                 this.depthCapture.capture(cmd, slot, this.mainDepthViews.get(main.identity(), this.deferred, VkFrames.serial()));
+                //2026-10-29: the colour with it, for what is drawn over the translucent terrain later (no reflection there)
+                if (slot == VkDepthCapture.AFTER && this.lightingChoice.reflections()) {
+                    VkContext.mainColourToShaderRead(cmd, main);
+                    VkBarriers.mainColourForCompute(cmd);
+                    this.depthCapture.captureColour(cmd, VkContext.mainColourView(main));
+                    VkBarriers.mainColourAfterCompute(cmd);
+                    VkContext.mainColourToAttachment(cmd, main);
+                }
             } finally {
                 VkBarriers.mainDepthAfterCompute(cmd);
                 VkContext.resumeMainPass();
@@ -628,7 +639,7 @@ public final class VisualsRenderer {
             this.post.prepareEntityShadows(EntityShadowUniforms.compute(entityCascade, shadowNow, this.atmosphere, shadow.near() || shadow.far()),
                     this.entityShadows != null ? this.entityShadows.view() : 0);
             ReflectionUniforms.Values reflection = plan.reflections() ? ReflectionUniforms.compute(settings, this.lightingChoice, lighting,
-                    this.atmosphere, atmosphere.night(), this.skyExposure.value(), this.frameId) : ReflectionUniforms.off();
+                    this.atmosphere, atmosphere.night(), this.skyExposure.value(), this.frameId, this.flowSeconds) : ReflectionUniforms.off();
             CloudUniforms.Values clouds = CloudUniforms.compute(settings, this.atmosphere, atmosphere, serial, hasSkyLight,
                     this.post.cloudMapReady(), farSections);
             if (lighting.on()) {
@@ -683,6 +694,8 @@ public final class VisualsRenderer {
                 VkPostProcess.Depths depths = PostInputs.depths(mainDepth, lod, lighting.on(), before, after, shadow.near() ? near : null,
                         shadow.far() ? far : null, shadow.close() ? close : null);
                 if (terrainFilled) this.terrainLight.toCompute(cmd);
+                //2026-10-29: the colour right after the translucent terrain (0: none this frame; the composite then compares with itself)
+                this.post.colourAfterTranslucent(this.depthCapture != null ? this.depthCapture.colourAfter(serial, main.width(), main.height()) : 0);
                 if (entityCascade != null) this.entityShadows.draw(cmd, entityCascade, EntityShadowCapture.data(), EntityShadowCapture.vertexCount(serial));
                 this.post.compute(cmd, VkContext.mainColourView(main), depths,
                         new VkPostProcess.LightInputs(lightVolume == null ? null : lightVolume.data(), lightVolume == null ? null : lightVolume.ready(), lightmap,

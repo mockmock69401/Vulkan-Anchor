@@ -24,6 +24,8 @@ final class VisualsPrograms {
         add(c, "edgeCover", defs(), c.vertex("post/edge_cover.vert"), c.fragment("post/edge_cover.frag"));
         //The full-screen post-process
         add(c, "postDepthCapture", defs(), c.compute("post/depth_capture.comp"));
+        //2026-10-29: the main colour right after the translucent terrain (VkDepthCapture.captureColour)
+        add(c, "postColourCapture", defs(), c.compute("post/colour_capture.comp"));
         add(c, "postLighting", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/lighting.comp"));
         add(c, "postLightingBlur", defs(), c.compute("post/lighting_blur.comp"));
         //W10: the ambient occlusion (VkAmbientOcclusion): view distances, horizon search, blur, all at half resolution

@@ -30,6 +30,13 @@ public final class WaterMath {
     public static final float WATER_F0 = 0.02f, FRESNEL_POWER = 5.0f;
     public static final float WATER_REFLECTION = 1.0f, GLASS_REFLECTION = 0.5f;
     public static final float REFLECT_MARK_MIN = 0.001f;
+    /** 2026-10-29: water.glsl's OVERDRAW_MIN (overdrawnAfterTranslucent). */
+    public static final float OVERDRAW_MIN = 0.0058824f;
+
+    public static boolean overdrawnAfterTranslucent(float[] afterTranslucent, float[] colour) {
+        for (int i = 0; i < 3; i++) if (Math.abs(afterTranslucent[i] - colour[i]) > OVERDRAW_MIN) return true;
+        return false;
+    }
     public static final float SUN_HALF_SIZE = 0.084f, MOON_HALF_SIZE = 0.06f, DISC_EDGE = 0.002f;
     public static final float DISC_RAIN_HIDE = 1.25f;
     public static final float MOON_DISC_LUMINANCE = 0.6f, MOON_RED = 0.92f, MOON_GREEN = 0.98f, MOON_BLUE = 1.12f;

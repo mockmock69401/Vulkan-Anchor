@@ -46,6 +46,8 @@ layout(binding = 13) uniform sampler2D aoTex;
 layout(binding = 14, r32ui) uniform readonly restrict uimage2D terrainLight;
 //2026-10-23: the albedo of each pixel's front fragment (TerrainLightTarget)
 layout(binding = 15, r32ui) uniform readonly restrict uimage2D terrainAlbedo;
+//2026-10-29: the main colour right after the translucent terrain (VkDepthCapture.captureColour; mainColour itself when not taken)
+layout(binding = 16) uniform sampler2D colourAfterTranslucent;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -831,6 +833,9 @@ void main() {
         lit = mix(rainFog, lit, exp(-k*k*amount));
     }
     lit = farCloudsOver(a, lit, dir, dist);
+    //2026-10-29 (the user: raindrops took the water's reflection): a pixel drawn over after the translucent terrain (rain and snow
+    // particles, splashes, ripples) keeps no mark, so it stays as drawn instead of being mirrored over
+    bool overdrawn = overdrawnAfterTranslucent(texelFetch(colourAfterTranslucent, p, 0).rgb, colour.rgb);
     imageStore(sceneOut, p, vec4(lit*underwaterExposure(),
-            passRan && !cloud ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0));
+            passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0));
 }
