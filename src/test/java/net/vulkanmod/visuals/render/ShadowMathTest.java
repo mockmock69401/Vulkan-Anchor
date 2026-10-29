@@ -101,6 +101,9 @@ class ShadowMathTest {
         assertEquals(32f, ShadowMath.nearReach(0));
         assertEquals(128f, ShadowMath.vanillaRadius(ShadowMath.Which.CLOSE, 32, ShadowMath.nearReach(8)));
         assertEquals(512f, ShadowMath.vanillaRadius(ShadowMath.Which.FAR, 32, ShadowMath.nearReach(8)));
+        //2026-10-29: with LODs casting past it, the far cascade's vanilla terrain ends at the shadow distance as well
+        assertEquals(128f, ShadowMath.vanillaRadius(ShadowMath.Which.FAR, 32, ShadowMath.nearReach(8), true));
+        assertEquals(64f, ShadowMath.vanillaRadius(ShadowMath.Which.NEAR, 12, ShadowMath.nearReach(4), true));
     }
 
     /** Design 3.2: the far cascade drawn frames ago is read relative to this frame's camera. */

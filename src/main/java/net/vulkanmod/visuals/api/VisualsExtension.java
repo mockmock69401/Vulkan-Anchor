@@ -39,6 +39,14 @@ public interface VisualsExtension {
     default void drawShadowCasters(VkCommandBuffer cmd, long renderPass, ShadowCascadeContext c) {
     }
 
+    /**
+     * 2026-10-29: whether this frame's shadow casters cover the terrain past the vanilla shadow distance (an LOD renderer's): the
+     * vanilla terrain then casts only out to the shadow distance in every cascade (ShadowMath.vanillaRadius's lodBeyond).
+     */
+    default boolean castsFarTerrain() {
+        return false;
+    }
+
     /** After the download stream commit. */
     default void afterDownloads(VkCommandBuffer cmd) {
     }

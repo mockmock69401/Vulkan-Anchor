@@ -36,6 +36,10 @@ class DhShadowCastersTest {
         assertEquals(512f, DhShadowCasters.cutoff("shadows.far", true, 32));
         assertEquals(512f, DhShadowCasters.cutoff("shadows.far", true, 48));
         assertEquals(32f, DhShadowCasters.cutoff("shadows.far", true, 2));
+        //2026-10-29: while the LODs cast, every cascade's vanilla terrain ends at the shadow distance
+        assertEquals(64f, DhShadowCasters.cutoff("shadows.far", true, 12, 4));
+        assertEquals(160f, DhShadowCasters.cutoff("shadows.far", true, 32, 10));
+        assertEquals(64f, DhShadowCasters.cutoff("shadows.near", true, 12, 4));
         //Without the vanilla shadows the LODs are the only casters
         assertEquals(0f, DhShadowCasters.cutoff("shadows.near", false, 12));
         assertEquals(0f, DhShadowCasters.cutoff("shadows.far", false, 32));
