@@ -2,9 +2,13 @@ package net.vulkanmod.mixin.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.vulkanmod.interfaces.ImmediateBuffer;
+import net.vulkanmod.visuals.render.EntityShadowCapture;
+import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.vulkanmod.compat.sable.render.SublevelRenderScope;
@@ -31,6 +35,14 @@ public class BufferUploaderM {
     @Redirect(method = "upload", at = @At(value = "INVOKE",
             target = "Lcom/mojang/blaze3d/vertex/VertexBuffer;upload(Lcom/mojang/blaze3d/vertex/MeshData;)V"))
     private static void drawWithShader(VertexBuffer buffer, MeshData meshData) {
+        //The visuals (2026-10-29): drawWithShader draws through the VBO path, past Drawer.draw's hook; while the level render draws
+        // its entities, their triangles for the entity sun shadows
+        MeshData.DrawState state = meshData.drawState();
+        if (EntityShadowCapture.capturing() && state.format() == DefaultVertexFormat.NEW_ENTITY
+                && (state.mode() == VertexFormat.Mode.QUADS || state.mode() == VertexFormat.Mode.TRIANGLES)) {
+            EntityShadowCapture.capture(MemoryUtil.memAddress(meshData.vertexBuffer()), state.format().getVertexSize(), state.vertexCount(),
+                    state.mode() == VertexFormat.Mode.QUADS, RenderSystem.getModelViewMatrix());
+        }
         ImmediateBuffer immediate = (ImmediateBuffer) buffer;
         boolean previous = immediate.setImmediateUpload(true);
         try {
