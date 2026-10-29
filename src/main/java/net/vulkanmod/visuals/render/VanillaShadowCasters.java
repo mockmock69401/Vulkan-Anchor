@@ -18,7 +18,7 @@ public final class VanillaShadowCasters {
     /**
      * The horizontal reach of the vanilla casters around the camera that was fixed before it became an argument. Grass and leaf
      * detail is under a texel of the near cascade farther out (where its LOD shadows stay); the whole cascade (160) cost a third
-     * of the frame rate at noon.
+     * of the frame rate at noon. 2026-10-29: the default of the shadow distance setting (ShadowMath.nearReach).
      */
     public static final float REACH = 64;
 

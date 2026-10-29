@@ -289,10 +289,13 @@ float reflectHitClearance(float dist) {
     return HIT_CLEARANCE + HIT_CLEARANCE_SHARE*max(dist, 0.0);
 }
 
-//Whether a pixel the reflected ray reached counts as its hit: never a reflective pixel (its alpha hitMark), and only above the
-// surface (heightAbove: the hit's height over the reflecting plane along its normal, blocks; dist the surface's view distance)
+//Whether a pixel the reflected ray reached counts as its hit: never a reflective translucent pixel (its alpha hitMark: water or
+// ice/glass/slime; 2026-10-29: a polished or metal block's mark, below -1 (blockreflect.glsl), is solid ground a ray may stop on), and
+// only above the surface (heightAbove: the hit's height over the reflecting plane along its normal, blocks; dist the surface's view
+// distance)
 bool reflectAcceptsHit(float hitMark, float heightAbove, float dist) {
-    return !(abs(hitMark) >= REFLECT_MARK_MIN) && heightAbove > reflectHitClearance(dist);
+    bool translucent = abs(hitMark) >= REFLECT_MARK_MIN && hitMark >= -WATER_REFLECTION;
+    return !translucent && heightAbove > reflectHitClearance(dist);
 }
 
 //The weight of a hit by the share 0..1 of its neighbourhood the hit surface covers

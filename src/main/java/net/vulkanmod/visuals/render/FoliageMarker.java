@@ -1,6 +1,7 @@
 package net.vulkanmod.visuals.render;
 
 import net.minecraft.client.renderer.block.model.BakedQuad;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.BushBlock;
@@ -8,6 +9,10 @@ import net.minecraft.world.level.block.WaterlilyBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 /**
  * Shadow pass (2026-10-14): Reforged's chunk builder gives every terrain vertex alpha 1. A quad vanilla draws without
@@ -43,6 +48,25 @@ public final class FoliageMarker {
      */
     public static final float WATER_ALPHA = 247.25f / 255f;
     /**
+     * 2026-10-29 (the user: Complementary Reimagined's High profile reflects on polished and metal blocks): 246 for a metal block's
+     * shaded quads, 245 for a polished one's (smoothKind), which the composite gives the sun's highlight and the reflection pass its
+     * reflection (blockreflect.glsl). After the emissive and ore marks; a quad without directional shade keeps the plant mark.
+     */
+    public static final float METAL_ALPHA = 246.25f / 255f, POLISHED_ALPHA = 245.25f / 255f;
+    /** smoothKind's answers: a block that is neither, polished stone and the like, metal. */
+    public static final int ROUGH = 0, POLISHED = 1, METAL = 2;
+    /**
+     * Metal by registry name (any namespace, so modded storage blocks count): unweathered copper, the metal blocks, iron's doors,
+     * trapdoors and bars, chains, anvils, weighted pressure plates, cauldrons and hoppers.
+     */
+    static final Pattern METAL_NAMES = Pattern.compile("(waxed_)?(exposed_)?(cut_)?copper(_block|_stairs|_slab)?"
+            + "|(iron|gold|netherite|steel|tin|bronze|silver|lead|nickel|aluminum|aluminium|zinc|brass|platinum|osmium|electrum|invar|constantan|titanium|cobalt|iridium)_block"
+            + "|iron_(door|trapdoor|bars)|chain|(chipped_|damaged_)?anvil|(heavy|light)_weighted_pressure_plate|(water_|lava_|powder_snow_)?cauldron|hopper");
+    /** Polished by registry name: anything polished_, quartz, glazed terracotta, obsidian, packed and blue ice, gem blocks, prismarine bricks. */
+    static final Pattern POLISHED_NAMES = Pattern.compile(".*polished_.*|smooth_quartz.*|quartz_(block|pillar|bricks|stairs|slab)|chiseled_quartz_block"
+            + "|.*_glazed_terracotta|(crying_)?obsidian|packed_ice|blue_ice|(diamond|emerald|lapis|amethyst)_block|prismarine_brick.*|dark_prismarine.*");
+    private static final Map<Block, Integer> SMOOTH_KINDS = new ConcurrentHashMap<>();
+    /**
      * Wind (2026-10-21): vertex-only marks terrain.vsh reads and turns back into the plant mark (SWAY, SWAY_HIGH) or into 1 (LEAF)
      * before the fragment stage, so the main colour's alpha keeps its meaning. A plant vertex above its block's base is SWAY (height
      * 1), the top of a double plant's upper half SWAY_HIGH (height 2); leaves sway as a whole block. The base stays ALPHA (height 0).
@@ -56,6 +80,8 @@ public final class FoliageMarker {
     private static final ThreadLocal<boolean[]> EMISSIVE = ThreadLocal.withInitial(() -> new boolean[1]);
     /** Whether the block the chunk build thread is drawing is an ore. */
     private static final ThreadLocal<boolean[]> ORE = ThreadLocal.withInitial(() -> new boolean[1]);
+    /** The smooth kind of the block the chunk build thread is drawing. */
+    private static final ThreadLocal<int[]> SMOOTH = ThreadLocal.withInitial(() -> new int[1]);
     /** The wind kind of the block the chunk build thread is drawing. */
     private static final ThreadLocal<int[]> SWAY = ThreadLocal.withInitial(() -> new int[1]);
 
@@ -70,6 +96,22 @@ public final class FoliageMarker {
         ORE.get()[0] = ore;
     }
 
+    public static void setSmooth(int kind) {
+        SMOOTH.get()[0] = kind;
+    }
+
+    /** A block's smooth kind by its registry path (METAL_NAMES, POLISHED_NAMES). */
+    public static int smoothKind(String path) {
+        if (path == null) return ROUGH;
+        if (METAL_NAMES.matcher(path).matches()) return METAL;
+        return POLISHED_NAMES.matcher(path).matches() ? POLISHED : ROUGH;
+    }
+
+    /** smoothKind of a block, worked out once per block. */
+    public static int smoothKind(BlockState state) {
+        return SMOOTH_KINDS.computeIfAbsent(state.getBlock(), b -> smoothKind(BuiltInRegistries.BLOCK.getKey(b).getPath()));
+    }
+
     /** The vertex alpha for this quad: ALPHA for a vanilla quad without directional shade, else the alpha given. */
     public static float alpha(Object quad, float alpha) {
         return quad instanceof BakedQuad q && !q.isShade() ? ALPHA : alpha;
@@ -80,9 +122,17 @@ public final class FoliageMarker {
         return emissive ? EMISSIVE_ALPHA : alpha(quad, alpha);
     }
 
-    /** The mark for the block this thread is drawing: a light source's, else an ore's, else as alpha(quad, alpha). */
+    /** The mark for the block this thread is drawing: a light source's, else an ore's, else a smooth block's, else as alpha(quad, alpha). */
     public static float markedAlpha(Object quad, float alpha) {
-        return alpha(quad, alpha, EMISSIVE.get()[0], ORE.get()[0]);
+        return alpha(quad, alpha, EMISSIVE.get()[0], ORE.get()[0], SMOOTH.get()[0]);
+    }
+
+    /** As alpha(quad, alpha, emissive, ore), METAL_ALPHA or POLISHED_ALPHA for a smooth block's shaded quads that are neither. */
+    public static float alpha(Object quad, float alpha, boolean emissive, boolean ore, int smooth) {
+        if (!emissive && !ore && smooth != ROUGH && !(quad instanceof BakedQuad q && !q.isShade())) {
+            return smooth == METAL ? METAL_ALPHA : POLISHED_ALPHA;
+        }
+        return alpha(quad, alpha, emissive, ore);
     }
 
     /** As alpha(quad, alpha, emissive), ORE_ALPHA for an ore's quads that are no light source's. */

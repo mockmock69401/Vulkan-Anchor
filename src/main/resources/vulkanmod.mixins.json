@@ -177,6 +177,7 @@
     "visuals.ServerChunkCacheDhIsolationMixin",
     "visuals.FogRendererUnderwaterMixin",
     "visuals.LevelRendererFrameTimesMixin",
+    "visuals.LevelRendererEntityShadowMixin",
     "visuals.MouseHandlerLatencyMixin",
     "visuals.ScreenshotFrameGenMixin"
   ],

@@ -442,7 +442,7 @@ public final class DhExtension implements VisualsExtension {
         if (cascade == null || indices == 0 || f.opaque().isEmpty()) return;
         Matrix4f viewProjection = cascade.viewProjection();
         float cutoff = DhShadowCasters.cutoff(c.name(), PostProcessSettings.from(VisualsConfig.get()).vanillaShadows(),
-                Minecraft.getInstance().options.getEffectiveRenderDistance());
+                Minecraft.getInstance().options.getEffectiveRenderDistance(), VisualsConfig.get().shadowDistance);
         int capacity = this.quads.capacityQuads();
         boolean bound = false;
         try (MemoryStack stack = MemoryStack.stackPush()) {

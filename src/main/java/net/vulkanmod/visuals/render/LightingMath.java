@@ -39,6 +39,8 @@ public final class LightingMath {
     public static final int ORE_ALPHA_CODE = 252;
     /** 2026-10-28: FoliageMarker.EMISSIVE_FLUID_ALPHA, a light-emitting fluid's quads (a light source with a stronger glow). */
     public static final int EMISSIVE_FLUID_ALPHA_CODE = 251;
+    /** 2026-10-29: FoliageMarker.METAL_ALPHA and POLISHED_ALPHA, a smooth block's quads (blockreflect.glsl's highlights and reflections). */
+    public static final int METAL_ALPHA_CODE = 246, POLISHED_ALPHA_CODE = 245;
 
     /** Whether a mark is a light source's (a block's or a fluid's). */
     public static boolean isEmissiveCode(int code) {

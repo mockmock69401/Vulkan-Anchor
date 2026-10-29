@@ -271,6 +271,7 @@ class SceneCompositeTest {
                     c.aoStrength = 0;
                     c.waterDepth = 0;
                     c.waterReflections = 0;
+                    c.blockReflections = 0;
                 }), frame(NOON), true, false, 1));
         for (float[][] s : cases) {
             assertEquals(0f, s[SceneCompositeMath.LIGHTING][2], "the pass did not run");
@@ -293,7 +294,8 @@ class SceneCompositeTest {
         assertEquals(1, count(COMP, "lightingAt("), "one read of lightTex/sunTex");
         assertEquals(1, count(COMP, "texelFetch(plantSunTex"));
         assertFalse(COMP.contains("texelFetch(lightTex") || COMP.contains("texelFetch(sunTex"), "only through W5's lightingAt");
-        assertTrue(COMP.contains("passRan && !cloud ? reflectionMark(kind) : 0.0"), "alpha 0 without the pass");
+        assertTrue(COMP.contains("passRan && !cloud ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0"),
+                "alpha 0 without the pass");
     }
 
     // ---- 3. under water: W4's environmental-fog path ----
@@ -1114,6 +1116,7 @@ class SceneCompositeTest {
             c.aoStrength = 0;
             c.waterDepth = 0;
             c.waterReflections = 0;
+            c.blockReflections = 0;
         }), frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 1);
         assertArrayEquals(linear(stone), rgb(SceneCompositeMath.composite(surface(stone, UP, shaded, new float[]{15, 0, 1}), off, LIGHTMAP)), 1e-6f);
         //Night: moonlit terrain at NIGHT_SKY_EXPOSURE, the village's block light at full
@@ -1161,6 +1164,7 @@ class SceneCompositeTest {
         c.sunShading = 0;
         c.waterDepth = 0;
         c.waterReflections = 0;
+        c.blockReflections = 0;
         c.waterRipples = 0;
         c.waterRippleSpeed = 0;
         c.skyLightAmbient = 0;

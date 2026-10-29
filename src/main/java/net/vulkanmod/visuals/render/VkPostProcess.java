@@ -61,6 +61,8 @@ public final class VkPostProcess {
     SHADOW_NEAR_B = 11, SHADOW_FAR_B = 12,
     //Texel crawl pass (2026-10-16): and the close cascade's two maps at 13 and 14
     SHADOW_CLOSE = 13, SHADOW_CLOSE_B = 14,
+    //2026-10-29: and the entity shadow map at 16
+    SHADOW_ENTITY = 16,
     //W10: the copy reads the ambient occlusion at 13
     COPY_AO = 13,
     //2026-10-23: the copy reads the terrain light at 14, the reflection at 9 (TerrainLightTarget, storage images in GENERAL)
@@ -109,6 +111,8 @@ public final class VkPostProcess {
     private byte[] cloudMapData;
     private boolean cloudMapReal;
     private long cloudMapSerial = -1;
+    //2026-10-29: this frame's entity shadow map (0: none, the main depth stands in)
+    private long entityShadowView;
     private VkImage2D scene, sceneLit, shaftMaskImage, shaftImage, lightImage, lightBlurImage, sunImage, plantSunImage;
     private VkImage2D[] bloom;
     private int width, height;
@@ -317,6 +321,12 @@ public final class VkPostProcess {
      * CPU side, before the upload commit that precedes compute(): the copy's atmosphere and lighting, the lighting pass's block,
      * the reflection pass's block, the sun position.
      */
+    /** 2026-10-29: before prepare(), this frame's entity shadow map (view 0 and entity off: none). */
+    public void prepareEntityShadows(EntityShadowUniforms.Values entity, long view) {
+        entity.write(this.lightingUniforms);
+        this.entityShadowView = entity.on() ? view : 0;
+    }
+
     public void prepare(VkUploadStream upload, AtmosphereUniforms.Values atmosphere, LightingUniforms.Values lighting, ReflectionUniforms.Values reflection,
                         CloudUniforms.Values clouds, ShadowUniforms.Values shadow, LightVolumeUniforms.Values light, HeldLightSystem held,
                         BloomFog.Values bloomFog, VolumetricLight.Values volumetric) {
@@ -451,7 +461,8 @@ public final class VkPostProcess {
                 .sampledView(SHADOW_CLOSE, depths.shadowClose(), this.nearest).sampledView(SHADOW_CLOSE_B, depths.shadowCloseB(), this.nearest)
                 .sampledView(LIGHTING_MAIN_COLOUR, mainColourView, this.nearest)//2026-10-15: the plant marker
                 .storageImage(LIGHTING_PLANT_SUN, this.plantSunImage.view())
-                .sampledView(LIGHTING_LOD_LIGHT, lodLight, this.nearest);//2026-10-19: the LOD pixels' faces
+                .sampledView(LIGHTING_LOD_LIGHT, lodLight, this.nearest)//2026-10-19: the LOD pixels' faces
+                .sampledView(SHADOW_ENTITY, this.entityShadowView != 0 ? this.entityShadowView : depths.main(), this.nearest);
         if (this.lightingUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.lightingUniformBuffer);
         this.lighting.dispatchWithPush(cmd, bindings, this.lightingUniformBuffer == null ? this.lightingUniforms.buffer() : null,
                 groups(this.lightImage.width), groups(this.lightImage.height), 1);

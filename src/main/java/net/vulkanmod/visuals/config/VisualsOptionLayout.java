@@ -1,6 +1,7 @@
 package net.vulkanmod.visuals.config;
 
 import net.vulkanmod.visuals.fsr.FsrSettings;
+import net.vulkanmod.visuals.render.ShadowMath;
 
 import java.util.List;
 
@@ -13,7 +14,7 @@ import static net.vulkanmod.visuals.render.PostProcessSettings.*;
  * "block." + key. W10: the ambient occlusion's strength (aoStrength) is the item ao_strength in the lighting page's shading block.
  */
 public final class VisualsOptionLayout {
-    public enum Kind {SWITCH, PERCENT, BLOCKS, CHOICE}
+    public enum Kind {SWITCH, PERCENT, BLOCKS, CHUNKS, CHOICE}
 
     public enum Impact {NONE, LOW, MEDIUM, HIGH}
 
@@ -101,7 +102,9 @@ public final class VisualsOptionLayout {
                             toggle("dh_shadows", Impact.MEDIUM, "dh_lods"))),
                     new Block("shadows", List.of(
                             toggle("sun_shadows", Impact.HIGH, null),
-                            toggle("vanilla_shadows", Impact.MEDIUM, "sun_shadows"))),
+                            toggle("vanilla_shadows", Impact.MEDIUM, "sun_shadows"),
+                            new Item("shadow_distance", Kind.CHUNKS, ShadowMath.SHADOW_DISTANCE_MIN, ShadowMath.SHADOW_DISTANCE_MAX, Impact.HIGH, "vanilla_shadows"),
+                            toggle("entity_shadows", Impact.MEDIUM, "sun_shadows"))),
                     new Block("light", List.of(
                             toggle("per_pixel_light", Impact.LOW, null),
                             new Item("sky_light_ambient", Kind.PERCENT, 0, SKY_LIGHT_AMBIENT_MAX, Impact.NONE, "per_pixel_light"),
@@ -111,6 +114,7 @@ public final class VisualsOptionLayout {
                     new Block("water", List.of(
                             percent("water_depth", STRENGTH_MAX),
                             percent("water_reflections", 0, STRENGTH_MAX, Impact.MEDIUM),
+                            new Item("block_reflections", Kind.CHOICE, 0, BLOCK_REFLECTIONS_MAX, Impact.MEDIUM, null),
                             percent("water_ripples", STRENGTH_MAX),
                             percent("water_ripple_speed", RIPPLE_SPEED_MAX))),
                     new Block("wind", List.of(
@@ -157,6 +161,8 @@ public final class VisualsOptionLayout {
             case "edge_cover" -> c.edgeCover ? 1 : 0;
             case "sun_shadows" -> c.sunShadows ? 1 : 0;
             case "vanilla_shadows" -> c.vanillaShadows ? 1 : 0;
+            case "shadow_distance" -> c.shadowDistance;
+            case "entity_shadows" -> c.entityShadows ? 1 : 0;
             case "per_pixel_light" -> c.perPixelLight ? 1 : 0;
             case "sky_light_ambient" -> c.skyLightAmbient;
             case "held_light" -> c.heldLight ? 1 : 0;
@@ -165,6 +171,7 @@ public final class VisualsOptionLayout {
             case "light_debug" -> c.lightDebug;
             case "water_depth" -> c.waterDepth;
             case "water_reflections" -> c.waterReflections;
+            case "block_reflections" -> c.blockReflections;
             case "water_ripples" -> c.waterRipples;
             case "water_ripple_speed" -> c.waterRippleSpeed;
             case "foliage_wind" -> c.foliageWind;
@@ -206,6 +213,8 @@ public final class VisualsOptionLayout {
             case "edge_cover" -> c.edgeCover = v != 0;
             case "sun_shadows" -> c.sunShadows = v != 0;
             case "vanilla_shadows" -> c.vanillaShadows = v != 0;
+            case "shadow_distance" -> c.shadowDistance = v;
+            case "entity_shadows" -> c.entityShadows = v != 0;
             case "per_pixel_light" -> c.perPixelLight = v != 0;
             case "sky_light_ambient" -> c.skyLightAmbient = v;
             case "held_light" -> c.heldLight = v != 0;
@@ -214,6 +223,7 @@ public final class VisualsOptionLayout {
             case "light_debug" -> c.lightDebug = v;
             case "water_depth" -> c.waterDepth = v;
             case "water_reflections" -> c.waterReflections = v;
+            case "block_reflections" -> c.blockReflections = v;
             case "water_ripples" -> c.waterRipples = v;
             case "water_ripple_speed" -> c.waterRippleSpeed = v;
             case "foliage_wind" -> c.foliageWind = v;

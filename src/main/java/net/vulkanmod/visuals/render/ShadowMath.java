@@ -72,10 +72,26 @@ public final class ShadowMath {
      */
     public static final float FAR_VANILLA_MAX = 512;
 
-    /** How far from the camera (horizontally, in blocks) vanilla sections cast into a cascade. */
+    /**
+     * 2026-10-29 (the user: Complementary Reimagined's High profile casts sharp shadows 12 chunks out): the shadow distance setting,
+     * in chunks, is how far the vanilla terrain casts into the close and near cascades; it ends at the near cascade's edge.
+     */
+    public static final int SHADOW_DISTANCE_MIN = 2, SHADOW_DISTANCE_MAX = (int) (NEAR_RADIUS / 16);
+
+    /** How far from the camera (horizontally, in blocks) vanilla sections cast into a cascade, at the default shadow distance. */
     public static float vanillaRadius(Which which, int renderDistanceChunks) {
+        return vanillaRadius(which, renderDistanceChunks, VanillaShadowCasters.REACH);
+    }
+
+    /** The same with nearReach (nearReach(shadowDistance)) for the close and near cascades. */
+    public static float vanillaRadius(Which which, int renderDistanceChunks, float nearReach) {
         if (which == Which.FAR) return Math.min(renderDistanceChunks * 16f, FAR_VANILLA_MAX);
-        return VanillaShadowCasters.REACH;
+        return nearReach;
+    }
+
+    /** The vanilla casters' reach in blocks for a shadow distance in chunks (kept in its range). */
+    public static float nearReach(int shadowDistanceChunks) {
+        return Math.max(SHADOW_DISTANCE_MIN, Math.min(SHADOW_DISTANCE_MAX, shadowDistanceChunks)) * 16f;
     }
 
     /** A cascade: projection (Vulkan depth 0..1) and light view (rotation), the texel and depth range in blocks, the camera it was centred on. */

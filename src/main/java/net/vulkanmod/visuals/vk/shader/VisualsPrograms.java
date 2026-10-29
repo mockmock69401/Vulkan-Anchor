@@ -18,6 +18,8 @@ final class VisualsPrograms {
     static ShaderCatalog register(ShaderCatalog c) {
         //Near sun shadow cascade: VulkanMod's vanilla terrain
         add(c, "vanillaShadow", defs(), c.vertex("shadow/vanilla.vert"), c.fragment("shadow/vanilla.frag"));
+        //2026-10-29: the entities this frame drew into the entity shadow map (VkEntityShadows)
+        add(c, "entityShadow", defs(), c.vertex("shadow/entity.vert"), c.fragment("shadow/entity.frag"));
         //Covers over built sections' sides next to ones VulkanMod has not built yet (VkEdgeCover)
         add(c, "edgeCover", defs(), c.vertex("post/edge_cover.vert"), c.fragment("post/edge_cover.frag"));
         //The full-screen post-process

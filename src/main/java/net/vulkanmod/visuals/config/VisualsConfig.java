@@ -122,6 +122,8 @@ public class VisualsConfig {
     public int sunShading = 100;
     public int waterDepth = 100;
     public int waterReflections = 100;
+    /** 2026-10-29: polished and metal blocks: 0 off, 1 the sun's and moon's highlights, 2 also their reflections (BlockReflectionMath). */
+    public int blockReflections = 2;
     public int waterRipples = 100;
     public int waterRippleSpeed = 100;
     /** 2026-10-21: how far plants and leaves sway in the wind (FoliageWind). */
@@ -129,6 +131,10 @@ public class VisualsConfig {
     public boolean farClouds = true;
     public boolean sunShadows = true;
     public boolean vanillaShadows = true;
+    /** 2026-10-29: chunks around the camera the vanilla terrain casts sharp sun shadows in (ShadowMath.nearReach); 4 is the old 64 blocks. */
+    public int shadowDistance = 4;
+    /** 2026-10-29: mobs, players and items cast sun shadows (VkEntityShadows). */
+    public boolean entityShadows = true;
     public int skyLightAmbient = 100;
     public boolean perPixelLight = true;
     public int lightColour = 70;

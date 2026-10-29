@@ -12,7 +12,12 @@ public record LightingChoice(long serial, boolean ao, boolean sun, boolean water
     public static LightingChoice of(long serial, PostProcessSettings s, boolean postAvailable, boolean atmosphereCaptured, boolean fogCoversAll,
                                     boolean hasSkyLight) {
         boolean on = s.enabled() && postAvailable && atmosphereCaptured && !fogCoversAll && hasSkyLight;
-        return new LightingChoice(serial, on && s.aoStrength() > 0, on && s.sunShading() > 0, on && s.waterDepth() > 0, on && s.waterReflections() > 0);
+        return new LightingChoice(serial, on && s.aoStrength() > 0, on && s.sunShading() > 0, on && s.waterDepth() > 0, on && reflectionPass(s));
+    }
+
+    /** Whether the reflection pass has work: water reflections, or 2026-10-29 the block reflections at their second level. */
+    public static boolean reflectionPass(PostProcessSettings s) {
+        return s.waterReflections() > 0 || s.blockReflections() >= BlockReflectionMath.REFLECTIONS;
     }
 
     public boolean any() {

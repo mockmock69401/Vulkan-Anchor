@@ -26,7 +26,8 @@ layout(binding = 9, r32ui) uniform readonly restrict uimage2D terrainLight;
 
 //0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
-// view; 14..18 W4's cloud block; 19..22 the clean light volume; 24..29 reserved (written 0)
+// view; 14..18 W4's cloud block; 19..22 the clean light volume; 24 (2026-10-29) x the block reflections setting, y the frame number
+// (blockReflection's rough rays); 25..29 reserved (written 0)
 layout(location = 0) uniform mat4 invVanillaProj;
 layout(location = 1) uniform mat4 invLodProj;
 layout(location = 2) uniform mat4 proj;
@@ -51,7 +52,7 @@ layout(location = 20) uniform vec4 lightFrac;
 layout(location = 21) uniform vec4 lightSize;
 layout(location = 22) uniform vec4 lightMode;
 layout(location = 23) uniform vec4 atmosphereFog;
-layout(location = 24) uniform vec4 reserved24;
+layout(location = 24) uniform vec4 blockParams;
 layout(location = 25) uniform vec4 reserved25;
 layout(location = 26) uniform vec4 reserved26;
 layout(location = 27) uniform vec4 reserved27;
@@ -64,6 +65,7 @@ layout(location = 29) uniform vec4 reserved29;
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/blockreflect.glsl>
 
 //The march: REFLECT_STEPS steps in screen space up to the screen's edge, denser near the start (t^REFLECT_STEP_POWER), then
 // REFLECT_REFINE halvings between the last step in front and the first behind
@@ -331,6 +333,62 @@ float sunVisibilityAt(ivec2 p, ivec2 size, float dist, vec3 normalView) {
     return weights < 1e-6 ? nearest : sum/weights;
 }
 
+//2026-10-29: a polished or metal block's pixel (blockreflect.glsl; block reflections 2): its snapped depth normal tilted by its
+// roughness (a new tilt each frame, which the TAA averages into a soft reflection), the scene by the march or the sky without the discs
+// (the composite already added the sun's and the moon's highlights), mixed in by its tinted Fresnel term. Where the block does not
+// see the sky and the march finds nothing it stays as it was
+vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
+    vec3 view;
+    bool fromLod;
+    if (!scenePositionFrom(p, size, view, fromLod) || fromLod) {
+        return own;
+    }
+    int cls = blockReflectClass(mark);
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog);
+    mat3 toWorld = mat3(invView);
+    mat3 toView = transpose(toWorld);
+    vec3 world = toWorld*view;
+    float dist = length(view);
+    vec3 d = world/max(dist, 0.000001);
+    vec3 nGeom = normalize(toWorld*snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), toView*vec3(1.0, 0.0, 0.0), toView*vec3(0.0, 1.0, 0.0)));
+    if (!(-dot(d, nGeom) > 0.0)) {
+        return own;
+    }
+    float frame = blockParams.y;
+    vec2 xi = vec2(interleavedGradientNoise(vec2(p) + 5.588238*frame), interleavedGradientNoise(vec2(p.yx) + 3.7*frame + 17.0));
+    vec3 n = roughNormal(nGeom, blockRoughness(cls)*BLOCK_RAY_SPREAD, xi);
+    if (!(-dot(d, n) > 0.0)) {
+        n = nGeom;
+    }
+    vec3 f = blockReflectivity(cls, -dot(d, n), cls == 2 ? metalTint(own) : vec3(1.0));
+    vec3 r = reflect(d, n);
+    float rise = dot(r, nGeom);
+    if (rise < REFLECT_MIN_UP) {
+        r = normalize(r + nGeom*(REFLECT_MIN_UP - rise));
+    }
+    vec3 pl = pixelLight(p, size, world, nGeom);
+    bool known = pl.z > 0.5;
+    float skyAccess = known ? skyVisibility(pl.x) : clamp(reflectParams.z, 0.0, 1.0);
+    float amount = hazeAmount(a, known ? skyShare(pl.x) : 1.0, false);
+    vec3 sky = skyColour(a, r) + sunGlow(a, r);
+    if (cloudShape.w > 0.5 && atmosphereSky(a)) {
+        vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, xi.x), r, 1.0);
+        sky = sky*(1.0 - cloud.a) + cloud.rgb;
+    }
+    vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+    if (max(f.r, max(f.g, f.b)) >= REFLECT_MIN_MARCH) {
+        vec3 hitColour;
+        float pathLength;
+        float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength);
+        if (w > 0.0) {
+            vec3 hitWorld = world + r*pathLength;
+            float extra = max(dist + pathLength - length(hitWorld), 0.0);
+            reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
+        }
+    }
+    return own*(vec3(1.0) - f) + reflection*f;
+}
+
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(sceneOut);
@@ -345,8 +403,13 @@ void main() {
         return;
     }
     if (reflectParams.w > 0.5) {
-        vec3 debug = mark > 0.0 ? vec3(DEBUG_WATER_RED, DEBUG_WATER_GREEN, DEBUG_WATER_BLUE) : vec3(DEBUG_GLASS_RED, DEBUG_GLASS_GREEN, DEBUG_GLASS_BLUE);
+        vec3 debug = blockReflectClass(mark) > 0 ? vec3(DEBUG_SMOOTH_RED, DEBUG_SMOOTH_GREEN, DEBUG_SMOOTH_BLUE)
+                : (mark > 0.0 ? vec3(DEBUG_WATER_RED, DEBUG_WATER_GREEN, DEBUG_WATER_BLUE) : vec3(DEBUG_GLASS_RED, DEBUG_GLASS_GREEN, DEBUG_GLASS_BLUE));
         imageStore(sceneOut, p, vec4(debug, 1.0));
+        return;
+    }
+    if (blockReflectClass(mark) > 0) {
+        imageStore(sceneOut, p, vec4(blockReflection(p, size, lit.rgb, mark), 1.0));
         return;
     }
     vec3 view;

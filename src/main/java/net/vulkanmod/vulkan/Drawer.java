@@ -1,5 +1,7 @@
 package net.vulkanmod.vulkan;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import net.vulkanmod.compat.gl.GlPatchState;
@@ -7,6 +9,7 @@ import net.vulkanmod.render.ImmediateIndexStream;
 import net.vulkanmod.render.PatchGeometry;
 import net.vulkanmod.render.PatchIndexStream;
 import net.vulkanmod.render.QuadPatchIndices;
+import net.vulkanmod.visuals.render.EntityShadowCapture;
 import net.vulkanmod.vulkan.memory.*;
 import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.system.MemoryUtil;
@@ -331,6 +334,13 @@ public class Drawer {
     public void draw(ByteBuffer buffer, VertexFormat.Mode mode, VertexFormat vertexFormat, int vertexCount) {
         AutoIndexBuffer autoIndexBuffer;
         int indexCount;
+
+        //The visuals (2026-10-29): while the level render draws its entities, their triangles for the entity sun shadows
+        if (EntityShadowCapture.capturing() && vertexFormat == DefaultVertexFormat.NEW_ENTITY
+                && (mode == VertexFormat.Mode.QUADS || mode == VertexFormat.Mode.TRIANGLES)) {
+            EntityShadowCapture.capture(MemoryUtil.memAddress(buffer), vertexFormat.getVertexSize(), vertexCount, mode == VertexFormat.Mode.QUADS,
+                    RenderSystem.getModelViewMatrix());
+        }
 
         VertexBuffer vertexBuffer = this.vertexBuffers[this.currentFrame];
         vertexBuffer.copyToVertexBuffer(vertexFormat.getVertexSize(), vertexCount, buffer);

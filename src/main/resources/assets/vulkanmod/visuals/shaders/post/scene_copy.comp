@@ -104,6 +104,7 @@ layout(location = 34) uniform vec4 reserved34;
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
 
 //Vanilla's directional face shade in a dimension with sky light (ClientLevel.getShade: display values the terrain colour was multiplied
@@ -786,6 +787,18 @@ void main() {
             lit += oreGlow(base, speck, bakedShade(normalWorld), glowParams.y);
         }
     }
+    //2026-10-29: polished and metal blocks catch the sun's and the moon's light (blockreflect.glsl; block reflections 1 and 2, slot 33
+    // .z): the sun's at its visibility and this frame's day (slot 23 .w), the moon's at its strength (slot 32 .w), both where the sky
+    // reaches. At 2 the reflection pass adds what they mirror (the mark below)
+    int smoothClass = passRan && !cloud && !fromLod && !emissive && !plant && glowParams.z > 0.5 ? blockCodeClass(alphaCode(colour.a)) : 0;
+    if (smoothClass > 0 && dot(normalWorld, normalWorld) > 0.25) {
+        float gate = skyGate(clamp(skyT/15.0, 0.0, 1.0));
+        vec3 tint = smoothClass == 2 ? metalTint(colour.rgb) : vec3(1.0);
+        vec3 sunLit = lightSun.rgb*(clamp(lightShade.w, 0.0, 1.0)*clamp(lt.w, 0.0, 1.0)*gate);
+        vec3 moonLit = moonLightColour.rgb*(MOON_HIGHLIGHT*max(moonLightColour.w, 0.0)*gate);
+        lit += blockHighlight(smoothClass, normalWorld, -dir, a.sun.xyz, sunLit, tint)
+                + blockHighlight(smoothClass, normalWorld, -dir, -a.sun.xyz, moonLit, tint);
+    }
     int debug = int(lightMode.x + 0.5);
     if (debug >= DEBUG_SKY_VIEW && debug <= DEBUG_SHARE_VIEW) {
         imageStore(sceneOut, p, vec4(debugView(debug, known, skyT, blockT, share, sunPart), 0.0));
@@ -818,5 +831,6 @@ void main() {
         lit = mix(rainFog, lit, exp(-k*k*amount));
     }
     lit = farCloudsOver(a, lit, dir, dist);
-    imageStore(sceneOut, p, vec4(lit*underwaterExposure(), passRan && !cloud ? reflectionMark(kind) : 0.0));
+    imageStore(sceneOut, p, vec4(lit*underwaterExposure(),
+            passRan && !cloud ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0));
 }
