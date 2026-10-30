@@ -225,6 +225,10 @@ public class VulkanImage {
         if (fence != VK_NULL_HANDLE)
 
             Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
+
+        //2026-10-30: a font page's lower levels follow its level 0, whichever path uploaded it (FontPages)
+        net.vulkanmod.render.text.FontPages.afterUpload(this, mipLevel, width, height, xOffset, yOffset, unpackSkipRows, unpackSkipPixels,
+                unpackRowLength, buffer);
     }
 
     private void transferDstLayout(MemoryStack stack, VkCommandBuffer commandBuffer) {

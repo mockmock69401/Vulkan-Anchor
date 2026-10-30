@@ -42,6 +42,39 @@ class FontPagesTest {
         assertEquals(3 * 10 + 4, page.texel(0, 21, 31));
     }
 
+    /** Final review: a transparent texel takes an opaque neighbour's colour (else white), so bilinear edges never darken. */
+    @Test
+    void transparentTexelsTakeANeighboursColour() {
+        FontPageShadow page = new FontPageShadow(256, 256, 4);
+        byte[] src = {(byte) 255, 0, 0, (byte) 255, 0, 0, 0, 0, 0, 0, 0, 0};
+        List<FontPageShadow.Upload> ups = page.write(10, 10, 3, 1, 0, 0, 0, direct(src));
+        assertEquals(0, ups.get(0).level(), "level 0 goes back up with the new colours");
+        assertArrayEquals(new int[]{10, 10, 3, 1}, ups.get(0).rect());
+        assertArrayEquals(new byte[]{(byte) 255, 0, 0, (byte) 255, (byte) 255, 0, 0, 0, (byte) 255, (byte) 255, (byte) 255, 0}, ups.get(0).pixels());
+    }
+
+    /** Final review: an RGBA page whose upload has no transparent texels needs no level-0 re-upload; R8 pages never do. */
+    @Test
+    void levelZeroIsResentOnlyWhenChanged() {
+        byte[] opaque = new byte[2 * 2 * 4];
+        java.util.Arrays.fill(opaque, (byte) 255);
+        assertEquals(1, new FontPageShadow(256, 256, 4).write(0, 0, 2, 2, 0, 0, 0, direct(opaque)).get(0).level());
+        assertEquals(1, new FontPageShadow(256, 256, 1).write(0, 0, 2, 2, 0, 0, 0, direct(new byte[4])).get(0).level());
+    }
+
+    /** Final review: the shadow holds 64x64 tiles where uploads landed, not the whole page (2048x2048 pages were 21 MiB each). */
+    @Test
+    void shadowMemoryFollowsTheUsedArea() {
+        FontPageShadow page = new FontPageShadow(2048, 2048, 4);
+        assertEquals(0, page.allocatedBytes());
+        byte[] white = new byte[2 * 2 * 4];
+        java.util.Arrays.fill(white, (byte) 255);
+        page.write(1000, 1000, 2, 2, 0, 0, 0, direct(white));
+        assertTrue(page.allocatedBytes() <= 4 * 64 * 64 * 4, "one tile per level: " + page.allocatedBytes());
+        assertEquals(255, page.texel(0, 1001, 1001));
+        assertEquals(255, page.texel(1, 500, 500));
+    }
+
     @Test
     void r8PagesAverageWithoutPremultiply() {
         FontPageShadow page = new FontPageShadow(256, 256, 1);
