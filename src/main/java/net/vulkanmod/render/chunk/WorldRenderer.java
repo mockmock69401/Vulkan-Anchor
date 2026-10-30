@@ -244,6 +244,7 @@ public class WorldRenderer {
             if (this.taskDispatcher.updateSections()) {
                 this.scheduleGraphUpdate();
             }
+            PlayerChangeLatency.tick(System.nanoTime(), this.taskDispatcher.pendingUploads());
             performedUploadWork = this.taskDispatcher.performedUploadWorkLastUpdate();
         } catch (Exception e) {
 

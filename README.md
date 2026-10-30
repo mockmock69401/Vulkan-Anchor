@@ -58,7 +58,7 @@ It is experimental: compatibility and feature parity are incomplete.
     real frames; the HUD stays sharp). Windows x64 and a GPU with Vulkan 1.3 only; greyed out with the reason
     elsewhere.
   - **Optical Flow**: a built-in generator that reprojects the last frame by the camera's motion.
-- **Performance**: animated textures only update while visible, and fixes for stalls seen in large modpacks.
+- **Performance**: animated textures only update while visible, blocks you change (a door, a placed block) show at once while chunks load, and fixes for stalls seen in large modpacks.
 - **FPS overlay** (Video settings → FPS Overlay, off by default): the frame rate in the top-left corner, as the average
   only, the average with min and max, or the average with the 1% and 0.1% lows, over the last 5 seconds.
 

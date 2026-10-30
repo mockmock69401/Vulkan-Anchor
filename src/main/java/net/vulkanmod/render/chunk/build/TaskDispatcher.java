@@ -41,6 +41,9 @@ public class TaskDispatcher {
     private final AtomicInteger idleThreads = new AtomicInteger();
     private final Queue<ChunkTask> highPriorityTasks = new ConcurrentLinkedQueue<>();
     private final Queue<ChunkTask> lowPriorityTasks = new ConcurrentLinkedQueue<>();
+    //2026-10-31 (doors late in Deceased): sections the player changed (ChunkTask.urgent), built first and uploaded outside the budget
+    private final Queue<ChunkTask> urgentTasks = new ConcurrentLinkedQueue<>();
+    private final Queue<CompileResult> urgentResults = new ConcurrentLinkedQueue<>();
     private final Set<ChunkTask> activeTasks = ConcurrentHashMap.newKeySet();
     private final Queue<ChunkTask> failedTasks = new ConcurrentLinkedQueue<>();
     private final Semaphore taskSignal = new Semaphore(0);
@@ -162,6 +165,12 @@ public class TaskDispatcher {
             return false;
         }
 
+        if (chunkTask.urgent) {
+            this.urgentTasks.offer(chunkTask);
+            this.taskSignal.release();
+            return true;
+        }
+
         if (this.highPriorityTasks.size() + this.lowPriorityTasks.size()
                 >= ChunkSchedulingPolicy.MAX_QUEUED_BUILD_TASKS) {
             chunkTask.discard();
@@ -186,6 +195,15 @@ public class TaskDispatcher {
 
     @Nullable
     private synchronized ChunkTask pollTask() {
+        ChunkTask urgent = this.urgentTasks.poll();
+        if (urgent != null) {
+            if (urgent.isCancelled()) {
+                urgent.discard();
+                return null;
+            }
+            return urgent;
+        }
+
         boolean highAvailable = !this.highPriorityTasks.isEmpty();
         boolean lowAvailable = !this.lowPriorityTasks.isEmpty();
         ChunkTask task;
@@ -273,7 +291,7 @@ public class TaskDispatcher {
         this.performedUploadWorkLastUpdate = false;
         this.recoverFailedTasks();
 
-        boolean completedFullUpdate = false;
+        boolean completedFullUpdate = this.uploadUrgentResults();
         int completedUpdatesThisFrame = 0;
         int discardedResultsThisFrame = 0;
         int uploadStepsThisFrame = 0;
@@ -351,10 +369,42 @@ public class TaskDispatcher {
 
         long stagedBytes = stagingBuffer.getUsedBytes() - uploadStartBytes;
         int pendingAfter = this.compileResults.size() + (this.activeCompileResult == null ? 0 : 1);
-        this.performedUploadWorkLastUpdate = uploadStepsThisFrame > 0;
+        this.performedUploadWorkLastUpdate |= uploadStepsThisFrame > 0;
         ChunkFrameDiagnostics.recordUploads(completedUpdatesThisFrame, stagedBytes, pendingAfter);
 
         return completedFullUpdate;
+    }
+
+    /** Uploads every urgent mesh whole, outside the frame's budget, keeping a partly uploaded result where it was; whether one was a full update. */
+    private boolean uploadUrgentResults() {
+        boolean fullUpdate = false;
+        CompileResult result;
+        while ((result = this.urgentResults.poll()) != null) {
+            if (!result.matchesCurrentSection()) {
+                result.releaseBuffers();
+                continue;
+            }
+
+            CompileResult active = this.activeCompileResult;
+            int activeIndex = this.activeRenderLayerIndex;
+            this.activeCompileResult = result;
+            this.activeRenderLayerIndex = 0;
+            try {
+                while (!this.uploadNextLayer(result)) {
+                }
+            } catch (RuntimeException | Error failure) {
+                try { result.releaseBuffers(); }
+                catch (RuntimeException | Error cleanup) { if (cleanup != failure) failure.addSuppressed(cleanup); }
+                throw failure;
+            } finally {
+                this.activeCompileResult = active;
+                this.activeRenderLayerIndex = activeIndex;
+            }
+            this.performedUploadWorkLastUpdate = true;
+            fullUpdate |= result.fullUpdate;
+            result.releaseBuffers();
+        }
+        return fullUpdate;
     }
 
     public boolean performedUploadWorkLastUpdate() {
@@ -374,6 +424,11 @@ public class TaskDispatcher {
     }
 
     public boolean scheduleSectionUpdate(CompileResult compileResult, ChunkTask owner) {
+        if (compileResult.urgent && !this.stopThreads && !owner.isCancelled() && compileResult.matchesCurrentSection()) {
+            this.urgentResults.add(compileResult);
+            return true;
+        }
+
         try {
             while (!this.stopThreads && !owner.isCancelled() && compileResult.matchesCurrentSection()) {
                 if (this.compileResults.offer(compileResult, 10L, TimeUnit.MILLISECONDS)) {
@@ -442,15 +497,21 @@ public class TaskDispatcher {
         }
         drawBuffers.commitFullUpdate(result.renderSection, result.stagedLayers);
         if (result.commitBlockLayer()) result.updateSection();
+        result.renderSection.meshUploaded(result.taskCreatedNanos);
         //The visuals: a light change waiting for this section's new mesh is taken now (LightUpdates.holdForMeshes)
         RenderSection section = result.renderSection;
         LightUpdates.meshUploaded(section.xOffset() >> 4, section.yOffset() >> 4, section.zOffset() >> 4);
         return true;
     }
 
+    public int pendingUploads() {
+        return this.compileResults.size() + this.urgentResults.size() + (this.activeCompileResult == null ? 0 : 1);
+    }
+
     public boolean isIdle() {
         return this.threads != null
                 && this.idleThreads.get() == this.threads.length
+                && this.urgentTasks.isEmpty()
                 && this.highPriorityTasks.isEmpty()
                 && this.lowPriorityTasks.isEmpty()
                 && this.activeTasks.isEmpty()
@@ -470,8 +531,16 @@ public class TaskDispatcher {
             try { task.discard(); }
             catch (RuntimeException | Error cleanup) { failure = collectFailure(failure, cleanup); }
         }
+        while ((task = this.urgentTasks.poll()) != null) {
+            try { task.discard(); }
+            catch (RuntimeException | Error cleanup) { failure = collectFailure(failure, cleanup); }
+        }
         CompileResult result;
         while ((result = this.compileResults.poll()) != null) {
+            try { result.releaseBuffers(); }
+            catch (RuntimeException | Error cleanup) { failure = collectFailure(failure, cleanup); }
+        }
+        while ((result = this.urgentResults.poll()) != null) {
             try { result.releaseBuffers(); }
             catch (RuntimeException | Error cleanup) { failure = collectFailure(failure, cleanup); }
         }

@@ -104,6 +104,8 @@ public class BuildTask extends ChunkTask {
     @Nullable
     private CompileResult compile(float camX, float camY, float camZ, BuilderResources builderResources) {
         CompileResult compileResult = new CompileResult(this.section, true, this.buildRevision, -1L);
+        compileResult.taskCreatedNanos = this.createdNanos;
+        compileResult.urgent = this.urgent;
         boolean completed = false;
         try {
 

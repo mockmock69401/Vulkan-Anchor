@@ -44,6 +44,8 @@ public class RenderSection {
     private final CompileStatus compileStatus = new CompileStatus();
 
     private boolean dirty = true;
+    //PlayerChangeLatency: when the player changed a block here that no uploaded mesh shows yet (0 = none)
+    private long playerChangeNanos;
     private boolean playerChanged;
     private boolean completelyEmpty = true;
     private boolean containsBlockEntities = false;
@@ -75,6 +77,7 @@ public class RenderSection {
         if (this.chunkArea != null) {
             this.reset();
         }
+        this.playerChangeNanos = 0;
 
         this.xOffset = x;
         this.yOffset = y;
@@ -291,6 +294,7 @@ public class RenderSection {
         boolean flag1 = this.compileStatus.compiledSection == CompiledSection.UNCOMPILED;
         this.compileStatus.buildTask = ChunkTask.createBuildTask(
                 this, renderRegion, !flag1 || flag, buildRevision);
+        this.compileStatus.buildTask.urgent = this.isUrgentRebuild();
         return this.compileStatus.buildTask;
     }
 
@@ -473,7 +477,22 @@ public class RenderSection {
         ++this.compileStatus.transparencyRevision;
         this.playerChanged = playerChanged || this.dirty && this.playerChanged;
         this.dirty = true;
+        if (playerChanged) this.playerChangeNanos = PlayerChangeLatency.dirtied(this.playerChangeNanos, System.nanoTime());
         WorldRenderer.getInstance().scheduleGraphUpdate();
+    }
+
+    /**
+     * 2026-10-31 (doors late in Deceased): a player change here that no uploaded mesh shows yet, also when the rebuild for it was
+     * cancelled by a later one. Vanilla compiles these on the render thread ("Player affected"); here they jump the builders' and
+     * the uploads' queues (TaskDispatcher) and the build task capacity (SectionGraph).
+     */
+    public boolean isUrgentRebuild() {
+        return this.isDirtyFromPlayer() || this.playerChangeNanos != 0;
+    }
+
+    /** A full mesh of a task created at taskCreatedNanos was uploaded (PlayerChangeLatency). */
+    public void meshUploaded(long taskCreatedNanos) {
+        this.playerChangeNanos = PlayerChangeLatency.uploaded(this.playerChangeNanos, taskCreatedNanos, System.nanoTime());
     }
 
     public void setDirtyAfterBuildFailure(long failedBuildRevision) {

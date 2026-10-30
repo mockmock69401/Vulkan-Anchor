@@ -245,7 +245,7 @@ public class SectionGraph {
         BlockPos camera=this.minecraft.gameRenderer.getMainCamera().getBlockPosition();
 
 
-        return SectionRebuildPolicy.isUrgent(section.isDirtyFromPlayer(),
+        return SectionRebuildPolicy.isUrgent(section.isUrgentRebuild(),
                 section.xOffset(),section.yOffset(),section.zOffset(),camera.getX(),camera.getY(),camera.getZ());
     }
 
@@ -286,7 +286,8 @@ public class SectionGraph {
                 break;
             }
 
-            if (!this.taskDispatcher.hasTaskCapacity()) {
+            //2026-10-31 (doors late in Deceased): a section the player changed is scheduled even with the build queue full
+            if (!this.taskDispatcher.hasTaskCapacity() && !this.pendingRebuilds.getFirst().isUrgentRebuild()) {
                 break;
             }
 
