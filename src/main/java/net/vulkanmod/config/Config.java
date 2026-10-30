@@ -36,6 +36,8 @@ public class Config {
 
     public int ambientOcclusion = 1;
     public boolean textureAnimations = true;
+    /** 2026-10-30: font text drawn with mipmaps, trilinear/anisotropic filtering and minified-stroke coverage (FontPages). */
+    public boolean textAntialiasing = true;
     /** The top-left FPS overlay: FpsOverlay.OFF, SIMPLE, BASIC or DETAILED. */
     public int fpsOverlay = 0;
 

@@ -52,6 +52,9 @@ public abstract class VTextureSelector {
             throw new NullPointerException("Texture is null at index: " + activeTexture);
 
         texture.uploadSubTextureAsync(mipLevel, width, height, xOffset, yOffset, unpackSkipRows, unpackSkipPixels, unpackRowLength, buffer);
+        //2026-10-30: a font page's lower levels follow its level 0
+        net.vulkanmod.render.text.FontPages.afterUpload(texture, mipLevel, width, height, xOffset, yOffset, unpackSkipRows, unpackSkipPixels,
+                unpackRowLength, buffer);
     }
 
     public static int getTextureIdx(String name) {

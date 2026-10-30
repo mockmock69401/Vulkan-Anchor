@@ -40,6 +40,8 @@ public class Uniforms {
         vec1f_uniformMap.put("GameTime", RenderSystem::getShaderGameTime);
         vec1f_uniformMap.put("GlintAlpha", RenderSystem::getShaderGlintAlpha);
         vec1f_uniformMap.put("AlphaCutout", () -> VRenderSystem.alphaCutout);
+        //2026-10-30: text anti-aliasing (text_aa.glsl)
+        vec1f_uniformMap.put("TextAntialias", () -> net.vulkanmod.Initializer.CONFIG != null && net.vulkanmod.Initializer.CONFIG.textAntialiasing ? 1f : 0f);
 
         vec2f_uniformMap.put("ScreenSize", VRenderSystem::getScreenSize);
 

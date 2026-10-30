@@ -71,6 +71,8 @@
   "vulkanmod.options.leavesCulling": "Leaves Culling",
   "vulkanmod.options.leavesCulling.tooltip": "Cull adjacent interior faces of leaf blocks to significantly improve performance in forests.",
   "vulkanmod.options.textureAnimations": "Texture Animations",
+  "vulkanmod.options.textAntialiasing": "Text Anti-aliasing",
+  "vulkanmod.options.textAntialiasing.tooltip": "Smooths font text so signs stay readable from far away or at an angle, and text from font packs looks clean. Applies immediately; uses slightly more video memory.",
   "vulkanmod.options.renderScale": "Render Scale",
   "vulkanmod.options.renderScale.tooltip": "Renders Minecraft at a lower internal resolution, then scales it back to the current window or fullscreen size.",
 

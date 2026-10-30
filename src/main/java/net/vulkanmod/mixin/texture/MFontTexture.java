@@ -16,7 +16,8 @@ public class MFontTexture implements VAbstractTextureI {
     @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/platform/TextureUtil;prepareImage(Lcom/mojang/blaze3d/platform/NativeImage$InternalGlFormat;III)V"))
     private void redirect(NativeImage.InternalGlFormat internalFormat, int id, int width, int height) {
                                                                            
-        VulkanImage image = new VulkanImage.Builder(width, height).setFormat(internalFormat).createVulkanImage();
+        //2026-10-30: a mipmapped page whose sampler follows the text anti-aliasing option (FontPages)
+        VulkanImage image = net.vulkanmod.render.text.FontPages.create(width, height, internalFormat);
         this.setId(id);
         this.setVulkanImage(image);
                                              
