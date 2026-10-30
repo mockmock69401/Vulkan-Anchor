@@ -471,6 +471,18 @@ class SceneCompositeTest {
         for (float level = 0; level <= 14; level += 0.5f) {
             assertTrue(SceneCompositeMath.heldFalloff(level, 14) <= level + 1e-6f, "never above vanilla's spread");
         }
+        //2026-10-30 (the user: vertical slabs patchy under the held torch, changing with the view angle): a face half a block into its
+        // cell (a slab's) read the layer exactly on a cell boundary, so depth noise flipped it between the slab's cell and the next.
+        // HELD_FRONT_STEP keeps such a face on its own cell (vanilla lights a face inside its block by the block's own light) and a
+        // full block's face on the cell in front of it
+        for (float noise = -0.05f; noise <= 0.05f; noise += 0.01f) {
+            assertEquals(63, SceneCompositeMath.heldFrontLayer(63.5f + noise, -1), "slab face, toward -");
+            assertEquals(63, SceneCompositeMath.heldFrontLayer(63.5f + noise, 1), "slab face, toward +");
+            assertEquals(63, SceneCompositeMath.heldFrontLayer(63f + noise, 1), "block face, toward +");
+            assertEquals(62, SceneCompositeMath.heldFrontLayer(63f + noise, -1), "block face, toward -");
+        }
+        assertTrue(COMP.contains("const float HELD_FRONT_STEP = " + SceneCompositeMath.HELD_FRONT_STEP + ";"));
+        assertTrue(COMP.contains("int layer = int(floor(g[axis] + (n[axis] >= 0.0 ? HELD_FRONT_STEP : -HELD_FRONT_STEP)));"));
         assertTrue(COMP.contains("blockT = max(blockT, heldFalloff(held, float(heldCell(ivec3(HELD_GRID_SIDE/2)))));"));
         assertEquals(HeldLight.MAX_GAIN, SceneCompositeMath.HELD_MAX_GAIN);
         assertTrue(COMP.contains("if (heldOrigin.w > 0.5 && lightCamera.w > 0.5 && !fromLod) {"));

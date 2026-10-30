@@ -31,6 +31,12 @@ public final class SceneCompositeMath {
     public static final float HELD_MAX_GAIN = 256f;
     /** Tuning round 1: the held light loses HELD_FALLOFF levels per level of vanilla's spread. */
     public static final float HELD_FALLOFF = 1.7f;
+    /**
+     * 2026-10-30: how far in front of a face the held light reads its cell layer (scene_copy's heldLightAt). Under half a block, so a
+     * face half a block into its cell (a slab's) stays on its own cell instead of a cell boundary where depth noise flipped it; 11/32
+     * keeps faces on the 1/16 model grid off the boundary too.
+     */
+    public static final float HELD_FRONT_STEP = 0.34375f;
     /** Tuning round 3: the sky-lit light under an overcast day sky and at night. */
     public static final float OVERCAST_EXPOSURE = 1.8f, NIGHT_SKY_EXPOSURE = 0.85f;
     /** Tuning round 3: the far clouds start this far out with the camera inside vanilla's cloud layer (within the margin). */
@@ -218,6 +224,11 @@ public final class SceneCompositeMath {
 
     private static boolean exposureMode(float[] look, float mode) {
         return Math.abs(look[3] - mode) < 0.5f;
+    }
+
+    /** The shader's heldLightAt layer: the held grid's cell layer read for a face at s along its axis (sign: the normal's). */
+    public static int heldFrontLayer(float s, int sign) {
+        return (int) Math.floor(s + HELD_FRONT_STEP * sign);
     }
 
     /** The shader's heldFalloff: the held level at a surface whose spread level is level (eye: the eye cell's level). */
