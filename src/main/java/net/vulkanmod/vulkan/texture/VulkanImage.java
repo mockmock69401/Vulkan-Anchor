@@ -338,6 +338,8 @@ public class VulkanImage {
     }
 
     public void updateTextureSampler(int maxLod, byte flags) {
+        //2026-10-30: a font page's sampler follows the text anti-aliasing option only (FontPages.manages)
+        if (net.vulkanmod.render.text.FontPages.manages(this)) return;
         this.sampler = SamplerManager.getTextureSampler((byte) maxLod, flags);
     }
 
@@ -580,6 +582,11 @@ public class VulkanImage {
 
     public long getSampler() {
         return sampler;
+    }
+
+    /** 2026-10-30: a sampler chosen elsewhere (FontPages: the text anti-aliasing option). */
+    public void setSampler(long sampler) {
+        this.sampler = sampler;
     }
 
     public static Builder builder(int width, int height) {

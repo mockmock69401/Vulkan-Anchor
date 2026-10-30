@@ -77,6 +77,8 @@
   "vulkanmod.options.leavesCulling": "Leaves Culling",
   "vulkanmod.options.leavesCulling.tooltip": "Removes hidden faces between adjacent leaf blocks, reducing forest geometry substantially. Transparent resource packs may make the visual difference more noticeable.",
   "vulkanmod.options.textureAnimations": "Texture Animations",
+  "vulkanmod.options.textAntialiasing": "Text Anti-aliasing",
+  "vulkanmod.options.textAntialiasing.tooltip": "Smooths font text so signs stay readable from far away or at an angle, and text from font packs looks clean. Applies immediately; uses slightly more video memory.",
   "vulkanmod.options.textureAnimations.tooltip": "Updates animated textures such as water, lava, fire, and portals. Disabling it makes those textures static and reduces animation-update work.",
   "vulkanmod.options.renderScale": "Render Scale",
   "vulkanmod.options.renderScale.tooltip": "Renders the 3D scene at a percentage of the window resolution, then scales it to the display. Lower values greatly reduce GPU load but make the world look softer; the interface stays readable.",

@@ -183,7 +183,56 @@ public abstract class SamplerManager {
         }
     }
 
+    /** 2026-10-30: the LOD bias of the anti-aliased font sampler (tuned against the sign captures). */
+    public static final float FONT_LOD_BIAS = 0.0f;
+    private static long fontSampler;
+
+    /**
+     * 2026-10-30: the font pages' sampler. Off: today's (nearest, level 0 only). On: linear, trilinear over the page's
+     * FontMipmaps.LEVELS levels, anisotropic up to 16x where the device enabled samplerAnisotropy, clamped to the edge.
+     */
+    public static long getFontSampler(boolean antialias) {
+        if (!antialias) {
+            return getTextureSampler((byte) 1, (byte) 0);
+        }
+        if (fontSampler == 0L) {
+            fontSampler = createFontSampler();
+        }
+        return fontSampler;
+    }
+
+    private static long createFontSampler() {
+        try (MemoryStack stack = stackPush()) {
+            VkSamplerCreateInfo info = VkSamplerCreateInfo.calloc(stack);
+            info.sType(VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
+            info.magFilter(VK_FILTER_LINEAR);
+            info.minFilter(VK_FILTER_LINEAR);
+            info.mipmapMode(VK_SAMPLER_MIPMAP_MODE_LINEAR);
+            info.addressModeU(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+            info.addressModeV(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+            info.addressModeW(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE);
+            boolean aniso = DeviceManager.device != null && DeviceManager.device.availableFeatures.features().samplerAnisotropy()
+                    && DeviceManager.deviceProperties != null;
+            info.anisotropyEnable(aniso);
+            info.maxAnisotropy(aniso ? Math.min(16.0f, DeviceManager.deviceProperties.limits().maxSamplerAnisotropy()) : 1.0f);
+            info.borderColor(VK_BORDER_COLOR_INT_OPAQUE_WHITE);
+            info.compareOp(VK_COMPARE_OP_ALWAYS);
+            info.minLod(0.0f);
+            info.maxLod(net.vulkanmod.render.text.FontMipmaps.LEVELS - 1);
+            info.mipLodBias(FONT_LOD_BIAS);
+            LongBuffer p = stack.mallocLong(1);
+            if (vkCreateSampler(getVkDevice(), info, null, p) != VK_SUCCESS) {
+                throw new RuntimeException("Failed to create the font sampler");
+            }
+            return p.get(0);
+        }
+    }
+
     public static void cleanUp() {
+        if (fontSampler != 0L) {
+            vkDestroySampler(DeviceManager.vkDevice, fontSampler, null);
+            fontSampler = 0L;
+        }
         for (long id : SAMPLERS.values()) {
             vkDestroySampler(DeviceManager.vkDevice, id, null);
         }

@@ -41,6 +41,8 @@ public class Uniforms {
         vec1f_uniformMap.put("GameTime", RenderSystem::getShaderGameTime);
         vec1f_uniformMap.put("GlintAlpha", RenderSystem::getShaderGlintAlpha);
         vec1f_uniformMap.put("AlphaCutout", () -> VRenderSystem.alphaCutout);
+        //2026-10-30: text anti-aliasing (text_aa.glsl)
+        vec1f_uniformMap.put("TextAntialias", () -> net.vulkanmod.Initializer.CONFIG != null && net.vulkanmod.Initializer.CONFIG.textAntialiasing ? 1f : 0f);
         vec1f_uniformMap.put("SableSkyLightScale", () -> ScopedUniformResolver.floatValue("SableSkyLightScale", () -> 1.0f));
         vec1f_uniformMap.put("SableEnableNormalLighting", () -> ScopedUniformResolver.floatValue("SableEnableNormalLighting", () -> 0.0f));
         vec1f_uniformMap.put("SableShadowsEnabled", () -> ScopedUniformResolver.floatValue("SableShadowsEnabled", () -> 0.0f));

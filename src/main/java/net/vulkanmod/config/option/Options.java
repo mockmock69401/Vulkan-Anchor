@@ -332,7 +332,15 @@ public abstract class Options {
                                  () -> minecraftOptions.mipmapLevels().get())
                                  .setTranslator(value -> Component.nullToEmpty(value.toString()))
                                 .setTooltip(Component.translatable("vulkanmod.options.mipmapLevels.tooltip"))
-                                 .setImpact(PerformanceImpact.LOW)
+                                 .setImpact(PerformanceImpact.LOW),
+                        new SwitchOption(Component.translatable("vulkanmod.options.textAntialiasing"),
+                                value -> {
+                                    config.textAntialiasing = value;
+                                    net.vulkanmod.render.text.FontPages.applyOption(value);
+                                },
+                                () -> config.textAntialiasing)
+                                .setTooltip(Component.translatable("vulkanmod.options.textAntialiasing.tooltip"))
+                                .setImpact(PerformanceImpact.LOW)
                 })
         };
     }

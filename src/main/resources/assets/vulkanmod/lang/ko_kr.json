@@ -189,6 +189,8 @@
   "vulkanmod.options.leavesCulling": "나뭇잎 컬링",
   "vulkanmod.options.leavesCulling.tooltip": "붙어 있는 나뭇잎 블록 사이의 안쪽 면을 그리지 않아 숲에서 성능이 크게 좋아집니다.",
   "vulkanmod.options.textureAnimations": "텍스처 애니메이션",
+  "vulkanmod.options.textAntialiasing": "텍스트 안티앨리어싱",
+  "vulkanmod.options.textAntialiasing.tooltip": "글자를 부드럽게 그려 멀리서나 비스듬히 봐도 표지판을 읽을 수 있고 폰트 팩 글자도 깔끔하게 보입니다. 바로 적용되며 비디오 메모리를 조금 더 씁니다.",
   "vulkanmod.options.renderScale": "렌더 배율",
   "vulkanmod.options.renderScale.tooltip": "Minecraft를 더 낮은 내부 해상도로 그린 뒤 지금 창이나 전체 화면 크기로 늘립니다.",
   "vulkanmod.options.animateOnlyVisibleTextures": "보이는 텍스처만 애니메이션",
