@@ -103,4 +103,15 @@ class TextCoverageTest {
             assertTrue(fsh.contains("textPerspective"), s);
         }
     }
+
+    /** Final review: every upload path (VTextureSelector, GlTexture's GL emulation, PBOs) reaches FontPages through VulkanImage. */
+    @Test
+    void everyUploadReachesTheFontPages() throws Exception {
+        String image = Files.readString(Path.of("src/main/java/net/vulkanmod/vulkan/texture/VulkanImage.java"));
+        String selector = Files.readString(Path.of("src/main/java/net/vulkanmod/vulkan/texture/VTextureSelector.java"));
+        int at = image.indexOf("public void uploadSubTextureAsync(");
+        int end = image.indexOf("\n    }", at);
+        assertTrue(image.substring(at, end).contains("FontPages.afterUpload(this, mipLevel"), "VulkanImage.uploadSubTextureAsync");
+        assertFalse(selector.contains("FontPages.afterUpload"), "not twice");
+    }
 }

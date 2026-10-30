@@ -69,7 +69,13 @@ public final class FontPages {
         int texel = format == NativeImage.InternalGlFormat.RED ? 1 : 4;
         for (int l = 0; l < FontMipmaps.LEVELS; l++) {
             int lw = Math.max(1, width >> l), lh = Math.max(1, height >> l);
+            //transparent white on RGBA pages (black transparent texels darkened bilinear edges)
             ByteBuffer zero = MemoryUtil.memCalloc(lw * lh * texel);
+            if (texel == 4) {
+                for (int k = 0; k < lw * lh; k++) {
+                    zero.put(k * 4, (byte) 255).put(k * 4 + 1, (byte) 255).put(k * 4 + 2, (byte) 255);
+                }
+            }
             try {
                 image.uploadSubTextureAsync(l, lw, lh, 0, 0, 0, 0, 0, zero);
             } finally {
@@ -81,13 +87,26 @@ public final class FontPages {
         return image;
     }
 
-    /** After an upload into image (VTextureSelector.uploadSubTexture): a font page's level 0 → its lower levels follow. */
+    private static boolean uploading;
+
+    /**
+     * After any upload into image (VulkanImage.uploadSubTextureAsync: VTextureSelector, the GL emulation, PBOs): a font page's level 0
+     * → its lower levels (and level 0's filled transparent texels) follow. Not re-entered by those uploads.
+     */
     public static void afterUpload(VulkanImage image, int level, int w, int h, int x, int y, int skipRows, int skipPixels, int rowLength,
                                    ByteBuffer src) {
-        if (level != 0 || image == null) return;
+        if (level != 0 || image == null || uploading) return;
         FontPageShadow shadow = SHADOWS.get(image);
         if (shadow == null) return;
-        List<FontPageShadow.Upload> ups = shadow.write(x, y, w, h, skipRows, skipPixels, rowLength, src);
+        uploading = true;
+        try {
+            uploadLevels(image, shadow.write(x, y, w, h, skipRows, skipPixels, rowLength, src));
+        } finally {
+            uploading = false;
+        }
+    }
+
+    private static void uploadLevels(VulkanImage image, List<FontPageShadow.Upload> ups) {
         for (FontPageShadow.Upload up : ups) {
             ByteBuffer buf = MemoryUtil.memAlloc(up.pixels().length);
             try {
