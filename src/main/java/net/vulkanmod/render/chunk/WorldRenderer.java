@@ -248,6 +248,7 @@ public class WorldRenderer {
             if (this.taskDispatcher.updateSections()) {
                 this.graphNeedsUpdate = true;
             }
+            PlayerChangeLatency.tick(System.nanoTime(), this.taskDispatcher.pendingUploads());
         } catch (Exception e) {
             Initializer.LOGGER.error("Failed to upload chunk sections; resetting renderer", e);
             allChanged();

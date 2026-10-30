@@ -194,18 +194,28 @@ public class SectionGraph {
 
     private void scheduleRebuilds() {
         int maxScheduledRebuilds = AdaptiveChunkUploadBudget.chooseRebuildScheduleBudget(this.rebuildQueue.size());
-        int scheduledRebuilds = 0;
+        int scheduledRebuilds = 0, urgentRebuilds = 0;
+
+        //2026-10-31 (doors late in Deceased): the sections the player changed first, outside the budget
+        for (int i = 0; i < this.rebuildQueue.size(); i++) {
+            RenderSection section = this.rebuildQueue.get(i);
+
+            if (section.isUrgentRebuild() && section.rebuildChunkAsync(this.taskDispatcher, this.renderRegionCache)) {
+                section.setNotDirty();
+                urgentRebuilds++;
+            }
+        }
 
         for (int i = 0; i < this.rebuildQueue.size() && scheduledRebuilds < maxScheduledRebuilds; i++) {
             RenderSection section = this.rebuildQueue.get(i);
 
-            if (section.rebuildChunkAsync(this.taskDispatcher, this.renderRegionCache)) {
+            if (section.isDirty() && section.rebuildChunkAsync(this.taskDispatcher, this.renderRegionCache)) {
                 section.setNotDirty();
                 scheduledRebuilds++;
             }
         }
 
-        if (scheduledRebuilds < this.rebuildQueue.size()) {
+        if (scheduledRebuilds + urgentRebuilds < this.rebuildQueue.size()) {
             WorldRenderer.getInstance().scheduleGraphUpdate();
         }
 

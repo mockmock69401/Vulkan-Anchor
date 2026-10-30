@@ -78,6 +78,8 @@ public class BuildTask extends ChunkTask {
 
     private CompileResult compile(float camX, float camY, float camZ, BuilderResources builderResources) {
         CompileResult compileResult = new CompileResult(this.section, true);
+        compileResult.taskCreatedNanos = this.createdNanos;
+        compileResult.urgent = this.urgent;
 
         BlockPos startBlockPos = new BlockPos(section.xOffset(), section.yOffset(), section.zOffset()).immutable();
         VisGraph visGraph = new VisGraph();

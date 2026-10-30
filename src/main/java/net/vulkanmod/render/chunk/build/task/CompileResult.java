@@ -28,6 +28,10 @@ public class CompileResult {
     VisibilitySet visibilitySet;
     QuadSorter.SortState transparencyState;
     CompiledSection compiledSection;
+    /** When the task that built this was created (PlayerChangeLatency). */
+    public long taskCreatedNanos;
+    /** Built by an urgent task: uploaded before the frame's budget (TaskDispatcher). */
+    public boolean urgent;
 
     CompileResult(RenderSection renderSection, boolean fullUpdate) {
         this.renderSection = renderSection;

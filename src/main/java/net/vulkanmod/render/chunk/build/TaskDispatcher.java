@@ -29,6 +29,9 @@ public class TaskDispatcher {
     private int idleThreads;
     private final Queue<ChunkTask> highPriorityTasks = Queues.newConcurrentLinkedQueue();
     private final Queue<ChunkTask> lowPriorityTasks = Queues.newConcurrentLinkedQueue();
+    //2026-10-31 (doors late in Deceased): sections the player changed (ChunkTask.urgent), built first and uploaded outside the budget
+    private final Queue<ChunkTask> urgentTasks = Queues.newConcurrentLinkedQueue();
+    private final Queue<CompileResult> urgentResults = Queues.newConcurrentLinkedQueue();
 
     public TaskDispatcher() {
         this.fixedBuffers = new ThreadBuilderPack();
@@ -99,7 +102,9 @@ public class TaskDispatcher {
         if(chunkTask == null)
             return;
 
-        if (chunkTask.highPriority) {
+        if (chunkTask.urgent) {
+            this.urgentTasks.offer(chunkTask);
+        } else if (chunkTask.highPriority) {
             this.highPriorityTasks.offer(chunkTask);
         } else {
             this.lowPriorityTasks.offer(chunkTask);
@@ -112,7 +117,10 @@ public class TaskDispatcher {
 
     @Nullable
     private ChunkTask pollTask() {
-        ChunkTask task = this.highPriorityTasks.poll();
+        ChunkTask task = this.urgentTasks.poll();
+
+        if(task == null)
+            task = this.highPriorityTasks.poll();
 
         if(task == null)
             task = this.lowPriorityTasks.poll();
@@ -170,8 +178,9 @@ public class TaskDispatcher {
                 ? AdaptiveChunkUploadBudget.uploadTimeBudgetNanos(pendingUploads)
                 : Long.MAX_VALUE;
 
-        while(uploadsThisFrame < maxUploadsPerFrame && (result = this.compileResults.poll()) != null) {
+        while((result = this.nextResult(uploadsThisFrame < maxUploadsPerFrame)) != null) {
             graphChanged |= doSectionUpdate(result);
+            if (result.urgent) continue;
             uploadsThisFrame++;
 
             if (uploadsThisFrame > 0 && System.nanoTime() - uploadStartNanos >= uploadTimeBudgetNanos) {
@@ -194,7 +203,19 @@ public class TaskDispatcher {
         return Math.max(1, Math.min(16, uploadsPerFrame));
     }
 
+    /** The next mesh to upload: an urgent one whatever the budget, else one in the order built while budgetLeft. */
+    @Nullable
+    private CompileResult nextResult(boolean budgetLeft) {
+        CompileResult result = this.urgentResults.poll();
+        return result != null || !budgetLeft ? result : this.compileResults.poll();
+    }
+
     public void scheduleSectionUpdate(CompileResult compileResult) {
+        if (compileResult.urgent && !this.stopThreads) {
+            this.urgentResults.add(compileResult);
+            return;
+        }
+
         while (!this.stopThreads && this.compileResults.size() >= MAX_PENDING_COMPILE_RESULTS) {
             LockSupport.parkNanos(1_000_000L);
         }
@@ -232,6 +253,7 @@ public class TaskDispatcher {
             //DH gate A3: the graph walk stops at an uncompiled section, so a mesh that opens a way through must be walked again
             boolean graphChanged = compileResult.changesGraph();
             compileResult.updateSection();
+            section.meshUploaded(compileResult.taskCreatedNanos);
             //The visuals: a light change waiting for this section's new mesh is taken now (LightUpdates.holdForMeshes)
             LightUpdates.meshUploaded(section.xOffset() >> 4, section.yOffset() >> 4, section.zOffset() >> 4);
             return graphChanged;
@@ -243,9 +265,18 @@ public class TaskDispatcher {
         }
     }
 
-    public boolean isIdle() { return this.idleThreads == this.threads.length && this.compileResults.isEmpty(); }
+    public int pendingUploads() {
+        return this.compileResults.size() + this.urgentResults.size();
+    }
+
+    public boolean isIdle() { return this.idleThreads == this.threads.length && this.compileResults.isEmpty() && this.urgentResults.isEmpty(); }
 
     public void clearBatchQueue() {
+        ChunkTask urgentTask;
+        while ((urgentTask = this.urgentTasks.poll()) != null) {
+            urgentTask.discard();
+        }
+
         while(!this.highPriorityTasks.isEmpty()) {
             ChunkTask chunkTask = this.highPriorityTasks.poll();
             if (chunkTask != null) {
@@ -264,11 +295,15 @@ public class TaskDispatcher {
         while ((compileResult = this.compileResults.poll()) != null) {
             compileResult.releaseBuffers();
         }
+
+        while ((compileResult = this.urgentResults.poll()) != null) {
+            compileResult.releaseBuffers();
+        }
     }
 
     public String getStats() {
-        int taskCount = highPriorityTasks.size() + lowPriorityTasks.size();
-        return String.format("iT: %d Ts: %d uQ: %d", this.idleThreads, taskCount, this.compileResults.size());
+        int taskCount = urgentTasks.size() + highPriorityTasks.size() + lowPriorityTasks.size();
+        return String.format("iT: %d Ts: %d uQ: %d", this.idleThreads, taskCount, this.pendingUploads());
     }
 
     public BuilderResources[] getResourcesArray() {

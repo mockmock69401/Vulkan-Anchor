@@ -20,6 +20,9 @@ public abstract class ChunkTask {
     private final AtomicBoolean started = new AtomicBoolean(false);
     protected final RenderSection section;
     public boolean highPriority = false;
+    /** A section the player changed (a door): built and uploaded before everything else (TaskDispatcher). */
+    public boolean urgent = false;
+    public final long createdNanos = System.nanoTime();
 
     ChunkTask(RenderSection renderSection) {
         this.section = renderSection;
