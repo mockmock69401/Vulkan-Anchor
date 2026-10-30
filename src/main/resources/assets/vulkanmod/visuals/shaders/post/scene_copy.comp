@@ -145,6 +145,9 @@ const float HELD_MAX_GAIN = 256.0;
 //Tuning round 1: the held light falls off HELD_FALLOFF times as fast as vanilla spreads it (levels per block from the eye), so it lights
 // the surfaces near the hand, not the whole room (refs/S12; tuning round 2: 2.0 left only a spot, 1.4; tuning round 3: 1.4 was 1.87x, 1.7)
 const float HELD_FALLOFF = 1.7;
+//2026-10-30: how far in front of a face its held light layer is read (SceneCompositeMath.HELD_FRONT_STEP): under half a block, so a
+// face half a block into its cell (a slab's) stays on its own cell instead of a boundary where depth noise flipped it with the view
+const float HELD_FRONT_STEP = 0.34375;
 //Tuning round 3: the sky-lit light's weather and night exposures. Under an overcast day sky (W4's overcast share, Atmosphere.sunLight.w,
 // 0.8 in full rain (slot 29 .z), times the day seen from under the open sky: slot 11 .w) it rises toward OVERCAST_EXPOSURE (refs/S4 lights rainy
 // terrain about 3x vanilla: 1 + (3.6 - 1) x 0.8 = 3.1); at night (1 - slot 11 .z) it falls to NIGHT_SKY_EXPOSURE (refs/S3: the moonlit
@@ -414,14 +417,14 @@ int heldCell(ivec3 c) {
 }
 
 //B16: the held light at a face (rel: the surface relative to the light volume's camera block corner, n its world normal): the layer of
-// cells half a block in front of it, bilinear, skipping dark cells (inside blocks) while another is lit, as lightvolume.glsl reads faces
+// cells HELD_FRONT_STEP in front of it, bilinear, skipping dark cells (inside blocks) while another is lit, as lightvolume.glsl reads faces
 float heldLightAt(vec3 rel, vec3 n) {
     vec3 g = rel - heldOrigin.xyz;
     vec3 a = abs(n);
     int axis = a.x >= a.y && a.x >= a.z ? 0 : (a.y >= a.z ? 1 : 2);
     int u = axis == 0 ? 1 : 0;
     int v = axis == 2 ? 1 : 2;
-    int layer = int(floor(g[axis] + (n[axis] >= 0.0 ? 0.5 : -0.5)));
+    int layer = int(floor(g[axis] + (n[axis] >= 0.0 ? HELD_FRONT_STEP : -HELD_FRONT_STEP)));
     vec2 q = vec2(g[u], g[v]) - 0.5;
     vec2 f = floor(q);
     vec2 t = q - f;
