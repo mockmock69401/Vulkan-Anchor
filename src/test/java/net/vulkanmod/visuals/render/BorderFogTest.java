@@ -12,12 +12,15 @@ import static org.junit.jupiter.api.Assertions.*;
 class BorderFogTest {
     @Test
     void onlyWithoutLodsInTheSkyModeWithAKnownRenderDistance() {
-        assertArrayEquals(new float[]{144, 192, 1}, AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_SKY, 192), 1e-4f);
-        assertArrayEquals(new float[3], AtmosphereUniforms.border(true, AtmosphereMath.ATMOSPHERE_SKY, 192));
-        assertArrayEquals(new float[3], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_FOG, 192));
-        assertArrayEquals(new float[3], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_NO_SKY, 192));
-        assertArrayEquals(new float[3], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_SKY, 0));
-        assertArrayEquals(new float[3], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_SKY, Float.POSITIVE_INFINITY));
+        assertArrayEquals(new float[]{144, 192, 1, 0}, AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_SKY, 192), 1e-4f);
+        assertArrayEquals(new float[4], AtmosphereUniforms.border(true, AtmosphereMath.ATMOSPHERE_SKY, 192));
+        assertArrayEquals(new float[4], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_FOG, 192));
+        assertArrayEquals(new float[4], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_NO_SKY, 192));
+        assertArrayEquals(new float[4], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_SKY, 0));
+        assertArrayEquals(new float[4], AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_SKY, Float.POSITIVE_INFINITY));
+        //2026-10-28: .w carries the weather fog, with or without the border
+        assertArrayEquals(new float[]{144, 192, 1, 0.012f}, AtmosphereUniforms.border(false, AtmosphereMath.ATMOSPHERE_SKY, 192, 0.012f), 1e-6f);
+        assertArrayEquals(new float[]{0, 0, 0, 0.012f}, AtmosphereUniforms.border(true, AtmosphereMath.ATMOSPHERE_SKY, 192, 0.012f), 1e-6f);
     }
 
     @Test

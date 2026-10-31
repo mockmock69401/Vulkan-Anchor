@@ -73,6 +73,11 @@ class PostMathTest {
         assertTrue(white > 0.88f && white < 0.97f, "daylight white -> display " + white);
         assertTrue(PostMath.toneMap(4, knee) > PostMath.toneMap(2, knee));
         assertTrue(PostMath.toneMap(2, knee) < 1);
+        //2026-10-28 (sunlit snow clipped): twice daylight white still keeps room below white, and the shoulder starts with slope 1
+        float snow = PostMath.linearToDisplay(PostMath.toneMap(2 * PostMath.SCENE_WHITE, knee));
+        assertTrue(snow < 0.955f, "sunlit snow -> display " + snow);
+        float e = 1e-3f;
+        assertEquals(1f, (PostMath.toneMap(knee + e, knee) - PostMath.toneMap(knee, knee)) / e, 0.01f, "no kink at the knee");
     }
 
     // ---- 2. each setting neutral at its neutral value ----

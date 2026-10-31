@@ -657,6 +657,35 @@ class SceneCompositeTest {
         assertTrue(lit >= PostMath.luminance(lm0[0], lm0[1], lm0[2]) * 0.999f, lit + " vs floor " + Arrays.toString(lm0));
     }
 
+    @Test
+    void rainFogsSurfacesByDistanceAndLeavesTheSky() {
+        //2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined)
+        assertEquals(0f, AtmosphereUniforms.weatherFog(0, 0, 1), 0f, "clear weather");
+        assertEquals(AtmosphereUniforms.WEATHER_FOG_RAIN, AtmosphereUniforms.weatherFog(1, 0, 1), 1e-7f);
+        assertTrue(AtmosphereUniforms.weatherFog(1, 1, 1) > AtmosphereUniforms.weatherFog(1, 0, 1), "a thunderstorm is thicker");
+        assertEquals(0f, AtmosphereUniforms.weatherFog(1, 1, 0), 0f, "the setting at 0");
+        double k = AtmosphereUniforms.WEATHER_FOG_RAIN;
+        assertTrue(Math.exp(-(k * 100) * (k * 100)) < 0.4 && Math.exp(-(k * 40) * (k * 40)) > 0.8, "rain hides a street's far end, not its near one");
+        float[][] clear = scene(DEFAULT, frame(NOON), true, true, 1);
+        float[][] rain = scene(DEFAULT, frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 1);
+        float[][] off = scene(settings(c -> c.weatherFog = 0), frame(NOON, 1, false, FOG, new Matrix4f()), true, true, 1);
+        assertEquals(0f, clear[SceneCompositeMath.BORDER_FOG][3], 0f);
+        assertEquals(AtmosphereUniforms.WEATHER_FOG_RAIN, rain[SceneCompositeMath.BORDER_FOG][3], 1e-6f);
+        assertEquals(0f, off[SceneCompositeMath.BORDER_FOG][3], 0f);
+        float[] wall = {0.2f, 0.2f, 0.2f, 1}, SHADED = {1, 0, 0, 0};
+        float[] near = SceneCompositeMath.composite(surface(wall, NORTH, SHADED, -1, new float[]{15, 0, 1}, 0, false, 5), rain, LIGHTMAP);
+        float[] far = SceneCompositeMath.composite(surface(wall, NORTH, SHADED, -1, new float[]{15, 0, 1}, 0, false, 120), rain, LIGHTMAP);
+        float[] farOff = SceneCompositeMath.composite(surface(wall, NORTH, SHADED, -1, new float[]{15, 0, 1}, 0, false, 120), off, LIGHTMAP);
+        assertTrue(Math.abs(far[1] - farOff[1]) > Math.abs(near[1] - SceneCompositeMath.composite(surface(wall, NORTH, SHADED, -1,
+                new float[]{15, 0, 1}, 0, false, 5), off, LIGHTMAP)[1]) * 5, "far fogged, near barely");
+        //Under a roof (no sky light, block light 15) no weather fog; the sky itself is the same with and without it
+        float[] roofed = SceneCompositeMath.composite(surface(wall, NORTH, SHADED, -1, new float[]{0, 15, 1}, 0, false, 120), rain, LIGHTMAP);
+        assertArrayEquals(SceneCompositeMath.composite(surface(wall, NORTH, SHADED, -1, new float[]{0, 15, 1}, 0, false, 120), off, LIGHTMAP), roofed, 1e-6f);
+        assertArrayEquals(SceneCompositeMath.composite(skyPixel(new float[]{0.5f, 0.6f, 0.8f, 1}, dir(0, 0.3f, 1)), off, LIGHTMAP),
+                SceneCompositeMath.composite(skyPixel(new float[]{0.5f, 0.6f, 0.8f, 1}, dir(0, 0.3f, 1)), rain, LIGHTMAP), 1e-6f);
+        assertTrue(COMP.contains("lit = mix(rainFog, lit, exp(-k*k*amount));"));
+    }
+
     // ---- 6c. 2026-10-28: block glow and ore glow (slot 33) ----
 
     private static float[][] glowScene(int blockGlow, int oreGlow) {
@@ -1144,6 +1173,7 @@ class SceneCompositeTest {
         //The post-processing settings that disable the lighting: no exposure
         float[][] off = scene(settings(c -> {
             c.fogStrength = 0;
+            c.weatherFog = 0;
             c.sunShading = 0;
             c.aoStrength = 0;
             c.waterDepth = 0;
@@ -1177,6 +1207,7 @@ class SceneCompositeTest {
     /** The exposure tests' settings: no fog and none of the 2026-10-28 colours (torch light colour, moonlight), which move the hue. */
     private static void plainColours(VisualsConfig c) {
         c.fogStrength = 0;
+        c.weatherFog = 0;
         c.blockLightColour = 0;
         c.lightColour = 0;
     }
