@@ -23,6 +23,18 @@ public class ScreenM {
     @Inject(method = "renderWithTooltip", at = @At("HEAD"))
     private void vulkanMod$beginScreenRenderStateBoundary(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
         this.vulkanMod$screenStateSnapshot = new RenderStateSnapshot();
+
+        //2026-10-31 (the user: Relics' research screen hid its text): vanilla's GUI state: the HUD's last flush leaves the depth test
+        // off, so a screen's immediate draws write no depth (Relics' research background, at z 5000, hid the text drawn after it).
+        // Depth writes rest on, as vanilla's render types expect (off, unlike the 1.20.1 branch, hid Relics' hover tooltips)
+        RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
+        RenderSystem.colorMask(true, true, true, true);
+        RenderSystem.disableDepthTest();
+        RenderSystem.depthMask(true);
+        RenderSystem.disableCull();
+        RenderSystem.enableBlend();
+        RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
+
         Renderer.clearAttachments(GL11.GL_DEPTH_BUFFER_BIT);
     }
 
