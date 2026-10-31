@@ -131,7 +131,7 @@ public final class VisualsRenderer {
     private long frameLightmap;
     private int frameId;
     private long litFrames, copiedFrames, shadowFrames, lastStats = Long.MIN_VALUE;
-    private boolean listening, failed, postFailed, captureFailed, shadowsFailed, atmosphereWarned, closed;
+    private boolean listening, failed, postFailed, captureFailed, shadowsFailed, atmosphereWarned, closed, freed;
     //2026-10-30 (audit): post-process failures in a row; a few are skipped frames (a full upload stream, an allocation in a resize)
     private int postFailures;
     public static final int POST_FAILURES_ALLOWED = 3;
@@ -780,16 +780,30 @@ public final class VisualsRenderer {
 
     /** Safe on a partially created renderer and when called again: every step checks what exists, the second call frees nothing. */
     public void shutdown() {
+        close();
+        free(true);
+    }
+
+    /** 2026-10-31: out of every frame from now on (Visuals.shutdown frees the rest once no frame can use it); safe to call again. */
+    public void close() {
         FrameFlags.resetForSkippedPost();
-        if (this.closed) return;
         this.closed = true;
         if (this.listening) {
             VkFrames.removeListener(this.frameListener);
             this.listening = false;
         }
+    }
+
+    /**
+     * What the renderer gave the device; after close, once no frame can still use it. gpuTimer: the device's GPU timer pool goes too
+     * (not while the next renderer's frames may use it: it is shared). The second call frees nothing.
+     */
+    public void free(boolean gpuTimer) {
+        if (this.freed) return;
+        this.freed = true;
         //The streams are built first: without them nothing was given to the device
         if (this.upload != null) VkContext.waitIdle();
-        VkGpuTimer.free();
+        if (gpuTimer) VkGpuTimer.free();
         if (this.post != null) this.post.free();
         if (this.depthCapture != null) this.depthCapture.free();
         if (this.edgeCover != null) this.edgeCover.free();

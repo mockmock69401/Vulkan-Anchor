@@ -30,6 +30,8 @@ import static org.lwjgl.vulkan.VK10.*;
 public class MemoryManager {
     private static final boolean DEBUG = false;
     private static final boolean DEBUG_IMAGE_FREE = Boolean.getBoolean("vulkanmod.debug.imageFree");
+    //2026-10-31 diag (a font resource pack turned on in game: a buffer bound in the frame being recorded was destroyed)
+    private static final boolean DEBUG_BUFFER_FREE = Boolean.getBoolean("vulkanmod.debug.bufferFree");
     public static final long BYTES_IN_MB = 1024 * 1024;
 
     private static MemoryManager INSTANCE;
@@ -85,6 +87,7 @@ public class MemoryManager {
     }
 
     public synchronized void initFrame(int frame) {
+        if (DEBUG_BUFFER_FREE) Initializer.LOGGER.info("bufferFree initFrame {} ({} queued)", frame, this.freeableBuffers[frame].size());
         this.setCurrentFrame(frame);
         this.freeBuffers(frame);
         this.doFrameOps(frame);
@@ -165,6 +168,7 @@ public class MemoryManager {
             }
 
             buffers.putIfAbsent(buffer.getId(), buffer);
+            if (DEBUG_BUFFER_FREE) Initializer.LOGGER.info("bufferFree create 0x{} {} size {}", Long.toHexString(buffer.getId()), buffer.getClass().getSimpleName(), size);
         }
     }
 
@@ -226,12 +230,14 @@ public class MemoryManager {
     }
 
     public static void freeBuffer(long buffer, long allocation) {
+        if (DEBUG_BUFFER_FREE) Initializer.LOGGER.info("bufferFree destroy now 0x{}", Long.toHexString(buffer), new Throwable());
         vmaDestroyBuffer(ALLOCATOR, buffer, allocation);
 
         buffers.remove(buffer);
     }
 
     private static void freeBuffer(Buffer.BufferInfo bufferInfo) {
+        if (DEBUG_BUFFER_FREE) Initializer.LOGGER.info("bufferFree destroy 0x{}", Long.toHexString(bufferInfo.id()));
         vmaDestroyBuffer(ALLOCATOR, bufferInfo.id(), bufferInfo.allocation());
 
         if (bufferInfo.type() == MemoryType.Type.DEVICE_LOCAL) {
@@ -259,6 +265,12 @@ public class MemoryManager {
         checkBuffer(bufferInfo);
 
         freeableBuffers[currentFrame].add(bufferInfo);
+        if (DEBUG_BUFFER_FREE) {
+            StackTraceElement[] st = new Throwable().getStackTrace();
+            StringBuilder b = new StringBuilder();
+            for (int i = 1; i < Math.min(st.length, 12); i++) b.append("\n    at ").append(st[i]);
+            Initializer.LOGGER.info("bufferFree queue 0x{} size {} frame {}{}", Long.toHexString(bufferInfo.id()), bufferInfo.bufferSize(), currentFrame, b);
+        }
 
         if (DEBUG)
             stackTraces[currentFrame].add(new Throwable().getStackTrace());
