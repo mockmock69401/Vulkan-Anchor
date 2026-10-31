@@ -98,7 +98,8 @@ layout(location = 31) uniform vec4 blockLightColour;
 layout(location = 32) uniform vec4 moonLightColour;
 //2026-10-28, clean LightingUniforms: x the block glow, y the ore glow settings
 layout(location = 33) uniform vec4 glowParams;
-layout(location = 34) uniform vec4 reserved34;
+//2026-10-31: the held light: the eye this frame relative to the light volume's camera block corner, w the held level (HeldLightSystem)
+layout(location = 34) uniform vec4 heldEye;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -142,9 +143,15 @@ const int VANILLA_CLOUD_SKY = 15;
 //The held light's grid (HeldLight.SIDE) and how far it may lift a colour (HeldLight.MAX_GAIN)
 const int HELD_GRID_SIDE = 31;
 const float HELD_MAX_GAIN = 256.0;
-//Tuning round 1: the held light falls off HELD_FALLOFF times as fast as vanilla spreads it (levels per block from the eye), so it lights
-// the surfaces near the hand, not the whole room (refs/S12; tuning round 2: 2.0 left only a spot, 1.4; tuning round 3: 1.4 was 1.87x, 1.7)
-const float HELD_FALLOFF = 1.7;
+//2026-10-31 (the user: a held torch as bright as a placed one): the held light loses HELD_FALLOFF levels per block of its way, as a placed
+// torch's does (tuning rounds 1-3 had 1.7, to light only the surfaces near the hand). The grid's ways are in 1/HELD_DIST_STEPS blocks,
+// HELD_UNREACHED where the light does not reach (HeldLight)
+const float HELD_FALLOFF = 1.0;
+const float HELD_DIST_STEPS = 8.0;
+//The share of the grid's way counted: its 26-neighbour steps overestimate a straight way by up to about an eighth, which in open air
+// would win over the straight line and bring the blocky way back
+const float HELD_WAY_SHARE = 0.88;
+const int HELD_UNREACHED = 255;
 //2026-10-30: how far in front of a face its held light layer is read (SceneCompositeMath.HELD_FRONT_STEP): under half a block, so a
 // face half a block into its cell (a slab's) stays on its own cell instead of a boundary where depth noise flipped it with the view
 const float HELD_FRONT_STEP = 0.34375;
@@ -395,11 +402,6 @@ bool exposureMode(float mode) {
     return abs(lookParams.w - mode) < 0.5;
 }
 
-//The held level at a surface whose spread level is level, the eye's level eye: HELD_FALLOFF levels lost per level vanilla's spread loses
-float heldFalloff(float level, float eye) {
-    return level > 0.0 ? max(eye - HELD_FALLOFF*(eye - level), 0.0) : 0.0;
-}
-
 //HeldLight.whiteSurfaceScale: the scale on a held gain (largest channel gainMax) so a colour (largest channel litMax) ends at most at
 // the held light's lightmap colour (largest channel heldMax), and never darker than it was
 float heldRoom(float litMax, float gainMax, float heldMax) {
@@ -407,18 +409,21 @@ float heldRoom(float litMax, float gainMax, float heldMax) {
     return min(1.0, room/gainMax);
 }
 
-//The held grid's level at cell c (x fastest, then y, then z: HeldLight.index), 0 outside it
+//The held grid's way at cell c (x fastest, then y, then z: HeldLight.index), HELD_UNREACHED outside it
 int heldCell(ivec3 c) {
     if (any(lessThan(c, ivec3(0))) || any(greaterThanEqual(c, ivec3(HELD_GRID_SIDE)))) {
-        return 0;
+        return HELD_UNREACHED;
     }
     uint i = uint(c.x + HELD_GRID_SIDE*(c.y + HELD_GRID_SIDE*c.z));
     return int((heldLight[i >> 2u] >> ((i & 3u)*8u)) & 0xFFu);
 }
 
-//B16: the held light at a face (rel: the surface relative to the light volume's camera block corner, n its world normal): the layer of
-// cells HELD_FRONT_STEP in front of it, bilinear, skipping dark cells (inside blocks) while another is lit, as lightvolume.glsl reads faces
-float heldLightAt(vec3 rel, vec3 n) {
+//B16, 2026-10-31 (the user: the held light moved in block steps and banded at block edges): the held level at a face (rel: the surface
+// relative to the light volume's camera block corner, n its world normal). Its way from the eye: the straight line where the grid's way
+// (the layer of cells HELD_FRONT_STEP in front of the face, bilinear, skipping cells the light does not reach) from the eye's cell centre,
+// less the eye's offset from that centre, is no longer, which is open air; the grid's way round a wall where it is. The eye's exact
+// position comes each frame, so the light follows it between the grid's spreads (SceneCompositeMath.heldPath, heldLevel)
+float heldLevelAt(vec3 rel, vec3 n) {
     vec3 g = rel - heldOrigin.xyz;
     vec3 a = abs(n);
     int axis = a.x >= a.y && a.x >= a.z ? 0 : (a.y >= a.z ? 1 : 2);
@@ -428,30 +433,31 @@ float heldLightAt(vec3 rel, vec3 n) {
     vec2 q = vec2(g[u], g[v]) - 0.5;
     vec2 f = floor(q);
     vec2 t = q - f;
-    float cells[4];
-    bool anyLit = false;
+    float sum = 0.0;
+    float weights = 0.0;
+    float nearest = 1e9;
     for (int i = 0; i < 4; i++) {
         ivec3 c = ivec3(0);
         c[axis] = layer;
         c[u] = int(f.x) + (i & 1);
         c[v] = int(f.y) + ((i >> 1) & 1);
-        cells[i] = float(heldCell(c));
-        anyLit = anyLit || cells[i] > 0.0;
-    }
-    if (!anyLit) {
-        return 0.0;
-    }
-    float sum = 0.0;
-    float weights = 0.0;
-    for (int i = 0; i < 4; i++) {
-        if (cells[i] <= 0.0) {
+        int way = heldCell(c);
+        if (way >= HELD_UNREACHED) {
             continue;
         }
         float w = ((i & 1) != 0 ? t.x : 1.0 - t.x)*(((i >> 1) & 1) != 0 ? t.y : 1.0 - t.y);
-        sum += cells[i]*w;
+        sum += float(way)*w;
         weights += w;
+        nearest = min(nearest, float(way));
     }
-    return weights > 1e-6 ? sum/weights : max(max(cells[0], cells[1]), max(cells[2], cells[3]));
+    if (nearest > 1e8) {
+        return 0.0;
+    }
+    float geo = (weights > 1e-6 ? sum/weights : nearest)/HELD_DIST_STEPS;
+    vec3 eye = heldEye.xyz - heldOrigin.xyz;
+    vec3 centre = vec3(float(HELD_GRID_SIDE/2) + 0.5);
+    float path = max(distance(g, eye), geo*HELD_WAY_SHARE - distance(eye, centre));
+    return max(heldEye.w - HELD_FALLOFF*path, 0.0);
 }
 
 //The light volume's horizontal reach from the camera in blocks (its ring of sections around the camera's section)
@@ -691,8 +697,7 @@ void main() {
             }
             //B16: the held light, where the light volume is known
             if (heldOrigin.w > 0.5 && lightCamera.w > 0.5 && !fromLod) {
-                float held = heldLightAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world);
-                blockT = max(blockT, heldFalloff(held, float(heldCell(ivec3(HELD_GRID_SIDE/2)))));
+                blockT = max(blockT, heldLevelAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world));
             }
         }
         //Final fix R5: each lightmap colour is sampled once; equal levels reuse a sample (unknown light: one sample, nothing relit)

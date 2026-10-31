@@ -18,12 +18,15 @@ import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 import static org.lwjgl.vulkan.VK10.VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 /**
- * P7k design 3: the held light's grid around the player's eye, spread again when the eye block or the held light changes and
- * every REFRESH_TICKS while there is light (blocks change); uploaded only then. scene_copy reads it at COPY_HELD.
+ * P7k design 3: the held light's grid around the player's eye, its ways worked out again when the eye block or the held light changes
+ * and every REFRESH_TICKS while there is light (blocks change); uploaded only then. scene_copy reads it at COPY_HELD and, each frame,
+ * the eye's exact position and the held level at COPY_HELD_EYE (2026-10-31: the light follows the eye between spreads).
  */
 public final class HeldLightSystem {
     /** scene_copy.comp: the grid's corner minus the light volume's camera block, 1 when on. */
     public static final int COPY_HELD = 24;
+    /** scene_copy.comp: the eye's exact position minus the light volume's camera block, and the held level (0 when off). */
+    public static final int COPY_HELD_EYE = 34;
     static final int REFRESH_TICKS = 10;
 
     private final VkGpuBuffer buffer = VkGpuBuffer.device(HeldLight.BYTES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
@@ -48,7 +51,7 @@ public final class HeldLightSystem {
         //2026-10-30 (audit): a game time behind the last spread (another world) spreads again (it never refreshed there)
         if (!moved && tick >= this.spreadTick && tick - this.spreadTick < REFRESH_TICKS) return;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-        byte[] cells = HeldLight.spread(eye.getX(), eye.getY(), eye.getZ(), held,
+        byte[] cells = HeldLight.distances(eye.getX(), eye.getY(), eye.getZ(),
                 (bx, by, bz) -> level.getBlockState(pos.set(bx, by, bz)).getLightBlock(level, pos));
         ByteBuffer bytes = MemoryUtil.memAlloc(HeldLight.BYTES);
         try {
@@ -73,12 +76,18 @@ public final class HeldLightSystem {
         return 0;
     }
 
-    /** The grid's corner relative to the light volume's camera block (cameraBlock), and whether it is on. */
+    /** The grid's corner relative to the light volume's camera block (cameraBlock), and whether it is on; the eye and the level. */
     public void writeCopy(LooseUniformWriter w, float[] cameraBlock) {
-        if (!this.on || cameraBlock == null) {
+        Minecraft mc = Minecraft.getInstance();
+        if (!this.on || cameraBlock == null || mc.player == null) {
             w.putVec4(COPY_HELD, 0, 0, 0, 0);
+            if (w.has(COPY_HELD_EYE)) w.putVec4(COPY_HELD_EYE, 0, 0, 0, 0);
             return;
         }
+        //2026-10-31: the eye this frame (interpolated as the camera is), so the light moves with it, not in block steps
+        net.minecraft.world.phys.Vec3 eye = mc.player.getEyePosition(mc.getFrameTime());
+        if (w.has(COPY_HELD_EYE)) w.putVec4(COPY_HELD_EYE, (float) (eye.x - cameraBlock[0]), (float) (eye.y - cameraBlock[1]),
+                (float) (eye.z - cameraBlock[2]), this.level);
         //2026-10-30 (audit): in double, so the corner stays exact far from the origin (an int past 2^24 is not a float)
         w.putVec4(COPY_HELD, (float) (this.x - HeldLight.RADIUS - (double) cameraBlock[0]), (float) (this.y - HeldLight.RADIUS - (double) cameraBlock[1]),
                 (float) (this.z - HeldLight.RADIUS - (double) cameraBlock[2]), 1);
