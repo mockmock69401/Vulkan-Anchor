@@ -97,6 +97,15 @@ final class FontPageShadow {
         return px[0] & 255;
     }
 
+    /** 2026-10-31: level 0's w x h at (x, y), tightly packed (FontPages.widenBound). */
+    byte[] read(int x, int y, int w, int h) {
+        return region(0, new int[]{x, y, w, h});
+    }
+
+    int texelBytes() {
+        return this.texel;
+    }
+
     /** rect {x, y, w, h} of level l, tightly packed. */
     private byte[] region(int l, int[] r) {
         byte[] px = new byte[r[2] * r[3] * this.texel];
