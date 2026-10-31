@@ -49,8 +49,17 @@ public class SectionGraph {
         this.renderRegionCache = WorldRenderer.getInstance().renderRegionCache;
     }
 
+    /**
+     * 2026-10-31 (the user: Tensura's boss cutscenes showed only sky): the block holding the camera's position. Mods that move the camera
+     * by overriding Camera.getPosition() only (Bosses Rise's cinematics) leave getBlockPosition() at the player's block; the search
+     * started there, beside and behind the cinematic camera, and the frustum rejected it.
+     */
+    static BlockPos cameraBlock(Vec3 position) {
+        return BlockPos.containing(position);
+    }
+
     public void update(Camera camera, Frustum frustum, boolean spectator) {
-        BlockPos blockpos = camera.getBlockPosition();
+        BlockPos blockpos = cameraBlock(camera.getPosition());
 
         this.minecraft.getProfiler().popPush("update");
 
@@ -87,7 +96,7 @@ public class SectionGraph {
 
     private void initializeQueueForFullUpdate(Camera camera) {
         Vec3 vec3 = camera.getPosition();
-        BlockPos blockpos = camera.getBlockPosition();
+        BlockPos blockpos = cameraBlock(vec3);
         RenderSection renderSection = this.sectionGrid.getSectionAtBlockPos(blockpos);
 
         if (renderSection == null) {
