@@ -373,6 +373,33 @@ public class SPIRVUtils {
         return memUTF8(sourceName);
     }
 
+    /** A shaderc include result (freed by releaseIncludeResult): the name 0-terminated, the content as long as it is, not terminated. */
+    static long includeResult(String sourceName, byte[] content, long userData) {
+        ByteBuffer sourceNameBuffer = encodeIncludeSourceName(sourceName);
+        ByteBuffer contentBuffer = memAlloc(content.length);
+        contentBuffer.put(content).flip();
+
+        return ShadercIncludeResult.malloc()
+                .source_name(sourceNameBuffer)
+                .content(contentBuffer)
+                .user_data(userData)
+                .address();
+    }
+
+    /**
+     * 2026-10-31 (the user: Tensura (Vulkan) crashed on a language change): frees an include result's name, content and itself by
+     * their addresses. ShadercIncludeResult's source_name() and content() scan for a terminating 0 (memByteBufferNT1), and the
+     * content has none: the scan ran past it, now and then into an unmapped page (strlen64NT1 while the shaders were rebuilt).
+     */
+    static void releaseIncludeResult(long includeResult, java.util.function.LongConsumer free) {
+        if (includeResult == NULL) {
+            return;
+        }
+        free.accept(MemoryUtil.memGetAddress(includeResult + ShadercIncludeResult.SOURCE_NAME));
+        free.accept(MemoryUtil.memGetAddress(includeResult + ShadercIncludeResult.CONTENT));
+        free.accept(includeResult);
+    }
+
     private static class ShaderIncluder implements ShadercIncludeResolveI {
         @Override
         public long invoke(long user_data, long requested_source, int type, long requesting_source, long include_depth) {
@@ -394,15 +421,7 @@ public class SPIRVUtils {
         }
 
         private static long createIncludeResult(String sourceName, byte[] content, long userData) {
-            ByteBuffer sourceNameBuffer = encodeIncludeSourceName(sourceName);
-            ByteBuffer contentBuffer = memAlloc(content.length);
-            contentBuffer.put(content).flip();
-
-            return ShadercIncludeResult.malloc()
-                    .source_name(sourceNameBuffer)
-                    .content(contentBuffer)
-                    .user_data(userData)
-                    .address();
+            return includeResult(sourceName, content, userData);
         }
 
         private static long createIncludeError(String requesting, String requested, String reason, long userData) {
@@ -415,14 +434,7 @@ public class SPIRVUtils {
 
         @Override
         public void invoke(long user_data, long include_result) {
-            if (include_result == NULL) {
-                return;
-            }
-
-            ShadercIncludeResult result = ShadercIncludeResult.create(include_result);
-            memFree(result.source_name());
-            memFree(result.content());
-            result.free();
+            releaseIncludeResult(include_result, MemoryUtil::nmemFree);
         }
     }
 
