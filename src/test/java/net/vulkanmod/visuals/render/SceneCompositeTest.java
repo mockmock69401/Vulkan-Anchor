@@ -463,14 +463,33 @@ class SceneCompositeTest {
             }
         }
         assertEquals(HeldLight.SIDE, SceneCompositeMath.HELD_GRID_SIDE);
-        //Tuning round 1 (refs/S12): the held light falls off HELD_FALLOFF times as fast as vanilla's spread, from the eye's level
-        assertEquals(14f, SceneCompositeMath.heldFalloff(14, 14));
-        assertEquals(14f - SceneCompositeMath.HELD_FALLOFF * 3, SceneCompositeMath.heldFalloff(11, 14), 1e-6f);
-        assertEquals(0f, SceneCompositeMath.heldFalloff(4, 14), "far surfaces are not lifted");
-        assertEquals(0f, SceneCompositeMath.heldFalloff(0, 14));
-        for (float level = 0; level <= 14; level += 0.5f) {
-            assertTrue(SceneCompositeMath.heldFalloff(level, 14) <= level + 1e-6f, "never above vanilla's spread");
+        //2026-10-31 (the user: the held light moved in block steps and banded at block edges; a held torch as bright as a placed one):
+        // the level falls by a level per block of the light's way, as a placed torch's does
+        assertEquals(1f, SceneCompositeMath.HELD_FALLOFF);
+        assertEquals(14f, SceneCompositeMath.heldLevel(14, 0));
+        assertEquals(11f, SceneCompositeMath.heldLevel(14, 3), 1e-6f);
+        assertEquals(0f, SceneCompositeMath.heldLevel(14, 20), "far surfaces are not lifted");
+        //The way: the straight line from the eye in open air (the grid's way from the eye's cell, less the eye's offset in it, is never
+        // longer there), the grid's way around a wall where that is longer; it follows the eye inside its cell
+        assertEquals(5f, SceneCompositeMath.heldPath(5, 4.6f, 0.5f), 1e-6f);
+        assertEquals(9 * SceneCompositeMath.HELD_WAY_SHARE - 0.5f, SceneCompositeMath.heldPath(2, 9, 0.5f), 1e-6f);
+        //the grid's steps overestimate a straight way by up to an eighth: in open air its way never wins over the straight line
+        assertEquals(0.88f, SceneCompositeMath.HELD_WAY_SHARE);
+        float prev = -1;
+        for (float e = 0; e <= 1.0001f; e += 0.05f) {
+            //the eye moving 1 block toward a surface 6 blocks out: the way shrinks by as much, no step at the cell boundary
+            float way = SceneCompositeMath.heldPath(6 - e, 6 - 0.5f, Math.abs(e - 0.5f));
+            if (prev >= 0) assertEquals(0.05f, prev - way, 1e-4f, "at " + e);
+            prev = way;
         }
+        assertEquals(HeldLight.DIST_STEPS, SceneCompositeMath.HELD_DIST_STEPS);
+        assertEquals(HeldLight.UNREACHED, SceneCompositeMath.HELD_UNREACHED);
+        assertTrue(COMP.contains("float path = max(distance(g, eye), geo*HELD_WAY_SHARE - distance(eye, centre));"));
+        assertTrue(COMP.contains("return max(heldEye.w - HELD_FALLOFF*path, 0.0);"));
+        assertTrue(COMP.contains("const float HELD_FALLOFF = " + SceneCompositeMath.HELD_FALLOFF + ";"));
+        assertTrue(COMP.contains("const float HELD_DIST_STEPS = " + SceneCompositeMath.HELD_DIST_STEPS + ".0;"));
+        assertEquals(SceneCompositeMath.HELD_EYE, HeldLightSystem.COPY_HELD_EYE);
+        assertTrue(COMP.contains("layout(location = " + SceneCompositeMath.HELD_EYE + ") uniform vec4 heldEye;"));
         //2026-10-30 (the user: vertical slabs patchy under the held torch, changing with the view angle): a face half a block into its
         // cell (a slab's) read the layer exactly on a cell boundary, so depth noise flipped it between the slab's cell and the next.
         // HELD_FRONT_STEP keeps such a face on its own cell (vanilla lights a face inside its block by the block's own light) and a
@@ -483,7 +502,7 @@ class SceneCompositeTest {
         }
         assertTrue(COMP.contains("const float HELD_FRONT_STEP = " + SceneCompositeMath.HELD_FRONT_STEP + ";"));
         assertTrue(COMP.contains("int layer = int(floor(g[axis] + (n[axis] >= 0.0 ? HELD_FRONT_STEP : -HELD_FRONT_STEP)));"));
-        assertTrue(COMP.contains("blockT = max(blockT, heldFalloff(held, float(heldCell(ivec3(HELD_GRID_SIDE/2)))));"));
+        assertTrue(COMP.contains("blockT = max(blockT, heldLevelAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world));"));
         assertEquals(HeldLight.MAX_GAIN, SceneCompositeMath.HELD_MAX_GAIN);
         assertTrue(COMP.contains("if (heldOrigin.w > 0.5 && lightCamera.w > 0.5 && !fromLod) {"));
 
@@ -1036,7 +1055,7 @@ class SceneCompositeTest {
         float[] unhazed = SceneCompositeMath.composite(px, noFog, LIGHTMAP);
         assertArrayEquals(AtmosphereMath.applyHaze(a, rgb(unhazed), px.dir(), 800, AtmosphereMath.hazeAmount(a, skyT / 15, false)), rgb(out), 1e-5f);
         assertTrue(COMP.contains("float hazeSky = water ? skyShare(sky) : clamp(skyT/15.0, 0.0, 1.0);"));
-        assertTrue(COMP.contains("heldLightAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world)"));
+        assertTrue(COMP.contains("heldLevelAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world)"));
         assertTrue(COMP.contains("lightAll*perLight*ao*waterParams.y"));
         assertTrue(COMP.contains("if (!(m.y > 0.0)) {\n        return colour;"));
         //Water: the AO darkens the body's light too (W6: what a white texel receives). W10: only the sky light's ambient part of it
@@ -1395,7 +1414,7 @@ class SceneCompositeTest {
     // ---- the mirror ----
 
     private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
-            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW");
+            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "HELD_EYE", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW");
 
     @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {

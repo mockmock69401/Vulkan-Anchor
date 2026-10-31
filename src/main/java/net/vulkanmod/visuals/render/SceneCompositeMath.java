@@ -29,10 +29,17 @@ public final class SceneCompositeMath {
     public static final int VANILLA_CLOUD_SKY = 15;
     public static final int HELD_GRID_SIDE = 31;
     public static final float HELD_MAX_GAIN = 256f;
-    /** Tuning round 1: the held light loses HELD_FALLOFF levels per level of vanilla's spread. */
-    public static final float HELD_FALLOFF = 1.7f;
     /**
-     * 2026-10-30: how far in front of a face the held light reads its cell layer (scene_copy's heldLightAt). Under half a block, so a
+     * 2026-10-31 (the user: a held torch as bright as a placed one): the held light loses HELD_FALLOFF levels per block of its way, as
+     * a placed torch's does (tuning round 1 had 1.7, to light only the surfaces near the hand). HELD_DIST_STEPS and HELD_UNREACHED are
+     * HeldLight's DIST_STEPS and UNREACHED.
+     */
+    public static final float HELD_FALLOFF = 1.0f;
+    public static final int HELD_DIST_STEPS = HeldLight.DIST_STEPS, HELD_UNREACHED = HeldLight.UNREACHED;
+    /** The share of the grid's way counted: its 26-neighbour steps overestimate a straight way by up to about an eighth. */
+    public static final float HELD_WAY_SHARE = 0.88f;
+    /**
+     * 2026-10-30: how far in front of a face the held light reads its cell layer (scene_copy's heldLevelAt). Under half a block, so a
      * face half a block into its cell (a slab's) stays on its own cell instead of a cell boundary where depth noise flipped it; 11/32
      * keeps faces on the 1/16 model grid off the boundary too.
      */
@@ -62,7 +69,7 @@ public final class SceneCompositeMath {
     // ---- the composite's slots (boundary 3.2) ----
     public static final int SLOTS = 35;
     public static final int LIGHTING = 10, WATER = 11, CLOUD_SHAPE = 12, CLOUD_LIT = 14, CLOUD_AMBIENT = 15, CLOUD_LIGHT_DIR = 16, LIGHT_CAMERA = 18,
-            LIGHT_FRAC = 19, LIGHT_MODE = 21, LIGHT_SUN = 22, LIGHT_SHADE = 23, HELD_ORIGIN = 24, VANILLA_SKY = 26, VANILLA_FOG = 27, STAR_GATE = 28,
+            LIGHT_FRAC = 19, LIGHT_MODE = 21, LIGHT_SUN = 22, LIGHT_SHADE = 23, HELD_ORIGIN = 24, HELD_EYE = 34, VANILLA_SKY = 26, VANILLA_FOG = 27, STAR_GATE = 28,
             LOOK = 29, BORDER_FOG = 30, BLOCK_LIGHT = 31, MOON_LIGHT = 32, GLOW = 33;
     /** 2026-10-21: scene_copy.comp's flattenWaterTexture (far water's texture streaks; a neighbourhood filter, shader only). */
     public static final float WATER_FLATTEN = 0.4f, WATER_SAME_SURFACE = 0.03f, WATER_FLATTEN_NEAR = 24.0f, WATER_FLATTEN_FAR = 64.0f;
@@ -226,14 +233,22 @@ public final class SceneCompositeMath {
         return Math.abs(look[3] - mode) < 0.5f;
     }
 
-    /** The shader's heldLightAt layer: the held grid's cell layer read for a face at s along its axis (sign: the normal's). */
+    /** The shader's heldLevelAt layer: the held grid's cell layer read for a face at s along its axis (sign: the normal's). */
     public static int heldFrontLayer(float s, int sign) {
         return (int) Math.floor(s + HELD_FRONT_STEP * sign);
     }
 
-    /** The shader's heldFalloff: the held level at a surface whose spread level is level (eye: the eye cell's level). */
-    public static float heldFalloff(float level, float eye) {
-        return level > 0 ? Math.max(eye - HELD_FALLOFF * (eye - level), 0) : 0;
+    /**
+     * The shader's heldLevelAt, its way: the straight line from the eye (straight) where the grid's way from the eye's cell centre to the
+     * surface (grid, times HELD_WAY_SHARE) less the eye's offset from that centre (offset) is no longer, the grid's around a wall where it is.
+     */
+    public static float heldPath(float straight, float grid, float offset) {
+        return Math.max(straight, grid * HELD_WAY_SHARE - offset);
+    }
+
+    /** The shader's heldLevelAt: the held level (level) less HELD_FALLOFF per block of the way. */
+    public static float heldLevel(float level, float path) {
+        return Math.max(level - HELD_FALLOFF * path, 0);
     }
 
     /** The shader's heldRoom: HeldLight.whiteSurfaceScale. */
@@ -265,7 +280,7 @@ public final class SceneCompositeMath {
      * What the shader fetches for one pixel. colour: the main colour (display rgba); sky: nothing wrote the depth; dir: the world view
      * direction (unit); dist: the view distance; fromLod: viewpos.glsl's fromLod; normal: the pixel's world normal (0 for plants, light
      * sources and clouds); lt: lightingAt's result (read only when the pass ran); plantSun: plantSunTex (-1 elsewhere); light: pixelLight's
-     * (sky, block, known); sideSky: lightvolume.glsl's sideSky at the surface; held: heldFalloff(heldLightAt, the eye level) (0 off); cloud: vanillaCloud;
+     * (sky, block, known); sideSky: lightvolume.glsl's sideSky at the surface; held: heldLevelAt's level (heldLevel of heldPath; 0 off); cloud: vanillaCloud;
      * cloudMarch: clouds.glsl's cloudMarch along dir from farCloudNear to dist (sky: to HAZE_MAX_DISTANCE), its z counted from the camera,
      * (0, 0, 0) for none; ao: W10's aoAt(aoTex, p, dist) (read only when the pass ran and slot 10 .x > 0; 1 = no occlusion); albedo:
      * terrainAlbedoAt's colour before the lightmap (display rgb) where it holds, else null (read only with the terrain light's source 2).
