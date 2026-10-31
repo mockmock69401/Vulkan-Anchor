@@ -54,6 +54,14 @@ class VisualsSettingsPageTest {
         assertTrue(calls.contains("VisualsOptionLayout.followsMasterSwitch"), calls.toString());
     }
 
+    /** 2026-10-31 (the user): the reset to defaults is a button, not a switch that turns itself back off. */
+    @Test
+    void theResetIsAButton() throws Exception {
+        List<String> calls = Bytecode.calls(PAGE, "pages");
+        assertTrue(calls.contains("ButtonOption.<init>"), calls.toString());
+        assertFalse(calls.contains("SwitchOption.<init>"), calls.toString());
+    }
+
     @Test
     void theDhSettingsStayInTheConfigWhenHidden() {
         VisualsConfig c = new VisualsConfig();

@@ -5,6 +5,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.vulkanmod.config.gui.OptionBlock;
 import net.vulkanmod.config.gui.VOptionScreen;
+import net.vulkanmod.config.option.ButtonOption;
 import net.vulkanmod.config.option.Option;
 import net.vulkanmod.config.option.OptionPage;
 import net.vulkanmod.visuals.VisualsLog;
@@ -23,6 +24,7 @@ import static net.vulkanmod.visuals.render.PostProcessSettings.KEY_PREFIX;
  * vm opt KEY VALUE     change a shader option on the screen as a click would (KEY as in VisualsOptionLayout; true/false or a number)
  * vm state KEY         log a shader option's value, whether it can be changed (greyed out when not) and its tooltip
  * vm scroll PIXELS     scroll the open page's list (to shoot blocks below the first screen)
+ * vm press KEY        press a shader button (reset_defaults)
  * vm apply             press Apply
  * vm close             close the screen
  * </pre>
@@ -39,7 +41,8 @@ final class VisualsOptionScreenPilot {
                 mc.setScreen(screen);
                 String name = Component.translatable(KEY_PREFIX + "page." + a[1]).getString();
                 List<OptionPage> pages = pages(screen);
-                for (int i = 0; i < pages.size(); i++) {
+                //from the end: the Shaders pages follow VulkanMod's own, and in Korean "image" and VulkanMod's video page are both 화면
+                for (int i = pages.size() - 1; i >= 0; i--) {
                     if (pages.get(i).name.equals(name)) {
                         call(screen, "setOptionList", new Class<?>[]{int.class}, i);
                         VisualsLog.info("Visuals pilot: VulkanMod page " + name + " (" + i + " of " + pages.size() + ")");
@@ -66,6 +69,11 @@ final class VisualsOptionScreenPilot {
                 Field f = VOptionScreen.class.getDeclaredField("currentListIdx");
                 f.setAccessible(true);
                 pages(screen(mc)).get(f.getInt(screen(mc))).getOptionList().setScrollAmount(Double.parseDouble(a[1]));
+            }
+            case "press" -> {
+                if (!(find(screen(mc), a[1]) instanceof ButtonOption b)) throw new IllegalArgumentException("not a button: " + a[1]);
+                b.press();
+                VisualsLog.info("Visuals pilot: VulkanMod button " + a[1] + " pressed");
             }
             case "apply" -> call(screen(mc), "applyOptions", new Class<?>[0]);
             case "close" -> mc.setScreen(null);
