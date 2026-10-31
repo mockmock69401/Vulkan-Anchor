@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.vulkanmod.config.gui.ModSettingsEntry;
 import net.vulkanmod.config.gui.ModSettingsRegistry;
 import net.vulkanmod.config.gui.OptionBlock;
+import net.vulkanmod.config.option.ButtonOption;
 import net.vulkanmod.config.option.CyclingOption;
 import net.vulkanmod.config.option.Option;
 import net.vulkanmod.config.option.OptionPage;
@@ -65,9 +66,9 @@ public final class VisualsSettingsPage {
         Map<String, Option<?>> byKey = new HashMap<>();
         Map<Option<?>, Item> items = new HashMap<>();
         List<OptionPage> pages = new ArrayList<>();
-        //A reset to the defaults (which shows them, for Apply or Undo), above the first page's blocks
-        SwitchOption reset = new SwitchOption(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET), v -> {
-        }, () -> false);
+        //A reset to the defaults (which shows them, for Apply or Undo), above the first page's blocks, as a button (2026-10-31, the
+        // user: it was a switch that turned itself back off)
+        ButtonOption reset = new ButtonOption(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET));
         reset.setTooltip(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET + ".tooltip"));
         boolean first = true;
         for (VisualsOptionLayout.Page page : VisualsOptionLayout.PAGES) {
@@ -117,10 +118,8 @@ public final class VisualsSettingsPage {
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
         excludeEachOther(byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), byKey.get(VisualsOptionLayout.FRAME_GENERATION), refresh);
-        reset.setOnChange(() -> {
-            if (!Boolean.TRUE.equals(reset.getNewValue())) return;
+        reset.setOnPress(() -> {
             items.forEach(VisualsSettingsPage::showDefault);
-            reset.setNewValue(false);
             refresh.run();
         });
         return pages;
