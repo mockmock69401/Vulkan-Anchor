@@ -144,6 +144,16 @@ public class WorldRenderer {
         return INSTANCE.cameraPos;
     }
 
+    /**
+     * 2026-10-31 (the user: Tensura's boss cutscenes showed only sky): where the section grid is centred: the player, as vanilla's
+     * ViewArea (LevelRenderer.setupRender), else the camera. Following the camera, a cinematic camera that spent one frame far away
+     * (Bosses Rise interpolates from the origin) reset every section around the boss; the boss's section, never reached by the graph
+     * again, stayed uncompiled, so the boss (and the camera bone that moves the cutscene) was never drawn.
+     */
+    static Vec3 gridCentre(Vec3 player, Vec3 camera) {
+        return player != null ? player : camera;
+    }
+
     public void setupRenderer(Camera camera, Frustum frustum, boolean isCapturedFrustum, boolean spectator) {
         this.cameraPos = camera.getPosition();
         if (this.minecraft.options.getEffectiveRenderDistance() != this.renderDistance) {
@@ -156,19 +166,22 @@ public class WorldRenderer {
         float cameraX = (float) cameraPos.x();
         float cameraY = (float) cameraPos.y();
         float cameraZ = (float) cameraPos.z();
-        int sectionX = SectionPos.posToSectionCoord(cameraX);
-        int sectionY = SectionPos.posToSectionCoord(cameraY);
-        int sectionZ = SectionPos.posToSectionCoord(cameraZ);
+        //2026-10-31: the grid follows the player as vanilla's ViewArea does (gridCentre); the graph below follows the camera
+        Vec3 centre = gridCentre(this.minecraft.player != null ? this.minecraft.player.position() : null, this.cameraPos);
+        int sectionX = SectionPos.posToSectionCoord(centre.x());
+        int sectionY = SectionPos.posToSectionCoord(centre.y());
+        int sectionZ = SectionPos.posToSectionCoord(centre.z());
 
-        boolean cameraSectionChanged = this.lastCameraSectionX != sectionX
-                || this.lastCameraSectionY != sectionY
-                || this.lastCameraSectionZ != sectionZ;
-        if (cameraSectionChanged) {
+        if (this.lastCameraSectionX != sectionX || this.lastCameraSectionY != sectionY || this.lastCameraSectionZ != sectionZ) {
             this.lastCameraSectionX = sectionX;
             this.lastCameraSectionY = sectionY;
             this.lastCameraSectionZ = sectionZ;
-            this.sectionGrid.repositionCamera(cameraX, cameraZ);
+            this.sectionGrid.repositionCamera(centre.x(), centre.z());
+            this.graphNeedsUpdate = true;
         }
+        boolean cameraSectionChanged = SectionPos.posToSectionCoord(this.lastCameraX) != SectionPos.posToSectionCoord(cameraX)
+                || SectionPos.posToSectionCoord(this.lastCameraY) != SectionPos.posToSectionCoord(cameraY)
+                || SectionPos.posToSectionCoord(this.lastCameraZ) != SectionPos.posToSectionCoord(cameraZ);
 
         double entityDistanceScaling = this.minecraft.options.entityDistanceScaling().get();
         Entity.setViewScale(Mth.clamp((double) this.renderDistance / 8.0D, 1.0D, 2.5D) * entityDistanceScaling);
