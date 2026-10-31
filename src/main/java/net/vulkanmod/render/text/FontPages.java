@@ -106,6 +106,26 @@ public final class FontPages {
         }
     }
 
+    /**
+     * 2026-10-31: a bold glyph (FontBold) on the page bound now (FontTexture.add binds it before the upload): its plain glyph's w x h at
+     * (x, y), just uploaded, is widened kx to the right and ky up and down into the glyph's slot around it.
+     */
+    static void widenBound(int x, int y, int w, int h, int kx, int ky) {
+        net.vulkanmod.gl.GlTexture bound = net.vulkanmod.gl.GlTexture.getBoundTexture();
+        VulkanImage image = bound != null ? bound.getVulkanImage() : null;
+        FontPageShadow shadow = image != null ? SHADOWS.get(image) : null;
+        if (shadow == null) return;
+        int texel = shadow.texelBytes();
+        byte[] wide = FontBold.widen(shadow.read(x, y, w, h), w, h, texel, kx, ky);
+        ByteBuffer buf = MemoryUtil.memAlloc(wide.length);
+        try {
+            buf.put(wide).flip();
+            image.uploadSubTextureAsync(0, w + kx, h + 2 * ky, x, y - ky, 0, 0, 0, buf);
+        } finally {
+            MemoryUtil.memFree(buf);
+        }
+    }
+
     private static void uploadLevels(VulkanImage image, List<FontPageShadow.Upload> ups) {
         for (FontPageShadow.Upload up : ups) {
             ByteBuffer buf = MemoryUtil.memAlloc(up.pixels().length);

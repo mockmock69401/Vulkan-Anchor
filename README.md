@@ -52,6 +52,8 @@ It is experimental: compatibility and feature parity are incomplete.
 - **Text anti-aliasing** (Video settings → Graphics page): font text, the game's own font and fonts from resource packs
   alike, stays readable from far away and at an angle (signs, name tags) and looks clean in the GUI: mipmapped font pages,
   trilinear and anisotropic filtering, thin strokes kept when small. Switches instantly (Text Anti-aliasing).
+  Bold text in TTF fonts is drawn once as solid strokes instead of a second copy one pixel over, and TTF fonts smaller
+  than the default sit in the middle of the line.
 - **Distant Horizons support**: Distant Horizons LODs drawn by the Vulkan renderer, composited under vanilla terrain and
   lit and shadowed by the shaders. Works with the released Distant Horizons 3.3.1 and newer (it takes over Distant
   Horizons' internal render definition) and with Distant Horizons' render API once that is released (3.3.5).
