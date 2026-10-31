@@ -14,6 +14,8 @@ import static org.lwjgl.vulkan.VK10.*;
 
 /** A VMA buffer: device-local for GPU data, or host-visible and persistently mapped for staging and readback. */
 public final class VkGpuBuffer {
+    //2026-10-31 diag (-Dvulkanmod.debug.bufferFree, with MemoryManager's): every buffer made and destroyed, to name a destroyed handle
+    private static final boolean DEBUG_FREE = Boolean.getBoolean("vulkanmod.debug.bufferFree");
     private final long buffer;
     private final long allocation;
     private boolean freed;
@@ -38,6 +40,7 @@ public final class VkGpuBuffer {
             this.buffer = pBuffer.get(0);
             this.allocation = pAlloc.get(0);
             this.size = size;
+            if (DEBUG_FREE) org.slf4j.LoggerFactory.getLogger("VulkanMod").info("bufferFree visuals create 0x{} size {}", Long.toHexString(this.buffer), size);
             if (host) {
                 PointerBuffer pData = stack.mallocPointer(1);
                 result = Vma.vmaMapMemory(VkContext.allocator(), this.allocation, pData);
@@ -85,6 +88,7 @@ public final class VkGpuBuffer {
     public void free() {
         if (this.freed) return;
         this.freed = true;
+        if (DEBUG_FREE) org.slf4j.LoggerFactory.getLogger("VulkanMod").info("bufferFree visuals destroy 0x{} size {}", Long.toHexString(this.buffer), this.size, new Throwable());
         if (this.mapped != null) Vma.vmaUnmapMemory(VkContext.allocator(), this.allocation);
         Vma.vmaDestroyBuffer(VkContext.allocator(), this.buffer, this.allocation);
     }

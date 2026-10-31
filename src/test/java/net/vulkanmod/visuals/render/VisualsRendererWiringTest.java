@@ -110,7 +110,7 @@ class VisualsRendererWiringTest {
     @Test
     void theRendererTicksAndFreesThePostProcess() throws Exception {
         assertTrue(calls(SYSTEM, "onRecordingStarted").contains("VkPostProcess.tick"));
-        List<String> shutdown = calls(SYSTEM, "shutdown");
+        List<String> shutdown = calls(SYSTEM, "free");
         int idle = shutdown.indexOf("VkContext.waitIdle");
         int free = shutdown.indexOf("VkPostProcess.free");
         assertTrue(idle >= 0 && free > idle && free < shutdown.indexOf("DeferredFree.freeAll"), shutdown.toString());
@@ -240,7 +240,7 @@ class VisualsRendererWiringTest {
         assertTrue(calls(SYSTEM + "$OwnClouds", "computeValue").contains("FarClouds.overrides"));
         assertTrue(count(post, "FrameFlags.resetForSkippedPost") >= 3, post.toString());
         assertTrue(calls("net/vulkanmod/visuals/render/FrameFlags", "resetForSkippedPost").contains("FarClouds.set"));
-        assertEquals("FrameFlags.resetForSkippedPost", calls(SYSTEM, "shutdown").get(0), calls(SYSTEM, "shutdown").toString());
+        assertEquals("FrameFlags.resetForSkippedPost", calls(SYSTEM, "close").get(0), calls(SYSTEM, "close").toString());
         assertTrue(calls("net/vulkanmod/mixin/visuals/LevelRendererCloudsMixin", "visuals$farClouds").contains("FarClouds.replacesVanilla"));
     }
 
@@ -269,7 +269,7 @@ class VisualsRendererWiringTest {
         assertTrue(inputs.contains("VkShadowMaps$Maps.viewA"), inputs.toString());
         //Review focus 4: the lightmap follows this frame's shadows, vanilla when they are not read
         assertTrue(post.contains("SunShadows.strength") && post.contains("SunShadows.set"), post.toString());
-        List<String> shutdown = calls(SYSTEM, "shutdown");
+        List<String> shutdown = calls(SYSTEM, "free");
         assertTrue(shutdown.contains("VkShadowMaps.free"), shutdown.toString());
     }
 

@@ -8,6 +8,7 @@ import org.joml.Matrix4f;
 import org.joml.Matrix4fc;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The visuals' one renderer, tied to Reforged's WorldRenderer lifecycle: built at the end of allChanged, dropped at the start of
@@ -46,11 +47,25 @@ public final class Visuals {
     /** WorldRenderer.setLevel; safe to call again. */
     public static void shutdown() {
         if (current != null) {
-            try {
-                current.shutdown();
-            } finally {
-                current = null;
-            }
+            VisualsRenderer r = current;
+            current = null;
+            r.close();
+            boolean recording = net.vulkanmod.vulkan.Renderer.isRecording();
+            retire(() -> r.free(!recording), recording, op -> net.vulkanmod.vulkan.memory.MemoryManager.getInstance().addFrameOp(op));
+        }
+    }
+
+    /**
+     * 2026-10-31 (the user: turning on a font resource pack in game froze it): a reload's allChanged runs inside a frame (its
+     * LoadingOverlay renders it), whose commands, not yet submitted, use the old renderer's buffers and images (VK_ERROR_DEVICE_LOST
+     * once they were destroyed). Inside a frame they are freed after it completes (afterFrame: MemoryManager's frame ops, run once
+     * that frame's fence is waited for), else now.
+     */
+    static void retire(Runnable free, boolean recording, Consumer<Runnable> afterFrame) {
+        if (recording) {
+            afterFrame.accept(free);
+        } else {
+            free.run();
         }
     }
 
