@@ -540,4 +540,22 @@ class WaterTest {
         //water.glsl declares no uniforms or bindings (the composite imports it)
         assertFalse(Pattern.compile("(?m)^\\s*(layout|uniform)\\b").matcher(GLSL).find());
     }
+
+    /**
+     * 2026-11-01 (the user: BMC5's water columns looked odd): the lighting pass calls every upright translucent face glass (B5), so the
+     * composite gives water's sides no water colour; at WaterAlpha they were a see-through box. Only water's top and bottom faces take
+     * the water mark (WaterAlpha); its sides keep vanilla's opacity. Lava keeps its glow mark on every face.
+     */
+    @Test
+    void waterSidesKeepVanillasOpacity() throws Exception {
+        assertEquals(FoliageMarker.WATER_ALPHA, FoliageMarker.fluidMark(false, true, false), 0);
+        assertEquals(1f, FoliageMarker.fluidMark(false, true, true), 0);
+        assertEquals(FoliageMarker.EMISSIVE_FLUID_ALPHA, FoliageMarker.fluidMark(true, false, false), 0);
+        assertEquals(FoliageMarker.EMISSIVE_FLUID_ALPHA, FoliageMarker.fluidMark(true, true, true), 0);
+        assertEquals(1f, FoliageMarker.fluidMark(false, false, false), 0);
+        //LiquidRenderer colours the side quads (its XZ_DIRECTIONS loop) with the side mark
+        String liquid = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/net/vulkanmod/render/chunk/build/LiquidRenderer.java"));
+        String sides = liquid.substring(liquid.indexOf("for (Direction direction : Util.XZ_DIRECTIONS)"));
+        assertTrue(sides.contains("updateColor(r, g, b, brightness, this.sideMarkAlpha);"), "the side faces take the side mark");
+    }
 }

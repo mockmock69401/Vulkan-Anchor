@@ -47,6 +47,16 @@ public final class FoliageMarker {
      * opacity (1 with the visuals off: vanilla's water).
      */
     public static final float WATER_ALPHA = 247.25f / 255f;
+
+    /**
+     * A fluid quad's vertex alpha: a light-emitting fluid's mark on every face, water's on its top and bottom only, else 1. 2026-11-01
+     * (the user: BMC5's water columns looked odd): the lighting pass calls every upright translucent face glass, so the composite never
+     * gives water's sides the water colour that makes up for WaterAlpha; at WaterAlpha they were a see-through box. They keep vanilla's
+     * opacity.
+     */
+    public static float fluidMark(boolean emissive, boolean water, boolean side) {
+        return emissive ? EMISSIVE_FLUID_ALPHA : water && !side ? WATER_ALPHA : 1.0f;
+    }
     /**
      * 2026-10-29 (the user: Complementary Reimagined's High profile reflects on polished and metal blocks): 246 for a metal block's
      * shaded quads, 245 for a polished one's (smoothKind), which the composite gives the sun's highlight and the reflection pass its

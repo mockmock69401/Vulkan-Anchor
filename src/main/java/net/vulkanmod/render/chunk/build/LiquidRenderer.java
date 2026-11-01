@@ -41,8 +41,10 @@ public class LiquidRenderer {
     BuilderResources resources;
 
     private final int[] quadColors = new int[4];
-    /** The visuals (2026-10-28): the vertex alpha, the light-emitting fluid's mark (lava), water's mark, else 1. */
+    /** The visuals (2026-10-28): the vertex alpha, the light-emitting fluid's mark (lava), water's mark, else 1 (FoliageMarker.fluidMark). */
     private float markAlpha = 1.0f;
+    /** 2026-11-01: the side faces' vertex alpha (water's sides keep vanilla's opacity). */
+    private float sideMarkAlpha = 1.0f;
 
     public void setResources(BuilderResources resources) {
         this.resources = resources;
@@ -89,8 +91,9 @@ public class LiquidRenderer {
     }
 
     public void tessellate(BlockState blockState, FluidState fluidState, BlockPos blockPos, TerrainBufferBuilder vertexConsumer) {
-        this.markAlpha = blockState.getLightEmission() > 0 ? FoliageMarker.EMISSIVE_FLUID_ALPHA
-                : fluidState.is(FluidTags.WATER) ? FoliageMarker.WATER_ALPHA : 1.0f;
+        boolean emissive = blockState.getLightEmission() > 0, water = fluidState.is(FluidTags.WATER);
+        this.markAlpha = FoliageMarker.fluidMark(emissive, water, false);
+        this.sideMarkAlpha = FoliageMarker.fluidMark(emissive, water, true);
         BlockAndTintGetter region = this.resources.region;
 
         IClientFluidTypeExtensions extensions = IClientFluidTypeExtensions.of(fluidState);
@@ -224,7 +227,7 @@ public class LiquidRenderer {
             setVertex(modelQuad, 3, 1.0f, neHeight, 0.0f, u3, v3);
 
             updateQuad(this.modelQuad, blockPos, lightPipeline, Direction.UP);
-            updateColor(r, g, b, brightness);
+            updateColor(r, g, b, brightness, this.markAlpha);
 
             putQuad(modelQuad, vertexConsumer, x0, y0, z0, false);
 
@@ -250,7 +253,7 @@ public class LiquidRenderer {
             setVertex(modelQuad, 3, 1.0f, y, 1.0f, u1, v1);
 
             updateQuad(this.modelQuad, blockPos, lightPipeline, Direction.DOWN);
-            updateColor(r, g, b, brightness);
+            updateColor(r, g, b, brightness, this.markAlpha);
 
             putQuad(modelQuad, vertexConsumer, x0, y0, z0, false);
 
@@ -357,7 +360,7 @@ public class LiquidRenderer {
             setVertex(modelQuad, 3, x1, h1, z1, u0, v0);
 
             updateQuad(this.modelQuad, blockPos, lightPipeline, direction);
-            updateColor(r, g, b, brightness);
+            updateColor(r, g, b, brightness, this.sideMarkAlpha);
 
             putQuad(modelQuad, vertexConsumer, x0, y0, z0, false);
 
@@ -479,7 +482,7 @@ public class LiquidRenderer {
 
     }
 
-    private void updateColor(float r, float g, float b, float brightness) {
+    private void updateColor(float r, float g, float b, float brightness, float alpha) {
         QuadLightData quadLightData = resources.quadLightData;
 
         for (int i = 0; i < 4; i++) {
@@ -488,7 +491,7 @@ public class LiquidRenderer {
             float g1 = g * br;
             float b1 = b * br;
 
-            this.quadColors[i] = ColorUtil.RGBA.pack(r1, g1, b1, this.markAlpha);
+            this.quadColors[i] = ColorUtil.RGBA.pack(r1, g1, b1, alpha);
         }
     }
 }
