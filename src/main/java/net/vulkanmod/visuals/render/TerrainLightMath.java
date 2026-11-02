@@ -47,14 +47,46 @@ public final class TerrainLightMath {
     // ---- the albedo (terrain_light.glsl's packTerrainAlbedo, scene_copy.comp's terrainAlbedoAt) ----
     /** Set on a written albedo (the cleared value 0 is not). */
     public static final int TERRAIN_ALBEDO_WRITTEN = 0x80000000;
+    /** Set by a biome-tinted fragment (2026-11-02: the grass side's overlay keeps its albedo over its dirt layer's). */
+    public static final int TERRAIN_ALBEDO_TINTED = 0x40000000;
     /** The light value's depth step bits the albedo carries as its tag. */
-    public static final int TERRAIN_ALBEDO_TAG_MASK = 127;
+    public static final int TERRAIN_ALBEDO_TAG_MASK = 63;
     /** Only opaque texels write an albedo. */
     public static final float TERRAIN_ALBEDO_MIN_ALPHA = 0.999f;
+    /** terrainTinted: channels further apart than this share of the brightest carry a biome tint. */
+    public static final float TERRAIN_ALBEDO_TINT_MIN = 0.01f;
+    /** Within this view depth (blocks) a tinted layer counts as tinted: a depth step there is under ~0.01 block. */
+    public static final float TERRAIN_ALBEDO_LAYER_DISTANCE = 24f;
 
     /** packTerrainAlbedo: display rgb 0..1 of the fragment whose light value is light. */
     public static int packAlbedo(float r, float g, float b, int light) {
-        return TERRAIN_ALBEDO_WRITTEN | (((light >>> 12) & TERRAIN_ALBEDO_TAG_MASK) << 24) | channel(b) << 16 | channel(g) << 8 | channel(r);
+        return packAlbedo(r, g, b, light, false);
+    }
+
+    public static int packAlbedo(float r, float g, float b, int light, boolean tinted) {
+        return TERRAIN_ALBEDO_WRITTEN | (tinted ? TERRAIN_ALBEDO_TINTED : 0) | (((light >>> 12) & TERRAIN_ALBEDO_TAG_MASK) << 24)
+                | channel(b) << 16 | channel(g) << 8 | channel(r);
+    }
+
+    /** terrainTinted: the vertex colour without the lightmap carries a biome tint (shade and AO are grey). */
+    public static boolean tinted(float r, float g, float b) {
+        float max = Math.max(r, Math.max(g, b));
+        return max - Math.min(r, Math.min(g, b)) > TERRAIN_ALBEDO_TINT_MIN * max;
+    }
+
+    /**
+     * writeSceneLight's albedo write: the image's albedo after a fragment with light value v and albedo packed whose atomic min
+     * returned before. A nearer fragment writes, a tinted one at an equal value too, and nothing but a nearer tinted fragment replaces a
+     * tinted albedo with the writer's tag.
+     */
+    public static int writeAlbedo(int albedo, int v, int before, int packed) {
+        int order = Integer.compareUnsigned(v, before);
+        boolean tinted = (packed & TERRAIN_ALBEDO_TINTED) != 0;
+        if (order < 0 && tinted) return packed;
+        if (order > 0 || order == 0 && !tinted) return albedo;
+        int tag = TERRAIN_ALBEDO_TAG_MASK << 24;
+        if ((albedo & TERRAIN_ALBEDO_TINTED) != 0 && (albedo & tag) == (packed & tag)) return albedo;
+        return packed;
     }
 
     private static int channel(float c) {
