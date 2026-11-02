@@ -28,9 +28,17 @@ public final class DhWorldGenGuard {
     /** Call only with DH loaded (this class names DH's API). */
     public static void install() {
         if (!ModList.get().isLoaded(LOST_CITIES)) return;
-        MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> {
-            if (event.phase == TickEvent.Phase.END && !gaveUp && ticks++ % CHECK_TICKS == 0) apply();
-        });
+        MinecraftForge.EVENT_BUS.addListener((TickEvent.ClientTickEvent event) -> tick(event.phase));
+    }
+
+    /** 2026-11-02: a dedicated server with DH generates its players' LODs itself, so its DH config is held the same way. */
+    public static void installServer() {
+        if (!ModList.get().isLoaded(LOST_CITIES)) return;
+        MinecraftForge.EVENT_BUS.addListener((TickEvent.ServerTickEvent event) -> tick(event.phase));
+    }
+
+    private static void tick(TickEvent.Phase phase) {
+        if (phase == TickEvent.Phase.END && !gaveUp && ticks++ % CHECK_TICKS == 0) apply();
     }
 
     /** Whether a mode runs features on a partial region (what Lost Cities cannot generate in). */

@@ -22,15 +22,29 @@ class InitializerDistTest {
     private static final List<String> CLIENT_ONLY = List.of(
             "net/minecraft/client/", "com/mojang/blaze3d/", "net/minecraftforge/client/", "org/lwjgl/");
     private static final Set<String> OWN_TYPES = Set.of(
-            "net/vulkanmod/Initializer", "net/vulkanmod/ClientInitializer", "net/vulkanmod/config/Config");
+            "net/vulkanmod/Initializer", "net/vulkanmod/ClientInitializer", "net/vulkanmod/ServerInitializer", "net/vulkanmod/config/Config");
 
     @Test
     void initializerNamesNoClientType() throws Exception {
+        assertEquals(List.of(), clientTypes("net/vulkanmod/Initializer.class"));
+    }
+
+    // 2026-11-02: the dedicated server's half (Distant Horizons' world generation fixes) runs there, so it names no client type either
+    @Test
+    void serverSideClassesNameNoClientType() throws Exception {
+        for (String c : List.of("net/vulkanmod/ServerInitializer", "net/vulkanmod/visuals/dh/DhPresence", "net/vulkanmod/visuals/dh/DhWorldGenGuard",
+                "net/vulkanmod/visuals/dh/DhWorldGenIsolation", "net/vulkanmod/visuals/VisualsLog",
+                "net/vulkanmod/mixin/visuals/WorldGenRegionBlendingMixin", "net/vulkanmod/mixin/visuals/ServerChunkCacheDhIsolationMixin")) {
+            assertEquals(List.of(), clientTypes(c + ".class"), c);
+        }
+    }
+
+    private List<String> clientTypes(String resource) throws Exception {
         List<String> found = new ArrayList<>();
-        for (String s : utf8Constants("net/vulkanmod/Initializer.class")) {
+        for (String s : utf8Constants(resource)) {
             for (String prefix : CLIENT_ONLY) if (s.contains(prefix)) found.add(s);
         }
-        assertEquals(List.of(), found);
+        return found;
     }
 
     @Test

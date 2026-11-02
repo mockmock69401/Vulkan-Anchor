@@ -6,6 +6,8 @@
   "refmap": "vulkanmod.refmap.json",
   "plugin": "net.vulkanmod.mixin.MixinPlugin",
   "mixins": [
+    "visuals.WorldGenRegionBlendingMixin",
+    "visuals.ServerChunkCacheDhIsolationMixin"
   ],
   "client": [
     "window.WindowMixin",
@@ -170,8 +172,6 @@
     "visuals.LevelRendererTicksAccessor",
     "visuals.ClientLevelLightMixin",
     "visuals.ClientChunkCacheLightMixin",
-    "visuals.WorldGenRegionBlendingMixin",
-    "visuals.ServerChunkCacheDhIsolationMixin",
     "visuals.FogRendererUnderwaterMixin",
     "visuals.LevelRendererFrameTimesMixin",
     "visuals.LevelRendererEntityShadowMixin",

@@ -33,7 +33,8 @@ public class Initializer {
 		if (FMLEnvironment.dist.isClient()) {
 			ClientInitializer.register(modEventBus, modContainer);
 		} else {
-			LOGGER.info("VulkanMod is client-only; nothing to do on a dedicated server");
+			LOGGER.info("VulkanMod renders on the client; on a dedicated server only Distant Horizons' world generation fixes run");
+			ServerInitializer.register(modEventBus);
 		}
 	}
 
