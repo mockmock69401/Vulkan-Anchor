@@ -95,6 +95,12 @@ public class MinecraftMixin {
         if(this.f_91079_) cir.setReturnValue(10);
     }
 
+    //2026-11-02 (the user): while a frame generator runs, at most half the monitor's refresh rate
+    @Inject(method = "getFramerateLimit", at = @At("RETURN"), cancellable = true)
+    private void capWhileGenerating(CallbackInfoReturnable<Integer> cir) {
+        cir.setReturnValue(net.vulkanmod.visuals.framegen.GeneratorFrameCap.apply(cir.getReturnValueI()));
+    }
+
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/TimerQuery;getInstance()Ljava/util/Optional;"))
     private Optional<TimerQuery> removeTimer() {
         return Optional.empty();
