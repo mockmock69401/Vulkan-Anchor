@@ -81,14 +81,57 @@ class TerrainLightMathTest {
                 found++;
             }
         }
-        assertEquals(14, found);
+        assertEquals(17, found);
         //The read's step and slack are the write's
         assertTrue(READ.contains("float((v >> 6) & 63u)/TERRAIN_LIGHT_LEVEL_STEPS, float(v & 63u)/TERRAIN_LIGHT_LEVEL_STEPS, 2.0"));
         assertTrue(PACK.contains("return (d << 12) | (terrainLightLevel(light.x) << 6) | terrainLightLevel(light.y);"));
-        assertTrue(PACK.contains("return TERRAIN_ALBEDO_WRITTEN | (((light >> 12) & TERRAIN_ALBEDO_TAG_MASK) << 24) | (c.b << 16) | (c.g << 8) | c.r;"));
+        assertTrue(PACK.contains("return TERRAIN_ALBEDO_WRITTEN | (tinted ? TERRAIN_ALBEDO_TINTED : 0u) | (((light >> 12) & TERRAIN_ALBEDO_TAG_MASK) << 24)"));
         assertTrue(COPY.contains("return a >= TERRAIN_ALBEDO_WRITTEN && ((a >> 24) & TERRAIN_ALBEDO_TAG_MASK) == ((v >> 12) & TERRAIN_ALBEDO_TAG_MASK);"));
-        //Only the nearest-so-far, opaque and unfogged fragment writes its albedo
-        assertTrue(PACK.contains("if (v < before && unfogged && colour.a >= TERRAIN_ALBEDO_MIN_ALPHA) {"));
+        //Only an opaque and unfogged fragment writes its albedo: a tinted one at an equal or nearer value, an untinted one when nearer
+        assertTrue(PACK.contains("bool writes = unfogged && colour.a >= TERRAIN_ALBEDO_MIN_ALPHA;"));
+        assertTrue(PACK.replace("\r\n", "\n").contains("if (v < before && tinted) {\n        imageAtomicExchange(TerrainAlbedo, p, packed);\n    } else if (v < before || (v == before && tinted)) {"));
+        assertTrue(PACK.contains("if ((seen & TERRAIN_ALBEDO_TINTED) != 0u && (seen & (TERRAIN_ALBEDO_TAG_MASK << 24)) == tag && seen != stale) {"));
+        //Only near enough for a depth step to be one plane; the read of what was there before the atomic min comes first
+        assertTrue(PACK.contains("tinted = tinted && layers;"));
+        int read = PACK.indexOf("uint stale = writes && layers && !tinted ? imageAtomicOr(TerrainAlbedo, p, 0u) : 0u;");
+        assertTrue(read > 0 && read < PACK.indexOf("imageAtomicMin(TerrainLight, p, v)"));
+        //A near depth step: 0.05 near plane, 2^20 steps
+        float d = TerrainLightMath.TERRAIN_ALBEDO_LAYER_DISTANCE;
+        assertTrue(d * d / (0.05f * TerrainLightMath.TERRAIN_LIGHT_DEPTH_STEPS) < 0.012f);
+    }
+
+    /** 2026-11-02 (BMC5: grass sides speckled at night): the grass side's overlay keeps its albedo whichever coplanar write lands first. */
+    @Test
+    void theTintedOverlayKeepsItsAlbedoOverItsLayerInEitherOrder() {
+        int far = TerrainLightMath.pack(0.60f, 15, 0), side = TerrainLightMath.pack(0.30f, 15, 0);
+        int farAlbedo = TerrainLightMath.packAlbedo(0.4f, 0.4f, 0.4f, far);
+        int dirt = TerrainLightMath.packAlbedo(0.45f, 0.30f, 0.20f, side);
+        int overlay = TerrainLightMath.packAlbedo(0.35f, 0.55f, 0.20f, side, true);
+        //Dirt first: its atomic min found the far surface, the overlay's found the dirt's equal value
+        int a = TerrainLightMath.writeAlbedo(farAlbedo, side, far, dirt);
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, side, overlay));
+        //The overlay's swap landed before the dirt's write
+        a = TerrainLightMath.writeAlbedo(farAlbedo, side, side, overlay);
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, far, dirt));
+        //Overlay first: the dirt finds an equal value and writes nothing
+        a = TerrainLightMath.writeAlbedo(farAlbedo, side, far, overlay);
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, side, dirt));
+        //A nearer untinted surface still replaces a farther tinted one (another tag), and a farther tinted one writes nothing
+        int near = TerrainLightMath.pack(0.10f, 15, 0), stone = TerrainLightMath.packAlbedo(0.5f, 0.5f, 0.5f, near);
+        assertEquals(stone, TerrainLightMath.writeAlbedo(overlay, near, side, stone));
+        assertEquals(stone, TerrainLightMath.writeAlbedo(stone, side, near, overlay));
+        //Two tinted fragments at one value (leaves a depth step apart): the first one's stays
+        int leaf = TerrainLightMath.packAlbedo(0.2f, 0.5f, 0.1f, side, true);
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(overlay, side, side, leaf));
+        assertArrayEquals(new float[]{89 / 255f, 140 / 255f, 51 / 255f}, TerrainLightMath.albedoAt(side, overlay), 1e-6f);
+    }
+
+    @Test
+    void onlyABiomeTintCountsAsTinted() {
+        assertFalse(TerrainLightMath.tinted(0.8f, 0.8f, 0.8f), "face shade and AO are grey");
+        assertFalse(TerrainLightMath.tinted(0f, 0f, 0f));
+        assertTrue(TerrainLightMath.tinted(0.57f * 0.8f, 0.74f * 0.8f, 0.35f * 0.8f), "plains grass");
+        assertTrue(PACK.contains("return max(tint.r, max(tint.g, tint.b)) - min(tint.r, min(tint.g, tint.b)) > TERRAIN_ALBEDO_TINT_MIN*max(tint.r, max(tint.g, tint.b));"));
     }
 
     @Test
@@ -106,7 +149,7 @@ class TerrainLightMathTest {
     void theWritersWriteAfterTheCutoutBeforeTheLightmapAndOnlyWhenAsked() throws Exception {
         String fsh = core("basic/terrain/terrain.fsh"), fshZ = core("basic/terrain/terrain_z.fsh"), vsh = core("basic/terrain/terrain.vsh");
         String json = core("basic/terrain/terrain.json");
-        String write = "writeSceneLight(lightLevels, vec4(texel.rgb * albedoTint, texel.a), vertexDistance <= FogStart);";
+        String write = "writeSceneLight(lightLevels, vec4(texel.rgb * albedoTint, texel.a), vertexDistance <= FogStart, terrainTinted(albedoTint));";
         assertTrue(fsh.indexOf("discard;") < fsh.indexOf(write), "a cut-out texel writes nothing");
         assertTrue(fshZ.contains(write) && fshZ.contains("layout(early_fragment_tests) in;"));
         for (String f : new String[]{fsh, fshZ}) {

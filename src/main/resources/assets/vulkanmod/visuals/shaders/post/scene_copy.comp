@@ -576,7 +576,7 @@ vec3 sourceView(float source, bool fromLod, bool albedo) {
 
 //2026-10-23, the albedo (terrain_light.glsl packs it, TerrainLightMath mirrors it): rgb, the depth step's low bits, written on top
 const uint TERRAIN_ALBEDO_WRITTEN = 2147483648u;
-const uint TERRAIN_ALBEDO_TAG_MASK = 127u;
+const uint TERRAIN_ALBEDO_TAG_MASK = 63u;
 
 //The colour before the lightmap (display values) of the fragment the terrain light holds here, when that fragment wrote it (opaque,
 // unfogged); a farther fragment's that landed last carries another depth tag
