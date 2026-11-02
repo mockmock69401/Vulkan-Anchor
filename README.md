@@ -86,8 +86,9 @@ It is experimental: compatibility and feature parity are incomplete.
    OpenGL rendering or presents frames itself conflict with a Vulkan renderer.
 
 Frame generation costs GPU time: the game renders fewer real frames than with it off, and at high frame rates it can
-show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. Mobs, particles
-and the HUD keep the real frame rate.
+show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. While it runs, the
+game renders at most half your monitor's refresh rate (a lower frame limit in Video Settings still applies), so real
+and generated frames together fill the refresh. Mobs, particles and the HUD keep the real frame rate.
 
 ## Tested modpacks: mods to disable
 
