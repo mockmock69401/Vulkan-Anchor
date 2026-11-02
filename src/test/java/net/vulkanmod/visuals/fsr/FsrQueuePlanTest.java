@@ -21,6 +21,23 @@ class FsrQueuePlanTest {
         assertEquals(Optional.of(new FsrQueuePlan(0, 1, 0, 2, 2, 1)), nvidiaLike());
     }
 
+    @Test void aSeparatePresentFamilyMovesThePresentQueueOutOfTheGameFamily() {
+        //2026-11-02: the compute family can present, so the presenter thread's command lists get their own eight
+        Optional<FsrQueuePlan> plan = FsrQueuePlan.plan(new int[]{G | C | T, T, C | T}, new int[]{16, 2, 8},
+                new boolean[]{true, false, true}, new int[]{0, 1, 2}, 0);
+        assertEquals(Optional.of(new FsrQueuePlan(2, 1, 0, 1, 2, 2)), plan);
+        //without the option the first family that can present takes it, as before
+        assertEquals(Optional.of(new FsrQueuePlan(0, 1, 0, 2, 2, 1)), FsrQueuePlan.plan(new int[]{G | C | T, T, C | T},
+                new int[]{16, 2, 8}, new boolean[]{true, false, true}, new int[]{0, 1, 2}));
+    }
+
+    @Test void aSeparatePresentFamilyFallsBackToTheGameFamily() {
+        //only the game family can present (the NVIDIA-like layout above): the present queue stays there
+        Optional<FsrQueuePlan> plan = FsrQueuePlan.plan(new int[]{G | C | T, T, C | T}, new int[]{16, 2, 8},
+                new boolean[]{true, false, false}, new int[]{0, 1, 2}, 0);
+        assertEquals(nvidiaLike(), plan);
+    }
+
     @Test void amdLikeFamiliesPlaceAllThree() {
         Optional<FsrQueuePlan> plan = FsrQueuePlan.plan(new int[]{G | C | T, C | T, T}, new int[]{1, 4, 2},
                 new boolean[]{true, true, false}, new int[]{0, 1, 2});

@@ -224,7 +224,10 @@ public final class FsrSwapchain {
      * wait-before-signal the gate prevents, and the recreation's wait for FSR's presents would then never return).
      */
     public static boolean beforePresent() {
-        if (state != State.LIVE || !FsrFrame.takeGeneratedThisFrame() || !gateOn) return true;
+        if (state != State.LIVE) return true;
+        boolean generated = FsrFrame.takeGeneratedThisFrame();
+        awaitCommandLists();
+        if (!generated || !gateOn) return true;
         try {
             FsrInterpolationGate.Wait w = GATE.next(FSR_MEMORY, Vulkan.getSwapChain().getId());
             if (w == null) {
@@ -254,6 +257,213 @@ public final class FsrSwapchain {
             refuseGate("reading FSR's interpolation wait failed: " + e);
         }
         return true;
+    }
+
+    /** FsrCommandPoolGate: whether {@link #awaitCommandLists} may read FSR's command list pool; refused once, off for the session. */
+    private static boolean poolGateOn, poolGateRefused;
+    private static final FsrCommandPoolGate.Checker POOL = new FsrCommandPoolGate.Checker();
+    /** The longest {@link #awaitCommandLists} waits; past it the frame is presented anyway and FSR turned off at the recreation. */
+    private static final long COMMAND_LIST_WAIT_TIMEOUT_NS = 1_000_000_000L;
+    /** How long one wait for any busy list lasts before the pool is read again (FSR's threads take and free lists meanwhile). */
+    private static final long COMMAND_LIST_WAIT_STEP_NS = 2_000_000L;
+    /**
+     * Free command lists each of FSR's queue families keeps before a present. One present takes up to 7 with the presenter thread
+     * (BMC5, uncapped), so this cannot keep a shared family from running out (FsrQueuePlan.SEPARATE_PRESENT_FAMILY does); it is the
+     * last line when a family runs low. Some busy lists free only after the next present (a reserve of 8 never came: 7 of 8 for a
+     * second), so at most 7. With the pilot, -Dvulkanmod.fsr.commandListReserve sets it (1 to 9; 8 and 9 test the timeout).
+     */
+    static final int COMMAND_LIST_RESERVE = PILOT ? Math.max(1, Math.min(9, Integer.getInteger("vulkanmod.fsr.commandListReserve", 2))) : 2;
+    /** The queue families FSR's queues are in (game, present, acquire, compute), and the GPU's family count, set when the gate arms. */
+    private static int[] poolFamilies = new int[0];
+    private static int familyCount;
+    //with the pilot: presents checked since the last log line, those that waited and how long, and the fewest free lists seen
+    private static int poolFrames, poolWaited, poolMinFree = FsrCommandPoolGate.LISTS;
+    private static long poolWaitNs, poolWaitMaxNs, nextPoolLogNs, poolTakenBetweenMax, poolTakenPresentMax;
+    private static int poolFreeAfterMin = FsrCommandPoolGate.LISTS;
+    /** With the pilot: the fewest free lists after a present, by queue family. */
+    private static final int[] poolFreeAfterByFamily = filledLists(new int[32]);
+
+    private static int[] filledLists(int[] a) {
+        java.util.Arrays.fill(a, FsrCommandPoolGate.LISTS);
+        return a;
+    }
+
+    /**
+     * Renderer.submitFrame, before every present while FSR is live (2026-11-02, BMC5 crash at amd_fidelityfx_vk.dll+0x281e9): waits
+     * until each of FSR's queue families has {@link #COMMAND_LIST_RESERVE} free command lists in FSR's pool, so neither this present
+     * nor the presenter thread's next ones find all eight busy (FSR then writes through NULL). Render thread, outside QueueLock (the
+     * presenter thread's submits take it). Never throws and never skips the present (2026-11-03: a skipped present left a list waiting
+     * on it, and FSR's teardown never finished): a failed or implausible read turns the gate off for the session; lists that stay busy
+     * for {@link #COMMAND_LIST_WAIT_TIMEOUT_NS} turn FSR off at the recreation.
+     */
+    private static void awaitCommandLists() {
+        if (!poolGateOn) return;
+        try {
+            VkDevice device = Vulkan.getVkDevice();
+            long sc = Vulkan.getSwapChain().getId();
+            long start = System.nanoTime();
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                LongBuffer counter = stack.mallocLong(1);
+                int capacity = FsrCommandPoolGate.FAMILY_SETS * FsrCommandPoolGate.LISTS;
+                LongBuffer semaphores = stack.mallocLong(capacity);
+                LongBuffer values = stack.mallocLong(capacity);
+                VkSemaphoreWaitInfo info = VkSemaphoreWaitInfo.calloc(stack).sType$Default().flags(VK12.VK_SEMAPHORE_WAIT_ANY_BIT);
+                while (true) {
+                    FsrCommandPoolGate.Family[] families = POOL.read(FSR_MEMORY, sc, device.address(), familyCount, poolFamilies);
+                    if (families == null) {
+                        refusePoolGate("FSR's command list pool is implausible (" + POOL.failure() + ")");
+                        return;
+                    }
+                    int minFree = FsrCommandPoolGate.LISTS;
+                    int busyLists = 0;
+                    for (FsrCommandPoolGate.Family f : families) {
+                        int busy = 0;
+                        for (FsrCommandPoolGate.CommandList l : f.made()) {
+                            if (VK12.vkGetSemaphoreCounterValue(device, l.semaphore(), counter) != VK_SUCCESS) {
+                                refusePoolGate("reading a command list's semaphore failed");
+                                return;
+                            }
+                            Boolean b = FsrCommandPoolGate.busy(l.value(), counter.get(0));
+                            if (b == null) {
+                                POOL.implausibleCounter(l, counter.get(0));
+                                refusePoolGate("FSR's command list pool is implausible (" + POOL.failure() + ")");
+                                return;
+                            }
+                            if (b) {
+                                busy++;
+                                semaphores.put(busyLists, l.semaphore());
+                                values.put(busyLists, l.value());
+                                busyLists++;
+                            }
+                        }
+                        minFree = Math.min(minFree, FsrCommandPoolGate.free(busy, f.making()));
+                    }
+                    long now = System.nanoTime();
+                    if (minFree >= COMMAND_LIST_RESERVE) {
+                        if (PILOT) tallyPool(minFree, now - start, POOL.takeTaken());
+                        return;
+                    }
+                    if (now - start >= COMMAND_LIST_WAIT_TIMEOUT_NS) {
+                        //the frame is presented (a busy list may wait on it); FSR stops at the recreation
+                        poolGateOn = false;
+                        FsrSupport.markFailed("FSR's command lists stayed busy (" + minFree + " of " + FsrCommandPoolGate.LISTS
+                                + " free after " + (now - start) / 1_000_000 + " ms, " + COMMAND_LIST_RESERVE + " needed)", null);
+                        Renderer.scheduleSwapChainUpdate();
+                        return;
+                    }
+                    if (busyLists == 0) {
+                        //only lists FSR is making right now: they are busy or free in a moment
+                        Thread.yield();
+                        continue;
+                    }
+                    info.semaphoreCount(busyLists).pSemaphores(semaphores.limit(busyLists)).pValues(values.limit(busyLists));
+                    int r = VK12.vkWaitSemaphores(device, info, Math.min(COMMAND_LIST_WAIT_STEP_NS, COMMAND_LIST_WAIT_TIMEOUT_NS - (now - start)));
+                    semaphores.clear();
+                    values.clear();
+                    if (r != VK_SUCCESS && r != VK_TIMEOUT) {
+                        refusePoolGate("waiting for a command list failed (VkResult " + r + ")");
+                        return;
+                    }
+                }
+            }
+        } catch (RuntimeException | LinkageError e) {
+            refusePoolGate("reading FSR's command list pool failed: " + e);
+        }
+    }
+
+    private static void tallyPool(int minFree, long waited, long taken) {
+        poolFrames++;
+        poolTakenBetweenMax = Math.max(poolTakenBetweenMax, taken);
+        if (waited > 50_000L) {
+            poolWaited++;
+            poolWaitNs += waited;
+            poolWaitMaxNs = Math.max(poolWaitMaxNs, waited);
+        }
+        poolMinFree = Math.min(poolMinFree, minFree);
+        long now = System.nanoTime();
+        if (now >= nextPoolLogNs) {
+            nextPoolLogNs = now + 2_000_000_000L;
+            VisualsLog.info("Visuals FSR: command lists: " + poolFrames + " presents, fewest free " + poolMinFree + " of "
+                    + FsrCommandPoolGate.LISTS + " (" + COMMAND_LIST_RESERVE + " kept), " + poolWaited + " waited, "
+                    + poolWaitNs / 100_000 / 10.0 + " ms in all, at most " + poolWaitMaxNs / 100_000 / 10.0 + " ms; taken at most "
+                    + poolTakenBetweenMax + " between presents, " + poolTakenPresentMax + " during one, fewest free after one " + poolFreeAfterMin
+                    + " (" + java.util.Arrays.stream(poolFamilies).filter(x -> x < poolFreeAfterByFamily.length)
+                            .mapToObj(x -> "family " + x + " " + poolFreeAfterByFamily[x]).collect(java.util.stream.Collectors.joining(", ")) + ")");
+            poolFrames = poolWaited = 0;
+            poolMinFree = FsrCommandPoolGate.LISTS;
+            poolWaitNs = poolWaitMaxNs = 0L;
+            poolTakenBetweenMax = poolTakenPresentMax = 0L;
+            poolFreeAfterMin = FsrCommandPoolGate.LISTS;
+            filledLists(poolFreeAfterByFamily);
+        }
+    }
+
+    /**
+     * With the pilot, Renderer.submitFrame right after FSR's present: how many command lists the present took (with whatever the
+     * presenter thread took meanwhile) and how few were left free, for tuning {@link #COMMAND_LIST_RESERVE}.
+     */
+    public static void afterPresent() {
+        if (!PILOT || !poolGateOn) return;
+        try {
+            VkDevice device = Vulkan.getVkDevice();
+            FsrCommandPoolGate.Family[] families = POOL.read(FSR_MEMORY, Vulkan.getSwapChain().getId(), device.address(), familyCount, poolFamilies);
+            if (families == null) return;
+            poolTakenPresentMax = Math.max(poolTakenPresentMax, POOL.takeTaken());
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                LongBuffer counter = stack.mallocLong(1);
+                for (FsrCommandPoolGate.Family f : families) {
+                    int busy = 0;
+                    for (FsrCommandPoolGate.CommandList l : f.made()) {
+                        if (VK12.vkGetSemaphoreCounterValue(device, l.semaphore(), counter) == VK_SUCCESS && counter.get(0) < l.value()) busy++;
+                    }
+                    int free = FsrCommandPoolGate.free(busy, f.making());
+                    poolFreeAfterMin = Math.min(poolFreeAfterMin, free);
+                    if (f.family() < poolFreeAfterByFamily.length) poolFreeAfterByFamily[f.family()] = Math.min(poolFreeAfterByFamily[f.family()], free);
+                }
+            }
+        } catch (RuntimeException | LinkageError e) {
+            VisualsLog.warn("Visuals FSR: reading the command lists after a present failed: " + e);
+        }
+    }
+
+    /** Turns the command list gate off for the session and says so once; FSR runs on as it did before the gate. */
+    private static void refusePoolGate(String why) {
+        poolGateOn = false;
+        if (!poolGateRefused) VisualsLog.warn("Visuals FSR: command list gate off, " + why + "; FSR may crash when its command lists run out");
+        poolGateRefused = true;
+    }
+
+    /**
+     * When FSR's swapchain goes live: the command list gate is used only when the loaded DLL holds, at the RVAs the pool's layout was
+     * read from, exactly those instructions (FsrCommandPoolGate.SIGNATURES). Watches the families of FSR's queues. Never throws.
+     */
+    private static void armPoolGate(long imageBase, DeviceManager.FsrQueues q) {
+        POOL.reset();
+        poolGateOn = false;
+        if (poolGateRefused) return;
+        try {
+            if (FsrInterpolationGate.imageSize(FSR_MEMORY, imageBase) == 0L) {
+                refusePoolGate("the FidelityFX module has no PE image at 0x" + Long.toHexString(imageBase));
+                return;
+            }
+            String mismatch = FsrCommandPoolGate.codeMismatch(FSR_MEMORY, imageBase);
+            if (mismatch != null) {
+                refusePoolGate("the loaded FidelityFX module differs from the one the gate was made for (" + mismatch + ")");
+                return;
+            }
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                IntBuffer count = stack.ints(0);
+                vkGetPhysicalDeviceQueueFamilyProperties(DeviceManager.physicalDevice, count, null);
+                familyCount = count.get(0);
+            }
+            poolFamilies = java.util.stream.IntStream.of(q.gameFamily(), q.presentFamily(), q.acquireFamily(), q.computeFamily())
+                    .filter(f -> f >= 0).distinct().toArray();
+            poolGateOn = true;
+            if (PILOT) VisualsLog.info("Visuals FSR: command list gate on, families " + java.util.Arrays.toString(poolFamilies)
+                    + ", " + COMMAND_LIST_RESERVE + " lists kept free");
+        } catch (RuntimeException | LinkageError e) {
+            refusePoolGate("checking the FidelityFX module failed: " + e);
+        }
     }
 
     /**
@@ -403,7 +613,10 @@ public final class FsrSwapchain {
         Action a = FsrLifecycle.next(state, wanted(), sc.getWidth(), sc.getHeight(), sizeChanged);
         state = FsrLifecycle.run(state, a, bridge);
         //a swapchain FSR remade starts its counts over (start armed the gate already)
-        if (state == State.LIVE && a != Action.START) GATE.reset();
+        if (state == State.LIVE && a != Action.START) {
+            GATE.reset();
+            POOL.reset();
+        }
     }
 
     /**
@@ -516,6 +729,7 @@ public final class FsrSwapchain {
                 sc.adopt(replaced);
             }
             armGate(dll.imageBase());
+            armPoolGate(dll.imageBase(), q);
 
             createFrameGenerationContext();
             FsrCapture.setLive(true);

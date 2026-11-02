@@ -146,9 +146,10 @@ its output is checked in; the build does not need a C compiler.
 
 ## Known limitations
 
-- FSR 3.1 frame generation runs on Windows only; on one tested driver it needed a workaround that reads the bundled
-  FidelityFX library's internal state, so the bundled library cannot be swapped for another version without updating
-  that code (the workaround switches itself off if the library differs).
+- FSR 3.1 frame generation runs on Windows only. Two workarounds read the bundled FidelityFX library's internal state:
+  one keeps its presents from freezing on one tested driver, the other waits for free command lists before each present
+  (when the library ran out of them, the game crashed). The bundled library cannot be swapped for another version
+  without updating that code (both switch themselves off if the library differs).
 - Frame generation moves mobs and particles at the real frame rate; fast-moving objects can look doubled.
 - Some mods' own OpenGL shaders still fail to convert (for example shaders that read texture buffers); their effects
   fall back to a plain shader instead of crashing.

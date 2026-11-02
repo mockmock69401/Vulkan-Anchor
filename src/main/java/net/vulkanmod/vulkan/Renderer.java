@@ -539,6 +539,7 @@ public class Renderer {
                 boolean present = !fsrFence || net.vulkanmod.visuals.fsr.FsrSwapchain.beforePresent();
                 vkResult = present ? net.vulkanmod.vulkan.queue.QueueLock.present(DeviceManager.getPresentQueue().queue(), presentInfo)
                         : VK_ERROR_OUT_OF_DATE_KHR;
+                if (fsrFence && present) net.vulkanmod.visuals.fsr.FsrSwapchain.afterPresent();
             } finally {
                 if (fsrFence) signalAfterFsr(inFlightFences.get(currentFrame));
             }

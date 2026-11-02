@@ -27,19 +27,28 @@ public record FsrQueuePlan(int presentFamily, int presentIndex, int acquireFamil
      * @param usedFamilies   VulkanMod's families, each using its queue 0
      */
     public static Optional<FsrQueuePlan> plan(int[] flags, int[] counts, boolean[] presentSupport, int[] usedFamilies) {
+        return plan(flags, counts, presentSupport, usedFamilies, -1);
+    }
+
+    /**
+     * 2026-11-03 (FSR command list crash, FsrCommandPoolGate): the present queue goes outside the game queue's family when another
+     * family can take it, so the presenter thread's command lists come from that family's eight. Sharing one family (the RTX 5070's
+     * family 0), one present took up to 7 lists and none were left (3 of 3 uncapped pilots crashed); apart, 3 of 3 ran through with
+     * 2 free in the game's family at the fewest. FSR then transfers the images' queue family ownership on every present, which cost
+     * about a sixth of the real frames uncapped. -Dvulkanmod.fsr.separatePresentFamily=false keeps the queues together.
+     */
+    public static final boolean SEPARATE_PRESENT_FAMILY = !"false".equals(System.getProperty("vulkanmod.fsr.separatePresentFamily"));
+
+    /** {@link #plan(int[], int[], boolean[], int[])}, with the present queue outside avoidFamily when possible (-1: anywhere). */
+    public static Optional<FsrQueuePlan> plan(int[] flags, int[] counts, boolean[] presentSupport, int[] usedFamilies, int avoidFamily) {
         //the next spare queue index per family
         int[] next = new int[counts.length];
         for (int family : usedFamilies) {
             next[family] = 1;
         }
 
-        int present = -1;
-        for (int f = 0; f < counts.length && present < 0; f++) {
-            if (presentSupport[f] && (flags[f] & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) != 0
-                    && next[f] < counts[f]) {
-                present = f;
-            }
-        }
+        int present = presentFamily(flags, counts, presentSupport, next, avoidFamily);
+        if (present < 0 && avoidFamily >= 0) present = presentFamily(flags, counts, presentSupport, next, -1);
         if (present < 0) return Optional.empty();
         int presentIndex = next[present]++;
 
@@ -57,6 +66,17 @@ public record FsrQueuePlan(int presentFamily, int presentIndex, int acquireFamil
         int computeIndex = compute < 0 ? -1 : next[compute]++;
 
         return Optional.of(new FsrQueuePlan(present, presentIndex, acquire, acquireIndex, compute, computeIndex));
+    }
+
+    /** The first family other than skip that can present and transfer and has a spare queue, or -1. */
+    private static int presentFamily(int[] flags, int[] counts, boolean[] presentSupport, int[] next, int skip) {
+        for (int f = 0; f < counts.length; f++) {
+            if (f != skip && presentSupport[f] && (flags[f] & (VK_QUEUE_TRANSFER_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) != 0
+                    && next[f] < counts[f]) {
+                return f;
+            }
+        }
+        return -1;
     }
 
     private static int spareCompute(int[] flags, int[] counts, int[] next, boolean withoutGraphics) {
