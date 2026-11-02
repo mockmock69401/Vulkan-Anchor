@@ -6,6 +6,7 @@ import com.seibel.distanthorizons.api.interfaces.config.IDhApiConfigValue;
 import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.vulkanmod.visuals.VisualsLog;
 
 /**
@@ -28,9 +29,17 @@ public final class DhWorldGenGuard {
     /** Call only with DH loaded (this class names DH's API). */
     public static void install() {
         if (!ModList.get().isLoaded(LOST_CITIES)) return;
-        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
-            if (!gaveUp && ticks++ % CHECK_TICKS == 0) apply();
-        });
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> tick());
+    }
+
+    /** 2026-11-02: a dedicated server with DH generates its players' LODs itself, so its DH config is held the same way. */
+    public static void installServer() {
+        if (!ModList.get().isLoaded(LOST_CITIES)) return;
+        NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> tick());
+    }
+
+    private static void tick() {
+        if (!gaveUp && ticks++ % CHECK_TICKS == 0) apply();
     }
 
     /** Whether a mode runs features on a partial region (what Lost Cities cannot generate in). */
