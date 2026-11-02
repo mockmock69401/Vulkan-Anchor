@@ -61,7 +61,7 @@ class FsrInterpolationGateTest {
     }
 
     /** A module mapped at base: the PE image as the Windows loader lays it out (headers, then each section at its RVA). */
-    private static final class Image implements FsrInterpolationGate.Memory {
+    static final class Image implements FsrInterpolationGate.Memory {
         final long base;
         final byte[] bytes;
 
@@ -106,7 +106,7 @@ class FsrInterpolationGateTest {
         }
     }
 
-    private static byte[] bundledDll() throws IOException {
+    static byte[] bundledDll() throws IOException {
         try (InputStream in = FsrInterpolationGateTest.class.getResourceAsStream(FsrNative.RESOURCE)) {
             assertNotNull(in, "the bundled DLL is on the test classpath");
             return in.readAllBytes();

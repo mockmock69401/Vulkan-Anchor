@@ -75,7 +75,12 @@ public final class FsrInterpolationGate {
 
     /** The first signature the module at imageBase does not hold, or null when it holds them all. */
     static String codeMismatch(Memory m, long imageBase) {
-        for (Signature s : SIGNATURES) {
+        return codeMismatch(m, imageBase, SIGNATURES);
+    }
+
+    /** The first of signatures the module at imageBase does not hold, or null when it holds them all. */
+    static String codeMismatch(Memory m, long imageBase, Signature[] signatures) {
+        for (Signature s : signatures) {
             for (int i = 0; i < s.bytes().length; i++) {
                 if (m.getByte(imageBase + s.rva() + i) != s.bytes()[i]) return s.what() + " at RVA 0x" + Integer.toHexString(s.rva());
             }

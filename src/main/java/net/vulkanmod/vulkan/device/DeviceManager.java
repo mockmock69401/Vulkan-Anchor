@@ -198,7 +198,7 @@ public abstract class DeviceManager {
 
             //FSR design 4.2: FSR's queues and features only when FSR is possible; otherwise one queue per family, as before
             FsrSupport.probe(physicalDevice);
-            Optional<FsrQueuePlan> fsrPlan = planFsrQueuesSafely(uniqueQueueFamilies, stack);
+            Optional<FsrQueuePlan> fsrPlan = planFsrQueuesSafely(uniqueQueueFamilies, indices.graphicsFamily, stack);
             FsrFeatures fsrFeatures = fsrPlan.isPresent() ? fsrFeaturesSafely(stack) : FsrFeatures.NONE;
             if (fsrPlan.isPresent() && !fsrFeatures.storageImageWithoutFormat()) {
                 //AMD's shaders declare storage image reads and writes without a format: without both, no FSR queues or features
@@ -330,9 +330,9 @@ public abstract class DeviceManager {
     }
 
     /** {@link #planFsrQueues} that never throws: device creation must not fail because of FSR (FSR is then impossible, QUEUES). */
-    private static Optional<FsrQueuePlan> planFsrQueuesSafely(int[] usedFamilies, MemoryStack stack) {
+    private static Optional<FsrQueuePlan> planFsrQueuesSafely(int[] usedFamilies, int gameFamily, MemoryStack stack) {
         try {
-            return planFsrQueues(usedFamilies, stack);
+            return planFsrQueues(usedFamilies, gameFamily, stack);
         } catch (RuntimeException | LinkageError e) {
             FsrSupport.queuesPlanned(false);
             VisualsLog.warn("Visuals FSR: planning FSR's queues failed -> " + FsrSupport.current(), e);
@@ -354,7 +354,7 @@ public abstract class DeviceManager {
      * FSR design 4.2: plans FSR's queues when everything but the queues allows FSR, and records in {@link FsrSupport} whether
      * they could be placed. Empty when FSR is impossible here or no spare queues were found.
      */
-    private static Optional<FsrQueuePlan> planFsrQueues(int[] usedFamilies, MemoryStack stack) {
+    private static Optional<FsrQueuePlan> planFsrQueues(int[] usedFamilies, int gameFamily, MemoryStack stack) {
         FsrSupport.queuesPlanned(true);
         if (FsrSupport.current() != FsrSupport.Reason.OK) {
             FsrSupport.queuesPlanned(false);
@@ -379,7 +379,15 @@ public abstract class DeviceManager {
             presentSupport[i] = result == VK_SUCCESS && supported.get(0) == VK_TRUE;
         }
 
-        Optional<FsrQueuePlan> plan = FsrQueuePlan.plan(flags, counts, presentSupport, usedFamilies);
+        //2026-11-02: the families as the plan sees them (FSR's command lists come from one pool per family, eight each)
+        StringBuilder log = new StringBuilder();
+        for (int i = 0; i < flags.length; i++) {
+            log.append(i == 0 ? "" : ", ").append(i).append(": flags 0x").append(Integer.toHexString(flags[i])).append(" x").append(counts[i])
+                    .append(presentSupport[i] ? " present" : "");
+        }
+        VisualsLog.info("Visuals FSR: queue families " + log + (FsrQueuePlan.SEPARATE_PRESENT_FAMILY ? ", present queue apart from the game's family" : ""));
+        Optional<FsrQueuePlan> plan = FsrQueuePlan.plan(flags, counts, presentSupport, usedFamilies,
+                FsrQueuePlan.SEPARATE_PRESENT_FAMILY ? gameFamily : -1);
         FsrSupport.queuesPlanned(plan.isPresent());
         VisualsLog.info("Visuals FSR: queues " + plan.map(FsrQueuePlan::toString).orElse("none") + " -> " + FsrSupport.current());
         return plan;
