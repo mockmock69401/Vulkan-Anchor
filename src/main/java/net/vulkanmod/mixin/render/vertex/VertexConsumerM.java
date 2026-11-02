@@ -53,14 +53,23 @@ public interface VertexConsumerM {
 
             int color = ColorUtil.RGBA.pack(r, g, b, useQuadColorData ? alpha * ColorUtil.RGBA.unpackA(js[i + 3]) : alpha);
 
-            int light = lights[k];
+            //NeoForge's patch: the light and normal baked into the quad count too (Indigo passes light 0 and bakes the real one)
+            int baked = js[i + 6];
+            int light = Math.max(lights[k] & 0xFFFF, baked & 0xFFFF) | Math.max(lights[k] >>> 16, baked >>> 16) << 16;
             float u = Float.intBitsToFloat(js[i + 4]);
             float v = Float.intBitsToFloat(js[i + 5]);
 
             Vector4f vector4f = new Vector4f(x, y, z, 1.0f);
             vector4f.mul(matrix4f);
 
-            this.addVertex(vector4f.x(), vector4f.y(), vector4f.z(), color, u, v, overlay, light, normal.x(), normal.y(), normal.z());
+            Vector3f vertexNormal = normal;
+            int bakedNormal = js[i + 7];
+            if ((bakedNormal & 0xFFFFFF) != 0) {
+                vertexNormal = new Vector3f((byte) bakedNormal / 127.0f, (byte) (bakedNormal >> 8) / 127.0f, (byte) (bakedNormal >> 16) / 127.0f)
+                        .mul(matrixEntry.normal());
+            }
+
+            this.addVertex(vector4f.x(), vector4f.y(), vector4f.z(), color, u, v, overlay, light, vertexNormal.x(), vertexNormal.y(), vertexNormal.z());
         }
 
     }
