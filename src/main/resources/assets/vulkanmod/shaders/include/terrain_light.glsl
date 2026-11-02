@@ -49,13 +49,17 @@ layout(binding = SCENE_LIGHT_BINDING + 1, r32ui) uniform restrict uimage2D Terra
 
 //light: (sky, block) levels; colour: the fragment's colour before the lightmap and the fog; unfogged: no vanilla fog on it; tinted:
 // a biome-tinted layer (terrainTinted)
-//Writes packed unless a tinted albedo with its tag landed after this fragment read stale (the albedo before its atomic min; 0 for none):
-// one already there then is a farther surface's whose tag only looks alike (a few tries: each failed swap means another write)
-void writeAlbedoUnderTinted(ivec2 p, uint packed, uint stale) {
+//Writes packed (the albedo of the fragment with light value v) while v is still the pixel's light, a few tries (each failed swap means
+// another write: a nearer fragment's must stay). With backOff, not over a tinted albedo with its tag that landed after this fragment
+// read stale (the albedo before its atomic min; 0 for none): one already there then is a farther surface's whose tag only looks alike
+void writeAlbedoNear(ivec2 p, uint v, uint packed, uint stale, bool backOff) {
     uint tag = packed & (TERRAIN_ALBEDO_TAG_MASK << 24);
     uint seen = imageAtomicOr(TerrainAlbedo, p, 0u);
     for (int i = 0; i < 4; i++) {
-        if ((seen & TERRAIN_ALBEDO_TINTED) != 0u && (seen & (TERRAIN_ALBEDO_TAG_MASK << 24)) == tag && seen != stale) {
+        if (imageAtomicOr(TerrainLight, p, 0u) != v) {
+            return;
+        }
+        if (backOff && (seen & TERRAIN_ALBEDO_TINTED) != 0u && (seen & (TERRAIN_ALBEDO_TAG_MASK << 24)) == tag && seen != stale) {
             return;
         }
         uint was = imageAtomicCompSwap(TerrainAlbedo, p, seen, packed);
@@ -70,7 +74,8 @@ void writeAlbedoUnderTinted(ivec2 p, uint packed, uint stale) {
 // same light value and vanilla's LEQUAL depth test shows the overlay, drawn last; which of the two fragments' writes lands last is
 // the GPU's choice. So, near enough for an equal value to mean one plane, a tinted fragment writes at an equal value too, and nothing
 // replaces a tinted albedo with its own tag written since: the overlay's albedo is kept whichever lands first (it writes after its
-// atomic min, so after the dirt's read before its own). Two tinted fragments at one value keep the first
+// atomic min, so after the dirt's read before its own). Two tinted fragments at one value keep the first. Farther, the nearer
+// fragment's plain store as before
 void writeSceneLight(vec2 light, vec4 colour, bool unfogged, bool tinted) {
     ivec2 p = ivec2(gl_FragCoord.xy);
     //2026-10-30 (audit): never past the image (a target larger than the main one)
@@ -87,10 +92,12 @@ void writeSceneLight(vec2 light, vec4 colour, bool unfogged, bool tinted) {
         return;
     }
     uint packed = packTerrainAlbedo(colour.rgb, v, tinted);
-    if (v < before && tinted) {
-        imageAtomicExchange(TerrainAlbedo, p, packed);
+    if (!layers) {
+        if (v < before) {
+            imageStore(TerrainAlbedo, p, uvec4(packed));
+        }
     } else if (v < before || (v == before && tinted)) {
-        writeAlbedoUnderTinted(p, packed, stale);
+        writeAlbedoNear(p, v, packed, stale, !(v < before && tinted));
     }
 }
 

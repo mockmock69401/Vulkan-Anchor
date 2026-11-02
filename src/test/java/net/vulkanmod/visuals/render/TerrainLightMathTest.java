@@ -89,8 +89,11 @@ class TerrainLightMathTest {
         assertTrue(COPY.contains("return a >= TERRAIN_ALBEDO_WRITTEN && ((a >> 24) & TERRAIN_ALBEDO_TAG_MASK) == ((v >> 12) & TERRAIN_ALBEDO_TAG_MASK);"));
         //Only an opaque and unfogged fragment writes its albedo: a tinted one at an equal or nearer value, an untinted one when nearer
         assertTrue(PACK.contains("bool writes = unfogged && colour.a >= TERRAIN_ALBEDO_MIN_ALPHA;"));
-        assertTrue(PACK.replace("\r\n", "\n").contains("if (v < before && tinted) {\n        imageAtomicExchange(TerrainAlbedo, p, packed);\n    } else if (v < before || (v == before && tinted)) {"));
-        assertTrue(PACK.contains("if ((seen & TERRAIN_ALBEDO_TINTED) != 0u && (seen & (TERRAIN_ALBEDO_TAG_MASK << 24)) == tag && seen != stale) {"));
+        assertTrue(PACK.replace("\r\n", "\n").contains("    if (!layers) {\n        if (v < before) {\n            imageStore(TerrainAlbedo, p, uvec4(packed));\n        }\n    } else if (v < before || (v == before && tinted)) {\n        writeAlbedoNear(p, v, packed, stale, !(v < before && tinted));"));
+        assertTrue(PACK.contains("if (backOff && (seen & TERRAIN_ALBEDO_TINTED) != 0u && (seen & (TERRAIN_ALBEDO_TAG_MASK << 24)) == tag && seen != stale) {"));
+        //A swap only while the pixel's light is still the writer's: a nearer fragment's albedo stays
+        int check = PACK.indexOf("if (imageAtomicOr(TerrainLight, p, 0u) != v) {");
+        assertTrue(check > 0 && check < PACK.indexOf("imageAtomicCompSwap(TerrainAlbedo, p, seen, packed)"));
         //Only near enough for a depth step to be one plane; the read of what was there before the atomic min comes first
         assertTrue(PACK.contains("tinted = tinted && layers;"));
         int read = PACK.indexOf("uint stale = writes && layers && !tinted ? imageAtomicOr(TerrainAlbedo, p, 0u) : 0u;");
@@ -108,21 +111,24 @@ class TerrainLightMathTest {
         int dirt = TerrainLightMath.packAlbedo(0.45f, 0.30f, 0.20f, side);
         int overlay = TerrainLightMath.packAlbedo(0.35f, 0.55f, 0.20f, side, true);
         //Dirt first: its atomic min found the far surface, the overlay's found the dirt's equal value
-        int a = TerrainLightMath.writeAlbedo(farAlbedo, side, far, dirt);
-        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, side, overlay));
+        int a = TerrainLightMath.writeAlbedo(farAlbedo, side, side, far, dirt);
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, side, side, overlay));
         //The overlay's swap landed before the dirt's write
-        a = TerrainLightMath.writeAlbedo(farAlbedo, side, side, overlay);
-        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, far, dirt));
+        a = TerrainLightMath.writeAlbedo(farAlbedo, side, side, side, overlay);
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, side, far, dirt));
         //Overlay first: the dirt finds an equal value and writes nothing
-        a = TerrainLightMath.writeAlbedo(farAlbedo, side, far, overlay);
-        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, side, dirt));
+        a = TerrainLightMath.writeAlbedo(farAlbedo, side, side, far, overlay);
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(a, side, side, side, dirt));
         //A nearer untinted surface still replaces a farther tinted one (another tag), and a farther tinted one writes nothing
         int near = TerrainLightMath.pack(0.10f, 15, 0), stone = TerrainLightMath.packAlbedo(0.5f, 0.5f, 0.5f, near);
-        assertEquals(stone, TerrainLightMath.writeAlbedo(overlay, near, side, stone));
-        assertEquals(stone, TerrainLightMath.writeAlbedo(stone, side, near, overlay));
+        assertEquals(stone, TerrainLightMath.writeAlbedo(overlay, near, near, side, stone));
+        assertEquals(stone, TerrainLightMath.writeAlbedo(stone, near, side, near, overlay));
+        //2026-11-02 (BMC5: grass tops lost their albedo in patches): a farther fragment whose swap failed because a nearer one wrote
+        // does not retry over it
+        assertEquals(stone, TerrainLightMath.writeAlbedo(stone, near, side, far, dirt));
         //Two tinted fragments at one value (leaves a depth step apart): the first one's stays
         int leaf = TerrainLightMath.packAlbedo(0.2f, 0.5f, 0.1f, side, true);
-        assertEquals(overlay, TerrainLightMath.writeAlbedo(overlay, side, side, leaf));
+        assertEquals(overlay, TerrainLightMath.writeAlbedo(overlay, side, side, side, leaf));
         assertArrayEquals(new float[]{89 / 255f, 140 / 255f, 51 / 255f}, TerrainLightMath.albedoAt(side, overlay), 1e-6f);
     }
 

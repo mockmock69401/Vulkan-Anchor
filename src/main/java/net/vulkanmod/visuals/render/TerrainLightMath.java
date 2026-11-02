@@ -75,11 +75,12 @@ public final class TerrainLightMath {
     }
 
     /**
-     * writeSceneLight's albedo write: the image's albedo after a fragment with light value v and albedo packed whose atomic min
-     * returned before. A nearer fragment writes, a tinted one at an equal value too, and nothing but a nearer tinted fragment replaces a
-     * tinted albedo with the writer's tag.
+     * writeSceneLight's albedo write within the layer distance: the image's albedo after a fragment with light value v and albedo packed
+     * whose atomic min returned before, when the pixel's light is now light. Only while the pixel's light is still v: a nearer fragment
+     * writes, a tinted one at an equal value too, and nothing but a nearer tinted fragment replaces a tinted albedo with the writer's tag.
      */
-    public static int writeAlbedo(int albedo, int v, int before, int packed) {
+    public static int writeAlbedo(int albedo, int light, int v, int before, int packed) {
+        if (light != v) return albedo;
         int order = Integer.compareUnsigned(v, before);
         boolean tinted = (packed & TERRAIN_ALBEDO_TINTED) != 0;
         if (order < 0 && tinted) return packed;
