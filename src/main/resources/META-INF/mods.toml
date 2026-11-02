@@ -7,6 +7,8 @@ modId="vulkanmod"
 version="${version}"
 displayName="VulkanMod-shaded"
 logoFile="assets/vulkanmod/Vlogo.png"
+# Client-only: servers and clients with or without it see each other as compatible
+displayTest="IGNORE_ALL_VERSION"
 authors="Rindw"
 credits="Rindw (VulkanMod Reforged), and XCollateral (original VulkanMod creator). Unofficial modified build by mockmock69401, made with AI assistance (modpack compatibility fixes, Xaero map support, post-processing shaders, Distant Horizons and AMD FSR 3.1 support); not endorsed by Rindw or the upstream contributors."
 description='''
