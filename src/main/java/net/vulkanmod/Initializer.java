@@ -1,6 +1,7 @@
 package net.vulkanmod;
 
 import net.minecraft.network.chat.Component;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.loading.FMLPaths;
@@ -26,7 +27,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.file.Path;
 
-@Mod("vulkanmod")
+//2026-11-02: client-only entry point, so a dedicated server never loads this class (GLFW, client listeners; InitializerDistTest)
+@Mod(value = "vulkanmod", dist = Dist.CLIENT)
 public class Initializer {
 	public static final Logger LOGGER = LogManager.getLogger("VulkanMod");
 
