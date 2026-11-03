@@ -24,8 +24,9 @@ class CloudMathTest {
 
     @Test
     void theMaskMarksCloudCells() {
-        byte[] m = CloudMath.mask(new int[]{0x00FFFFFF, 0xFF000000, 0x01000000, 0x80FF0000});
-        assertArrayEquals(new byte[]{0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}, m);
+        byte[] m = CloudMath.mask(new int[]{0x00FFFFFF, 0xFF000000, 0x01000000, 0x1FFFFFFF, 0x20000000, 0x80FF0000});
+        assertArrayEquals(new byte[]{0, 0, 0, 0, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1}, m,
+                "alpha 1 and 31 are gaps vanilla discards (Stay True), 32 and up are clouds");
     }
 
     /** Design 3.1: a cell's middle is the cell, the boundary half way, the next cell's middle that cell; it repeats every 256 cells. */
