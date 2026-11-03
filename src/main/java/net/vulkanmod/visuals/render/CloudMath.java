@@ -48,11 +48,17 @@ public final class CloudMath {
         return new float[]{wrap(cameraX + (ticks + (double) partialTick) * CLOUD_DRIFT), wrap(cameraZ + CLOUD_Z_SHIFT * CLOUD_CELL)};
     }
 
-    /** clouds.png's ABGR pixels (NativeImage.getPixelRGBA) as RGBA8 bytes: 255 in every channel where the alpha is above 0, else 0. */
+    /**
+     * 2026-11-03: a texel is a cloud where vanilla draws it: rendertype_clouds.fsh discards alpha below 0.1 at vertex alpha 0.8,
+     * so texel alpha 32 and up (Stay True's clouds.png fills its gaps with alpha 1, which covered the whole sky).
+     */
+    public static final int MASK_ALPHA = 32;
+
+    /** clouds.png's ABGR pixels (NativeImage.getPixelRGBA) as RGBA8 bytes: 255 in every channel where the alpha is MASK_ALPHA or more, else 0. */
     public static byte[] mask(int[] abgr) {
         byte[] out = new byte[abgr.length * 4];
         for (int i = 0; i < abgr.length; i++) {
-            byte v = (abgr[i] >>> 24) != 0 ? (byte) 255 : 0;
+            byte v = (abgr[i] >>> 24) >= MASK_ALPHA ? (byte) 255 : 0;
             out[i * 4] = v;
             out[i * 4 + 1] = v;
             out[i * 4 + 2] = v;
