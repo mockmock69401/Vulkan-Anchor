@@ -20,8 +20,9 @@ public final class LightingMath {
     /**
      * The sky-lit light's factor in full shade and on sunlit flat ground with a high sun (sun term 1). Tuning round 1: 0.55, 1.1.
      * 2026-10-28: the sun 3.2 (was 2.5), sunlit leaves next to Complementary Reimagined's were a quarter darker.
+     * 2026-11-03 (BMC5: noon sand white): 0.65 and 2.88 (x0.9); open ground was a quarter brighter than Complementary Reimagined's.
      */
-    public static final float SHADE_LEVEL = 0.72f, SUN_LEVEL = 3.2f;
+    public static final float SHADE_LEVEL = 0.65f, SUN_LEVEL = 2.88f;
     /** The same with a low sun (sun term 0): round 1's levels, which the sunset (S2) matched with. */
     public static final float LOW_SUN_SHADE_LEVEL = 0.55f, LOW_SUN_SUN_LEVEL = 1.1f;
     /** The sun term (sunHeightTerm) runs from 0 at sin(elevation) SUN_TERM_LOW to 1 at SUN_TERM_HIGH. */

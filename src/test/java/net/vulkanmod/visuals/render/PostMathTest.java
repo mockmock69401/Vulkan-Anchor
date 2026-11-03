@@ -70,12 +70,18 @@ class PostMathTest {
         //Midtones are kept as they are; a white surface in full daylight is bright but not clipped; the sun is still brighter
         assertEquals(0.2f, PostMath.toneMap(0.2f, knee), 1e-6f);
         float white = PostMath.linearToDisplay(PostMath.toneMap(PostMath.SCENE_WHITE, knee));
-        assertTrue(white > 0.88f && white < 0.97f, "daylight white -> display " + white);
+        assertTrue(white > 0.82f && white < 0.97f, "daylight white -> display " + white);
         assertTrue(PostMath.toneMap(4, knee) > PostMath.toneMap(2, knee));
         assertTrue(PostMath.toneMap(2, knee) < 1);
         //2026-10-28 (sunlit snow clipped): twice daylight white still keeps room below white, and the shoulder starts with slope 1
         float snow = PostMath.linearToDisplay(PostMath.toneMap(2 * PostMath.SCENE_WHITE, knee));
         assertTrue(snow < 0.955f, "sunlit snow -> display " + snow);
+        //2026-11-03 (BMC5: noon sand white): sand (red albedo about 0.71) under the noon sun level stays below white, its texture
+        // (+-10%) still a few 8-bit steps apart
+        float sand = 0.71f * LightingMath.SUN_LEVEL;
+        float sandHi = PostMath.linearToDisplay(PostMath.toneMap(1.1f * sand, knee)), sandLo = PostMath.linearToDisplay(PostMath.toneMap(0.9f * sand, knee));
+        assertTrue(PostMath.linearToDisplay(PostMath.toneMap(sand, knee)) < 0.93f, "sunlit sand -> linear " + PostMath.toneMap(sand, knee));
+        assertTrue(sandHi - sandLo > 0.013f, "sand texture " + (sandHi - sandLo));
         float e = 1e-3f;
         assertEquals(1f, (PostMath.toneMap(knee + e, knee) - PostMath.toneMap(knee, knee)) / e, 0.01f, "no kink at the knee");
     }
