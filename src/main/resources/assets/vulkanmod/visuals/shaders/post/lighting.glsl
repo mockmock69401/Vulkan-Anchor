@@ -57,8 +57,9 @@ const float BLUR_DEPTH_MIN = 0.1;
 // LOW_SUN_SHADE_LEVEL / LOW_SUN_SUN_LEVEL with a low one (t = 0 below sin(elevation) SUN_TERM_LOW: the sunset of S2), smoothly between
 // up to SUN_TERM_HIGH. Tuning round 1: noon terrain was half as bright as the references with too little sun/shade contrast.
 //2026-10-28: SUN_LEVEL 3.2 (was 2.5): sunlit leaves next to Complementary Reimagined's were a quarter darker
-const float SHADE_LEVEL = 0.72;
-const float SUN_LEVEL = 3.2;
+//2026-11-03 (BMC5: noon sand white): 0.65 and 2.88 (x0.9); open ground was a quarter brighter than Complementary Reimagined's
+const float SHADE_LEVEL = 0.65;
+const float SUN_LEVEL = 2.88;
 const float LOW_SUN_SHADE_LEVEL = 0.55;
 const float LOW_SUN_SUN_LEVEL = 1.1;
 const float SUN_TERM_LOW = 0.2;

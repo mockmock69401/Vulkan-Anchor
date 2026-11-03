@@ -104,9 +104,9 @@ class LightingMathTest {
     /** Tuning round 1: noon sunlit terrain about x2.2 and shade about x1.3 of round 1's, a low sun and block light/night unchanged. */
     @Test
     void theLevelsFollowTheSunTerm() {
-        //High sun: x2.9 sunlit (2026-10-28: sun 3.2, was x2.2), x1.3 shade against round 1's 1.1 / 0.55
-        assertEquals(2.9f, LightingMath.sunShadingAt(1, 1, 1, 1) / 1.1f, 0.1f);
-        assertEquals(1.3f, LightingMath.sunShadingAt(0, 1, 1, 1) / 0.55f, 0.05f);
+        //High sun: x2.6 sunlit (2026-10-28: sun 3.2, was x2.2; 2026-11-03: 2.88), x1.2 shade against round 1's 1.1 / 0.55
+        assertEquals(2.6f, LightingMath.sunShadingAt(1, 1, 1, 1) / 1.1f, 0.1f);
+        assertEquals(1.2f, LightingMath.sunShadingAt(0, 1, 1, 1) / 0.55f, 0.05f);
         assertFalse(GLSL.contains("float sunShading("), "final fix minor: the 3-argument form (noon's levels at every sun height) is gone");
         //Low sun: round 1's levels exactly
         assertEquals(1.1f, LightingMath.sunShadingAt(1, 1, 1, 0), 1e-6f);

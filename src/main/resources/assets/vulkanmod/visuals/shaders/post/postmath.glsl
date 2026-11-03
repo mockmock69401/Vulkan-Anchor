@@ -25,8 +25,9 @@ const float SRGB_SCALE = 1.055;
 const float SRGB_OFFSET = 0.055;
 const float SRGB_GAMMA = 2.4;
 
-//Tone curve knee at tone strength 100 (the identity below it)
-const float TONE_KNEE = 0.55;
+//Tone curve knee at tone strength 100 (the identity below it). 2026-11-03 (BMC5: noon sand white): 0.38, was 0.55; sunlit sand, dirt
+// and snow match Complementary Reimagined's at noon
+const float TONE_KNEE = 0.38;
 
 //Interleaved gradient noise (Jimenez 2014, "Next Generation Post Processing in Call of Duty: Advanced Warfare")
 const float IGN_X = 0.06711056;
@@ -75,7 +76,7 @@ vec3 toneMap(vec3 x, float knee) {
     x = max(x, vec3(0.0));
     float w = max(1.0 - knee, 1e-6);
     vec3 d = max(x - knee, vec3(0.0));
-    vec3 shoulder = knee + w*d/(d + w);
+    vec3 shoulder = knee + (w - w*w/(d + w));
     return min(mix(x, shoulder, greaterThan(x, vec3(knee))), vec3(1.0));
 }
 

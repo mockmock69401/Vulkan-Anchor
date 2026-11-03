@@ -23,8 +23,11 @@ public final class PostMath {
     public static final float SRGB_CUT = 0.0031308f, SRGB_SLOPE = 12.92f, SRGB_SCALE = 1.055f, SRGB_OFFSET = 0.055f, SRGB_GAMMA = 2.4f;
     /** The display value at SRGB_CUT (decode threshold). */
     public static final float SRGB_DISPLAY_CUT = 0.04045f;
-    /** Tone mapping at strength 100: the identity up to this linear value, an exponential shoulder above it. */
-    public static final float TONE_KNEE = 0.55f;
+    /**
+     * Tone mapping at strength 100: the identity up to this linear value, the shoulder above it. 2026-11-03 (BMC5: noon sand white):
+     * 0.38, was 0.55; sunlit sand, dirt and snow match Complementary Reimagined's at noon.
+     */
+    public static final float TONE_KNEE = 0.38f;
     /** Interleaved gradient noise (Jimenez 2014) for the display dither. */
     public static final float IGN_X = 0.06711056f, IGN_Y = 0.00583715f, IGN_SCALE = 52.9829189f;
 
@@ -92,8 +95,9 @@ public final class PostMath {
         if (x <= knee) return Math.min(x, 1);
         float w = Math.max(1 - knee, 1e-6f);
         //2026-10-28: Reinhard's shoulder (postmath.glsl's), was 1 - exp(-d/w)
+        //w - w^2/(d + w) = w d/(d + w); this form rounds monotonically (d/(d + w) can step back in float)
         float d = x - knee;
-        float y = knee + w * (d / (d + w));
+        float y = knee + (w - w * w / (d + w));
         return Math.min(y, 1);
     }
 
