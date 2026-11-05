@@ -17,7 +17,8 @@ public final class CompatGate {
             "aaaparticles.", "aaa_particles",
             "gnetum.", "gnetum",
             "fancymenu.", "fancymenu",
-            "vix.", "vix"
+            "vix.", "vix",
+            "puffish.", "puffish_skills"
     );
 
     private CompatGate() {

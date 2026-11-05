@@ -41,7 +41,8 @@
     "gnetum.BlendAlphaMixin",
     "fancymenu.SmoothImageRectFallbackMixin",
     "vix.PostEffectLayoutMixin",
-    "vix.PassViewportMixin"
+    "vix.PassViewportMixin",
+    "puffish.BufferUploaderEmitsMixin"
   ],
   "injectors": {
     "defaultRequire": 1
