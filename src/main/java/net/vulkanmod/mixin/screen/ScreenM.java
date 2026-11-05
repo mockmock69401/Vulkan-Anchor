@@ -27,12 +27,14 @@ public class ScreenM {
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
         RenderSystem.colorMask(true, true, true, true);
         RenderSystem.disableDepthTest();
-        RenderSystem.depthMask(false);
+        //2026-11-05 (the user: Pufferfish's Skills lost its effect icons): depth writes rest on, as in vanilla's GUI state. The mod draws
+        // the icons at z 1 before their frames at z 0 and relies on the icons' depth to keep the frames off them
+        RenderSystem.depthMask(true);
         RenderSystem.disableCull();
         RenderSystem.enableBlend();
         RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
 
-                                                                                                    
+                                                                                                
                                                                                                       
                                                                                                      
                                                                                                      
