@@ -1,4 +1,6 @@
 .gradle/
+.claude/
+.omc/
 /build/
 run/
 run-*/
