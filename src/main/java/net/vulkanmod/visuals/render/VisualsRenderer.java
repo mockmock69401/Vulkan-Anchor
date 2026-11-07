@@ -643,7 +643,7 @@ public final class VisualsRenderer {
             VkShadowMaps.Maps close = shadowsOn ? this.shadows.close() : null;
             ShadowUniforms.Values shadow = ShadowUniforms.compute(lighting, this.atmosphere, shadowNow, near, far, close);
             //2026-10-29: the entity shadow map, from this frame's sun at the camera, when entities were captured or (2026-11-07) a sub-level drew
-            ShadowMath.Cascade entityCascade = shadowNow != null && this.entityShadows != null
+            ShadowMath.Cascade entityCascade = shadowNow != null && this.entityShadows != null && this.atmosphere != null
                     && VkEntityShadows.drawsAnything(true, EntityShadowCapture.vertexCount(serial), this.entityShadows.subLevelCasters())
                     ? VkEntityShadows.cascade(SunMath.sunDirection(this.shadowFrame.timeOfDay()), shadowNow.cameraX(), shadowNow.cameraY(), shadowNow.cameraZ()) : null;
             this.post.prepareEntityShadows(EntityShadowUniforms.compute(entityCascade, shadowNow, this.atmosphere, shadow.near() || shadow.far()),

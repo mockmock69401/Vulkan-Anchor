@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldInsnNode;
@@ -68,6 +69,25 @@ class SubLevelShadowWiringTest {
             assertFalse(insn instanceof FieldInsnNode f && f.owner.endsWith("VisualsConfig") && f.name.equals("entityShadows"),
                     "postProcess does not read the Entity Shadows setting");
         }
+    }
+
+    /**
+     * The map's draw reads this frame's atmosphere, which a failed capture leaves null: such a frame must not draw the map, or the
+     * post-process of a frame with entities and no structure at all would be skipped by the exception.
+     */
+    @Test
+    void theMapIsNotDrawnWithoutAnAtmosphere() throws Exception {
+        ClassNode node = new ClassNode();
+        try (InputStream in = SubLevelShadowWiringTest.class.getClassLoader().getResourceAsStream("net/vulkanmod/visuals/render/VisualsRenderer.class")) {
+            new ClassReader(in).accept(node, 0);
+        }
+        MethodNode postProcess = node.methods.stream().filter(m -> m.name.equals("postProcess")).findFirst().orElseThrow();
+        boolean guarded = false;
+        for (AbstractInsnNode insn : postProcess.instructions) {
+            if (insn instanceof MethodInsnNode c && c.owner.endsWith("VkEntityShadows") && c.name.equals("drawsAnything")) break;
+            if (insn instanceof FieldInsnNode f && f.name.equals("atmosphere") && f.getNext() != null && f.getNext().getOpcode() == Opcodes.IFNULL) guarded = true;
+        }
+        assertTrue(guarded, "the map's cascade is decided only with an atmosphere");
     }
 
     @Test
