@@ -48,7 +48,7 @@ with zipfile.ZipFile(jar) as archive:
     metadata_path = "META-INF/mods.toml" if mc == "1.20.1" else "META-INF/neoforge.mods.toml"
     metadata = tomllib.loads(archive.read(metadata_path).decode())
     mods = metadata.get("mods", [])
-    if len(mods) != 1 or mods[0].get("modId") != "vulkanmod" or mods[0].get("displayName") != "VulkanMod-shaded" or mods[0].get("version") != props["mod_version"]:
+    if len(mods) != 1 or mods[0].get("modId") != "vulkanmod" or mods[0].get("displayName") != "Vulkan Anchor" or mods[0].get("version") != props["mod_version"]:
         raise RuntimeError("Incorrect release mod metadata")
     if metadata.get("modLoader") != "javafml" or metadata.get("license") != "LGPL-3.0":
         raise RuntimeError("Incorrect loader or license metadata")

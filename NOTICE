@@ -1,4 +1,4 @@
-VulkanMod-shaded
+Vulkan Anchor
 
 An unofficial modified build of VulkanMod Reforged, itself an unofficial
 modified fork of VulkanMod:
@@ -12,7 +12,8 @@ VulkanMod Reforged was modified on 2026-06-19 for NeoForge compatibility and
 release metadata. Further renderer, compatibility, and publication changes
 were made through 2026-10-16.
 
-VulkanMod-shaded is a further modified version, changed from 2026-10-17 to
+Vulkan Anchor (first released as VulkanMod-shaded) is a further modified
+version, changed from 2026-10-17 to
 2026-10-25 by mockmock69401. The changes were written with an AI coding
 assistant (Anthropic's Claude, through Claude Code) under mockmock69401's
 direction and testing. They:

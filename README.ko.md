@@ -1,6 +1,8 @@
-# VulkanMod-shaded
+# Vulkan Anchor
 
 [English](README.md) | 한국어
+
+이전 이름은 VulkanMod-shaded입니다. `mods` 폴더에 예전 `VulkanMod-shaded_*.jar`가 있다면 이 jar를 넣을 때 지워 주세요.
 
 **레거시 Forge 1.20.1 모드팩**을 위한 Vulkan 렌더러입니다. [VulkanMod](https://github.com/xCollateral/VulkanMod)의 포크인
 [VulkanMod Reforged](https://github.com/TrulyRin/VulkanMod-Reforged)를 수정한 비공식 빌드입니다. 이 브랜치는 Forge 1.20.1
@@ -75,7 +77,7 @@ Vulkan으로 돌리기 위해 만들어졌고, 그 위에 셰이더 느낌의 �
 
 ## 설치
 
-1. 배포용 jar 하나(`VulkanMod-shaded_1.20.1-<버전>.jar`)를 모드팩의 `mods` 폴더에 넣습니다.
+1. 배포용 jar 하나(`VulkanAnchor_1.20.1-<버전>.jar`)를 모드팩의 `mods` 폴더에 넣습니다.
 2. 다른 VulkanMod나 VulkanMod Reforged jar는 지우거나 비활성화합니다.
 3. 게임을 한 번 실행합니다. VulkanMod가 함께 실행할 수 없는 모드(Sodium 계열과 그 밖의 모드.
    [전체 목록](src/main/resources/assets/vulkanmod/compat/incompatible_mod_ids.txt))를 직접 비활성화합니다. jar 이름을
@@ -118,7 +120,7 @@ Vulkan으로 돌리기 위해 만들어졌고, 그 위에 셰이더 느낌의 �
 ./gradlew assemble
 ```
 
-jar는 `build/libs/VulkanMod-shaded_1.20.1-0.1.0.jar`에 만들어집니다(옆의 `-sources.jar`는 개발용입니다). 테스트는
+jar는 `build/libs/VulkanAnchor_1.20.1-0.1.0.jar`에 만들어집니다(옆의 `-sources.jar`는 개발용입니다). 테스트는
 `./gradlew test`로 실행합니다. 빌드에는 JDK 17이 필요하고, Forge와 LWJGL을 포함한 나머지는 Gradle이 내려받습니다.
 `tools/`의 FSR 구조체 레이아웃 확인 프로그램은 Windows에서 MSVC 2022로 컴파일했고 그 출력이 저장소에 들어 있어서,
 빌드에 C 컴파일러는 필요하지 않습니다.
@@ -162,7 +164,7 @@ VulkanMod, VulkanMod Reforged와 같은 LGPL-3.0-only입니다. [LICENSE](LICENS
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 서드파티 구성 요소(LWJGL, AMD FidelityFX SDK, SMAA,
 Distant Horizons)와 그 라이선스가 있습니다.
 
-"VulkanMod-shaded"는 비공식 빌드입니다. 코드 라이선스는 상표권을 주지 않으며, 업스트림의 이름과 로고는 각 소유자의
+"Vulkan Anchor"는 비공식 빌드입니다. 코드 라이선스는 상표권을 주지 않으며, 업스트림의 이름과 로고는 각 소유자의
 것입니다.
 
 이 문서는 [README.md](README.md)(영문)의 번역입니다. 내용이 다르면 영문 README가 기준입니다.

@@ -1,6 +1,6 @@
 # Third-party notices
 
-VulkanMod-shaded is LGPL-3.0-only (see [LICENSE](LICENSE), [COPYING](COPYING) and [NOTICE](NOTICE)). It includes or
+Vulkan Anchor is LGPL-3.0-only (see [LICENSE](LICENSE), [COPYING](COPYING) and [NOTICE](NOTICE)). It includes or
 builds against the following third-party parts, each under its own licence.
 
 | Part | Licence | Where | Notes |

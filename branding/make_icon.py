@@ -1,4 +1,4 @@
-"""VulkanMod-shaded icon: a blocky sunset landscape with far terrain fading into haze (shaders, LODs), framed by a large V.
+"""Vulkan Anchor icon: a blocky sunset landscape with far terrain fading into haze (shaders, LODs), framed by a large V.
 python -I make_icon.py OUT.png [SIZE]"""
 import math
 import random
