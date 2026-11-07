@@ -1,6 +1,8 @@
-# VulkanMod-shaded (Minecraft 1.21.1, NeoForge)
+# Vulkan Anchor (Minecraft 1.21.1, NeoForge)
 
 English | [한국어](README.ko.md)
+
+Formerly VulkanMod-shaded. If an old `VulkanMod-shaded_*.jar` is in your `mods` folder, remove it when you install this one.
 
 A Vulkan renderer for **NeoForge 1.21.1 modpacks**: an unofficial, modified build of
 [VulkanMod Reforged](https://github.com/TrulyRin/VulkanMod-Reforged), itself a fork of
@@ -80,7 +82,7 @@ It is experimental: compatibility and feature parity are incomplete.
 
 ## Installing
 
-1. Put the single production jar (`VulkanMod-shaded_1.21.1-<version>.jar`) in the modpack's `mods` folder.
+1. Put the single production jar (`VulkanAnchor_1.21.1-<version>.jar`) in the modpack's `mods` folder.
 2. Remove or disable any other VulkanMod or VulkanMod Reforged jar.
 3. Start the game once. VulkanMod disables the mods it cannot run with by itself: the Sodium family and the others in the
    [full list](src/main/resources/assets/vulkanmod/compat/incompatible_mod_ids.txt). It renames their jars to
@@ -119,7 +121,7 @@ Notes:
 ./gradlew assemble
 ```
 
-The jar is written to `build/libs/VulkanMod-shaded_1.21.1-0.1.0.jar` (the `-sources.jar` next
+The jar is written to `build/libs/VulkanAnchor_1.21.1-0.1.0.jar` (the `-sources.jar` next
 to it is for development). Run the tests with `./gradlew test`. The build needs JDK 21; Gradle downloads everything
 else, including NeoForge and LWJGL. On Windows, the FSR struct-layout probe in `tools/` was compiled with MSVC 2022 and
 its output is checked in; the build does not need a C compiler.
@@ -165,5 +167,5 @@ GPLv3 text it incorporates). [NOTICE](NOTICE) lists the authors, the modificatio
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists the third-party parts (LWJGL, AMD FidelityFX SDK, SMAA,
 Distant Horizons, Flywheel) and their licences.
 
-"VulkanMod-shaded" is an unofficial build. The code licence grants no trademark rights; upstream names and logos remain
+"Vulkan Anchor" is an unofficial build. The code licence grants no trademark rights; upstream names and logos remain
 their owners'.

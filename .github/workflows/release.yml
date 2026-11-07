@@ -35,12 +35,12 @@ jobs:
           python3 .github/scripts/verify_release.py
           mc=$(sed -n 's/^minecraft_version[[:space:]]*=[[:space:]]*//p' gradle.properties)
           echo "minecraft=$mc" >> "$GITHUB_OUTPUT"
-          git archive --format=zip HEAD -o "build/release/VulkanMod-shaded_${mc}-source.zip"
+          git archive --format=zip HEAD -o "build/release/VulkanAnchor_${mc}-source.zip"
           cd build/release
           sha256sum *.jar *.zip > SHA256SUMS.txt
       - uses: actions/upload-artifact@v7
         with:
-          name: VulkanMod-shaded-${{ steps.package.outputs.minecraft }}
+          name: VulkanAnchor-${{ steps.package.outputs.minecraft }}
           path: build/release/
           if-no-files-found: error
       - name: Publish prerelease
@@ -50,4 +50,4 @@ jobs:
           MC_VERSION: ${{ steps.package.outputs.minecraft }}
         run: |
           tag="shaded-mc-${MC_VERSION}-${GITHUB_SHA:0:7}"
-          gh release create "$tag" build/release/*             --target "$GITHUB_SHA"             --title "VulkanMod-shaded 0.1.0 - Minecraft ${MC_VERSION}"             --notes-file .github/release-notes.txt             --prerelease
+          gh release create "$tag" build/release/*             --target "$GITHUB_SHA"             --title "Vulkan Anchor 0.1.0 - Minecraft ${MC_VERSION}"             --notes-file .github/release-notes.txt             --prerelease

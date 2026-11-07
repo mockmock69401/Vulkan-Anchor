@@ -1,4 +1,4 @@
-VulkanMod-shaded for Minecraft 1.21.1 (NeoForge).
+Vulkan Anchor for Minecraft 1.21.1 (NeoForge).
 
 An unofficial modified build of VulkanMod Reforged, written with an AI coding assistant, to run NeoForge 1.21.1 modpacks on Vulkan. Experimental: compatibility and feature parity are incomplete. See README.md for the mods each tested modpack needs disabled.
 
