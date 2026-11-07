@@ -1,5 +1,6 @@
 package net.vulkanmod.mixin;
 
+import net.vulkanmod.compat.IncompatibleModDisabler;
 import net.vulkanmod.compat.RuntimeOptions;
 import net.vulkanmod.visuals.dh.DhPresence;
 import org.objectweb.asm.tree.ClassNode;
@@ -59,6 +60,7 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public void onLoad(String mixinPackage) {
+        IncompatibleModDisabler.run();
     }
 
     @Override

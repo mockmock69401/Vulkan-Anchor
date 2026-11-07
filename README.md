@@ -83,9 +83,13 @@ It is experimental: compatibility and feature parity are incomplete.
 
 1. Put the single production jar (`VulkanMod-shaded_1.20.1-<version>.jar`) in the modpack's `mods` folder.
 2. Remove or disable any other VulkanMod or VulkanMod Reforged jar.
-3. Disable the mods listed for your modpack below. In general, Embeddium, Oculus, Mekalus,
-   Chloride, Sodium add-ons and any mod that replaces OpenGL rendering or presents frames itself conflict with a
-   Vulkan renderer.
+3. Start the game once. VulkanMod disables the Sodium family by itself: Sodium, its forks and add-ons, and the shader
+   mods built on them ([full list](src/main/resources/assets/vulkanmod/compat/sodium_family_mod_ids.txt)). It renames
+   their jars to `<name>.jar.disabled`, lists them in a dialog and closes the game; start it again to play. To keep one
+   of them on, remove `.disabled` and add its mod id to `config/vulkanmod_keep_mods.txt`, one id per line. A mod that
+   requires a disabled mod is only named in the dialog, because disabling it could remove content from a world.
+4. Disable the other mods listed for your modpack below by hand. In general, any mod that replaces OpenGL rendering or
+   presents frames itself conflicts with a Vulkan renderer.
 
 Frame generation costs GPU time: the game renders fewer real frames than with it off, and at high frame rates it can
 show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. While it runs, the

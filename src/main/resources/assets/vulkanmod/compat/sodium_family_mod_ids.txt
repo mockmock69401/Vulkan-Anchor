@@ -1,0 +1,25 @@
+# Mod ids VulkanMod turns off by itself at startup (compat.IncompatibleModDisabler): Sodium, its forks, their add-ons and
+# the shader mods built on them. Exact ids only: colorwheel_patcher stays on while colorwheel goes.
+# To exempt one on a machine, list its id in config/vulkanmod_keep_mods.txt.
+sodium
+embeddium
+rubidium
+xenon
+embeddiumplus
+chloride
+mekalus
+flerovium
+sodiumextra
+sodiumextras
+sodiumdynamiclights
+sodiumleafculling
+sodiumoptionsapi
+sodiumoptionsmodcompat
+reeses_sodium_options
+iris
+oculus
+irissearch
+iris_shader_folder
+colorwheel
+# Not a Sodium add-on itself, but it cannot load without sodiumdynamiclights
+immersivelanterns
