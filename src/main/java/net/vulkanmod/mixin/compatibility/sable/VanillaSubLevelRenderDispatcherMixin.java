@@ -6,6 +6,8 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.vulkanmod.compat.render.RenderStateSnapshot;
 import net.vulkanmod.compat.sable.render.SublevelRenderScope;
+import net.vulkanmod.render.vertex.TerrainRenderType;
+import net.vulkanmod.visuals.render.SubLevelShadowCasters;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
@@ -22,8 +24,13 @@ public abstract class VanillaSubLevelRenderDispatcherMixin {
         SublevelRenderScope.Pass pass = renderType == RenderType.translucent()
                 ? SublevelRenderScope.Pass.TRANSLUCENT : SublevelRenderScope.Pass.TERRAIN;
         RenderStateSnapshot snapshot = new RenderStateSnapshot();
+        //2026-11-07: the opaque and cutout layers' draws go on into the sun shadows (SubLevelShadowCasters)
+        boolean casts = renderType == RenderType.solid() || renderType == RenderType.cutoutMipped() || renderType == RenderType.cutout();
+        if (casts) SubLevelShadowCasters.beginLayer(TerrainRenderType.get(renderType).alphaCutout);
         try (var scope = SublevelRenderScope.enter(pass, shader, snapshot::restore)) {
             original.call(levels, renderType, shader, cameraX, cameraY, cameraZ, modelView, projection, partialTick);
+        } finally {
+            if (casts) SubLevelShadowCasters.endLayer();
         }
     }
 

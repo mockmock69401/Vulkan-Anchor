@@ -1,6 +1,7 @@
 package net.vulkanmod.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.neoforged.api.distmarker.Dist;
@@ -27,13 +28,21 @@ import net.vulkanmod.vulkan.shader.GraphicsPipeline;
 import net.vulkanmod.vulkan.shader.CustomUniformMatrices;
 import net.vulkanmod.vulkan.shader.Pipeline;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
+import net.vulkanmod.visuals.render.SubLevelShadowCasters;
 import org.joml.Matrix4f;
+import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.vulkan.VkCommandBuffer;
 
 import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
+
+import static org.lwjgl.vulkan.VK10.vkCmdBindIndexBuffer;
+import static org.lwjgl.vulkan.VK10.vkCmdBindVertexBuffers;
+import static org.lwjgl.vulkan.VK10.vkCmdDrawIndexed;
 
 @OnlyIn(Dist.CLIENT)
-public class VBO {
+public class VBO implements SubLevelShadowCasters.Drawable {
     private VertexBuffer vertexBuffer;
     private static final IndexUploadState.Backend<IndexBuffer> INDEX_BACKEND = new IndexUploadState.Backend<>() {
         public IndexBuffer create(int bytes, QuadPatchIndices.IndexType type) {
@@ -512,6 +521,13 @@ public class VBO {
                             ? SublevelRenderScope.enter(scopedState.pass(), activeShader)
                             : null;
                     try {
+                        //2026-11-07: a sub-level's opaque draw goes on into the sun shadows, with what Sable gave the shader for it
+                        if (SubLevelShadowCasters.recording() && this.format == DefaultVertexFormat.BLOCK
+                                && activeShader instanceof ShaderInstance instance
+                                && instance.MODEL_VIEW_MATRIX != null && instance.CHUNK_OFFSET != null) {
+                            FloatBuffer offset = instance.CHUNK_OFFSET.getFloatBuffer();
+                            SubLevelShadowCasters.record(this, instance.MODEL_VIEW_MATRIX.getFloatBuffer(), offset.get(0), offset.get(1), offset.get(2));
+                        }
                         validateGeometry(scopedPipeline);
                         renderer.bindGraphicsPipeline(scopedPipeline);
                         VTextureSelector.bindShaderTextures(scopedPipeline);
@@ -537,6 +553,25 @@ public class VBO {
         }
     }
 
+
+    /**
+     * 2026-11-07: this frame's draw again, into the shadow pass open on cmd (SubLevelShadowCasters), with the buffers it has now.
+     * False when it has nothing to draw any more, as after a sub-level was taken apart since (Drawer's draws record on the main
+     * command buffer and count as main pass writes, so they are not used here).
+     */
+    @Override
+    public boolean recordShadowDraw(VkCommandBuffer cmd) {
+        if (this.closed || this.transientGeometry || this.vertexBuffer == null || !hasGeometry()) return false;
+        refreshAutomaticIndices();
+        IndexBuffer ib = this.indices.indices();
+        if (ib == null) return false;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            vkCmdBindVertexBuffers(cmd, 0, stack.longs(this.vertexBuffer.getId()), stack.longs(this.vertexBuffer.getOffset()));
+        }
+        vkCmdBindIndexBuffer(cmd, ib.getId(), ib.getOffset(), ib.indexType.type);
+        vkCmdDrawIndexed(cmd, this.indexCount, 1, 0, 0, 0);
+        return true;
+    }
 
     private void validateGeometry(Pipeline pipeline) {
         if (this.transientGeometry) {

@@ -72,6 +72,7 @@ public abstract class LevelRendererMixin {
 
     @Inject(method = "renderLevel", at = @At("HEAD"))
     private void prepareLevelRenderState(DeltaTracker deltaTracker, boolean bl, Camera camera, GameRenderer gameRenderer, LightTexture lightTexture, Matrix4f matrix4f, Matrix4f matrix4f2, CallbackInfo ci) {
+        net.vulkanmod.visuals.render.SubLevelShadowCasters.beginLevel();
         prepareWorldPassRenderState();
     }
 
