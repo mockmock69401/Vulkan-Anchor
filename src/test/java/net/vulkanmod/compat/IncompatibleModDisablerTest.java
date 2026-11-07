@@ -115,11 +115,16 @@ class IncompatibleModDisablerTest {
     }
 
     @Test
-    void theShippedListNamesTheFamilyAndNothingBeyondIt() {
-        List<String> ids = List.of(CompatMods.loadLines("/assets/vulkanmod/compat/sodium_family_mod_ids.txt"));
+    void theShippedListNamesTheConflictingModsByTheirRealIds() {
+        List<String> ids = List.of(CompatMods.loadLines("/assets/vulkanmod/compat/incompatible_mod_ids.txt"));
 
         assertTrue(ids.containsAll(List.of("embeddium", "oculus", "sodiumoptionsapi", "colorwheel", "iris_search")), ids.toString());
-        // The README's tested packs keep colorwheel_patcher; the others are not this family
+        assertTrue(ids.containsAll(List.of("modernui", "acceleratedrendering", "particle_core", "modpackupdatechecker")), ids.toString());
+        // Jar names, not ids: these would never match a mod
+        assertFalse(ids.contains("irissearch"));
+        assertFalse(ids.contains("mekalus"));
+        assertFalse(ids.contains("modpack-update-checker"));
+        // The README's tested packs keep colorwheel_patcher; the others are not on the list at all
         assertFalse(ids.contains("colorwheel_patcher"));
         assertFalse(ids.contains("distanthorizons"));
         assertFalse(ids.contains("vulkanmod"));
