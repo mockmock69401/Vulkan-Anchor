@@ -239,13 +239,19 @@ bool depthNeighbour(sampler2D depthTex, mat4 invProj, ivec2 p, ivec2 size, out v
     return true;
 }
 
-//The tangent along one screen axis: toward whichever neighbour lies nearer in distance (an edge does not bend the normal)
+//The tangent along one screen axis: toward the side whose two neighbours line up with this pixel (an edge does not bend the normal;
+// Turanszki 2021, "Improved normal reconstruction from depth"). 2026-11-06 (the user: a ring of sheen on a forest floor around the
+// player, with fallen leaves on it): the nearer neighbour in distance was the grass under a leaf litter plane's edge from where a pixel's
+// step along the floor passes the gap between the planes (about 8 blocks at 1440p), and the normal stood sideways. LightingMath.tangentFromA
 bool depthTangent(sampler2D depthTex, mat4 invProj, ivec2 p, ivec2 size, ivec2 axis, vec3 centre, out vec3 t) {
-    vec3 a, b;
+    vec3 a, b, a2, b2;
     bool hasA = depthNeighbour(depthTex, invProj, p + axis, size, a);
     bool hasB = depthNeighbour(depthTex, invProj, p - axis, size, b);
+    bool hasA2 = hasA && depthNeighbour(depthTex, invProj, p + 2*axis, size, a2);
+    bool hasB2 = hasB && depthNeighbour(depthTex, invProj, p - 2*axis, size, b2);
     float d = length(centre);
-    if (hasA && (!hasB || abs(length(a) - d) <= abs(length(b) - d))) {
+    bool fromA = hasA && (!hasB || (hasA2 && hasB2 ? distance(2.0*a - a2, centre) <= distance(2.0*b - b2, centre) : abs(length(a) - d) <= abs(length(b) - d)));
+    if (fromA) {
         t = a - centre;
         return true;
     }
