@@ -62,6 +62,23 @@ class SubLevelShadowCastersTest {
         assertFalse(SubLevelShadowCasters.recording(), "a layer left open by the last frame does not stay open");
     }
 
+    /** Review focus 2: a draw whose buffers are gone since it was kept is left out, the others still go. */
+    @Test
+    void drawAllGoesOverEveryCasterAndCountsTheDrawnOnes() {
+        SubLevelShadowCasters.beginLayer(0);
+        SubLevelShadowCasters.record(FAKE, matrix(new Matrix4f()), 0, 0, 0);
+        SubLevelShadowCasters.record(FAKE, matrix(new Matrix4f()), 1, 0, 0);
+        SubLevelShadowCasters.endLayer();
+        SubLevelShadowCasters.Caster first = SubLevelShadowCasters.get(0);
+        int[] seen = {0};
+        int drawn = SubLevelShadowCasters.drawAll(c -> {
+            seen[0]++;
+            return c != first;
+        });
+        assertEquals(2, seen[0]);
+        assertEquals(1, drawn);
+    }
+
     @Test
     void keepsTheFirstCastersPastTheLimit() {
         SubLevelShadowCasters.beginLayer(0.1f);

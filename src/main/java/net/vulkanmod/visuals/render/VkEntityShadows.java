@@ -10,6 +10,7 @@ import net.vulkanmod.visuals.vk.VkGpuTimer;
 import net.vulkanmod.visuals.vk.VkGraphicsProgram;
 import net.vulkanmod.visuals.vk.VkImage2D;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
 import org.joml.Vector3fc;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
@@ -43,6 +44,7 @@ public final class VkEntityShadows {
     private final long framebuffer;
     private final VkGraphicsProgram program;
     private final LooseUniformWriter loose;
+    private final VkSubLevelShadows subLevels;//null when its program could not be built: the map holds the entities only
     private VkGpuBuffer[] vertices;
     private ShadowMath.Cascade drawn;
     private long drawnSerial = -1;
@@ -76,6 +78,7 @@ public final class VkEntityShadows {
         this.vertices = vertices;
         this.program = program;
         this.loose = new LooseUniformWriter(program.meta());
+        this.subLevels = VkSubLevelShadows.create();
     }
 
     /**
@@ -105,17 +108,35 @@ public final class VkEntityShadows {
     }
 
     /**
-     * Outside a render pass: clears the map and draws count captured corners (data, xyz floats) for cascade, then leaves it readable
-     * by the lighting pass. Nothing when count is 0 (the lighting then does not read it, drawn() is null).
+     * Whether this frame's map has anything to draw: a cascade, and captured entity corners or kept sub-level draws (2026-11-07).
+     * With nothing the map is not drawn and the lighting does not read it.
      */
-    public void draw(VkCommandBuffer cmd, ShadowMath.Cascade cascade, FloatBuffer data, int count) {
+    static boolean drawsAnything(boolean hasCascade, int entityCorners, int subLevelCasters) {
+        return hasCascade && (entityCorners > 0 || subLevelCasters > 0);
+    }
+
+    /** The sub-level draws this frame's map can take: 0 without their program. */
+    public int subLevelCasters() {
+        return this.subLevels == null || this.subLevels.disabled() ? 0 : SubLevelShadowCasters.count();
+    }
+
+    /**
+     * Outside a render pass: clears the map and draws count captured corners (data, xyz floats) and the kept sub-level draws for cascade,
+     * then leaves it readable by the lighting pass. Nothing when there are neither (the lighting then does not read it, drawn() is
+     * null). invModelView: this frame's view space to camera-relative world.
+     */
+    public void draw(VkCommandBuffer cmd, ShadowMath.Cascade cascade, FloatBuffer data, int count, Matrix4fc invModelView) {
         this.drawn = null;
         this.depth.tick();
-        if (cascade == null || data == null || count <= 0) return;
-        int n = Math.min(count, EntityShadowCapture.MAX_VERTICES);
-        this.matchFramesInFlight();
-        VkGpuBuffer buffer = this.vertices[Math.floorMod(VkFrames.recordingSlot(), this.vertices.length)];
-        MemoryUtil.memCopy(MemoryUtil.memAddress(data), MemoryUtil.memAddress(buffer.mapped()), (long) n * STRIDE);
+        int n = data == null ? 0 : Math.min(count, EntityShadowCapture.MAX_VERTICES);
+        int casters = this.subLevelCasters();
+        if (!drawsAnything(cascade != null, n, casters)) return;
+        VkGpuBuffer buffer = null;
+        if (n > 0) {
+            this.matchFramesInFlight();
+            buffer = this.vertices[Math.floorMod(VkFrames.recordingSlot(), this.vertices.length)];
+            MemoryUtil.memCopy(MemoryUtil.memAddress(data), MemoryUtil.memAddress(buffer.mapped()), (long) n * STRIDE);
+        }
         VkGpuTimer.mark(cmd, "shadows.entities");
         try (MemoryStack stack = MemoryStack.stackPush()) {
             VkClearValue.Buffer clears = VkClearValue.calloc(1, stack);
@@ -132,10 +153,13 @@ public final class VkEntityShadows {
                 scissor.get(0).offset().set(0, 0);
                 scissor.get(0).extent().set(MAP_SIZE, MAP_SIZE);
                 vkCmdSetScissor(cmd, 0, scissor);
-                this.loose.putMat4(VIEW_PROJECTION, cascade.viewProjection());
-                this.program.bind(cmd, this.renderPass, new VkBindings(), this.loose);
-                vkCmdBindVertexBuffers(cmd, 0, stack.longs(buffer.handle()), stack.longs(0));
-                vkCmdDraw(cmd, n, 1, 0, 0);
+                if (n > 0) {
+                    this.loose.putMat4(VIEW_PROJECTION, cascade.viewProjection());
+                    this.program.bind(cmd, this.renderPass, new VkBindings(), this.loose);
+                    vkCmdBindVertexBuffers(cmd, 0, stack.longs(buffer.handle()), stack.longs(0));
+                    vkCmdDraw(cmd, n, 1, 0, 0);
+                }
+                if (casters > 0) this.subLevels.draw(cmd, this.renderPass, cascade, invModelView);
             } finally {
                 vkCmdEndRenderPass(cmd);
             }
@@ -159,6 +183,7 @@ public final class VkEntityShadows {
     /** Only once no submitted frame can still use it (after the device is idle). */
     public void free() {
         for (VkGpuBuffer b : this.vertices) b.free();
+        if (this.subLevels != null) this.subLevels.free();
         this.program.free();
         vkDestroyFramebuffer(VkContext.device(), this.framebuffer, null);
         this.depth.free();

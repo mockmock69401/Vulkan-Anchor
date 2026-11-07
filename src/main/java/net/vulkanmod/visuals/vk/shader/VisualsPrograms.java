@@ -20,6 +20,8 @@ final class VisualsPrograms {
         add(c, "vanillaShadow", defs(), c.vertex("shadow/vanilla.vert"), c.fragment("shadow/vanilla.frag"));
         //2026-10-29: the entities this frame drew into the entity shadow map (VkEntityShadows)
         add(c, "entityShadow", defs(), c.vertex("shadow/entity.vert"), c.fragment("shadow/entity.frag"));
+        //2026-11-07: the sections of Sable's sub-levels into the same map (VkSubLevelShadows); their cutouts as the terrain's
+        add(c, "subLevelShadow", defs(), c.vertex("shadow/sublevel.vert"), c.fragment("shadow/vanilla.frag"));
         //Covers over built sections' sides next to ones VulkanMod has not built yet (VkEdgeCover)
         add(c, "edgeCover", defs(), c.vertex("post/edge_cover.vert"), c.fragment("post/edge_cover.frag"));
         //The full-screen post-process

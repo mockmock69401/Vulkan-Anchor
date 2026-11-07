@@ -642,8 +642,9 @@ public final class VisualsRenderer {
             VkShadowMaps.Maps far = shadowsOn ? this.shadows.far() : null;
             VkShadowMaps.Maps close = shadowsOn ? this.shadows.close() : null;
             ShadowUniforms.Values shadow = ShadowUniforms.compute(lighting, this.atmosphere, shadowNow, near, far, close);
-            //2026-10-29: the entity shadow map, from this frame's sun at the camera, when entities were captured
-            ShadowMath.Cascade entityCascade = shadowNow != null && this.entityShadows != null && EntityShadowCapture.vertexCount(serial) > 0
+            //2026-10-29: the entity shadow map, from this frame's sun at the camera, when entities were captured or (2026-11-07) a sub-level drew
+            ShadowMath.Cascade entityCascade = shadowNow != null && this.entityShadows != null
+                    && VkEntityShadows.drawsAnything(true, EntityShadowCapture.vertexCount(serial), this.entityShadows.subLevelCasters())
                     ? VkEntityShadows.cascade(SunMath.sunDirection(this.shadowFrame.timeOfDay()), shadowNow.cameraX(), shadowNow.cameraY(), shadowNow.cameraZ()) : null;
             this.post.prepareEntityShadows(EntityShadowUniforms.compute(entityCascade, shadowNow, this.atmosphere, shadow.near() || shadow.far()),
                     this.entityShadows != null ? this.entityShadows.view() : 0);
@@ -703,7 +704,7 @@ public final class VisualsRenderer {
                 if (terrainFilled) this.terrainLight.toCompute(cmd);
                 //2026-10-29: the colour right after the translucent terrain (0: none this frame; the composite then compares with itself)
                 this.post.colourAfterTranslucent(this.depthCapture != null ? this.depthCapture.colourAfter(serial, main.width(), main.height()) : 0);
-                if (entityCascade != null) this.entityShadows.draw(cmd, entityCascade, EntityShadowCapture.data(), EntityShadowCapture.vertexCount(serial));
+                if (entityCascade != null) this.entityShadows.draw(cmd, entityCascade, EntityShadowCapture.data(), EntityShadowCapture.vertexCount(serial), this.atmosphere.invModelView());
                 this.post.compute(cmd, VkContext.mainColourView(main), depths,
                         new VkPostProcess.LightInputs(lightVolume == null ? null : lightVolume.data(), lightVolume == null ? null : lightVolume.ready(), lightmap,
                                 lod != null ? lod.lightView() : 0, this.heldLight.on() ? this.heldLight.buffer() : null, this.terrainLight.view(),

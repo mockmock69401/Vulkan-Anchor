@@ -122,7 +122,7 @@ public final class VkVanillaShadows {
     }
 
     /** The block atlas's view (VulkanMod keeps sampled textures in the read layout), 0 when it has none yet. */
-    private static long atlasView() {
+    static long atlasView() {
         int id = Minecraft.getInstance().getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS).getId();
         GlTexture texture = GlTexture.getTexture(id);
         VulkanImage image = texture == null ? null : texture.getVulkanImage();

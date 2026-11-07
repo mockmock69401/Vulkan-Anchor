@@ -4,6 +4,7 @@ import org.joml.Matrix4f;
 import org.lwjgl.vulkan.VkCommandBuffer;
 
 import java.nio.FloatBuffer;
+import java.util.function.Predicate;
 
 /**
  * 2026-11-07: the sections of Sable's sub-levels (physics structures) this frame drew, kept on the render thread for the sun shadows.
@@ -80,5 +81,14 @@ public final class SubLevelShadowCasters {
 
     public static Caster get(int index) {
         return CASTERS[index];
+    }
+
+    /** Offers every kept draw to draw; how many it drew (it says false for one that cannot reach the map or has no buffers any more). */
+    static int drawAll(Predicate<Caster> draw) {
+        int drawn = 0;
+        for (int i = 0; i < count; i++) {
+            if (draw.test(CASTERS[i])) drawn++;
+        }
+        return drawn;
     }
 }

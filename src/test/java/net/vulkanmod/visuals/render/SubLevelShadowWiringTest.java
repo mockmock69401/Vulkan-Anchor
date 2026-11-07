@@ -1,9 +1,12 @@
 package net.vulkanmod.visuals.render;
 
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormatElement;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FieldInsnNode;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 
@@ -48,6 +51,46 @@ class SubLevelShadowWiringTest {
         assertFalse(scope.contains("RenderType.tripwire"), scope.toString());
         int open = scope.indexOf(CASTERS + "beginLayer"), draw = scope.indexOf("Operation.call"), close = scope.lastIndexOf(CASTERS + "endLayer");
         assertTrue(open >= 0 && open < draw && draw < close, scope.toString());
+    }
+
+    /** Review focus 3: the map is drawn for sub-levels whatever the Entity Shadows setting says. */
+    @Test
+    void theMapIsDrawnForSubLevelsWithoutTheEntitySetting() throws Exception {
+        List<String> post = calls("net/vulkanmod/visuals/render/VisualsRenderer", "postProcess");
+        assertTrue(post.contains("VkEntityShadows.drawsAnything") && post.contains("VkEntityShadows.subLevelCasters"), post.toString());
+        assertTrue(calls("net/vulkanmod/visuals/render/VkEntityShadows", "subLevelCasters").contains(CASTERS + "count"));
+        ClassNode node = new ClassNode();
+        try (InputStream in = SubLevelShadowWiringTest.class.getClassLoader().getResourceAsStream("net/vulkanmod/visuals/render/VisualsRenderer.class")) {
+            new ClassReader(in).accept(node, 0);
+        }
+        MethodNode postProcess = node.methods.stream().filter(m -> m.name.equals("postProcess")).findFirst().orElseThrow();
+        for (AbstractInsnNode insn : postProcess.instructions) {
+            assertFalse(insn instanceof FieldInsnNode f && f.owner.endsWith("VisualsConfig") && f.name.equals("entityShadows"),
+                    "postProcess does not read the Entity Shadows setting");
+        }
+    }
+
+    @Test
+    void theSubLevelsAreDrawnInsideTheMapsPass() throws Exception {
+        List<String> draw = calls("net/vulkanmod/visuals/render/VkEntityShadows", "draw");
+        int begin = draw.indexOf("VK10.vkCmdBeginRenderPass"), subLevels = draw.indexOf("VkSubLevelShadows.draw"), end = draw.indexOf("VK10.vkCmdEndRenderPass");
+        assertTrue(begin >= 0 && begin < subLevels && subLevels < end, draw.toString());
+    }
+
+    @Test
+    void theMapDrawsForEitherKindOfCaster() {
+        assertTrue(VkEntityShadows.drawsAnything(true, 6, 0));
+        assertTrue(VkEntityShadows.drawsAnything(true, 0, 3), "sub-levels alone");
+        assertFalse(VkEntityShadows.drawsAnything(true, 0, 0));
+        assertFalse(VkEntityShadows.drawsAnything(false, 6, 3), "no cascade this frame");
+    }
+
+    /** Sable's section buffers: Position at 0, UV0 at 16 in the 32-byte block vertex. */
+    @Test
+    void theVertexLayoutIsTheBlockFormat() {
+        assertEquals(DefaultVertexFormat.BLOCK.getVertexSize(), VkSubLevelShadows.BLOCK.stride());
+        assertEquals(DefaultVertexFormat.BLOCK.getOffset(VertexFormatElement.UV0), VkSubLevelShadows.BLOCK.offsets()[1]);
+        assertEquals(DefaultVertexFormat.BLOCK.getOffset(VertexFormatElement.POSITION), VkSubLevelShadows.BLOCK.offsets()[0]);
     }
 
     /** Review focus 5: a frame without a post-process does not leave its draws to the next one. */
