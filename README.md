@@ -149,7 +149,7 @@ its output is checked in; the build does not need a C compiler.
 | `src/test/` | JUnit tests (maths, struct layouts, settings and wiring checks; no game needed) |
 | `third_party/` | SMAA sources, FidelityFX headers and provenance, LWJGL licence |
 | `tools/` | the MSVC probe that pins the FidelityFX struct layouts, and its output |
-| `branding/` | the CurseForge icon (512 and 1024) and the script that draws it |
+| `branding/` | the CurseForge icon (512 and 1024), the mark without the name (512) and the script that draws them |
 | `libs/DistantHorizonsApi-7.3.0.jar` | Distant Horizons API, compile-time only (not packed into the jar); Distant Horizons 3.3.3 itself is fetched from Modrinth's Maven at build time, also compile-time only |
 
 ## Known limitations

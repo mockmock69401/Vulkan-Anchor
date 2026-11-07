@@ -143,7 +143,7 @@ jar는 `build/libs/VulkanAnchor_1.20.1-0.1.0.jar`에 만들어집니다(옆의 `
 | `src/test/` | JUnit 테스트(계산, 구조체 레이아웃, 설정과 연결 확인; 게임 불필요) |
 | `third_party/` | SMAA 소스, FidelityFX 헤더와 출처 정보, LWJGL 라이선스 |
 | `tools/` | FidelityFX 구조체 레이아웃을 고정하는 MSVC 확인 프로그램과 그 출력 |
-| `branding/` | CurseForge 아이콘(512, 1024)과 그것을 그리는 스크립트 |
+| `branding/` | CurseForge 아이콘(512, 1024), 이름 없는 마크(512), 그것들을 그리는 스크립트 |
 | `libs/DistantHorizonsApi-7.3.0.jar` | Distant Horizons API, 컴파일에만 사용(jar에 포함하지 않음). Distant Horizons 3.3.3 자체는 빌드할 때 Modrinth Maven에서 받으며 역시 컴파일에만 사용 |
 
 ## 알려진 한계
