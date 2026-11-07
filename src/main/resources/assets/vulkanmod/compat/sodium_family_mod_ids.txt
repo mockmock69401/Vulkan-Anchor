@@ -10,6 +10,7 @@ chloride
 mekalus
 flerovium
 sodiumextra
+sodium_extra
 sodiumextras
 sodiumdynamiclights
 sodiumleafculling
@@ -18,7 +19,7 @@ sodiumoptionsmodcompat
 reeses_sodium_options
 iris
 oculus
-irissearch
+iris_search
 iris_shader_folder
 colorwheel
 # Not a Sodium add-on itself, but it cannot load without sodiumdynamiclights

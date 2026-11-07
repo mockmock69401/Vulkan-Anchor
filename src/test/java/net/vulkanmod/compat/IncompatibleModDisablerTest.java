@@ -118,7 +118,7 @@ class IncompatibleModDisablerTest {
     void theShippedListNamesTheFamilyAndNothingBeyondIt() {
         List<String> ids = List.of(CompatMods.loadLines("/assets/vulkanmod/compat/sodium_family_mod_ids.txt"));
 
-        assertTrue(ids.containsAll(List.of("embeddium", "oculus", "sodiumoptionsapi", "colorwheel")), ids.toString());
+        assertTrue(ids.containsAll(List.of("embeddium", "oculus", "sodiumoptionsapi", "colorwheel", "iris_search")), ids.toString());
         // The README's tested packs keep colorwheel_patcher; the others are not this family
         assertFalse(ids.contains("colorwheel_patcher"));
         assertFalse(ids.contains("distanthorizons"));
