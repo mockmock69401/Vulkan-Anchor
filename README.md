@@ -82,13 +82,12 @@ It is experimental: compatibility and feature parity are incomplete.
 
 1. Put the single production jar (`VulkanMod-shaded_1.21.1-<version>.jar`) in the modpack's `mods` folder.
 2. Remove or disable any other VulkanMod or VulkanMod Reforged jar.
-3. Start the game once. VulkanMod disables the Sodium family by itself: Sodium, its forks and add-ons, and the shader
-   mods built on them ([full list](src/main/resources/assets/vulkanmod/compat/sodium_family_mod_ids.txt)). It renames
-   their jars to `<name>.jar.disabled`, lists them in a dialog and closes the game; start it again to play. To keep one
-   of them on, remove `.disabled` and add its mod id to `config/vulkanmod_keep_mods.txt`, one id per line. A mod that
-   requires a disabled mod is only named in the dialog, because disabling it could remove content from a world.
-4. Disable the other mods listed for your modpack below by hand. In general, any mod that replaces OpenGL rendering or
-   presents frames itself conflicts with a Vulkan renderer.
+3. Start the game once. VulkanMod disables the mods it cannot run with by itself: the Sodium family and the others in the
+   [full list](src/main/resources/assets/vulkanmod/compat/incompatible_mod_ids.txt). It renames their jars to
+   `<name>.jar.disabled`, lists them in a dialog and closes the game; start it again to play. To keep one of them on,
+   remove `.disabled` and add its mod id to `config/vulkanmod_keep_mods.txt`, one id per line; a kept mod that needs
+   another mod on the list needs that one kept too. A mod that requires a disabled mod is only named in the dialog,
+   because disabling it could remove content from a world.
 
 Frame generation costs GPU time: the game renders fewer real frames than with it off, and at high frame rates it can
 show fewer frames in total. Use it when your frame rate is below your monitor's refresh rate. While it runs, the
@@ -98,7 +97,7 @@ and generated frames together fill the refresh. Mobs, particles and the HUD keep
 ## Tested modpacks: mods to disable
 
 Tested on CurseForge with the versions below (copies of the installed packs: a new world, the HUD, maps and the quest
-book checked; rechecked on clean installs 2026-10-25). "Disable" means renaming the jar to `<name>.jar.disabled` (CurseForge's "disable" switch does the same).
+book checked; rechecked on clean installs 2026-10-25). VulkanMod disables these by itself at the first start, so this table is what to expect. "Disable" means renaming the jar to `<name>.jar.disabled` (CurseForge's "disable" switch does the same).
 
 | Modpack (version tested) | Disable |
 |---|---|

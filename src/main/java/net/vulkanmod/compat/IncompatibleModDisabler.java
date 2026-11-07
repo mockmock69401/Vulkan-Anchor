@@ -21,14 +21,14 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Turns the Sodium family off when it is installed next to VulkanMod: each such mod's jar becomes {@code <name>.jar.disabled}, the
+ * Turns off the mods that cannot run next to VulkanMod (the Sodium family and others): each such mod's jar becomes {@code <name>.jar.disabled}, the
  * name every launcher's own disable switch uses. FML has already put those mods in this game's module layer by the time any of
  * VulkanMod's code runs, so the rename only counts from the next start: after one, a dialog says what happened and the game exits
  * before a conflicting mixin can apply.
  */
 public final class IncompatibleModDisabler {
     private static final Logger LOGGER = LogManager.getLogger("VulkanMod");
-    private static final String MOD_ID_LIST = "/assets/vulkanmod/compat/sodium_family_mod_ids.txt";
+    private static final String MOD_ID_LIST = "/assets/vulkanmod/compat/incompatible_mod_ids.txt";
     static final String KEEP_FILE = "vulkanmod_keep_mods.txt";
     private static final String DISABLED_SUFFIX = ".disabled";
 

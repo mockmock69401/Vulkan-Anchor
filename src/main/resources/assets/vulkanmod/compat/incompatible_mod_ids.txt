@@ -1,0 +1,32 @@
+# Mod ids VulkanMod turns off by itself at startup (compat.IncompatibleModDisabler). Exact ids, read from the mods' own jars: a jar's
+# name is not its id (IrisSearch is iris_search, and Mekalus declares oculus). colorwheel_patcher stays on while colorwheel goes.
+# To exempt one on a machine, list its id in config/vulkanmod_keep_mods.txt.
+
+# Sodium, its forks, their add-ons and the shader mods built on them
+sodium
+embeddium
+rubidium
+xenon
+embeddiumplus
+chloride
+flerovium
+sodiumextra
+sodium_extra
+sodiumextras
+sodiumdynamiclights
+sodiumleafculling
+sodiumoptionsapi
+sodiumoptionsmodcompat
+reeses_sodium_options
+iris
+oculus
+iris_search
+iris_shader_folder
+colorwheel
+# Not a Sodium add-on itself, but it cannot load without sodiumdynamiclights
+immersivelanterns
+
+# Other mods the README's tested packs cannot run with: they hook OpenGL texture uploads that the Vulkan renderer replaces, and
+# crash the game at startup
+kerria
+modpackupdatechecker
