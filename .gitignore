@@ -22,6 +22,7 @@ tools/
 docs/
 .worktrees/
 .omc/
+.claude/
 src/testControl/
 src/testControlTest/
 
