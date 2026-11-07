@@ -62,6 +62,19 @@ public final class LightingMath {
     /** leanNormal: below this length the leaned normal is world up. */
     public static final float LEAN_MIN_LENGTH = 1e-4f;
     public static final float NORMAL_SNAP_MIN = 0.8f;
+
+    /**
+     * lighting.glsl's depthTangent with all four neighbours: whether the tangent goes to side a (a, then a2 beyond it) rather than side b,
+     * the side whose two neighbours extrapolate closer to the centre (view positions).
+     */
+    public static boolean tangentFromA(float[] centre, float[] a, float[] a2, float[] b, float[] b2) {
+        return extrapolationMiss(centre, a, a2) <= extrapolationMiss(centre, b, b2);
+    }
+
+    private static float extrapolationMiss(float[] centre, float[] near, float[] far) {
+        float x = 2 * near[0] - far[0] - centre[0], y = 2 * near[1] - far[1] - centre[1], z = 2 * near[2] - far[2] - centre[2];
+        return (float) Math.sqrt(x * x + y * y + z * z);
+    }
     public static final float HORIZONTAL_MIN = 0.5f, BOUNDARY_TOLERANCE = 0.04f;
     /**
      * 2026-10-22: a boundary only where one depth step moves the surface's world y by at most this (an eighth of the tolerance: the

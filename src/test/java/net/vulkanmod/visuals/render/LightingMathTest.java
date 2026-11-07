@@ -127,6 +127,46 @@ class LightingMathTest {
         assertTrue(GLSL.contains("float sunShadingAt(float direct, float skyLight, float sunWeight, float sunTerm) {"));
     }
 
+    /** A point on a floor at height plane under an eye eyeHeight above the ground, on the ray angle radians below the horizon. */
+    private static float[] floorPoint(float eyeHeight, float plane, double angle) {
+        return new float[]{0, plane - eyeHeight, (float) ((eyeHeight - plane) / Math.tan(angle))};
+    }
+
+    /**
+     * 2026-11-06 (the user: a ring of sheen on a forest floor around the player, with fallen leaves on it, with or without a torch): the
+     * first pixel of a leaf litter plane 1/64 block over the grass. Its nearest neighbour in distance is the grass below it from the
+     * distance where a pixel's step along the floor passes the gap between the planes (about 8 blocks at 1440p): the tangent then
+     * joined two planes, the normal stood sideways and the pixel took a wall's light.
+     */
+    @Test
+    void aFloorDecalsEdgeKeepsItsOwnPlanesNormalAtEveryDistance() {
+        float eye = 1.62f, litter = 0.25f / 16f;
+        double perPixel = 2 * Math.tan(Math.toRadians(35.5)) / 1440;
+        boolean nearestPickedTheGrass = false;
+        for (float d = 1; d <= 40; d += 0.25f) {
+            double angle = Math.atan2(eye - litter, d);
+            float[] centre = floorPoint(eye, litter, angle);
+            float[] a = floorPoint(eye, litter, angle - perPixel), a2 = floorPoint(eye, litter, angle - 2 * perPixel);
+            float[] b = floorPoint(eye, 0, angle + perPixel), b2 = floorPoint(eye, 0, angle + 2 * perPixel);
+            assertTrue(LightingMath.tangentFromA(centre, a, a2, b, b2), "the litter's own side at " + d + " blocks");
+            float dc = new Vector3f(centre).length();
+            if (Math.abs(new Vector3f(b).length() - dc) <= Math.abs(new Vector3f(a).length() - dc)) {
+                nearestPickedTheGrass = true;
+                assertTrue(d > 4, "the old rule's trouble starts past the hand at " + d);
+            }
+        }
+        assertTrue(nearestPickedTheGrass, "the case this guards");
+        //The other way round: a grass pixel just past the litter's far edge keeps the grass
+        float[] centre = floorPoint(eye, 0, 0.1);
+        float[] grassA = floorPoint(eye, 0, 0.1 - perPixel), grassA2 = floorPoint(eye, 0, 0.1 - 2 * perPixel);
+        float[] litterB = floorPoint(eye, litter, 0.1 + perPixel), litterB2 = floorPoint(eye, litter, 0.1 + 2 * perPixel);
+        assertTrue(LightingMath.tangentFromA(centre, grassA, grassA2, litterB, litterB2));
+        assertFalse(LightingMath.tangentFromA(centre, litterB, litterB2, grassA, grassA2));
+        //An even plane takes the first side, as before
+        assertTrue(LightingMath.tangentFromA(new float[]{0, 0, 2}, new float[]{0, 0, 1}, new float[]{0, 0, 0}, new float[]{0, 0, 3}, new float[]{0, 0, 4}));
+        assertTrue(GLSL.contains("bool fromA = hasA && (!hasB || (hasA2 && hasB2 ? distance(2.0*a - a2, centre) <= distance(2.0*b - b2, centre) : abs(length(a) - d) <= abs(length(b) - d)));"));
+    }
+
     /** Review round 2: a face turned down, leaned half way toward up, must not normalise a zero vector (NaN). */
     @Test
     void theLeanedLookupNormalIsNeverNaN() {
