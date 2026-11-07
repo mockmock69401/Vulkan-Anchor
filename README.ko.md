@@ -2,8 +2,6 @@
 
 [English](README.md) | 한국어
 
-이전 이름은 VulkanMod-shaded입니다. `mods` 폴더에 예전 `VulkanMod-shaded_*.jar`가 있다면 이 jar를 넣을 때 지워 주세요.
-
 **레거시 Forge 1.20.1 모드팩**을 위한 Vulkan 렌더러입니다. [VulkanMod](https://github.com/xCollateral/VulkanMod)의 포크인
 [VulkanMod Reforged](https://github.com/TrulyRin/VulkanMod-Reforged)를 수정한 비공식 빌드입니다. 이 브랜치는 Forge 1.20.1
 빌드이고, NeoForge 1.21.1 빌드는 `1.21.1` 브랜치에 있습니다.

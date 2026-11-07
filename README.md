@@ -2,8 +2,6 @@
 
 English | [한국어](README.ko.md)
 
-Formerly VulkanMod-shaded. If an old `VulkanMod-shaded_*.jar` is in your `mods` folder, remove it when you install this one.
-
 A Vulkan renderer for **legacy Forge 1.20.1 modpacks**: an unofficial, modified build of
 [VulkanMod Reforged](https://github.com/TrulyRin/VulkanMod-Reforged), itself a fork of
 [VulkanMod](https://github.com/xCollateral/VulkanMod). This branch is the Forge 1.20.1 build; the NeoForge 1.21.1
