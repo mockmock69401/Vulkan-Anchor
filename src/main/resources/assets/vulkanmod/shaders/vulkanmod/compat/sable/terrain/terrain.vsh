@@ -25,6 +25,9 @@ layout(binding = 3) uniform sampler2D Sampler2;
 layout(location = 0) out float vertexDistance;
 layout(location = 1) out vec4 vertexColor;
 layout(location = 2) out vec2 texCoord0;
+//2026-11-07: the scene light's (terrain.fsh): sky and block levels, and the colour without the lightmap
+layout(location = 3) out vec2 lightLevels;
+layout(location = 4) out vec3 albedoTint;
 
 void main() {
     vec3 drawPosition = Position + ChunkOffset;
@@ -33,6 +36,8 @@ void main() {
 
     ivec2 lightCoordinates = bitfieldExtract(UV2, 4, 8);
     lightCoordinates.y = int(round(float(lightCoordinates.y) * clamp(SableSkyLightScale, 0.0, 1.0)));
+    lightLevels = vec2(lightCoordinates.y, lightCoordinates.x);
+    albedoTint = Color.rgb;
     vec4 lightColor = texelFetch(Sampler2, lightCoordinates, 0);
     vertexColor = Color * lightColor;
 

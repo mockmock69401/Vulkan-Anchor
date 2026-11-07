@@ -17,6 +17,10 @@
     { "name": "Sampler0" },
     { "name": "Sampler2" }
   ],
+  "storageImages": [
+    { "name": "TerrainLight" },
+    { "name": "TerrainAlbedo" }
+  ],
   "UBOs": [
     { "type": "vertex", "binding": 0, "fields": [
       { "name": "MVP", "type": "matrix4x4", "count": 16 },
@@ -33,7 +37,8 @@
       { "name": "FogColor", "type": "float", "count": 4 },
       { "name": "FogStart", "type": "float", "count": 1 },
       { "name": "FogEnd", "type": "float", "count": 1 },
-      { "name": "AlphaCutout", "type": "float", "count": 1 }
+      { "name": "AlphaCutout", "type": "float", "count": 1 },
+      { "name": "LightOut", "type": "float", "count": 1 }
     ] }
   ]
 }

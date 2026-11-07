@@ -1,6 +1,9 @@
 #version 450
 
 #include "fog.glsl"
+//2026-11-07: the visuals' scene light (terrain_light.glsl, terrain.json's storage images), as VulkanMod's terrain writes it
+#define SCENE_LIGHT_BINDING 4
+#include "terrain_light.glsl"
 
 layout(binding = 2) uniform sampler2D Sampler0;
 
@@ -10,18 +13,25 @@ layout(binding = 1) uniform FragmentUniforms {
     float FogStart;
     float FogEnd;
     float AlphaCutout;
+    float LightOut;
 };
 
 layout(location = 0) in float vertexDistance;
 layout(location = 1) in vec4 vertexColor;
 layout(location = 2) in vec2 texCoord0;
+layout(location = 3) in vec2 lightLevels;
+layout(location = 4) in vec3 albedoTint;
 
 layout(location = 0) out vec4 fragColor;
 
 void main() {
-    vec4 color = texture(Sampler0, texCoord0) * vertexColor * ColorModulator;
+    vec4 texel = texture(Sampler0, texCoord0);
+    vec4 color = texel * vertexColor * ColorModulator;
     if (color.a < AlphaCutout) {
         discard;
+    }
+    if (LightOut > 0.5) {
+        writeSceneLight(lightLevels, vec4(texel.rgb * albedoTint, texel.a), vertexDistance <= FogStart, terrainTinted(albedoTint));
     }
     fragColor = linear_fog(color, vertexDistance, FogStart, FogEnd, FogColor);
 }
