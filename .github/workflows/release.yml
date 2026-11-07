@@ -50,4 +50,4 @@ jobs:
           MC_VERSION: ${{ steps.package.outputs.minecraft }}
         run: |
           tag="shaded-mc-${MC_VERSION}-${GITHUB_SHA:0:7}"
-          gh release create "$tag" build/release/*             --target "$GITHUB_SHA"             --title "Vulkan Anchor 0.1.0 - Minecraft ${MC_VERSION}"             --notes-file .github/release-notes.txt             --prerelease
+          gh release create "$tag" build/release/*             --target "$GITHUB_SHA"             --title "Vulkan Anchor 0.1.1 - Minecraft ${MC_VERSION}"             --notes-file .github/release-notes.txt             --prerelease
