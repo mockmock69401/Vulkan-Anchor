@@ -1,130 +1,179 @@
-"""Vulkan Anchor icon: a blocky sunset landscape with far terrain fading into haze (shaders, LODs), framed by a large V.
-python -I make_icon.py OUT.png [SIZE]"""
+"""Vulkan Anchor logo: a glowing red V whose arms are an anchor's, over the name.
+python -I make_icon.py OUT.png [SIZE] [--mark]   (--mark: no wordmark, the mark fills the square)
+The wordmark is set in Geist (SIL Open Font License), which has to be installed for the current user."""
 import math
+import os
 import random
 import sys
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
-OUT = sys.argv[1]
-FINAL = int(sys.argv[2]) if len(sys.argv) > 2 else 512
-S = 2048  # drawn at 4x, then downsampled
-rnd = random.Random(7)
+args = [a for a in sys.argv[1:] if not a.startswith('--')]
+MARK_ONLY = '--mark' in sys.argv
+OUT = args[0]
+FINAL = int(args[1]) if len(args) > 1 else 512
+S = 2048  # canvas; the shapes are drawn at twice this, then everything is downsampled
+SS = 2
+FONT = os.path.join(os.environ['LOCALAPPDATA'], 'Microsoft', 'Windows', 'Fonts', 'Geist-VariableFont_wght.ttf')
 
+RED_TOP, RED_BOTTOM = (255, 58, 58), (172, 20, 30)
+BG_EDGE, BG_CENTRE = (7, 7, 10), (30, 8, 12)
 
-def lerp(a, b, t):
-    return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(3))
-
-
-def gradient(stops, t):
-    for (t0, c0), (t1, c1) in zip(stops, stops[1:]):
-        if t <= t1:
-            return lerp(c0, c1, (t - t0) / (t1 - t0) if t1 > t0 else 0)
-    return stops[-1][1]
-
-
-HORIZON = int(S * 0.64)
-SKY = [(0.0, (14, 22, 66)), (0.45, (72, 52, 140)), (0.78, (214, 98, 120)), (1.0, (255, 170, 96))]
-
-img = Image.new('RGB', (S, S))
-px = img.load()
-d = ImageDraw.Draw(img)
-for y in range(HORIZON):
-    d.line([(0, y), (S, y)], fill=gradient(SKY, y / HORIZON))
-
-# stars in the upper sky
-for _ in range(90):
-    x, y = rnd.randrange(S), rnd.randrange(int(S * 0.32))
-    r = rnd.choice((3, 4, 5, 6))
-    d.rectangle([x, y, x + r, y + r], fill=(255, 245, 230) if rnd.random() < 0.8 else (190, 220, 255))
-
-# sun with bloom
-SUN = (S // 2, int(S * 0.555))
-SUN_R = int(S * 0.115)
-glow = Image.new('RGB', (S, S))
-g = ImageDraw.Draw(glow)
-g.ellipse([SUN[0] - SUN_R * 2.4, SUN[1] - SUN_R * 2.4, SUN[0] + SUN_R * 2.4, SUN[1] + SUN_R * 2.4], fill=(150, 70, 40))
-g.ellipse([SUN[0] - SUN_R * 1.5, SUN[1] - SUN_R * 1.5, SUN[0] + SUN_R * 1.5, SUN[1] + SUN_R * 1.5], fill=(200, 110, 60))
-glow = glow.filter(ImageFilter.GaussianBlur(S * 0.06))
-img = ImageChops.add(img, glow)
-d = ImageDraw.Draw(img)
-d.ellipse([SUN[0] - SUN_R, SUN[1] - SUN_R, SUN[0] + SUN_R, SUN[1] + SUN_R], fill=(255, 236, 180))
+# the mark is laid out in 0..1 around (0.5, 0.344); --mark scales it up to fill the square
+if MARK_ONLY:
+    SCALE, SHIFT_Y = 1.36, 0.5 - 0.344 * 1.36
+else:
+    SCALE, SHIFT_Y = 1.0, 0.0
 
 
-def ridge(base, amp, block, seed, freq):
-    """A stepped (block-wise) mountain line: y per block column."""
-    r = random.Random(seed)
-    phases = [r.uniform(0, 6.28) for _ in range(3)]
-    ys = []
-    for i in range(S // block + 2):
-        x = i / (S / block)
-        h = (math.sin(x * freq * 6.28 + phases[0]) * 0.55 + math.sin(x * freq * 2.3 * 6.28 + phases[1]) * 0.3
-             + math.sin(x * freq * 5.1 * 6.28 + phases[2]) * 0.15)
-        ys.append(int(base - amp * (h * 0.5 + 0.5)) // block * block)
-    return ys
+def p(x, y):
+    return (S * SS * (0.5 + (x - 0.5) * SCALE), S * SS * (y * SCALE + SHIFT_Y))
 
 
-def draw_layer(ys, block, top, bottom, haze, snow=None):
-    for i, y0 in enumerate(ys):
-        x0 = i * block
-        for y in range(y0, HORIZON + block, block):
-            t = (y - y0) / max(1, HORIZON - y0)
-            c = lerp(top, bottom, min(1, t * 1.6))
-            sky = gradient(SKY, min(1, y / HORIZON))
-            c = lerp(c, sky, haze)
-            if snow and y < y0 + block * 2 and y0 < snow:
-                c = lerp((236, 226, 240), sky, haze * 0.8)
-            d.rectangle([x0, y, x0 + block - 1, y + block - 1], fill=c)
+def size(v):
+    return S * SS * v * SCALE
 
 
-# far to near: hazier, smaller blocks far away (LODs), crisper and bigger near
-draw_layer(ridge(HORIZON - S * 0.05, S * 0.24, 16, 3, 1.4), 16, (120, 92, 170), (150, 110, 170), 0.55, snow=HORIZON - S * 0.2)
-draw_layer(ridge(HORIZON - S * 0.01, S * 0.19, 32, 11, 1.1), 32, (70, 70, 130), (90, 70, 120), 0.32)
-draw_layer(ridge(HORIZON + S * 0.03, S * 0.13, 64, 23, 1.3), 64, (34, 64, 84), (30, 50, 70), 0.08)
+def vertical(y0, y1, c0, c1):
+    grad = Image.new('RGB', (1, S))
+    for y in range(S):
+        t = min(1, max(0, (y - y0) / (y1 - y0)))
+        grad.putpixel((0, y), tuple(round(c0[i] + (c1[i] - c0[i]) * t) for i in range(3)))
+    return grad.resize((S, S))
 
-# water: reflection of the sky, sun streak, ripple lines
-for y in range(HORIZON, S):
-    t = (y - HORIZON) / (S - HORIZON)
-    c = lerp(gradient(SKY, 1 - t * 0.9), (10, 20, 50), min(1, t * 1.3))
-    d.line([(0, y), (S, y)], fill=c)
-for k in range(26):
-    y = HORIZON + int((k + 0.5) / 26 * (S - HORIZON) * 0.95)
-    w = int(SUN_R * (1.6 - k / 26 * 1.1) * (0.8 + rnd.random() * 0.4))
-    h = max(6, int(10 + k * 0.8))
-    a = 1 - k / 26
-    c = lerp((40, 40, 80), (255, 214, 150), a)
-    d.rectangle([SUN[0] - w, y, SUN[0] + w, y + h], fill=c)
 
-# the V: two slanted bars with a bevel; its notch frames the sun
-v_top, v_bottom = int(S * 0.13), int(S * 0.86)
-half_top, thick = int(S * 0.37), int(S * 0.15)
-cx = S // 2
-outer = [(cx - half_top, v_top), (cx - half_top + thick, v_top), (cx, v_bottom - int(thick * 1.25)),
-         (cx + half_top - thick, v_top), (cx + half_top, v_top), (cx + int(thick * 0.42), v_bottom),
-         (cx - int(thick * 0.42), v_bottom)]
-mask = Image.new('L', (S, S), 0)
-ImageDraw.Draw(mask).polygon(outer, fill=255)
+def blank():
+    return Image.new('L', (S * SS, S * SS), 0)
 
-shadow = Image.new('L', (S, S), 0)
-ImageDraw.Draw(shadow).polygon([(x + S * 0.012, y + S * 0.02) for x, y in outer], fill=170)
-shadow = shadow.filter(ImageFilter.GaussianBlur(S * 0.012))
-img = Image.composite(Image.new('RGB', (S, S), (8, 8, 24)), img, shadow)
 
-fill = Image.new('RGB', (S, S))
-f = ImageDraw.Draw(fill)
-for y in range(S):
-    t = min(1, max(0, (y - v_top) / (v_bottom - v_top)))
-    f.line([(0, y), (S, y)], fill=gradient([(0, (255, 255, 255)), (0.55, (196, 236, 255)), (1, (120, 190, 255))], t))
-img = Image.composite(fill, img, mask)
+def finish(big, round_by=0.0):
+    """Down to canvas size; round_by softens corners (blur, then a steep threshold)."""
+    if round_by:
+        big = big.filter(ImageFilter.GaussianBlur(size(round_by))).point(lambda v: min(255, max(0, (v - 118) * 14)))
+    return big.resize((S, S), Image.LANCZOS)
 
-# bevel: a darker inner edge on the right faces, a light rim on the left
-edge = mask.filter(ImageFilter.FIND_EDGES).filter(ImageFilter.MaxFilter(9))
-img = Image.composite(Image.new('RGB', (S, S), (40, 70, 150)), img, ImageChops.multiply(edge, mask))
-right = Image.new('L', (S, S), 0)
-rd = ImageDraw.Draw(right)
-rd.polygon([(cx + half_top - thick, v_top), (cx + half_top, v_top), (cx + int(thick * 0.42), v_bottom),
-            (cx, v_bottom - int(thick * 1.25))], fill=70)
-img = Image.composite(Image.new('RGB', (S, S), (70, 110, 190)), img, ImageChops.multiply(right, mask))
+
+# ---- the V: its arms are the anchor's arms, with barbed flukes; ring, stock and shank rise from the notch
+Y_CROWN, ARM_TOP, ARM_X, ARM_THICK = 0.58, 0.235, 0.27, 0.098
+FLUKE_BACK, FLUKE_WIDE, FLUKE_TIP = 0.07, 0.021, 0.018
+
+big = blank()
+m = ImageDraw.Draw(big)
+dx, dy = ARM_X, ARM_TOP - Y_CROWN
+length = math.hypot(dx, dy)
+ux, uy = -dx / length, dy / length
+nx, ny = -uy, ux
+half = ARM_THICK / 2
+for arm in (-1, 1):
+    def q(along, side):
+        return p(0.5 + (ux * along + nx * side) * -arm, Y_CROWN + uy * along + ny * side)
+    start = lambda side: -nx * side / ux  # both edges start on the centre line: the arms meet in one point
+    # one outline per arm. side > 0 faces the notch; the end is a chisel from a tip over the inner edge
+    # down to a barb that flares past the outer edge: the fluke
+    m.polygon([q(start(-half), -half), q(length - FLUKE_BACK * 1.3, -half), q(length - FLUKE_BACK, -half - FLUKE_WIDE),
+               q(length + FLUKE_TIP, half), q(start(half), half)], fill=255)
+SHANK, STOCK_X, STOCK_Y, STOCK_H = 0.020, 0.086, 0.148, 0.0165
+RING_Y, RING_OUT, RING_IN = 0.077, 0.047, 0.023
+m.rectangle([p(0.5 - SHANK, RING_Y), p(0.5 + SHANK, Y_CROWN)], fill=255)
+m.rectangle([p(0.5 - STOCK_X, STOCK_Y - STOCK_H), p(0.5 + STOCK_X, STOCK_Y + STOCK_H)], fill=255)
+for side in (-1, 1):
+    ex, ey = p(0.5 + side * STOCK_X, STOCK_Y)
+    r = size(STOCK_H)
+    m.ellipse([ex - r, ey - r, ex + r, ey + r], fill=255)
+rx, ry = p(0.5, RING_Y)
+for radius, value in ((RING_OUT, 255), (RING_IN, 0)):
+    r = size(radius)
+    m.ellipse([rx - r, ry - r, rx + r, ry + r], fill=value)
+v_mask = finish(big, 0.0035)
+
+# ---- background: near black, warming slightly behind the mark
+# Image.radial_gradient is 0 at the centre, 255 at the corners; centred on the mark, which sits above the name
+reach = S * 2
+radial = Image.radial_gradient('L').resize((reach, reach), Image.BICUBIC)
+top_of_crop = (reach - S) // 2 + (0 if MARK_ONLY else int(S * 0.15))
+radial = radial.crop((reach // 4, top_of_crop, reach // 4 + S, top_of_crop + S)).point(lambda v: min(255, v * 2))
+radial = radial.filter(ImageFilter.GaussianBlur(S * 0.01))
+img = Image.composite(Image.new('RGB', (S, S), BG_EDGE), Image.new('RGB', (S, S), BG_CENTRE), radial)
+
+# ---- obsidian: faint glassy blocks, each split into two facets; denser toward the edges, clear behind the mark
+def obsidian(base):
+    rnd = random.Random(11)
+    coarse_n = 7
+    coarse = [[rnd.random() for _ in range(coarse_n + 1)] for _ in range(coarse_n + 1)]
+
+    def patches(x, y):
+        gx, gy = x * coarse_n, y * coarse_n
+        ix, iy = min(int(gx), coarse_n - 1), min(int(gy), coarse_n - 1)
+        fx, fy = gx - ix, gy - iy
+        top = coarse[iy][ix] * (1 - fx) + coarse[iy][ix + 1] * fx
+        low = coarse[iy + 1][ix] * (1 - fx) + coarse[iy + 1][ix + 1] * fx
+        return top * (1 - fy) + low * fy
+
+    alpha = Image.new('L', (S, S), 0)
+    d = ImageDraw.Draw(alpha)
+    centre_y = 0.5 if MARK_ONLY else 0.36
+    for cell, chance in ((S // 12, 0.5), (S // 24, 0.55)):  # large blocks first, small ones over them
+        for row in range(S // cell + 1):
+            for col in range(S // cell + 1):
+                x0, y0 = col * cell, row * cell
+                x, y = (col + 0.5) * cell / S, (row + 0.5) * cell / S
+                away = min(1, max(0, (math.hypot(x - 0.5, y - centre_y) - 0.2) / 0.45))
+                if patches(min(x, 1), min(y, 1)) + rnd.random() * 0.35 < 0.84 - away * 0.34 or rnd.random() > chance:
+                    continue
+                level = int((26 + rnd.random() * 44) * (0.35 + 0.65 * away))
+                x1, y1 = x0 + cell - 1, y0 + cell - 1
+                if rnd.random() < 0.5:
+                    light, dark = [(x0, y0), (x1, y0), (x0, y1)], [(x1, y0), (x1, y1), (x0, y1)]
+                else:
+                    light, dark = [(x0, y0), (x1, y0), (x1, y1)], [(x0, y0), (x1, y1), (x0, y1)]
+                d.polygon(light, fill=level)
+                d.polygon(dark, fill=int(level * 0.8))
+                d.line([(x0, y0), (x1, y0)], fill=min(255, int(level * 1.35)), width=max(2, S // 512))
+    return Image.composite(Image.new('RGB', (S, S), (92, 80, 118)), base, alpha)
+
+
+img = obsidian(img)
+
+# ---- glow, wide and tight
+for radius, strength, colour in ((0.05, 0.42, (230, 25, 35)), (0.014, 0.85, (255, 40, 45))):
+    glow = v_mask.filter(ImageFilter.GaussianBlur(S * radius)).point(lambda v: int(v * strength))
+    img = ImageChops.add(img, ImageChops.multiply(Image.merge('RGB', (glow, glow, glow)), Image.new('RGB', (S, S), colour)))
+
+# ---- fills
+v_top, v_bottom = p(0.5, RING_Y - RING_OUT)[1] / SS, p(0.5, Y_CROWN + half / -ux)[1] / SS
+img = Image.composite(vertical(v_top, v_bottom, RED_TOP, RED_BOTTOM), img, v_mask)
+# a thin light rim on the upper left of the V
+rim = ImageChops.subtract(v_mask, ImageChops.offset(v_mask, int(S * 0.003), int(S * 0.004))).point(lambda v: v * 120 // 255)
+img = Image.composite(Image.new('RGB', (S, S), (255, 165, 160)), img, rim)
+
+
+# ---- the name
+def text_mask(text, weight, height_px, tracking=0.0):
+    """White-on-black text mask, cropped to its ink, its ink height height_px (canvas pixels)."""
+    font = ImageFont.truetype(FONT, 1000)
+    font.set_variation_by_axes([weight])
+    canvas = Image.new('L', (9000, 1600), 0)
+    d = ImageDraw.Draw(canvas)
+    x = 100
+    for ch in text:
+        d.text((x, 100), ch, font=font, fill=255)
+        x += font.getlength(ch) + tracking * 1000
+    canvas = canvas.crop(canvas.getbbox())
+    return canvas.resize((round(canvas.width * height_px / canvas.height), round(height_px)), Image.LANCZOS)
+
+
+if not MARK_ONLY:
+    word = text_mask('Vulkan', 900, S * 0.145, tracking=-0.005)
+    x, y = (S - word.width) // 2, int(S * 0.692)
+    layer = Image.new('L', (S, S), 0)
+    layer.paste(word, (x, y))
+    img = Image.composite(vertical(y, y + word.height, (255, 255, 255), (206, 208, 216)), img, layer)
+
+    sub = text_mask('ANCHOR', 800, S * 0.056, tracking=0.34)
+    x, y = (S - sub.width) // 2, int(S * 0.874)
+    layer = Image.new('L', (S, S), 0)
+    layer.paste(sub, (x, y))
+    img = Image.composite(Image.new('RGB', (S, S), (240, 48, 52)), img, layer)
 
 img = img.resize((FINAL, FINAL), Image.LANCZOS)
 img.save(OUT)
