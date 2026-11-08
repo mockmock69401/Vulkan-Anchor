@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Unique;
 
+@SuppressWarnings("target")
 @Mixin(MainTarget.class)
 public class MainTargetMixin extends RenderTarget {
 

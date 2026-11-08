@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Unique;
 
+@SuppressWarnings("target")
 @Mixin(GlUtil.class)
 public class GlDebugInfoM {
 

@@ -6,6 +6,7 @@ import net.vulkanmod.interfaces.VisibilitySetExtended;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
+@SuppressWarnings("target")
 @Mixin(VisibilitySet.class)
 public class VisibilitySetMixin implements VisibilitySetExtended {
 

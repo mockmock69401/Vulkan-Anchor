@@ -15,6 +15,7 @@ import org.joml.Vector4f;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
+@SuppressWarnings("target")
 @Mixin(FaceBakery.class)
 public class FaceBakeryM {
 

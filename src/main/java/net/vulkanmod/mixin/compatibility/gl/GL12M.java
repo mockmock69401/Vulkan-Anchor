@@ -2,7 +2,7 @@ package net.vulkanmod.mixin.compatibility.gl;
 
 import net.vulkanmod.compat.opengl.GlDrawContract;
 import net.vulkanmod.gl.GlTexture;
-import org.jetbrains.annotations.Nullable;
+import javax.annotation.Nullable;
 import org.lwjgl.opengl.GL12C;
 import org.lwjgl.system.NativeType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,11 +20,6 @@ public class GL12M {
     @Overwrite(remap = false)
     public static void glDrawRangeElements(@NativeType("GLenum") int mode, @NativeType("GLuint") int start, @NativeType("GLuint") int end, @NativeType("GLsizei") int count, @NativeType("GLenum") int type, @NativeType("void const *") long indices) {
         GlDrawContract.drawElements(mode, count, type, indices);
-    }
-
-    @Overwrite(remap = false)
-    public static void glDrawRangeElements(@NativeType("GLenum") int mode, @NativeType("GLuint") int start, @NativeType("GLuint") int end, @NativeType("GLsizei") int count, @NativeType("GLenum") int type, @NativeType("void const *") ByteBuffer indices) {
-        GlDrawContract.drawElements(mode, count, type, 0L);
     }
 
     @Overwrite(remap = false)

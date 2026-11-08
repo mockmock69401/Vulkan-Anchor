@@ -144,9 +144,10 @@ tasks.withType(JavaCompile).configureEach {
     it.options.encoding = 'UTF-8'
     it.options.compilerArgs += [
             "-AoutRefMapFile=${layout.buildDirectory.file("tmp/compileJava/compileJava-refmap.json").get().asFile}",
-            "-AoutMixinConfig=vulkanmod.mixins.json",
             "-AreobfSrgFile=${layout.buildDirectory.file("moddev/artifacts/namedToIntermediate.srg").get().asFile}",
-            "-AdefaultObfuscationEnv=searge"
+            "-AdefaultObfuscationEnv=searge",
+            // Skips only the processor's request for an @author/@reason javadoc on each @Overwrite
+            "-AdisableOverwriteChecker=true"
     ]
 }
 

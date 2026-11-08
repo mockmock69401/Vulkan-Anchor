@@ -1,7 +1,7 @@
 package net.vulkanmod.mixin.compatibility.gl;
 
 import net.vulkanmod.compat.gl.GlCapabilityState;
-import org.jetbrains.annotations.Nullable;
+import javax.annotation.Nullable;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL11C;

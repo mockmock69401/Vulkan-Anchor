@@ -13,7 +13,7 @@ public class InputConstantsM {
               
                                                                       
        
-    @Redirect(method = "grabOrReleaseMouse", at = @At(value = "INVOKE", target = "Lorg/lwjgl/glfw/GLFW;glfwSetCursorPos(JDD)V"))
+    @Redirect(method = "grabOrReleaseMouse", at = @At(value = "INVOKE", target = "Lorg/lwjgl/glfw/GLFW;glfwSetCursorPos(JDD)V", remap = false))
     private static void grabOrReleaseMouse(long window, double xpos, double ypos) {
         if (!Platform.isWayLand())
             GLFW.glfwSetCursorPos(window, xpos, ypos);

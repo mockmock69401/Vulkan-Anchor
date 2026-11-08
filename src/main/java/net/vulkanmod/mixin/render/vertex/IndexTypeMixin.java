@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.VertexFormat;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
+@SuppressWarnings("target")
 @Mixin(VertexFormat.IndexType.class)
 public class IndexTypeMixin {
 
