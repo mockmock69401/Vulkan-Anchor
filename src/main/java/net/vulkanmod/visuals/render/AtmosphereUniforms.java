@@ -118,10 +118,20 @@ public final class AtmosphereUniforms {
     public static final float[] SKY_TINT_REFERENCE = {121 / 255f, 167 / 255f, 1};
 
     // ---- haze ----
-    /** Blocks of view distance per air mass at fog strength 100 (the aerial haze: terrain 3000 blocks away is behind one air mass). */
+    /**
+     * Blocks of view distance per air mass far away at fog strength and distance haze 100 (Atmosphere.ambient.w); near the camera
+     * atmosphere.glsl's hazeMass adds the aerial veil on top (about 1.3 air masses at 200 blocks, 4.5 at 3000).
+     */
     public static final float AIR_MASS_BLOCKS = 3000;
     /** Ground fog density per block at sea level at fog strength 100; full rain multiplies it by 1 + RAIN_FOG. */
     public static final float FOG_DENSITY = 0.001f, RAIN_FOG = 1.5f;
+    /**
+     * 2026-11-09 (session 1b, the roadmap: "morning valley fog"): in the morning (the sun in the east) the ground fog is MORNING_MIST times
+     * thicker on top of its clear density, from dawn (sun height MIST_DAWN) until MIST_SUN_LOW, gone by MIST_SUN_HIGH. The low sun lights it
+     * through fogColour (warm toward the sun, the sky's blue away from it). Vanilla's sun is already 20 degrees up (height 0.34) at time 500,
+     * where Luxium and Complementary Reimagined fill the F3 river valley with a warm mist (SEUS keeps it clear); it is gone by about time 2300.
+     */
+    public static final float MORNING_MIST = 2.0f, MIST_DAWN = -0.2f, MIST_SUN_LOW = 0.35f, MIST_SUN_HIGH = 0.7f;
     /**
      * 2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined, whose rain hides a street's far end at any height):
      * the weather fog, a Gaussian distance fog on surfaces only (scene_copy.comp, BORDER .w), 1 / range in full rain at the weather fog
@@ -381,10 +391,12 @@ public final class AtmosphereUniforms {
         b[7] = clamp01(RAIN_GREY * Math.max(rain, thunder));
         b[11] = 1 - dayFade;
         b[15] = tauM;
-        b[19] = fogStrength / AIR_MASS_BLOCKS;
+        //2026-11-09 (session 1b): the distance haze setting scales the aerial haze only (its near veil and the far fade), not the ground fog
+        b[19] = fogStrength * Math.max(0, finite(s.distanceHaze())) / AIR_MASS_BLOCKS;
         b[23] = GLOW_AMOUNT * glow * (1 - GLOW_RAIN_CUT * rain);
         float fogHeight = Math.max(PostProcessSettings.FOG_HEIGHT_MIN, finite(s.fogHeight()));
-        b[24] = FOG_DENSITY * fogStrength * (1 + RAIN_FOG * rain);
+        float mist = morning * AtmosphereMath.smoothstep(MIST_DAWN, 0, sun.y) * (1 - AtmosphereMath.smoothstep(MIST_SUN_LOW, MIST_SUN_HIGH, sun.y));
+        b[24] = FOG_DENSITY * fogStrength * (1 + RAIN_FOG * rain + MORNING_MIST * mist);
         b[25] = 1 / fogHeight;
         b[26] = Math.max(0, finite(f.cameraY()) - finite(f.seaLevel()));
         //The sun's reddening air mass (the sunset light setting scales it, as transmittance does): atmosphere.glsl's airlight lifts it for
