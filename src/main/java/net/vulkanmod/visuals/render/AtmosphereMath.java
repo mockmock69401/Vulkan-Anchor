@@ -24,6 +24,20 @@ public final class AtmosphereMath {
     public static final float GLOW_DEPTH = 0.2f;
     /** The isotropic sky dome builds up along a path like a medium of this optical depth per air mass (flatter than Rayleigh's gradient). */
     public static final float AMBIENT_DEPTH = 0.7f;
+    /**
+     * 2026-11-09 (session 1a): the low haze band (lowBand; see atmosphere.glsl). Optical depth LOW_DEPTH m^2 / SKY_MAX_AIR_MASS along m
+     * air masses, while the sun is below LOW_SUN_HIGH (full below LOW_SUN_LOW) and above LOW_NIGHT_LOW (full above LOW_NIGHT_HIGH).
+     */
+    public static final float LOW_DEPTH = 0.6f, LOW_SUN_LOW = 0.15f, LOW_SUN_HIGH = 0.45f, LOW_NIGHT_LOW = -0.2f, LOW_NIGHT_HIGH = -0.05f;
+    /** The band's light: the sky's sunlight reddened LOW_REDDENING times more, up to the reddening of LOW_LIGHT_MASS air masses, at its brightness, times LOW_SCATTER. */
+    public static final float LOW_REDDENING = 4.5f, LOW_LIGHT_MASS = 20.0f, LOW_SCATTER = 1.0f;
+    /**
+     * The band's phase: LOW_ISO isotropic, the rest a Henyey-Greenstein lobe of LOW_G; as the sun sinks from LOW_SHADOW_HIGH to LOW_SHADOW_LOW
+     * the low air away from it falls into the earth's shadow (lit only within LOW_SHADOW_COS of the sun's direction, fully above it).
+     */
+    public static final float LOW_G = 0.3f, LOW_ISO = 0.3f, LOW_SHADOW_LOW = -0.03f, LOW_SHADOW_HIGH = 0.12f, LOW_SHADOW_COS = 0.7f;
+    /** The band also scatters LOW_DOME of the dome's light (the sky lights it too: the earth's shadow is blue-grey, not black). */
+    public static final float LOW_DOME = 0.5f;
     /** The sky's sunlight is reddened by this share of the extinction along the sun's air mass (AtmosphereUniforms.SKY_REDDENING). */
     public static final float SKY_REDDENING = 0.7f;
     /** Vanilla's sunrise/sunset fan is suppressed on the sun's side: fully above FAN_SIDE_HIGH horizontal cosine to the sun, not below FAN_SIDE_LOW. */
@@ -119,7 +133,34 @@ public final class AtmosphereMath {
             float sunPath = m * (Math.abs(km) > FOG_SERIES ? (1 - (float) Math.exp(-km)) / km : 1 - 0.5f * km);
             out[i] = sun * sunPath + moon * (1 - (float) Math.exp(-tau * m)) / tau + a.ambient[i] * (1 - (float) Math.exp(-AMBIENT_DEPTH * m));
         }
+        //2026-11-09 (session 1a): the low haze band in front of it all
+        float band = lowBand(a, m);
+        if (band > 0) {
+            float t = (float) Math.exp(-band);
+            float[] light = lowLight(a);
+            float lit = smoothstep(LOW_SHADOW_LOW, LOW_SHADOW_HIGH, a.sun[1]);
+            float phase = (LOW_ISO + (1 - LOW_ISO) * hgPhase(cs, LOW_G)) * (lit + (1 - lit) * smoothstep(0, LOW_SHADOW_COS, cs));
+            for (int i = 0; i < 3; i++) out[i] = out[i] * t + (LOW_SCATTER * light[i] * phase + LOW_DOME * a.ambient[i]) * (1 - t);
+        }
         return out;
+    }
+
+    /** The low haze band's optical depth along m air masses: LOW_DEPTH m^2 / SKY_MAX_AIR_MASS by the sun's height and the overcast. */
+    public static float lowBand(Atmosphere a, float m) {
+        float w = (1 - smoothstep(LOW_SUN_LOW, LOW_SUN_HIGH, a.sun[1])) * smoothstep(LOW_NIGHT_LOW, LOW_NIGHT_HIGH, a.sun[1]) * (1 - clamp01(a.sunLight[3]));
+        float mm = Math.max(m, 0);
+        return LOW_DEPTH * w * mm * mm / SKY_MAX_AIR_MASS;
+    }
+
+    /** The low haze band's light: the sky's sunlight reddened LOW_REDDENING times more, up to LOW_LIGHT_MASS air masses in all, at its luminance. */
+    public static float[] lowLight(Atmosphere a) {
+        float[] light = new float[3];
+        float w = Math.max(a.fog[3], 0), mass = Math.min(LOW_REDDENING * w, Math.max(LOW_LIGHT_MASS - w, 0));
+        for (int i = 0; i < 3; i++) light[i] = a.sunLight[i] * (float) Math.exp(-SKY_REDDENING * (a.depth[i] + a.depth[3]) * mass);
+        float ll = PostMath.luminance(light[0], light[1], light[2]), ls = PostMath.luminance(a.sunLight[0], a.sunLight[1], a.sunLight[2]);
+        float k = ll > MIN_DEPTH ? ls / ll : 0;
+        for (int i = 0; i < 3; i++) light[i] *= k;
+        return light;
     }
 
     public static float[] fogColour(Atmosphere a, float[] dir) {
@@ -191,7 +232,8 @@ public final class AtmosphereMath {
         float skyMass = skyAirMass(dir[1]);
         float mass = Math.min(d * a.ambient[3], skyMass) * k;
         float[] t = new float[3];
-        for (int i = 0; i < 3; i++) t[i] = (float) Math.exp(-Math.max(a.depth[i] + a.depth[3], MIN_DEPTH) * mass) * tf;
+        float band = (float) Math.exp(-lowBand(a, mass));
+        for (int i = 0; i < 3; i++) t[i] = (float) Math.exp(-Math.max(a.depth[i] + a.depth[3], MIN_DEPTH) * mass) * tf * band;
         float[] air = overcast(a, airlight(a, dir, mass));
         float[] lobe = glowLobe(a, dir);
         float along = glowGain(mass), sky = glowGain(skyMass);

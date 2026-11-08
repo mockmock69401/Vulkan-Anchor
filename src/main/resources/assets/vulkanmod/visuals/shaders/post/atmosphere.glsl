@@ -35,7 +35,8 @@
 //   fog        x the ground fog's density per block at sea level (fog strength and rain applied; NO_SKY and FOG: the uniform
 //              density), y 1 / fog height (blocks^-1; 0 in NO_SKY and FOG: height independent), z the camera's height above sea
 //              level (clamped at 0), w the sun's reddening air mass (SKY: sunLight is the light through SKY_REDDENING of the
-//              extinction along it; 0 in NO_SKY and FOG)
+//              extinction along it, which airlight lifts for light scattered high in the air and the low haze band deepens; 0 in NO_SKY
+//              and FOG)
 // CloudLight fields: lit rgb the colour of a fully sunlit cloud (scene units, CLOUD_ALBEDO and vanilla's cloud colour already
 // applied: do not multiply again; vanilla's cloud colour carries the day/night and weather brightness, so night clouds are dark), ambient rgb the sky light every cloud sample gets, light xyz the direction the clouds are lit
 // from (the sun, the moon at night: pass it as clouds.glsl's cloudMarch lightDir); w components 0.
@@ -105,6 +106,35 @@ const float GLOW_DEPTH = 0.2;
 const float AMBIENT_DEPTH = 0.7;
 //The sky's sunlight (Atmosphere.sunLight) is reddened by this share of the extinction along the sun's air mass (fog.w)
 const float SKY_REDDENING = 0.7;
+//2026-11-09 (session 1a: "the sunset is only red", "the sunrise is grey"): the low haze band (lowBand). The references (Luxium,
+// Complementary Reimagined, Fantasy) draw a sun 10 degrees up the way a real sky looks with the sun 2 degrees up: an orange band about
+// 10 to 15 degrees tall at the horizon, pink and lavender above it, blue at the top. Deepening the whole column's reddening for that turned
+// the zenith grey (a channel's column-averaged light falls as one over its depth, which Rayleigh's weighting cancels), so the deeper
+// reddening lives in a band of low haze only (the boundary layer, after the two-layer picture of Preetham, Shirley and Smits 1999, "A
+// practical analytic model for daylight", where haze sits low and Rayleigh air above). Its optical depth along m air masses is
+// LOW_DEPTH m^2 / SKY_MAX_AIR_MASS (opaque at the horizon, about 70% at 10 degrees, 27% at 20, 14% at 30), while the sun is low: full below sun
+// height LOW_SUN_LOW, none above LOW_SUN_HIGH; it fades out after dusk (LOW_NIGHT_LOW .. LOW_NIGHT_HIGH) and with the overcast
+const float LOW_DEPTH = 0.6;
+const float LOW_SUN_LOW = 0.15;
+const float LOW_SUN_HIGH = 0.45;
+const float LOW_NIGHT_LOW = -0.2;
+const float LOW_NIGHT_HIGH = -0.05;
+//The band's light is the sky's sunlight reddened LOW_REDDENING times more, but to no more than the reddening of LOW_LIGHT_MASS air masses
+// in all (the sky's own cap, AtmosphereUniforms.SUN_MAX_AIR_MASS: a set sun's band stays burnt orange), kept at the sky's sunlight's
+// luminance, times LOW_SCATTER. Its haze scatters grey (no Rayleigh weighting: an orange light stays orange)
+const float LOW_REDDENING = 4.5;
+const float LOW_LIGHT_MASS = 20.0;
+const float LOW_SCATTER = 1.0;
+//The band's phase: LOW_ISO isotropic, the rest a Henyey-Greenstein lobe of LOW_G (warm toward the sun, a pink belt opposite). As the sun
+// sinks from LOW_SHADOW_HIGH to LOW_SHADOW_LOW the low air away from it falls into the earth's shadow: then only the band within
+// LOW_SHADOW_COS of the sun's direction (cosine) is lit
+const float LOW_G = 0.3;
+const float LOW_ISO = 0.3;
+const float LOW_SHADOW_LOW = -0.03;
+const float LOW_SHADOW_HIGH = 0.12;
+const float LOW_SHADOW_COS = 0.7;
+//The band also scatters this share of the dome's light (the sky lights the haze too: the earth's shadow is blue-grey, not black)
+const float LOW_DOME = 0.5;
 //Vanilla's sunrise/sunset fan is suppressed on the side of the sky facing the sun: fully where the horizontal cosine to the sun's
 // azimuth is above FAN_SIDE_HIGH, not at all below FAN_SIDE_LOW (the fan spans the sun's half of the horizon)
 const float FAN_SIDE_LOW = -0.3;
@@ -188,13 +218,32 @@ vec3 overcast(Atmosphere a, vec3 c) {
     return mix(c, vec3(OVERCAST_RED, OVERCAST_GREEN, OVERCAST_BLUE)*luminance(c), a.sunLight.w);
 }
 
+//The low haze band's optical depth along a path of m air masses (see LOW_DEPTH): by the sun's height and the overcast
+float lowBand(Atmosphere a, float m) {
+    float w = (1.0 - smoothstep(LOW_SUN_LOW, LOW_SUN_HIGH, a.sun.y))*smoothstep(LOW_NIGHT_LOW, LOW_NIGHT_HIGH, a.sun.y)
+            *(1.0 - clamp(a.sunLight.w, 0.0, 1.0));
+    float mm = max(m, 0.0);
+    return LOW_DEPTH*w*mm*mm/SKY_MAX_AIR_MASS;
+}
+
+//The low haze band's light (see LOW_REDDENING): the sky's sunlight reddened further, at its luminance
+vec3 lowLight(Atmosphere a) {
+    float w = max(a.fog.w, 0.0);
+    float mass = min(LOW_REDDENING*w, max(LOW_LIGHT_MASS - w, 0.0));
+    vec3 light = a.sunLight.rgb*exp(-SKY_REDDENING*(a.depth.rgb + a.depth.w)*mass);
+    float ll = luminance(light);
+    return ll > MIN_DEPTH ? light*(luminance(a.sunLight.rgb)/ll) : vec3(0.0);
+}
+
 //Single scattering of sun and moon light plus the ambient light along a path of `mass` air masses toward dir, in a homogeneous
 // atmosphere (Hoffman and Preetham 2002, "Rendering outdoor light scattering in real time", GDC): in-scatter =
 // (sun (tauR PR + tauM PH) + moon (...)) (1 - exp(-tau mass)) / tau, plus the isotropic dome ambient (1 - exp(-AMBIENT_DEPTH
 // mass)). Before the overcast. ATMOSPHERE_SKY only. 2026-10-24 (CTE2: "the sunset is only red"): sunLight is the light at the
 // ground; a point x air masses along the view has climbed x / M of the air column (M the whole view's air mass), and the sunlight
 // there went through that much less of the sun's reddening depth tauS: the sun's term integrates exp(-tau x) exp(tauS x / M), so
-// the zenith of a sunset sky keeps its blue while the horizon toward the sun stays red.
+// the zenith of a sunset sky keeps its blue while the horizon toward the sun stays red. 2026-11-09 (session 1a): then the low haze band
+// (lowBand) in front of it all: what is behind it is dimmed by its transmittance, and it adds its own light (lowLight in its phase, plus
+// LOW_DOME of the dome).
 vec3 airlight(Atmosphere a, vec3 dir, float mass) {
     vec3 tauR = a.depth.rgb;
     float tauM = a.depth.w;
@@ -205,7 +254,15 @@ vec3 airlight(Atmosphere a, vec3 dir, float mass) {
     float m = max(mass, 0.0);
     vec3 km = (tau - SKY_REDDENING*(tauR + tauM)*a.fog.w/skyAirMass(dir.y))*m;
     vec3 sunPath = m*mix(1.0 - 0.5*km, (1.0 - exp(-km))/km, greaterThan(abs(km), vec3(FOG_SERIES)));
-    return sun*sunPath + moon*(1.0 - exp(-tau*m))/tau + a.ambient.rgb*(1.0 - exp(-AMBIENT_DEPTH*m));
+    vec3 air = sun*sunPath + moon*(1.0 - exp(-tau*m))/tau + a.ambient.rgb*(1.0 - exp(-AMBIENT_DEPTH*m));
+    float band = lowBand(a, m);
+    if (band > 0.0) {
+        float t = exp(-band);
+        float lit = smoothstep(LOW_SHADOW_LOW, LOW_SHADOW_HIGH, a.sun.y);
+        float phase = (LOW_ISO + (1.0 - LOW_ISO)*hgPhase(cs, LOW_G))*(lit + (1.0 - lit)*smoothstep(0.0, LOW_SHADOW_COS, cs));
+        air = air*t + (LOW_SCATTER*lowLight(a)*phase + LOW_DOME*a.ambient.rgb)*(1.0 - t);
+    }
+    return air;
 }
 
 //The colour the ground fog scatters toward the camera looking along dir: the horizon sky in dir's azimuth (so fogged terrain meets
@@ -307,7 +364,7 @@ void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittan
     float skyMass = skyAirMass(dir.y);
     float mass = min(d*a.ambient.w, skyMass)*k;
     vec3 tau = max(a.depth.rgb + a.depth.w, vec3(MIN_DEPTH));
-    vec3 ta = exp(-tau*mass);
+    vec3 ta = exp(-tau*mass)*exp(-lowBand(a, mass));
     transmittance = ta*tf;
     vec3 lobe = glowLobe(a, dir);
     inscatter = (overcast(a, airlight(a, dir, mass)) + lobe*glowGain(mass))*tf;
