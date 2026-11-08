@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** P7e-3 design 3.3 (revision 2.4: three octaves): the flow phase advances with the game time. */
+/** P7e-3 design 3.3 (revision 2.4: three octaves; 2026-11-09: four): the flow phase advances with the game time. */
 class RippleClockTest {
     /** The phase from start after dt seconds at speed factor f, as RippleClock adds it. */
     private static double[] flowed(double[] start, double dt, float f) {
@@ -21,7 +21,7 @@ class RippleClockTest {
     void theFirstFrameOnlyStarts() {
         RippleClock c = new RippleClock();
         c.advance(1000, 1);
-        assertArrayEquals(new double[6], c.phase());
+        assertArrayEquals(new double[RippleMath.OCTAVES * 2], c.phase());
     }
 
     @Test
@@ -29,7 +29,7 @@ class RippleClockTest {
         RippleClock c = new RippleClock();
         c.advance(10, 1);
         c.advance(10.5, 1);
-        assertArrayEquals(flowed(new double[6], 0.5, 1), c.phase(), 1e-9);
+        assertArrayEquals(flowed(new double[RippleMath.OCTAVES * 2], 0.5, 1), c.phase(), 1e-9);
     }
 
     /** Review focus (first plan) 3: rain doubles the speed from then on; the phase so far is kept. */
@@ -39,7 +39,7 @@ class RippleClockTest {
         c.advance(0, 1);
         c.advance(0.5, 1);
         c.advance(1.0, 2);
-        assertArrayEquals(flowed(flowed(new double[6], 0.5, 1), 0.5, 2), c.phase(), 1e-9);
+        assertArrayEquals(flowed(flowed(new double[RippleMath.OCTAVES * 2], 0.5, 1), 0.5, 2), c.phase(), 1e-9);
     }
 
     /** Revision 2.5: speed 0 holds the ripples still. */

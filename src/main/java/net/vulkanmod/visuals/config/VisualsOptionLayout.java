@@ -117,7 +117,8 @@ public final class VisualsOptionLayout {
                             percent("water_reflections", 0, STRENGTH_MAX, Impact.MEDIUM),
                             new Item("block_reflections", Kind.CHOICE, 0, BLOCK_REFLECTIONS_MAX, Impact.MEDIUM, null),
                             percent("water_ripples", STRENGTH_MAX),
-                            percent("water_ripple_speed", RIPPLE_SPEED_MAX))),
+                            percent("water_ripple_speed", RIPPLE_SPEED_MAX),
+                            percent("water_ripple_density", RIPPLE_DENSITY_MIN, RIPPLE_DENSITY_MAX, Impact.NONE))),
                     new Block("wind", List.of(
                             percent("foliage_wind", STRENGTH_MAX))))));
 
@@ -176,6 +177,7 @@ public final class VisualsOptionLayout {
             case "block_reflections" -> c.blockReflections;
             case "water_ripples" -> c.waterRipples;
             case "water_ripple_speed" -> c.waterRippleSpeed;
+            case "water_ripple_density" -> c.waterRippleDensity;
             case "foliage_wind" -> c.foliageWind;
             default -> throw new IllegalArgumentException(item.key());
         };
@@ -229,6 +231,7 @@ public final class VisualsOptionLayout {
             case "block_reflections" -> c.blockReflections = v;
             case "water_ripples" -> c.waterRipples = v;
             case "water_ripple_speed" -> c.waterRippleSpeed = v;
+            case "water_ripple_density" -> c.waterRippleDensity = v;
             case "foliage_wind" -> c.foliageWind = v;
             default -> throw new IllegalArgumentException(item.key());
         }

@@ -51,7 +51,7 @@ public final class WaterMath {
     public static final float REFLECT_RAY_LENGTH = 100000.0f, REFLECT_NEAR = 0.06f;
     public static final float REFLECT_THICK_MIN = 0.5f, REFLECT_THICK_SHARE = 0.03f, REFLECT_STEP_CAP = 0.25f;
     public static final float REFLECT_EDGE_FADE = 0.05f, REFLECT_MIN_MARCH = 0.025f;
-    public static final float REFRACT_BLOCKS = 0.25f, REFRACT_MAX_PIXELS = 24.0f, REFRACT_SAME_DEPTH = 0.08f;
+    public static final float REFRACT_BLOCKS = 0.6f, REFRACT_MAX_PIXELS = 24.0f, REFRACT_SAME_DEPTH = 0.08f;
     public static final int REFLECT_CLOUD_MIN_SAMPLES = 4, REFLECT_CLOUD_MAX_SAMPLES = 12;
     public static final float REFLECT_CLOUD_STEP = 8.0f;
     public static final float REFLECT_CLOUD_SHADE = 0.7f;
@@ -181,25 +181,33 @@ public final class WaterMath {
         return h;
     }
 
-    public static float rippleCorner(float ix, float iz, float n, int seed) {
-        float wx = ix - n * (float) Math.floor(ix / n), wz = iz - n * (float) Math.floor(iz / n);
+    /** The value -1..1 at lattice corner (ix, iz), wrapped into nx, nz cells. */
+    public static float rippleCorner(float ix, float iz, float nx, float nz, int seed) {
+        float wx = ix - nx * (float) Math.floor(ix / nx), wz = iz - nz * (float) Math.floor(iz / nz);
         return (rippleHash((int) wx, (int) wz, seed) & 0xFFFFFF) / 16777215f * 2 - 1;
     }
 
-    /** The value noise's gradient at (x, z) in lattice units, repeating every n cells. */
-    public static float[] rippleGradient(float x, float z, float n, int seed) {
+    /** The value noise's gradient at (x, z) in lattice units, repeating every nx, nz cells. */
+    public static float[] rippleGradient(float x, float z, float nx, float nz, int seed) {
         float ix = (float) Math.floor(x), iz = (float) Math.floor(z);
         float fx = x - ix, fz = z - iz;
         float ux = fx * fx * fx * (fx * (fx * 6 - 15) + 10), uz = fz * fz * fz * (fz * (fz * 6 - 15) + 10);
         float dux = 30 * fx * fx * (fx * (fx - 2) + 1), duz = 30 * fz * fz * (fz * (fz - 2) + 1);
-        float a = rippleCorner(ix, iz, n, seed), b = rippleCorner(ix + 1, iz, n, seed);
-        float c = rippleCorner(ix, iz + 1, n, seed), d = rippleCorner(ix + 1, iz + 1, n, seed);
+        float a = rippleCorner(ix, iz, nx, nz, seed), b = rippleCorner(ix + 1, iz, nx, nz, seed);
+        float c = rippleCorner(ix, iz + 1, nx, nz, seed), d = rippleCorner(ix + 1, iz + 1, nx, nz, seed);
         float k = a - b - c + d;
         return new float[]{dux * (b - a + k * uz), duz * (c - a + k * ux)};
     }
 
-    public static float rippleCells(float cell) {
-        return (float) Math.floor(RippleMath.RIPPLE_PERIOD / cell + 0.5f);
+    /** The whole number of cells (at least 1) of span blocks in one period. */
+    public static float rippleCells(float span) {
+        return Math.max((float) Math.floor(RippleMath.RIPPLE_PERIOD / span + 0.5f), 1);
+    }
+
+    /** The density setting clamped to RIPPLE_DENSITY_MIN..MAX; 1 for NaN. */
+    public static float rippleDensity(float density) {
+        return density >= RippleMath.RIPPLE_DENSITY_MIN ? Math.min(density, RippleMath.RIPPLE_DENSITY_MAX)
+                : (density < RippleMath.RIPPLE_DENSITY_MIN ? RippleMath.RIPPLE_DENSITY_MIN : 1);
     }
 
     public static float rippleFade(float cell, float footprint) {
@@ -207,17 +215,36 @@ public final class WaterMath {
         return smoothstep(RippleMath.RIPPLE_FADE_NONE, RippleMath.RIPPLE_FADE_FULL, pixels);
     }
 
+    /** water.glsl's rippleOctave: the slope {d h / d x, d h / d z} of octave k at (px, pz) (world less the flow); density rippleDensity's. */
+    public static float[] rippleOctave(int k, float px, float pz, float density, float footprint) {
+        float u = RippleMath.DIRS[k][0], v = RippleMath.DIRS[k][1];
+        float m = (float) Math.sqrt(u * u + v * v);
+        float cell = RippleMath.CELLS[k];
+        float nx = rippleCells(cell * m / density), ny = rippleCells(cell * RippleMath.STRETCHES[k] * m / density);
+        float qx = (u * px + v * pz) * nx / RippleMath.RIPPLE_PERIOD, qz = (u * pz - v * px) * ny / RippleMath.RIPPLE_PERIOD;
+        float[] g = rippleGradient(qx, qz, nx, ny, k + 1);
+        float w = RippleMath.STEEPS[k] * rippleFade(RippleMath.RIPPLE_PERIOD / (nx * m), footprint);
+        float gy = g[1] * (ny / nx);
+        return new float[]{(g[0] * u - gy * v) * (w / m), (g[0] * v + gy * u) * (w / m)};
+    }
+
+    /** The cell (blocks) across octave k's crests at the density (rippleDensity's), as the shader rounds it. */
+    public static float rippleCellAcross(int k, float density) {
+        float u = RippleMath.DIRS[k][0], v = RippleMath.DIRS[k][1];
+        float m = (float) Math.sqrt(u * u + v * v);
+        return RippleMath.RIPPLE_PERIOD / (rippleCells(RippleMath.CELLS[k] * m / density) * m);
+    }
+
     /** water.glsl's rippleNormal: rel the surface's x, z relative to the camera; offsets RippleMath.offsets (slots 11, 12). */
-    public static float[] rippleNormal(float relX, float relZ, float[] offsets, float strength, float footprint) {
+    public static float[] rippleNormal(float relX, float relZ, float[] offsets, float strength, float density, float footprint) {
         float s = strength > 0 ? strength : 0;
         if (s <= 0) return new float[]{0, 1, 0};
+        float d = rippleDensity(density);
         float sx = 0, sz = 0;
         for (int k = 0; k < RippleMath.OCTAVES; k++) {
-            float cell = RippleMath.CELLS[k];
-            float[] g = rippleGradient((relX + offsets[2 * k]) / cell, (relZ + offsets[2 * k + 1]) / cell, rippleCells(cell), k + 1);
-            float w = RippleMath.HEIGHTS[k] / cell * rippleFade(cell, footprint);
-            sx += g[0] * w;
-            sz += g[1] * w;
+            float[] o = rippleOctave(k, relX + offsets[2 * k], relZ + offsets[2 * k + 1], d, footprint);
+            sx += o[0];
+            sz += o[1];
         }
         sx *= s;
         sz *= s;
@@ -225,9 +252,9 @@ public final class WaterMath {
         return scale(n, 1 / length(n));
     }
 
-    public static float rippleAmount(float strength, float footprint) {
+    public static float rippleAmount(float strength, float density, float footprint) {
         float s = strength > 0 ? Math.min(strength, 1) : 0;
-        return s * rippleFade(RippleMath.RIPPLE_CELL_0, footprint);
+        return s * rippleFade(RippleMath.RIPPLE_CELL_0 * RippleMath.RIPPLE_STRETCH_0 / rippleDensity(density), footprint);
     }
 
     // ---- hits ----

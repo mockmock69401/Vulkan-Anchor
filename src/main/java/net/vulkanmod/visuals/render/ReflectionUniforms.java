@@ -10,24 +10,25 @@ import org.joml.Matrix4f;
  * struct Atmosphere in field order (AtmosphereUniforms.writeBlock); 8 the view to world matrix (camera relative); 11, 12 RippleMath.offsets;
  * 13 x the ripple strength (setting), y the reflection strength (setting), z the camera's sky exposure, w 1 for the reflective debug view;
  * 24 (2026-10-29) x the block reflections setting, y the frame number (the rough rays' noise); 25 (2026-10-29) x seconds wrapped at
- * RainRippleMath.TIME_WRAP, y the rain on the water (rain level x ripple setting); 26..29 reserved, written 0. The cloud block (14..18) and the light volume (19..22) are written by their owners.
+ * RainRippleMath.TIME_WRAP, y the rain on the water (rain level x ripple setting); 26 (2026-11-09) x the ripple density setting (ratio);
+ * 27..29 reserved, written 0. The cloud block (14..18) and the light volume (19..22) are written by their owners.
  */
 public final class ReflectionUniforms {
     /** Blocks; vanilla's sky fog end when it reports none. */
     public static final float DEFAULT_SKY_FOG_END = 256;
 
-    public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, PROJ = 2, DEPTH = 3, INV_VIEW = 8, RIPPLE_A = 11, RIPPLE_B = 12, PARAMS = 13, BLOCK = 24, RAIN = 25;
+    public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, PROJ = 2, DEPTH = 3, INV_VIEW = 8, RIPPLE_A = 11, RIPPLE_B = 12, PARAMS = 13, BLOCK = 24, RAIN = 25, RIPPLE_PARAMS = 26;
     /** Where the Atmosphere struct goes, in field order (sun, sunLight, moonLight, depth, ambient, glow, fog). */
     public static final int[] ATMOSPHERE_SLOTS = {4, 5, 6, 7, 9, 10, 23};
-    public static final int RESERVED_FIRST = 26, RESERVED_LAST = 29;
+    public static final int RESERVED_FIRST = 27, RESERVED_LAST = 29;
 
     /**
      * on: the pass runs this frame. block: AtmosphereUniforms.block's 28 floats; offsets: RippleMath.offsets' 8 floats; ripples and
-     * strength the settings (ratios), skyExposure 0..1, debug the reflective debug view.
+     * strength the settings (ratios), skyExposure 0..1, debug the reflective debug view; density the ripple density setting (ratio).
      */
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f projection, boolean lodValid,
                          Matrix4f invView, float[] block, float[] offsets, float ripples, float strength, float skyExposure, boolean debug,
-                         int blockReflections, int frame, float rainTime, float rain) {
+                         int blockReflections, int frame, float rainTime, float rain, float density) {
         public void write(LooseUniformWriter w) {
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection).putMat4(INV_LOD_PROJ, this.invLodProjection).putMat4(PROJ, this.projection);
             w.putVec4(DEPTH, LodClamp.CLAMP_THRESHOLD, this.lodValid ? 1 : 0, 0, 0);
@@ -41,6 +42,7 @@ public final class ReflectionUniforms {
             //the frame number wraps well inside float's exact integers
             w.putVec4(BLOCK, this.blockReflections, this.frame & 0xFFFF, 0, 0);
             w.putVec4(RAIN, this.rainTime, this.rain, 0, 0);
+            w.putVec4(RIPPLE_PARAMS, this.density, 0, 0, 0);
             for (int slot = RESERVED_FIRST; slot <= RESERVED_LAST; slot++) w.putVec4(slot, 0, 0, 0, 0);
         }
     }
@@ -76,12 +78,13 @@ public final class ReflectionUniforms {
                 AtmosphereUniforms.block(settings, frame, frame.skyColour() != null), offsets, Math.max(0, settings.waterRipples()),
                 Math.min(1, settings.waterReflections()), exposure, settings.lightDebug() == PostProcessSettings.REFLECTIVE_DEBUG,
                 settings.blockReflections(), frameId, (float) (Math.max(0, flowSeconds) % RainRippleMath.TIME_WRAP),
-                Float.isFinite(frame.rain()) ? Math.max(0, Math.min(1, frame.rain())) * Math.min(1, settings.waterRipples()) : 0);
+                Float.isFinite(frame.rain()) ? Math.max(0, Math.min(1, frame.rain())) * Math.min(1, settings.waterRipples()) : 0,
+                settings.waterRippleDensity());
     }
 
     /** The pass is skipped; write() still fills every owned slot with finite values. */
     public static Values off() {
         return new Values(false, new Matrix4f(), new Matrix4f(), new Matrix4f(), false, new Matrix4f(), new float[AtmosphereMath.Atmosphere.VEC4S * 4],
-                new float[8], 0, 0, 0, false, 0, 0, 0, 0);
+                new float[8], 0, 0, 0, false, 0, 0, 0, 0, 1);
     }
 }
