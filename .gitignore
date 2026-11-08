@@ -35,3 +35,5 @@ src/testControlTest/
 !/THIRD_PARTY_NOTICES.md
 !/third_party/**/*.md
 /logs
+# the shader roadmap, a local planning note
+/SHADER_ROADMAP.md
