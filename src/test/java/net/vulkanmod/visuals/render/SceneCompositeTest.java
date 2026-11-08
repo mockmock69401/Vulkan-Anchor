@@ -37,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SceneCompositeTest {
     private static final String PROGRAM = "postSceneCopy";
     private static final String COMP = ShaderFiles.read("post/scene_copy.comp");
+    private static final String LIGHTING_COMP = ShaderFiles.read("post/lighting.comp");
     private static final long SERIAL = 7;
     private static final Matrix4f PROJ = new Matrix4f().perspective((float) Math.toRadians(70), 16f / 9f, 0.05f, 1000f);
     private static final float NOON = 0, MIDNIGHT = 0.5f;
@@ -432,7 +433,7 @@ class SceneCompositeTest {
             }
         }
         assertTrue(COMP.contains("bool plant = isPlant(colour.a);") && COMP.contains("bool emissive = isEmissive(colour.a);"));
-        assertTrue(COMP.contains("if (!cloud && !emissive) {"));
+        assertTrue(COMP.contains("if (!cloud && emission < 1.0) {"));
         assertTrue(COMP.contains("float direct = ownSun ? plantSun : lt.y;"));
 
         //B16: the held light only with its slot on (and the light volume's camera)
@@ -702,16 +703,19 @@ class SceneCompositeTest {
         assertEquals(1f, on[SceneCompositeMath.GLOW][0]);
         assertEquals(0f, off[SceneCompositeMath.GLOW][0]);
         float[] shaded = {1, 0, 0, 0};
-        float[] lava = {0.85f, 0.40f, 0.08f, FoliageMarker.EMISSIVE_ALPHA}, rock = {0.20f, 0.08f, 0.06f, FoliageMarker.EMISSIVE_ALPHA};
+        float[] lava = {0.98f, 0.55f, 0.10f, FoliageMarker.EMISSIVE_ALPHA}, rock = {0.20f, 0.08f, 0.06f, FoliageMarker.EMISSIVE_ALPHA};
         float[] bright = SceneCompositeMath.composite(surface(lava, UP, shaded, new float[]{0, 15, 1}), on, LIGHTMAP);
         float[] plain = SceneCompositeMath.composite(surface(lava, UP, shaded, new float[]{0, 15, 1}), off, LIGHTMAP);
         assertArrayEquals(linear(lava), rgb(plain), 1e-6f);
         float g = SceneCompositeMath.lightGlow(lava, 1);
         assertTrue(g > 2.2f && g <= 1 + SceneCompositeMath.LIGHT_GLOW_GAIN, "lava glows " + g);
         for (int i = 0; i < 3; i++) assertEquals(linear(lava)[i] * g, bright[i], 1e-5f);
-        //Dark texels of a light source (magma's rock) stay as they are
-        float[] dark = SceneCompositeMath.composite(surface(rock, UP, shaded, new float[]{0, 15, 1}), on, LIGHTMAP);
-        assertArrayEquals(linear(rock), rgb(dark), 1e-6f);
+        //2026-11-08: dark texels of a light source (magma's rock) are no light: lit as any block's, glow or not
+        float[] plainRock = {rock[0], rock[1], rock[2], OPAQUE};
+        for (float[][] s : new float[][][]{on, off}) {
+            assertArrayEquals(SceneCompositeMath.composite(surface(plainRock, UP, shaded, new float[]{0, 15, 1}), s, LIGHTMAP),
+                    SceneCompositeMath.composite(surface(rock, UP, shaded, new float[]{0, 15, 1}), s, LIGHTMAP), 1e-6f);
+        }
         //2026-10-28: a light-emitting fluid's mark is a light source's with FLUID_GLOW_SCALE times the glow
         assertEquals(LightingMath.EMISSIVE_FLUID_ALPHA_CODE, LightingMath.alphaCode(FoliageMarker.EMISSIVE_FLUID_ALPHA));
         float[] fluid = {lava[0], lava[1], lava[2], FoliageMarker.EMISSIVE_FLUID_ALPHA};
@@ -720,8 +724,42 @@ class SceneCompositeTest {
         assertTrue(gf > g * 1.5f, gf + " vs " + g);
         for (int i = 0; i < 3; i++) assertEquals(linear(lava)[i] * gf, lake[i], 1e-4f);
         assertArrayEquals(linear(lava), rgb(SceneCompositeMath.composite(surface(fluid, UP, shaded, new float[]{0, 15, 1}), off, LIGHTMAP)), 1e-6f);
-        assertTrue(COMP.contains("lit = scene*lightGlow(colour.rgb, glowParams.x*(alphaCode(colour.a) == EMISSIVE_FLUID_ALPHA_CODE ? FLUID_GLOW_SCALE : 1.0));"));
+        assertTrue(COMP.contains("lit = mix(lit, scene*lightGlow(colour.rgb, glowParams.x*(emissiveFluid ? FLUID_GLOW_SCALE : 1.0)), emission);"));
         assertTrue(COMP.contains("layout(location = 33) uniform vec4 glowParams;"));
+    }
+
+    /** 2026-11-08 (the user: a lit furnace's or a campfire's whole block shone): only a light source's bright texels are light. */
+    @Test
+    void onlyTheFireOfALightSourceIsLight() {
+        float[] west = {-1, 0, 0}, down = {0, -1, 0};
+        //Vanilla's furnace stone and campfire bark reach 0.77; their fire 0.76..1
+        assertEquals(0f, SceneCompositeMath.lightSourceShare(new float[]{0.77f, 0.77f, 0.77f}, UP), 0f);
+        assertEquals(0f, SceneCompositeMath.lightSourceShare(new float[]{0.45f, 0.3f, 0.2f}, UP), 0f);
+        assertEquals(1f, SceneCompositeMath.lightSourceShare(new float[]{1, 0.8f, 0.3f}, UP), 0f);
+        //The face shade in the albedo is divided out: a fire on a west or a lower face is as much light as on top, its stone no more
+        assertEquals(1f, SceneCompositeMath.lightSourceShare(new float[]{0.6f, 0.48f, 0.18f}, west), 1e-6f);
+        assertEquals(1f, SceneCompositeMath.lightSourceShare(new float[]{0.5f, 0.4f, 0.15f}, down), 1e-6f);
+        assertEquals(0f, SceneCompositeMath.lightSourceShare(new float[]{0.46f, 0.46f, 0.46f}, west), 0f);
+        assertEquals(1f, SceneCompositeMath.faceShadeDisplay(new float[]{0.7f, 0.7f, 0}), 0f);
+        //A lit furnace by day: its stone is lit as stone (the sun reaches it), its fire glows whatever the sun does
+        float[][] s = noonLit();
+        float[] sunlit = {1, 1, 0, 1}, shaded = {1, 0, 0, 0};
+        float[] light = {15, 13, 1};
+        float[] stone = {0.5f, 0.5f, 0.5f, FoliageMarker.EMISSIVE_ALPHA}, plainStone = {0.5f, 0.5f, 0.5f, OPAQUE};
+        float[] fire = {1, 0.85f, 0.4f, FoliageMarker.EMISSIVE_ALPHA};
+        for (float[] lt : new float[][]{sunlit, shaded}) {
+            assertArrayEquals(SceneCompositeMath.composite(surface(plainStone, NORTH, lt, light), s, LIGHTMAP),
+                    SceneCompositeMath.composite(surface(stone, NORTH, lt, light), s, LIGHTMAP), 1e-6f);
+            float[] flame = SceneCompositeMath.composite(surface(fire, NORTH, lt, light), s, LIGHTMAP);
+            float g = SceneCompositeMath.lightGlow(fire, s[SceneCompositeMath.GLOW][0]);
+            for (int i = 0; i < 3; i++) assertEquals(linear(fire)[i] * g, flame[i], 1e-5f);
+        }
+        float[] stoneSun = SceneCompositeMath.composite(surface(stone, NORTH, sunlit, light), s, LIGHTMAP);
+        float[] stoneShade = SceneCompositeMath.composite(surface(stone, NORTH, shaded, light), s, LIGHTMAP);
+        assertTrue(stoneSun[1] > stoneShade[1], "the sun lights the furnace's stone " + Arrays.toString(stoneSun) + " " + Arrays.toString(stoneShade));
+        assertTrue(COMP.contains("emission = emissiveFluid ? 1.0 : lightSourceShare(base, normalWorld);"));
+        assertTrue(COMP.contains("} else if (!plant && !cloud) {"), "light sources have a normal");
+        assertFalse(LIGHTING_COMP.contains("centreMark != EMISSIVE_ALPHA_CODE"), "the lighting pass shades light sources as any block");
     }
 
     @Test
@@ -934,7 +972,8 @@ class SceneCompositeTest {
         assertEquals(SceneCompositeMath.UNDERGROUND_SKY_EXPOSURE, SceneCompositeMath.skyExposure(1, 0, 1), 1e-6f, "underground by day");
         assertEquals(1f, SceneCompositeMath.blockExposure(0, 1), "night: torches at full");
         assertEquals(SceneCompositeMath.DAY_BLOCK_EXPOSURE, SceneCompositeMath.blockExposure(1, 1), 1e-6f);
-        //Tuning round 1 (refs/S8): by day block light is at DAY_BLOCK_EXPOSURE wherever the camera is; at night at full
+        //2026-11-08 (the user: with the sun up torch light got darker instead): block light is as bright by day as by night
+        assertEquals(1f, SceneCompositeMath.DAY_BLOCK_EXPOSURE, 0f);
         float[] stone = {0.5f, 0.5f, 0.5f, 1};
         float[][] cave = scene(settings(SceneCompositeTest::plainColours), frame(NOON), true, true, 0);
         float[][] open = scene(settings(SceneCompositeTest::plainColours), frame(NOON), true, true, 1);
@@ -946,6 +985,7 @@ class SceneCompositeTest {
         assertArrayEquals(torchOpen, torchCave, 1e-6f);
         assertArrayEquals(linear(stone), rgb(torchNight), 1e-5f);
         for (int i = 0; i < 3; i++) assertEquals(linear(stone)[i] * SceneCompositeMath.DAY_BLOCK_EXPOSURE, torchCave[i], 1e-5f);
+        assertArrayEquals(rgb(torchNight), rgb(torchCave), 1e-5f);
         assertTrue(COMP.contains("float be = blockExposure(waterParams.z, look);"), "final fix R1: whether or not the lighting pass ran");
     }
 

@@ -8,8 +8,8 @@
 //               ground in full sun: facing(N.L)/max(facing(up.L), GROUND_FACING_MIN). 1 = as much as flat ground facing up while the
 //               sun is above sin(elevation) = GROUND_FACING_MIN (about 6 degrees; below it the ground itself gets facing(up.L)/0.1 < 1),
 //               0 = turned away from the sun, above 1 = turned toward a low sun more than the ground is (capped at FACING_MAX). Far away
-//               (few pixels per block) it fades to 1 (B2). Water, ice, glass, plant and light-source pixels are 1 (no face shading,
-//               B11, B13). With sun shading off it is 1.
+//               (few pixels per block) it fades to 1 (B2). Water, ice, glass and plant pixels are 1 (no face shading, B11, B13;
+//               2026-11-08: light sources are shaded as any block, the composite needs it for their texels that are no light). With sun shading off it is 1.
 //   lightOut.b  view distance in blocks of the surface the texel shows, SKY_DISTANCE (negative) for sky
 //   lightOut.a  translucent kind: > 0 water (the length in blocks the view ray travels through it, up to WATER_MAX_LENGTH), < 0
 //               ice/glass/slime (minus that length), 0 anything else
@@ -25,12 +25,12 @@
 // The composite combines them as:
 //   lt        = lightingAt(lightTex, sunTex, p, dist, normal): normal is the pixel's own normal made as the pass makes it -- for an
 //               LOD pixel lodFaceNormal(texelFetch(lodLight, lodTexel(p, size), 0).r, east, up), for a vanilla pixel
-//               snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), east, up) -- or vec3(0.0) for sky, plant and
-//               light-source pixels (and wherever the cost is not wanted: then only distances weigh). east and up are world east and up in
+//               snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), east, up) -- or vec3(0.0) for sky and plant
+//               pixels (and wherever the cost is not wanted: then only distances weigh). east and up are world east and up in
 //               view space; from the composite's invView (slot 2, view to world): east = vec3(invView[0][0], invView[1][0], invView[2][0]),
 //               up = vec3(invView[0][1], invView[1][1], invView[2][1]).
 //   direct    = lt.y (= F*V) for ordinary pixels, plantSun for plant pixels (isPlant and plantSun >= 0), and no sun shading at all
-//               for light-source pixels (isEmissive)
+//               for the share of a light-source pixel that is light (isEmissive, scene_copy.comp's lightSourceShare)
 //   factor    = sunShadingAt(direct, skyLight, sunWeight, sunTerm), sunTerm = slot 10 .w (LightingMath.sunHeightTerm: 0 low sun ..
 //               1 high sun; the shade and sun levels follow it). shadeLevel(sunTerm) / sunLevel(sunTerm) are the two levels (for a
 //               share-of-light debug view: sunPart = (sun - shade)*share/(shade + (sun - shade)*share)).
