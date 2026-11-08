@@ -17,8 +17,11 @@ public final class SceneCompositeMath {
     public static final float FACE_AXIS_MIN = 0.999f;
     /** The share of vanilla's face shade baked into Distant Horizons' LOD colours. */
     public static final float LOD_FACE_SHADE_SHARE = 1.0f;
-    /** B14: sky-lit surfaces by day with the camera underground; block light by day under the open sky. */
-    public static final float UNDERGROUND_SKY_EXPOSURE = 0.7f, DAY_BLOCK_EXPOSURE = 0.6f;
+    /**
+     * B14: sky-lit surfaces by day with the camera underground; block light by day. 2026-11-08 (the user: with the sun up the light of
+     * torches, furnaces and campfires got darker instead): 1, block light as bright by day as by night (tuning round 1 had 0.6).
+     */
+    public static final float UNDERGROUND_SKY_EXPOSURE = 0.7f, DAY_BLOCK_EXPOSURE = 1.0f;
     /** Tuning round 1: dimensions without sky light. */
     public static final float NO_SKY_EXPOSURE = 1.7f;
     /** Tuning round 2: the view with the camera under water (final fix R2: the camera's fluid, slot 29 .y). */
@@ -52,6 +55,12 @@ public final class SceneCompositeMath {
     public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_KNEE = 0.62f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
     /** 2026-10-28: scene_copy.comp's glow constants (lightGlow, oreSpeck, oreGlow). */
     public static final float LIGHT_GLOW_GAIN = 3.0f, LIGHT_GLOW_LOW = 0.3f, LIGHT_GLOW_HIGH = 0.8f, FLUID_GLOW_SCALE = 2.0f;
+    /**
+     * 2026-11-08 (the user: a lit furnace's or a campfire's whole block shone, not only its fire): a light source's texel is light by the
+     * brightest channel of its own colour (face shade divided out) from LIGHT_SOURCE_LOW (none) to LIGHT_SOURCE_HIGH (all); the rest is
+     * lit as any block (lightSourceShare). Vanilla's furnace stone and campfire bark reach 0.77, their fire 0.76..1.
+     */
+    public static final float LIGHT_SOURCE_LOW = 0.78f, LIGHT_SOURCE_HIGH = 0.92f;
     public static final float ORE_GLOW_LEVEL = 0.8f, ORE_CONTRAST_LOW = 2.0f, ORE_CONTRAST_HIGH = 3.0f, ORE_SAT_LOW = 0.15f, ORE_SAT_HIGH = 0.3f,
             ORE_HOST_SAT_LOW = 0.2f, ORE_HOST_SAT_HIGH = 0.4f,
             ORE_HOST_MIN = 0.02f, ORE_VALUE_MIN = 0.03f, ORE_SHADE_MIN = 0.2f;
@@ -154,6 +163,24 @@ public final class SceneCompositeMath {
     public static float lightGlow(float[] colour, float strength) {
         float m = Math.max(colour[0], Math.max(colour[1], colour[2]));
         return 1 + LIGHT_GLOW_GAIN * Math.max(strength, 0) * AtmosphereMath.smoothstep(LIGHT_GLOW_LOW, LIGHT_GLOW_HIGH, m);
+    }
+
+    /** 2026-11-08: scene_copy.comp faceShadeDisplay: vanilla's face shade (display values) of a world normal, 1 off the axes. */
+    public static float faceShadeDisplay(float[] n) {
+        float ax = Math.abs(n[0]), ay = Math.abs(n[1]), az = Math.abs(n[2]);
+        if (ay >= FACE_AXIS_MIN) return n[1] > 0 ? FACE_SHADE_UP : FACE_SHADE_DOWN;
+        if (az >= FACE_AXIS_MIN) return FACE_SHADE_NORTH_SOUTH;
+        if (ax >= FACE_AXIS_MIN) return FACE_SHADE_WEST_EAST;
+        return 1;
+    }
+
+    /**
+     * 2026-11-08: scene_copy.comp lightSourceShare: the share of a light source's texel that is light (0 lit as any block, 1 its glow
+     * alone). base: its colour before the lightmap (display, face shade in it); n: its face's world normal.
+     */
+    public static float lightSourceShare(float[] base, float[] n) {
+        float m = Math.max(base[0], Math.max(base[1], base[2])) / faceShadeDisplay(n);
+        return AtmosphereMath.smoothstep(LIGHT_SOURCE_LOW, LIGHT_SOURCE_HIGH, m);
     }
 
     /** 2026-10-28: a colour's saturation (display values), 0 grey .. 1 a pure hue; the face shade and the light's brightness leave it. */
@@ -352,10 +379,23 @@ public final class SceneCompositeMath {
         boolean hasAlbedo = px.light[2] > 1.5f && px.albedo != null && albedoMatches(px.albedo, px.colour, px.light[1], px.light[0], lm);
         float sky = known ? px.light[0] : 15, block = known ? px.light[1] : 0;
         float skyT = sky, blockT = block;
+        //2026-11-08: how much of the pixel is light (a light-emitting fluid all of it, a light source its bright texels)
+        boolean emissiveFluid = emissive && code == LightingMath.EMISSIVE_FLUID_ALPHA_CODE;
+        float emission = 0;
+        if (emissive && !cloud && !px.fromLod) {
+            float[] base = {px.colour[0], px.colour[1], px.colour[2]};
+            if (hasAlbedo) {
+                base = px.albedo;
+            } else if (known) {
+                float[] lmd = lightmapDisplay(lm, block, sky);
+                for (int i = 0; i < 3; i++) base[i] = Math.min(px.colour[i] / Math.max(lmd[i], ORE_LIGHTMAP_MIN), 1);
+            }
+            emission = emissiveFluid ? 1 : lightSourceShare(base, px.normal);
+        }
         float[] lit = scene;
         float[] share = {1, 1, 1};
         float sunPart = 0;
-        if (!cloud && !emissive) {
+        if (!cloud && emission < 1) {
             boolean ownSun = plant && plantSun >= 0;
             float direct = ownSun ? plantSun : lt[1], visibility = ownSun ? plantSun : lt[3];
             if (known) {
@@ -446,8 +486,11 @@ public final class SceneCompositeMath {
         }
         //2026-10-28: light sources glow; an ore's specks add their own light (its albedo, or vanilla's colour over vanilla's lightmap)
         float[] glow = slots[GLOW];
-        if (emissive && !cloud && !px.fromLod) {
-            lit = scale(scene, lightGlow(px.colour, glow[0] * (code == LightingMath.EMISSIVE_FLUID_ALPHA_CODE ? FLUID_GLOW_SCALE : 1)));
+        if (emission > 0) {
+            float[] glowing = scale(scene, lightGlow(px.colour, glow[0] * (emissiveFluid ? FLUID_GLOW_SCALE : 1)));
+            float[] mixed = new float[3];
+            for (int i = 0; i < 3; i++) mixed[i] = mix(lit[i], glowing[i], emission);
+            lit = mixed;
         } else if (ore && !cloud && !px.fromLod && glow[1] > 0) {
             float[] base = new float[]{px.colour[0], px.colour[1], px.colour[2]};
             boolean readable = true;
