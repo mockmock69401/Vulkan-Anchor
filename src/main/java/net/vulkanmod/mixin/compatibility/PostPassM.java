@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.IntSupplier;
 
+@SuppressWarnings("target")
 @Mixin(value = PostPass.class, priority = 900)
 public class PostPassM {
 

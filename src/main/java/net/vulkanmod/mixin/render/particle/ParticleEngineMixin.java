@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Map;
 import java.util.Queue;
 
+@SuppressWarnings("target")
 @Mixin(ParticleEngine.class)
 public class ParticleEngineMixin {
 

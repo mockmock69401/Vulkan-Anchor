@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+@SuppressWarnings("target")
 @Mixin(AbstractTexture.class)
 public abstract class MAbstractTexture implements VAbstractTextureI {
     @Shadow(remap = false) private int f_117950_;

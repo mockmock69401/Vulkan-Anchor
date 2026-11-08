@@ -21,6 +21,7 @@ import java.util.List;
 
 import static net.vulkanmod.Initializer.getVersion;
 
+@SuppressWarnings("target")
 @Mixin(DebugScreenOverlay.class)
 public abstract class DebugScreenOverlayM {
 

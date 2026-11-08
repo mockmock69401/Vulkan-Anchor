@@ -17,6 +17,7 @@ import net.vulkanmod.render.model.quad.BakedQuadDeduplicator;
 
 import static net.vulkanmod.render.model.quad.ModelQuad.VERTEX_SIZE;
 
+@SuppressWarnings("target")
 @Mixin(BakedQuad.class)
 public class BakedQuadM implements QuadView {
 

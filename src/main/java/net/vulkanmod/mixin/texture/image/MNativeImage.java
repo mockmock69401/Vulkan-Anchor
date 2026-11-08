@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.nio.ByteBuffer;
 import java.util.Locale;
 
+@SuppressWarnings("target")
 @Mixin(NativeImage.class)
 public abstract class MNativeImage {
 

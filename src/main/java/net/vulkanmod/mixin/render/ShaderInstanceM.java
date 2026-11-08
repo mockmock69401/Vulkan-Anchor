@@ -36,6 +36,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.function.Supplier;
 
+@SuppressWarnings("target")
 @Mixin(value = ShaderInstance.class, priority = 900)
 public class ShaderInstanceM implements ShaderMixed {
 

@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
+@SuppressWarnings("target")
 @Mixin(DynamicTexture.class)
 public abstract class MDynamicTexture extends AbstractTexture {
 

@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.Shadow;
 
 import java.util.Set;
 
+@SuppressWarnings("target")
 @Mixin(TextureManager.class)
 public abstract class MTextureManager {
 

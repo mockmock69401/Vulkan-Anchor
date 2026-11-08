@@ -29,6 +29,7 @@ import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import java.util.Optional;
 
+@SuppressWarnings("target")
 @Mixin(Minecraft.class)
 public class MinecraftMixin {
 

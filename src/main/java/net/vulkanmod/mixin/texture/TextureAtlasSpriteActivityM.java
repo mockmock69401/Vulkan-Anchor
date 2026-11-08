@@ -21,6 +21,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * f_244165_ contents, f_118351_..f_118354_ u0 u1 v0 v1; m_118409_ getU0, m_118410_ getU1, m_118411_ getV0, m_118412_ getV1,
  * m_118367_ getU(double), m_118393_ getV(double).
  */
+@SuppressWarnings("target")
 @Mixin(TextureAtlasSprite.class)
 public class TextureAtlasSpriteActivityM implements SpriteActivity.AtlasSprite {
     @Shadow(remap = false) @Final private SpriteContents f_244165_;

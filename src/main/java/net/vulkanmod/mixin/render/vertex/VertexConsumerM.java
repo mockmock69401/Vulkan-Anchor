@@ -17,6 +17,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 
+@SuppressWarnings("target")
 @Mixin(VertexConsumer.class)
 public interface VertexConsumerM {
 

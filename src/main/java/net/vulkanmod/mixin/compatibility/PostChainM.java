@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
+@SuppressWarnings("target")
 @Mixin(value = PostChain.class, priority = 900)
 public abstract class PostChainM {
 

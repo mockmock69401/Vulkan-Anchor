@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+@SuppressWarnings("target")
 @Mixin(VoxelShape.class)
 public class VoxelShapeMixin implements VoxelShapeExtended {
     @Shadow(remap = false) @Final protected DiscreteVoxelShape f_83211_;

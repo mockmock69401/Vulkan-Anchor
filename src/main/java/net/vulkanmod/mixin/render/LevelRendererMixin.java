@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.io.IOException;
 
+@SuppressWarnings("target")
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
 

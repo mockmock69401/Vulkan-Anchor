@@ -24,6 +24,7 @@ import java.util.List;
 
                                                                                                  
                                                                                              
+@SuppressWarnings("target")
 @Mixin(value = ModelPart.class, priority = 900)
 public class ModelPartM {
 

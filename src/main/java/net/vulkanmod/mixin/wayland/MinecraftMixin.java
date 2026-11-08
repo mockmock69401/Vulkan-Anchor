@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.io.IOException;
 
+@SuppressWarnings("target")
 @Mixin(Minecraft.class)
 public class MinecraftMixin {
 

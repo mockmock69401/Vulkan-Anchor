@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
+@SuppressWarnings("target")
 @Mixin(VertexFormat.class)
 public class VertexFormatMixin implements VertexFormatMixed {
 

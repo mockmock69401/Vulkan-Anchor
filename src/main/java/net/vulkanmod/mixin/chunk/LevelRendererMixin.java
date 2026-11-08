@@ -29,6 +29,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.util.Set;
 import java.util.SortedSet;
 
+@SuppressWarnings("target")
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
 

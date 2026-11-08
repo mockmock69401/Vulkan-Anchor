@@ -26,6 +26,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static org.lwjgl.glfw.GLFW.*;
 
+@SuppressWarnings("target")
 @Mixin(Window.class)
 public abstract class WindowMixin {
     @Final @Shadow(remap = false) private long f_85349_;

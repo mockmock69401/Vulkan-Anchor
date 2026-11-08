@@ -18,6 +18,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+@SuppressWarnings("target")
 @Mixin(value = RenderTarget.class, priority = 900)
 public abstract class RenderTargetMixin implements ExtendedRenderTarget {
 

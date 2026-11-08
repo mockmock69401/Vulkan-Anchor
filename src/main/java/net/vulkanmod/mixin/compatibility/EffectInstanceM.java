@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
+@SuppressWarnings("target")
 @Mixin(value = EffectInstance.class, priority = 900)
 public class EffectInstanceM {
 
