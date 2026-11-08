@@ -330,6 +330,8 @@
   "vulkanmod.visuals.water_ripples.tooltip": "Small texel-sized waves stir the water: its reflections, the sun's glints and the view below the surface; stronger in rain and storms, far water stays calm",
   "vulkanmod.visuals.water_ripple_speed": "Water Ripple Speed",
   "vulkanmod.visuals.water_ripple_speed.tooltip": "How fast the ripples flow; 0 holds them still",
+  "vulkanmod.visuals.water_ripple_density": "Water Ripple Density",
+  "vulkanmod.visuals.water_ripple_density.tooltip": "How close together the ripples are. 100 is the default; higher makes shorter, finer waves, lower makes long, smooth swells. The waves keep their steepness either way",
   "vulkanmod.visuals.foliage_wind": "Foliage Wind",
   "vulkanmod.visuals.foliage_wind.tooltip": "Grass, flowers and leaves sway in the wind, with the water ripples' speed (faster in rain); 0 holds them still",
   "vulkanmod.visuals.far_clouds": "Far Clouds",

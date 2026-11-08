@@ -150,7 +150,7 @@ class WaterTest {
                     //The world point (cam - cam mod PERIOD) + w: the same point up to whole periods, near every camera
                     float relX = (float) (wx - (cam[0] - Math.floor(cam[0] / RippleMath.PERIOD) * RippleMath.PERIOD));
                     float relZ = (float) (wz - (cam[1] - Math.floor(cam[1] / RippleMath.PERIOD) * RippleMath.PERIOD));
-                    float[] n = WaterMath.rippleNormal(relX, relZ, o, 1, 0.01f);
+                    float[] n = WaterMath.rippleNormal(relX, relZ, o, 1, 1, 0.01f);
                     assertEquals(1, WaterMath.length(n), 1e-5f, "unit length");
                     assertTrue(n[1] > 0.9f, "a ripple tilts gently");
                     if (first == null) first = n;
@@ -167,13 +167,13 @@ class WaterTest {
         double px = 30012.25, pz = -29987.5;
         float[] first = null;
         for (double[] cam : new double[][]{{30000.1, -30000.2}, {30050.7, -29950.3}, {29960.0, -29990.0}, {30012.0, -29987.0}}) {
-            float[] n = WaterMath.rippleNormal((float) (px - cam[0]), (float) (pz - cam[1]), RippleMath.offsets(cam[0], cam[1], phase), 1, 0.01f);
+            float[] n = WaterMath.rippleNormal((float) (px - cam[0]), (float) (pz - cam[1]), RippleMath.offsets(cam[0], cam[1], phase), 1, 1, 0.01f);
             if (first == null) first = n;
             else assertArrayEquals(first, n, 2e-3f);
         }
         //And the pattern moves with the flow (the phase), not with the camera
         float[] moved = WaterMath.rippleNormal((float) (px - 30000.1), (float) (pz + 30000.2),
-                RippleMath.offsets(30000.1, -30000.2, new double[]{10.5, 20, 30, 40, 50, 60}), 1, 0.01f);
+                RippleMath.offsets(30000.1, -30000.2, new double[]{10.5, 20, 30, 40, 50, 60}), 1, 1, 0.01f);
         assertFalse(java.util.Arrays.equals(first, moved), "a phase step moves the ripples");
     }
 
@@ -183,28 +183,38 @@ class WaterTest {
         float[] up = {0, 1, 0};
         for (float x = -30; x < 30; x += 1.7f) {
             //strength 0: a flat mirror
-            assertArrayEquals(up, WaterMath.rippleNormal(x, x * 0.7f, o, 0, 0.01f), 0);
-            //Every octave's cell under RIPPLE_FADE_NONE pixels: flat (far water, or grazing views: footprint = bpp / cos)
-            float footprint = RippleMath.RIPPLE_CELL_0 / RippleMath.RIPPLE_FADE_NONE;
-            assertArrayEquals(up, WaterMath.rippleNormal(x, x * 0.7f, o, 1, footprint), 0);
-            assertEquals(0, WaterMath.rippleAmount(1, footprint), 0);
+            assertArrayEquals(up, WaterMath.rippleNormal(x, x * 0.7f, o, 0, 1, 0.01f), 0);
+            //Every octave's cell across its crests under RIPPLE_FADE_NONE pixels: flat (far water, or grazing views: footprint = bpp / cos)
+            float footprint = WaterMath.rippleCellAcross(0, 1) / RippleMath.RIPPLE_FADE_NONE;
+            assertArrayEquals(up, WaterMath.rippleNormal(x, x * 0.7f, o, 1, 1, footprint), 0);
+            //The glints turn back into mirrored discs once the longest crests (the first octave's along them) span too few pixels
+            float longest = RippleMath.RIPPLE_CELL_0 * RippleMath.RIPPLE_STRETCH_0 / RippleMath.RIPPLE_FADE_NONE;
+            assertEquals(0, WaterMath.rippleAmount(1, 1, longest), 0);
+            assertTrue(WaterMath.rippleAmount(1, 1, footprint) > 0);
         }
         //The fade grows with the pixels per cell, and the smaller octaves fade first
         float prev = -1;
         for (float f = 10; f > 0.001f; f *= 0.8f) {
             float v = WaterMath.rippleFade(RippleMath.RIPPLE_CELL_0, f);
             assertTrue(v >= prev);
-            assertTrue(WaterMath.rippleFade(RippleMath.RIPPLE_CELL_2, f) <= v);
+            assertTrue(WaterMath.rippleFade(RippleMath.RIPPLE_CELL_3, f) <= v);
             prev = v;
         }
-        assertEquals(1, WaterMath.rippleFade(RippleMath.RIPPLE_CELL_2, 0.01f), 0, "near water ripples fully");
+        assertEquals(1, WaterMath.rippleFade(RippleMath.RIPPLE_CELL_3, 0.02f), 0, "near water ripples fully");
         //A grazing view: the same distance's footprint over cos 0.03 flattens what is visible looking down
         float bpp = 0.1f;
-        assertTrue(WaterMath.rippleAmount(1, bpp) > 0.9f);
-        assertEquals(0, WaterMath.rippleAmount(1, bpp / 0.03f), 1e-6f);
-        //Periodic: one period away is the same normal (the offsets wrap there)
-        for (float x = -10; x < 10; x += 0.9f) {
-            assertArrayEquals(WaterMath.rippleNormal(x, 3, o, 1, 0.01f), WaterMath.rippleNormal(x + RippleMath.RIPPLE_PERIOD, 3, o, 1, 0.01f), 1e-3f);
+        assertTrue(WaterMath.rippleAmount(1, 1, bpp) > 0.9f);
+        assertEquals(0, WaterMath.rippleAmount(1, 1, bpp / 0.03f), 1e-6f);
+        //Periodic: one period away on x, on z or both is the same normal (the offsets wrap there), at every density: the turned lattices
+        // have whole numbers of cells per period
+        for (float d : new float[]{0.25f, 0.6f, 1, 1.37f, 2}) {
+            for (float x = -10; x < 10; x += 0.9f) {
+                float[] n = WaterMath.rippleNormal(x, 3, o, 1, d, 0.01f);
+                assertArrayEquals(n, WaterMath.rippleNormal(x + RippleMath.RIPPLE_PERIOD, 3, o, 1, d, 0.01f), 2e-3f, "x at density " + d);
+                assertArrayEquals(n, WaterMath.rippleNormal(x, 3 - RippleMath.RIPPLE_PERIOD, o, 1, d, 0.01f), 2e-3f, "z at density " + d);
+                assertArrayEquals(n, WaterMath.rippleNormal(x - RippleMath.RIPPLE_PERIOD, 3 + RippleMath.RIPPLE_PERIOD, o, 1, d, 0.01f), 2e-3f,
+                        "x and z at density " + d);
+            }
         }
     }
 
@@ -358,6 +368,86 @@ class WaterTest {
         assertTrue(COMP.contains("sunVisibilityAt(p, size, dist, toView*nGeom)") && COMP.contains("UPSAMPLE_NORMAL_POWER"));
     }
 
+    /** The RMS slope of the normals over a patch of near water (every octave at full strength). */
+    private static double rmsSlope(float[] o, float density) {
+        double sum = 0;
+        int n = 0;
+        for (float x = -12; x < 12; x += 0.137f) {
+            for (float z = -12; z < 12; z += 0.151f) {
+                float[] nn = WaterMath.rippleNormal(x, z, o, 1, density, 0.001f);
+                sum += (nn[0] * nn[0] + nn[2] * nn[2]) / (nn[1] * nn[1]);
+                n++;
+            }
+        }
+        return Math.sqrt(sum / n);
+    }
+
+    /** The mean distance between sign changes of the x slope along a line (blocks): a measure of the wavelength. */
+    private static double crossingSpacing(float[] o, float density) {
+        int changes = 0;
+        float prev = 0, len = 60, step = 0.01f;
+        for (float x = 0; x < len; x += step) {
+            float sx = -WaterMath.rippleNormal(x, 0.37f * x + 5, o, 1, density, 0.001f)[0];
+            if (x > 0 && Math.signum(sx) != Math.signum(prev)) changes++;
+            prev = sx;
+        }
+        return len / Math.max(changes, 1);
+    }
+
+    /**
+     * 2026-11-09 (session 2a; the user: the ripples' wavelength was so long the water looked like plastic): short waves, a density
+     * setting that changes their length but not their steepness, and directional octaves that flow along their own direction.
+     */
+    @Test
+    void ripplesAreShortAndTheDensityChangesTheirLengthButNotTheirSteepness() {
+        float[] o = RippleMath.offsets(41.5, -17.25, new double[]{1, 2, 3, 4, 5, 6, 7, 8});
+        //Every octave is at most a third of the old longest one (6 blocks), the finest a quarter block or less
+        for (int k = 0; k < RippleMath.OCTAVES; k++) assertTrue(WaterMath.rippleCellAcross(k, 1) <= 2.1f, "octave " + k);
+        assertTrue(WaterMath.rippleCellAcross(RippleMath.OCTAVES - 1, 1) <= 0.25f);
+        //The density divides the cells (rounded to whole cells per period: within 10% at the lowest density, where a period holds
+        // only about six of the first octave's turned cells)
+        for (int k = 0; k < RippleMath.OCTAVES; k++) {
+            for (float d : new float[]{0.25f, 0.5f, 1, 1.5f, 2}) {
+                assertEquals(RippleMath.CELLS[k] / d, WaterMath.rippleCellAcross(k, d), 0.1f * RippleMath.CELLS[k] / d, "octave " + k + " at " + d);
+            }
+        }
+        //Denser water has shorter waves: the slope changes sign more often along a line
+        double half = crossingSpacing(o, 0.5f), one = crossingSpacing(o, 1), two = crossingSpacing(o, 2);
+        assertTrue(half > one * 1.4 && one > two * 1.4, half + " " + one + " " + two);
+        //but the same steepness (within 15%): finer, not rougher
+        double sHalf = rmsSlope(o, 0.5f), sOne = rmsSlope(o, 1), sTwo = rmsSlope(o, 2);
+        assertEquals(sOne, sHalf, 0.15 * sOne);
+        assertEquals(sOne, sTwo, 0.15 * sOne);
+        //A calm lake's slope (Cox and Munk 1954: about 0.06 RMS in no wind; the old three octaves gave about 0.04)
+        assertTrue(sOne > 0.035 && sOne < 0.08, "RMS slope " + sOne);
+        //The density is clamped to the settings' range, NaN is 100%
+        assertEquals(1, WaterMath.rippleDensity(Float.NaN), 0);
+        assertEquals(RippleMath.RIPPLE_DENSITY_MIN, WaterMath.rippleDensity(0), 0);
+        assertEquals(RippleMath.RIPPLE_DENSITY_MIN, WaterMath.rippleDensity(Float.NEGATIVE_INFINITY), 0);
+        assertEquals(RippleMath.RIPPLE_DENSITY_MAX, WaterMath.rippleDensity(Float.POSITIVE_INFINITY), 0);
+        assertArrayEquals(WaterMath.rippleNormal(3, 4, o, 1, Float.NaN, 0.01f), WaterMath.rippleNormal(3, 4, o, 1, 1, 0.01f), 0);
+        assertEquals(PostProcessSettings.RIPPLE_DENSITY_MIN / 100f, RippleMath.RIPPLE_DENSITY_MIN, 1e-6f);
+        assertEquals(PostProcessSettings.RIPPLE_DENSITY_MAX / 100f, RippleMath.RIPPLE_DENSITY_MAX, 1e-6f);
+        //Denser waves fade nearer the camera (the fade follows the rounded cell), so they never shimmer farther out than the old ones
+        float far = WaterMath.rippleCellAcross(0, 2) / RippleMath.RIPPLE_FADE_NONE;
+        assertArrayEquals(new float[]{0, 1, 0}, WaterMath.rippleNormal(5, 6, o, 1, 2, far), 0);
+    }
+
+    @Test
+    void eachOctaveFlowsAlongItsWholeNumberDirectionAndTheFirstAlongTheWind() {
+        for (int k = 0; k < RippleMath.OCTAVES; k++) {
+            float u = RippleMath.DIRS[k][0], v = RippleMath.DIRS[k][1];
+            assertEquals(Math.rint(u), u, 0, "whole numbers keep the turned noise periodic");
+            assertEquals(Math.rint(v), v, 0);
+            double angle = Math.toDegrees(Math.atan2(RippleMath.FLOW[k][1], RippleMath.FLOW[k][0]) - Math.atan2(v, u));
+            assertEquals(0, angle, 1.0, "octave " + k + " flows across its crests");
+            assertTrue(RippleMath.STRETCHES[k] >= 1, "crests are longer than the waves are wide");
+            //Within about 60 degrees of the wind: a chop, not a cross sea
+            double toWind = Math.toDegrees(Math.atan2(v, u) - Math.atan2(RippleMath.FLOW[0][1], RippleMath.FLOW[0][0]));
+            assertTrue(Math.abs(toWind) < 60, "octave " + k + " " + toWind);
+        }
+    }
+
     // ---- 5. RippleMath ----
 
     @Test
@@ -373,7 +463,6 @@ class WaterTest {
         }
         assertEquals(RippleMath.OCTAVES, RippleMath.FLOW.length);
         assertEquals(RippleMath.PERIOD, RippleMath.RIPPLE_PERIOD, 0);
-        for (float cell : RippleMath.CELLS) assertEquals(0, RippleMath.PERIOD / cell - Math.rint(RippleMath.PERIOD / cell), 1e-4, "a cell divides the period");
     }
 
     @Test
@@ -387,9 +476,9 @@ class WaterTest {
                 assertEquals(0.01, circular, 1e-3, "octave offset " + k + " at " + x);
             }
         }
-        float[] o = RippleMath.offsets(12.75, -3.5, null);
-        assertEquals(0.75f, o[6], 1e-6f);
-        assertEquals(0.5f, o[7], 1e-6f);
+        //The shader's two vec4 ripple slots hold every octave's offset
+        assertEquals(8, RippleMath.offsets(12.75, -3.5, null).length);
+        assertEquals(4, RippleMath.OCTAVES);
         for (float v : RippleMath.offsets(Double.NaN, Double.POSITIVE_INFINITY, phase)) assertTrue(Float.isFinite(v));
         //The speed factor: the setting, faster in rain, never negative
         assertEquals(1, RippleMath.speedFactor(0, 1), 0);
@@ -464,6 +553,12 @@ class WaterTest {
             assertEquals(expect[i], b.getFloat(offset(11) + 4 * i), 0);
             assertEquals(expect[4 + i], b.getFloat(offset(12) + 4 * i), 0);
         }
+        //2026-11-09: slot 26 x the ripple density setting (ratio)
+        assertEquals(1, b.getFloat(offset(ReflectionUniforms.RIPPLE_PARAMS)), 0, "100% by default");
+        assertEquals(1.5f, on(settings(c -> c.waterRippleDensity = 150), null).density(), 1e-6f);
+        assertEquals(PostProcessSettings.RIPPLE_DENSITY_MAX / 100f, on(settings(c -> c.waterRippleDensity = 900), null).density(), 1e-6f);
+        assertEquals(1, ReflectionUniforms.off().density(), 0);
+        assertTrue(COMP.contains("rippleNormal(world.xz, rippleOffsetsA, rippleOffsetsB, strength, rippleParams.x, footprint)"));
         assertArrayEquals(AtmosphereUniforms.block(SETTINGS, frame(SUNSET, 0, new float[]{0.47f, 0.65f, 1}, null), true), v.block(), 0,
                 "W4's block, sky taken from the frame");
         //The shader's struct and blocks come from these slots
@@ -534,7 +629,7 @@ class WaterTest {
         assertTrue(GLSL.contains("0x7feb352du") && GLSL.contains("0x846ca68bu"));
         for (String fn : new String[]{"vec3 waterTransmittance(float len)", "vec3 waterColour(vec3 behind, float len, vec3 light)",
                 "float reflectionMark(float kind)", "float reflectivity(float mark, float cosTheta)", "vec3 sunDisc(Atmosphere a, vec3 dir)",
-                "vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility)", "vec3 rippleNormal(vec2 rel, vec4 offsetsA, vec4 offsetsB, float strength, float footprint)"}) {
+                "vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility)", "vec3 rippleNormal(vec2 rel, vec4 offsetsA, vec4 offsetsB, float strength, float density, float footprint)"}) {
             assertTrue(GLSL.contains(fn), fn);
         }
         //water.glsl declares no uniforms or bindings (the composite imports it)

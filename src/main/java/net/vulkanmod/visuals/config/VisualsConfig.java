@@ -135,6 +135,8 @@ public class VisualsConfig {
     public int blockReflections = 2;
     public int waterRipples = 100;
     public int waterRippleSpeed = 100;
+    /** 2026-11-09 (session 2a): how close together the ripples are, percent (100 = the four octaves of water.glsl; 200 halves every wavelength). */
+    public int waterRippleDensity = 100;
     /** 2026-10-21: how far plants and leaves sway in the wind (FoliageWind). */
     public int foliageWind = 100;
     public boolean farClouds = true;

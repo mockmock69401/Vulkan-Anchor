@@ -69,7 +69,7 @@ public record AtmosphereFrame(long serial, Matrix4f invVanillaProjection, Matrix
                 this.rain, this.thunder, this.sunrise, sky == null ? null : sky.clone(), skyFogEnd, this.rippleOffset, this.clouds, this.cameraFluid);
     }
 
-    /** P7e-3: the same frame with the ripples' noise offsets (RippleMath.offsets: the octaves' x and z, then the camera's x and z fraction). */
+    /** P7e-3: the same frame with the ripples' noise offsets (RippleMath.offsets: each octave's x and z). */
     public AtmosphereFrame withRipple(float[] offsets) {
         return new AtmosphereFrame(this.serial, this.invVanillaProjection, this.invLodProjection, this.invModelView, this.viewProjection,
                 this.cameraY, this.seaLevel, this.fogRed, this.fogGreen, this.fogBlue, this.fogCoversAllRendering, this.lodDrawn, this.timeOfDay,

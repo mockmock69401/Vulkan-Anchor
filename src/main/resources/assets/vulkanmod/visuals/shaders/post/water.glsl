@@ -192,18 +192,50 @@ vec3 reflectFallback(vec3 sky, vec3 own, float skyAccess) {
     return mix(own, sky, s);
 }
 
-// ---- ripples: three octaves of value noise with analytic derivatives (Perlin 2002, "Improving noise": the quintic fade) ----
+// ---- ripples: four octaves of value noise with analytic derivatives (Perlin 2002, "Improving noise": the quintic fade) ----
+//
+// 2026-11-09 (session 2a; the user: the ripples' wavelength was so long the water looked like plastic): each octave is a train of
+// short waves. Its lattice is turned to the octave's own direction of travel and stretched along the crests (STRETCH cells), so the
+// value noise reads as elongated crests rather than round blobs, and the four directions (within about 55 degrees of the wind,
+// RippleMath.FLOW[0]) cross into a chop, as in the directional wave spectra of Tessendorf 2001 ("Simulating Ocean Water",
+// SIGGRAPH course notes) without their FFT. The density setting divides every cell; the steepness (slope per octave) stays, so
+// denser water is finer, not rougher. The total slope (about 0.06 RMS; the old three octaves about 0.04) is a calm lake's: Cox
+// and Munk 1954 ("Measurement of the roughness of the sea surface from photographs of the sun's glitter", JOSA 44) give a slope
+// variance of 0.003 + 0.00512 U for a wind of U m/s, about 0.06 RMS in no wind.
+//
+// The turn keeps the noise periodic: a direction of whole numbers (u, v) puts the world point p at u p.x + v p.z across the crests
+// and -v p.x + u p.z along them; a step of RIPPLE_PERIOD in x or z moves both by whole multiples of RIPPLE_PERIOD, and the lattice
+// has a whole number of cells per RIPPLE_PERIOD on each axis, so the offsets' wrap (RippleMath.PERIOD) never shows a seam.
 
-//The noise repeats every RIPPLE_PERIOD blocks (RippleMath.PERIOD: the offsets wrap there); every cell divides it
+//The noise repeats every RIPPLE_PERIOD blocks (RippleMath.PERIOD: the offsets wrap there)
 const float RIPPLE_PERIOD = 240.0;
-const float RIPPLE_CELL_0 = 6.0;
-const float RIPPLE_CELL_1 = 2.5;
-const float RIPPLE_CELL_2 = 1.2;
-//Height amplitude per octave in blocks (the slope is height / cell times the noise's derivative)
-const float RIPPLE_HEIGHT_0 = 0.10;
-const float RIPPLE_HEIGHT_1 = 0.05;
-const float RIPPLE_HEIGHT_2 = 0.022;
-//An octave fades out as one cell covers fewer pixels along the view: none at RIPPLE_FADE_NONE pixels, full from RIPPLE_FADE_FULL
+//Per octave: the direction the waves travel (whole numbers, see above; RippleMath.FLOW drifts the same way), the cell across the
+// crests in blocks at density 100%, the crests' length in cells, and the steepness (the slope's scale: height / cell)
+const float RIPPLE_DIR_X_0 = 5.0;
+const float RIPPLE_DIR_Z_0 = 2.0;
+const float RIPPLE_CELL_0 = 2.0;
+const float RIPPLE_STRETCH_0 = 2.2;
+const float RIPPLE_STEEP_0 = 0.035;
+const float RIPPLE_DIR_X_1 = 6.0;
+const float RIPPLE_DIR_Z_1 = -1.0;
+const float RIPPLE_CELL_1 = 0.95;
+const float RIPPLE_STRETCH_1 = 2.0;
+const float RIPPLE_STEEP_1 = 0.035;
+const float RIPPLE_DIR_X_2 = 2.0;
+const float RIPPLE_DIR_Z_2 = 3.0;
+const float RIPPLE_CELL_2 = 0.45;
+const float RIPPLE_STRETCH_2 = 1.8;
+const float RIPPLE_STEEP_2 = 0.03;
+const float RIPPLE_DIR_X_3 = 3.0;
+const float RIPPLE_DIR_Z_3 = -2.0;
+const float RIPPLE_CELL_3 = 0.22;
+const float RIPPLE_STRETCH_3 = 1.5;
+const float RIPPLE_STEEP_3 = 0.025;
+//The density setting's range (ratio; the settings screen's 25..200%)
+const float RIPPLE_DENSITY_MIN = 0.25;
+const float RIPPLE_DENSITY_MAX = 2.0;
+//An octave fades out as one cell across its crests covers fewer pixels along the view: none at RIPPLE_FADE_NONE pixels, full from
+// RIPPLE_FADE_FULL (so a finer octave fades nearer the camera and never shimmers far away)
 const float RIPPLE_FADE_NONE = 2.0;
 const float RIPPLE_FADE_FULL = 8.0;
 //The foreshortening guard (the smallest cosine the footprint divides by)
@@ -226,14 +258,14 @@ uint rippleHash(ivec2 c, uint seed) {
     return h;
 }
 
-//The value -1..1 at lattice corner i (wrapped into n cells: the noise repeats every n cells)
-float rippleCorner(vec2 i, float n, uint seed) {
+//The value -1..1 at lattice corner i (wrapped into n cells per axis: the noise repeats every n cells)
+float rippleCorner(vec2 i, vec2 n, uint seed) {
     vec2 w = i - n*floor(i/n);
     return float(rippleHash(ivec2(w), seed) & 0xFFFFFFu)/16777215.0*2.0 - 1.0;
 }
 
-//The value noise's gradient at x (lattice units), repeating every n cells
-vec2 rippleGradient(vec2 x, float n, uint seed) {
+//The value noise's gradient at x (lattice units), repeating every n cells per axis
+vec2 rippleGradient(vec2 x, vec2 n, uint seed) {
     vec2 i = floor(x);
     vec2 f = x - i;
     vec2 u = f*f*f*(f*(f*6.0 - 15.0) + 10.0);
@@ -246,9 +278,14 @@ vec2 rippleGradient(vec2 x, float n, uint seed) {
     return du*vec2(b - a + k*u.y, c - a + k*u.x);
 }
 
-//The whole number of cells in one period (the division rounded: 240/1.2 is 199.99998 in float)
-float rippleCells(float cell) {
-    return floor(RIPPLE_PERIOD/cell + 0.5);
+//The whole number of cells (at least 1) of `span` blocks in one period (the division rounded: 240/1.2 is 199.99998 in float)
+float rippleCells(float span) {
+    return max(floor(RIPPLE_PERIOD/span + 0.5), 1.0);
+}
+
+//The density setting as the octaves take it: clamped to its range, 1 when not a number
+float rippleDensity(float density) {
+    return density >= RIPPLE_DENSITY_MIN ? min(density, RIPPLE_DENSITY_MAX) : (density < RIPPLE_DENSITY_MIN ? RIPPLE_DENSITY_MIN : 1.0);
 }
 
 //An octave's share 0..1 for a cell of `cell` blocks at `footprint` blocks per pixel along the view
@@ -257,30 +294,46 @@ float rippleFade(float cell, float footprint) {
     return smoothstep(RIPPLE_FADE_NONE, RIPPLE_FADE_FULL, pixels);
 }
 
+//One octave's slope (d height / d x, d height / d z) at p (the world x, z less the octave's flow, blocks): waves travelling along
+// dir (whole numbers), `cell` blocks across the crests and stretch cells along them at density 1, scaled to `steep`, faded by the
+// footprint. density is rippleDensity's
+vec2 rippleOctave(vec2 p, vec2 dir, float cell, float stretch, float steep, float density, float footprint, uint seed) {
+    float m = length(dir);
+    //Cells per period across and along the crests (in the turned frame a period is RIPPLE_PERIOD times m blocks long)
+    vec2 n = vec2(rippleCells(cell*m/density), rippleCells(cell*stretch*m/density));
+    vec2 q = vec2(dir.x*p.x + dir.y*p.y, dir.x*p.y - dir.y*p.x)*n/RIPPLE_PERIOD;
+    vec2 g = rippleGradient(q, n, seed);
+    //The height is steep times the cell across (RIPPLE_PERIOD/(n.x m) blocks): the slope across is steep times g.x, along it
+    // scaled down by the longer cell
+    float w = steep*rippleFade(RIPPLE_PERIOD/(n.x*m), footprint);
+    g.y *= n.y/n.x;
+    return vec2(g.x*dir.x - g.y*dir.y, g.x*dir.y + g.y*dir.x)*(w/m);
+}
+
 //The rippled water's world normal (unit, y up) at rel (the surface's x, z relative to the camera, blocks). offsetsA, offsetsB are
 // the reflection's slots 11 and 12 (RippleMath.offsets: each octave's world offset, wrapped), strength the ripple setting (0 = a flat
-// mirror), footprint the blocks one pixel covers along the view on the surface (blocks per pixel / cos of the view to the surface).
-// The same world position gives the same normal from any camera (world anchored, B9)
-vec3 rippleNormal(vec2 rel, vec4 offsetsA, vec4 offsetsB, float strength, float footprint) {
+// mirror), density the ripple density setting (1 = 100%; 2 halves every wavelength), footprint the blocks one pixel covers along the
+// view on the surface (blocks per pixel / cos of the view to the surface). The same world position gives the same normal from any
+// camera (world anchored, B9)
+vec3 rippleNormal(vec2 rel, vec4 offsetsA, vec4 offsetsB, float strength, float density, float footprint) {
     float s = strength > 0.0 ? strength : 0.0;
     if (s <= 0.0) {
         return vec3(0.0, 1.0, 0.0);
     }
-    vec2 slope = rippleGradient((rel + offsetsA.xy)/RIPPLE_CELL_0, rippleCells(RIPPLE_CELL_0), 1u)
-            *(RIPPLE_HEIGHT_0/RIPPLE_CELL_0*rippleFade(RIPPLE_CELL_0, footprint));
-    slope += rippleGradient((rel + offsetsA.zw)/RIPPLE_CELL_1, rippleCells(RIPPLE_CELL_1), 2u)
-            *(RIPPLE_HEIGHT_1/RIPPLE_CELL_1*rippleFade(RIPPLE_CELL_1, footprint));
-    slope += rippleGradient((rel + offsetsB.xy)/RIPPLE_CELL_2, rippleCells(RIPPLE_CELL_2), 3u)
-            *(RIPPLE_HEIGHT_2/RIPPLE_CELL_2*rippleFade(RIPPLE_CELL_2, footprint));
+    float d = rippleDensity(density);
+    vec2 slope = rippleOctave(rel + offsetsA.xy, vec2(RIPPLE_DIR_X_0, RIPPLE_DIR_Z_0), RIPPLE_CELL_0, RIPPLE_STRETCH_0, RIPPLE_STEEP_0, d, footprint, 1u);
+    slope += rippleOctave(rel + offsetsA.zw, vec2(RIPPLE_DIR_X_1, RIPPLE_DIR_Z_1), RIPPLE_CELL_1, RIPPLE_STRETCH_1, RIPPLE_STEEP_1, d, footprint, 2u);
+    slope += rippleOctave(rel + offsetsB.xy, vec2(RIPPLE_DIR_X_2, RIPPLE_DIR_Z_2), RIPPLE_CELL_2, RIPPLE_STRETCH_2, RIPPLE_STEEP_2, d, footprint, 3u);
+    slope += rippleOctave(rel + offsetsB.zw, vec2(RIPPLE_DIR_X_3, RIPPLE_DIR_Z_3), RIPPLE_CELL_3, RIPPLE_STRETCH_3, RIPPLE_STEEP_3, d, footprint, 4u);
     slope *= s;
     return normalize(vec3(-slope.x, 1.0, -slope.y));
 }
 
-//How much the water ripples at this footprint, 0 (calm: mirror discs) .. 1 (round glints): the largest octave's share times the
-// strength
-float rippleAmount(float strength, float footprint) {
+//How much the water ripples at this footprint, 0 (calm: mirror discs) .. 1 (round glints): the share of the longest waves (the first
+// octave's crests, RIPPLE_CELL_0 x RIPPLE_STRETCH_0 at the density) times the strength
+float rippleAmount(float strength, float density, float footprint) {
     float s = strength > 0.0 ? min(strength, 1.0) : 0.0;
-    return s*rippleFade(RIPPLE_CELL_0, footprint);
+    return s*rippleFade(RIPPLE_CELL_0*RIPPLE_STRETCH_0/rippleDensity(density), footprint);
 }
 
 // ---- reflection hits (B6, B7) ----

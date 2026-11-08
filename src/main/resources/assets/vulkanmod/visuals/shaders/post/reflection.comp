@@ -28,7 +28,7 @@ layout(binding = 9, r32ui) uniform readonly restrict uimage2D terrainLight;
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
 // view; 14..18 W4's cloud block; 19..22 the clean light volume; 24 (2026-10-29) x the block reflections setting, y the frame number
 // (blockReflection's rough rays); 25 (2026-10-29) x seconds (rainripple.glsl's time), y the rain on the water (rain level x ripple
-// setting); 26..29 reserved (written 0)
+// setting); 26 (2026-11-09) x the ripple density setting (ratio, 1 = 100%); 27..29 reserved (written 0)
 layout(location = 0) uniform mat4 invVanillaProj;
 layout(location = 1) uniform mat4 invLodProj;
 layout(location = 2) uniform mat4 proj;
@@ -55,7 +55,7 @@ layout(location = 22) uniform vec4 lightMode;
 layout(location = 23) uniform vec4 atmosphereFog;
 layout(location = 24) uniform vec4 blockParams;
 layout(location = 25) uniform vec4 rainParams;
-layout(location = 26) uniform vec4 reserved26;
+layout(location = 26) uniform vec4 rippleParams;
 layout(location = 27) uniform vec4 reserved27;
 layout(location = 28) uniform vec4 reserved28;
 layout(location = 29) uniform vec4 reserved29;
@@ -90,8 +90,10 @@ const float REFLECT_EDGE_FADE = 0.05;
 //Below this reflectivity the march is skipped (the sky alone is mirrored: at 2% a missed island is invisible)
 const float REFLECT_MIN_MARCH = 0.025;
 //Refraction of the water's own colour by the ripples: the floor's image moves REFRACT_BLOCKS per unit of slope, at most
-// REFRACT_MAX_PIXELS, and only to a pixel of the same water (a water pixel within REFRACT_SAME_DEPTH of the distance plus a block)
-const float REFRACT_BLOCKS = 0.25;
+// REFRACT_MAX_PIXELS, and only to a pixel of the same water (a water pixel within REFRACT_SAME_DEPTH of the distance plus a block).
+// 2026-11-09 (session 2a): 0.25 -> 0.6. A floor h blocks down seen through a surface of slope s shifts by about h s (1 - 1/1.33),
+// so 0.6 stands for a floor about 2.4 blocks down (0.25 was one block: the short ripples hardly showed on the floor near the camera)
+const float REFRACT_BLOCKS = 0.6;
 const float REFRACT_MAX_PIXELS = 24.0;
 const float REFRACT_SAME_DEPTH = 0.08;
 //The far clouds in the reflection: a short march (the composite's cloudMarch is too dear per water pixel) with a fixed share of
@@ -443,7 +445,7 @@ void main() {
     float bpp = dist*2.0/(abs(proj[1][1])*float(size.y));
     float footprint = bpp/max(cosGeom, RIPPLE_MIN_COS);
     float strength = mark > 0.0 ? reflectParams.x : 0.0;
-    vec3 n = mark > 0.0 ? rippleNormal(world.xz, rippleOffsetsA, rippleOffsetsB, strength, footprint) : nGeom;
+    vec3 n = mark > 0.0 ? rippleNormal(world.xz, rippleOffsetsA, rippleOffsetsB, strength, rippleParams.x, footprint) : nGeom;
     //2026-10-29: raindrops ring the water where it sees the sky (rainripple.glsl; slot 25), anchored as the first ripple octave
     float rainShine = 0.0;
     if (mark > 0.0 && rainParams.y > 0.0) {
@@ -453,7 +455,7 @@ void main() {
         n = normalize(n + vec3(-drops.x, 0.0, -drops.y)*n.y);
         rainShine = rainRippleShine(drops);
     }
-    float ripple = mark > 0.0 ? rippleAmount(strength, footprint) : 0.0;
+    float ripple = mark > 0.0 ? rippleAmount(strength, rippleParams.x, footprint) : 0.0;
     float f = reflectivity(mark, -dot(d, n))*clamp(reflectParams.y, 0.0, 1.0);
     vec3 r = reflect(d, n);
     float rise = dot(r, nGeom);
