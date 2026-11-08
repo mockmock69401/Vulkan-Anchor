@@ -777,13 +777,13 @@ class AtmosphereTest {
         //2026-11-09 (session 1a): no band at noon, at midnight or under a full overcast, so those skies keep their tuning
         for (float t : new float[]{NOON, MIDNIGHT}) {
             AtmosphereMath.Atmosphere a = sky(t, 0);
-            assertEquals(0f, AtmosphereMath.lowBand(a, AtmosphereMath.SKY_MAX_AIR_MASS), 0f, "t " + t);
+            assertEquals(0f, AtmosphereMath.lowBand(a, AtmosphereMath.SKY_MAX_AIR_MASS, AtmosphereMath.SKY_MAX_AIR_MASS), 0f, "t " + t);
         }
         AtmosphereMath.Atmosphere low = sky(ticks(12500), 0);
-        assertTrue(AtmosphereMath.lowBand(low, AtmosphereMath.SKY_MAX_AIR_MASS) > 3, "opaque on the horizon");
-        assertTrue(AtmosphereMath.lowBand(low, 1) < 0.05f, "next to nothing at the zenith");
+        assertTrue(AtmosphereMath.lowBand(low, AtmosphereMath.SKY_MAX_AIR_MASS, AtmosphereMath.SKY_MAX_AIR_MASS) > 3, "opaque on the horizon");
+        assertTrue(AtmosphereMath.lowBand(low, 1, 1) < 0.05f, "next to nothing at the zenith");
         AtmosphereMath.Atmosphere rain = atmosphere(SETTINGS, frame(ticks(12500), 1), true);
-        assertTrue(AtmosphereMath.lowBand(rain, AtmosphereMath.SKY_MAX_AIR_MASS) < 0.25f * AtmosphereMath.lowBand(low, AtmosphereMath.SKY_MAX_AIR_MASS), "rain greys it out");
+        assertTrue(AtmosphereMath.lowBand(rain, AtmosphereMath.SKY_MAX_AIR_MASS, AtmosphereMath.SKY_MAX_AIR_MASS) < 0.25f * AtmosphereMath.lowBand(low, AtmosphereMath.SKY_MAX_AIR_MASS, AtmosphereMath.SKY_MAX_AIR_MASS), "rain greys it out");
         //Its light keeps the sky's sunlight's luminance (a warmer hue, not more light) and is finite and non-negative
         float[] l = AtmosphereMath.lowLight(low), sl = low.sunLight();
         assertEquals(lum(new float[]{sl[0], sl[1], sl[2]}), lum(l), 1e-4f);
@@ -893,23 +893,40 @@ class AtmosphereTest {
 
     // ---- tuning round 1 ----
 
-    /** S1/S4/S6/S2 near terrain keeps its colour: within 150 blocks the haze is barely there; it builds toward the horizon. */
+    /**
+     * 2026-11-09 (session 1b, the user: "the aerial perspective is too weak"; it was "S1/S4/S6/S2 near terrain keeps its colour", with the
+     * haze barely there within 150 blocks). Seen from a hill at noon (F1) Luxium and Complementary Reimagined veil terrain 100 to 250
+     * blocks away in blue-grey and keep the veil there, while the far distance fades on into the sky. Now: a few blocks out nothing, a clear
+     * veil at a render distance's 100 to 250 blocks, leveling off after a few hundred blocks so that Distant Horizons' far terrain keeps
+     * some contrast, and in the end the sky behind (farTerrainTurnsIntoTheSkyBehindIt).
+     */
     @Test
-    void theHazeIsBarelyThereNearTheCameraAndBuildsFarAway() {
-        for (float[] scene : new float[][]{{NOON, 0, 110}, {NOON, 1, 110}, {S2_SUN, 0, 193}, {NOON, 0, 250}}) {
+    void theAerialVeilBuildsNearTheCameraAndLevelsOff() {
+        for (float[] scene : new float[][]{{NOON, 0, 110}, {NOON, 0, 160}, {S2_SUN, 0, 193}, {NOON, 0, 250}}) {
             AtmosphereMath.Atmosphere a = atmosphere(PLAYER, frame(scene[0], scene[1], 0, false, FOG, scene[2], new Matrix4f()), true);
-            for (float[] d : List.of(dir(0, -0.64f, 0.77f), dir(0, -0.3f, 1), dir(1, -0.05f, 0), dir(-1, -0.2f, 0.2f))) {
+            for (float[] d : List.of(dir(0, -0.3f, 1), dir(1, -0.05f, 0), dir(-1, -0.2f, 0.2f))) {
                 //terrain points (at or above sea level, 63)
-                if (scene[2] + d[1] * 150 < 63) continue;
-                AtmosphereMath.Haze near = AtmosphereMath.haze(a, d, 100, 1);
-                assertTrue(near.transmittance()[1] > 0.99f && lum(near.inscatter()) < 0.006f, "100 blocks T " + near.transmittance()[1] + " I " + Arrays.toString(near.inscatter()));
-                AtmosphereMath.Haze mid = AtmosphereMath.haze(a, d, 150, 1);
-                assertTrue(mid.transmittance()[1] > 0.98f && lum(mid.inscatter()) < 0.015f, "150 blocks " + Arrays.toString(scene) + " " + Arrays.toString(d) + " T " + mid.transmittance()[1] + " I " + lum(mid.inscatter()));
+                if (scene[2] + d[1] * 250 < 63) continue;
+                String at = Arrays.toString(scene) + " " + Arrays.toString(d);
+                //right by the camera: nothing
+                assertTrue(AtmosphereMath.haze(a, d, 8, 1).transmittance()[1] > 0.99f, at);
+                //a render distance away: a clear veil, not a wall
+                AtmosphereMath.Haze mid = AtmosphereMath.haze(a, d, 200, 1);
+                assertTrue(mid.transmittance()[1] < 0.93f && mid.transmittance()[1] > 0.6f, "200 blocks " + at + " T " + mid.transmittance()[1]);
+                assertTrue(lum(mid.inscatter()) > 0.05f, "200 blocks " + at + " I " + Arrays.toString(mid.inscatter()));
+                //Distant Horizons' far terrain keeps some contrast, and softens
+                float far = AtmosphereMath.haze(a, d, 3000, 1).transmittance()[1];
+                assertTrue(far > 0.05f && far < 0.5f, "3000 blocks " + at + " T " + far);
             }
-            AtmosphereMath.Haze far = AtmosphereMath.haze(a, dir(0, -0.05f, 1), 4000, 1);
-            assertTrue(far.transmittance()[1] < 0.7f, "far LODs soften into the sky " + far.transmittance()[1]);
         }
-        //The onset distance itself: monotonic, d^3/(d^2 + onset^2) (6% at 100 blocks), about d far away
+        //The veil levels off: its air mass grows over 20 times faster in the first 100 blocks than past 3000
+        AtmosphereMath.Atmosphere noon = atmosphere(PLAYER, frame(NOON, 0, 0, false, FOG, 160, new Matrix4f()), true);
+        float near = AtmosphereMath.hazeMass(noon, -0.1f, 100) / 100;
+        float beyond = (AtmosphereMath.hazeMass(noon, -0.1f, 4000) - AtmosphereMath.hazeMass(noon, -0.1f, 3000)) / 1000;
+        assertTrue(near > 20 * beyond, near + " " + beyond);
+        //and thins with height: a view up the same distance (a cloud, a peak) has less of it than a level one
+        assertTrue(AtmosphereMath.hazeMass(noon, 0.3f, 800) < AtmosphereMath.hazeMass(noon, 0, 800));
+        //The onset distance itself: monotonic, d^3/(d^2 + onset^2), about d far away
         float last = -1;
         for (float d = 0; d < 20000; d += 1) {
             float e = AtmosphereMath.hazeDistance(d);
@@ -917,12 +934,53 @@ class AtmosphereTest {
             last = e;
         }
         assertEquals(1e6f / (1e4f + AtmosphereMath.HAZE_ONSET * AtmosphereMath.HAZE_ONSET), AtmosphereMath.hazeDistance(100), 0.01f);
-        assertTrue(AtmosphereMath.hazeDistance(100) < 10f);
         assertEquals(1e6f, AtmosphereMath.hazeDistance(1e6f), 1f);
-        //At sunset the in-scatter toward the sun is warm, not cool grey
+        //At sunset the in-scatter toward the sun is warm, not cool grey, already a render distance away
         AtmosphereMath.Atmosphere s2 = atmosphere(PLAYER, frame(S2_SUN, 0, 0, false, FOG, 193, new Matrix4f()), true);
-        float[] in = AtmosphereMath.haze(s2, fromWest(-10, 0), 1500, 1).inscatter();
-        assertTrue(in[0] > in[2], "warm haze toward the sunset " + Arrays.toString(in));
+        for (float dist : new float[]{200, 1500}) {
+            float[] in = AtmosphereMath.haze(s2, fromWest(-10, 0), dist, 1).inscatter();
+            assertTrue(in[0] > in[2], "warm haze toward the sunset at " + dist + " " + Arrays.toString(in));
+        }
+        //At noon the veil is the sky's blue
+        float[] blue = AtmosphereMath.haze(noon, dir(0, -0.2f, 1), 200, 1).inscatter();
+        assertTrue(blue[2] > blue[1] && blue[1] > blue[0], Arrays.toString(blue));
+    }
+
+    /** 2026-11-09 (session 1b): the distance haze setting scales the aerial haze (veil and far fade) and leaves the ground fog alone. */
+    @Test
+    void theDistanceHazeSettingScalesTheAerialHazeOnly() {
+        AtmosphereFrame f = frame(NOON, 0, 0, false, FOG, 160, new Matrix4f());
+        AtmosphereMath.Atmosphere none = atmosphere(settings(c -> c.distanceHaze = 0), f, true);
+        AtmosphereMath.Atmosphere half = atmosphere(settings(c -> c.distanceHaze = 50), f, true);
+        AtmosphereMath.Atmosphere full = atmosphere(SETTINGS, f, true);
+        AtmosphereMath.Atmosphere twice = atmosphere(settings(c -> c.distanceHaze = 200), f, true);
+        assertEquals(0, AtmosphereMath.hazeMass(none, -0.1f, 500), 0f);
+        assertArrayEquals(full.fog(), none.fog(), 0f, "the ground fog is the fog strength's");
+        float[] d = dir(0, -0.2f, 1);
+        float t0 = AtmosphereMath.haze(none, d, 300, 1).transmittance()[1], t50 = AtmosphereMath.haze(half, d, 300, 1).transmittance()[1];
+        float t100 = AtmosphereMath.haze(full, d, 300, 1).transmittance()[1], t200 = AtmosphereMath.haze(twice, d, 300, 1).transmittance()[1];
+        assertTrue(t0 > t50 && t50 > t100 && t100 > t200, t0 + " " + t50 + " " + t100 + " " + t200);
+        //With none of it the far terrain is still hidden by the ground fog below the horizon, and the sky is unchanged
+        assertArrayEquals(AtmosphereMath.skyColour(full, d), AtmosphereMath.skyColour(none, d), 1e-6f);
+        assertEquals(0, AtmosphereMath.groundFogDepth(none, 0, 0), 0f);
+    }
+
+    /** 2026-11-09 (session 1b, the roadmap: "morning valley fog"): the ground fog thickens on a morning, not on an evening or at noon. */
+    @Test
+    void aMorningMistFillsTheValleysAndLiftsAsTheSunClimbs() {
+        float morning = (float) (1 - Math.acos(0.2) / (2 * Math.PI)), evening = (float) (Math.acos(0.2) / (2 * Math.PI));
+        AtmosphereMath.Atmosphere m = atmosphere(SETTINGS, frame(morning, 0, 0, false, FOG, 70, new Matrix4f()), true);
+        AtmosphereMath.Atmosphere e = atmosphere(SETTINGS, frame(evening, 0, 0, false, FOG, 70, new Matrix4f()), true);
+        AtmosphereMath.Atmosphere n = atmosphere(SETTINGS, frame(NOON, 0, 0, false, FOG, 70, new Matrix4f()), true);
+        assertTrue(m.sun()[0] > 0 && e.sun()[0] < 0, "the morning sun is in the east");
+        assertEquals(1 + AtmosphereUniforms.MORNING_MIST, m.fog()[0] / n.fog()[0], 1e-3f);
+        assertEquals(n.fog()[0], e.fog()[0], 1e-9f);
+        //Across the valley (100 blocks, level) the morning mist hides much more than the evening's clear air; it is lit, not grey
+        float[] across = dir(1, -0.02f, 0);
+        assertTrue(AtmosphereMath.haze(m, across, 100, 1).transmittance()[1] < AtmosphereMath.haze(e, across, 100, 1).transmittance()[1] - 0.03f);
+        //Gone by a high morning sun
+        AtmosphereMath.Atmosphere late = atmosphere(SETTINGS, frame((float) (1 - Math.acos(0.75) / (2 * Math.PI)), 0, 0, false, FOG, 70, new Matrix4f()), true);
+        assertEquals(n.fog()[0], late.fog()[0], 1e-9f);
     }
 
     /** W7's B3 request: cloudShape x and y whenever vanilla has a cloud layer, also with the far clouds off (w 0). */

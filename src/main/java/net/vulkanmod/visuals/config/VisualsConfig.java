@@ -121,6 +121,8 @@ public class VisualsConfig {
     public int fogHeight = 40;
     /** 2026-10-28: how thick the fog of rain and thunderstorms is (AtmosphereUniforms.weatherFog); 0 is the clear-weather fog. */
     public int weatherFog = 100;
+    /** 2026-11-09 (session 1b): how thick the aerial haze over the distance is (its near veil and the far fade into the sky), percent. */
+    public int distanceHaze = 100;
     public int sunGlow = 50;
     public int sunsetLight = 50;
     public int lightShafts = 50;

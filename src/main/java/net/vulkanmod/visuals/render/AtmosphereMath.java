@@ -38,12 +38,23 @@ public final class AtmosphereMath {
     public static final float LOW_G = 0.3f, LOW_ISO = 0.3f, LOW_SHADOW_LOW = -0.03f, LOW_SHADOW_HIGH = 0.12f, LOW_SHADOW_COS = 0.7f;
     /** The band also scatters LOW_DOME of the dome's light (the sky lights it too: the earth's shadow is blue-grey, not black). */
     public static final float LOW_DOME = 0.5f;
+    /** 2026-11-09 (session 1b): the band's depth along part of a sky path grows as (share of the path)^LOW_PATH_POWER. */
+    public static final float LOW_PATH_POWER = 1.5f;
     /** The sky's sunlight is reddened by this share of the extinction along the sun's air mass (AtmosphereUniforms.SKY_REDDENING). */
     public static final float SKY_REDDENING = 0.7f;
     /** Vanilla's sunrise/sunset fan is suppressed on the sun's side: fully above FAN_SIDE_HIGH horizontal cosine to the sun, not below FAN_SIDE_LOW. */
     public static final float FAN_SIDE_LOW = -0.3f, FAN_SIDE_HIGH = 0.1f;
-    /** The haze's optical depths use d^3 / (d^2 + HAZE_ONSET^2) for a view distance d: gentle near the camera, unchanged far away. */
-    public static final float HAZE_ONSET = 400.0f;
+    /**
+     * The haze's optical depths use d^3 / (d^2 + HAZE_ONSET^2) for a view distance d: gentle right by the camera, unchanged far away.
+     * 2026-11-09 (session 1b): 400 kept everything within 150 blocks clear; 32 starts the haze a few blocks out.
+     */
+    public static final float HAZE_ONSET = 32.0f;
+    /**
+     * 2026-11-09 (session 1b): the aerial veil (atmosphere.glsl hazeMass). Near the camera the aerial haze's air mass builds VEIL_GAIN times
+     * faster than ambient.w, leveling off at VEIL_GAIN x VEIL_RANGE blocks' worth after a few VEIL_RANGE blocks of air weighted by
+     * exp(-height / VEIL_HEIGHT) above sea level.
+     */
+    public static final float VEIL_GAIN = 35.0f, VEIL_RANGE = 300.0f, VEIL_HEIGHT = 200.0f;
     /** Rain's overcast tint (luminance 1). */
     public static final float OVERCAST_RED = 0.96f, OVERCAST_GREEN = 1.0f, OVERCAST_BLUE = 1.08f;
     /** Numerical guards (see atmosphere.glsl). */
@@ -134,7 +145,7 @@ public final class AtmosphereMath {
             out[i] = sun * sunPath + moon * (1 - (float) Math.exp(-tau * m)) / tau + a.ambient[i] * (1 - (float) Math.exp(-AMBIENT_DEPTH * m));
         }
         //2026-11-09 (session 1a): the low haze band in front of it all
-        float band = lowBand(a, m);
+        float band = lowBand(a, m, skyAirMass(dir[1]));
         if (band > 0) {
             float t = (float) Math.exp(-band);
             float[] light = lowLight(a);
@@ -145,11 +156,16 @@ public final class AtmosphereMath {
         return out;
     }
 
-    /** The low haze band's optical depth along m air masses: LOW_DEPTH m^2 / SKY_MAX_AIR_MASS by the sun's height and the overcast. */
-    public static float lowBand(Atmosphere a, float m) {
+    /**
+     * The low haze band's optical depth along m air masses of a sky path of skyMass: LOW_DEPTH skyMass^2 / SKY_MAX_AIR_MASS (m / skyMass)^LOW_PATH_POWER
+     * by the sun's height and the overcast. 2026-11-09 (session 1b): power 1.5 along part of a path (it was m^2), so terrain a few hundred
+     * blocks away toward a low sun takes the band's warm light.
+     */
+    public static float lowBand(Atmosphere a, float m, float skyMass) {
         float w = (1 - smoothstep(LOW_SUN_LOW, LOW_SUN_HIGH, a.sun[1])) * smoothstep(LOW_NIGHT_LOW, LOW_NIGHT_HIGH, a.sun[1]) * (1 - clamp01(a.sunLight[3]));
-        float mm = Math.max(m, 0);
-        return LOW_DEPTH * w * mm * mm / SKY_MAX_AIR_MASS;
+        float sm = Math.max(skyMass, 0);
+        float share = sm > 0 ? Math.min(Math.max(m / sm, 0), 1) : 0;
+        return LOW_DEPTH * w * sm * sm / SKY_MAX_AIR_MASS * (float) Math.pow(share, LOW_PATH_POWER);
     }
 
     /** The low haze band's light: the sky's sunlight reddened LOW_REDDENING times more, up to LOW_LIGHT_MASS air masses in all, at its luminance. */
@@ -170,15 +186,24 @@ public final class AtmosphereMath {
         return overcast(a, airlight(a, horizon, skyAirMass(0)));
     }
 
-    public static float groundFogDepth(Atmosphere a, float dirY, float dist) {
-        float d = dist > 0 ? Math.min(dist, HAZE_MAX_DISTANCE) : 0;
-        float invH = a.fog[1];
-        float h0 = a.fog[2] * invH;
-        float h1 = Math.max(a.fog[2] + dirY * d, 0) * invH;
+    /** The mean of exp(-height / H) along d blocks from a camera camHeight above sea level with dir.y = dirY, invH = 1 / H (heights clamped at 0). */
+    public static float heightMean(float camHeight, float dirY, float d, float invH) {
+        float h0 = camHeight * invH;
+        float h1 = Math.max(camHeight + dirY * d, 0) * invH;
         float dh = h1 - h0;
         float e0 = (float) Math.exp(-h0);
-        float mean = Math.abs(dh) > FOG_SERIES ? (e0 - (float) Math.exp(-h1)) / dh : e0 * (1 - 0.5f * dh);
-        return Math.max(a.fog[0] * d * mean, 0);
+        return Math.abs(dh) > FOG_SERIES ? (e0 - (float) Math.exp(-h1)) / dh : e0 * (1 - 0.5f * dh);
+    }
+
+    public static float groundFogDepth(Atmosphere a, float dirY, float dist) {
+        float d = dist > 0 ? Math.min(dist, HAZE_MAX_DISTANCE) : 0;
+        return Math.max(a.fog[0] * d * heightMean(a.fog[2], dirY, d, a.fog[1]), 0);
+    }
+
+    /** The aerial haze's air mass over a haze distance d: the far rate ambient.w per block plus the near veil (VEIL_GAIN). */
+    public static float hazeMass(Atmosphere a, float dirY, float d) {
+        float p = d * heightMean(a.fog[2], dirY, d, 1 / VEIL_HEIGHT);
+        return Math.max(a.ambient[3], 0) * (d + VEIL_GAIN * VEIL_RANGE * (1 - (float) Math.exp(-p / VEIL_RANGE)));
     }
 
     public static float[] skyColour(Atmosphere a, float[] dir) {
@@ -230,9 +255,9 @@ public final class AtmosphereMath {
             return new Haze(new float[]{tf, tf, tf}, new float[]{fog[0] * (1 - tf), fog[1] * (1 - tf), fog[2] * (1 - tf)});
         }
         float skyMass = skyAirMass(dir[1]);
-        float mass = Math.min(d * a.ambient[3], skyMass) * k;
+        float mass = Math.min(hazeMass(a, dir[1], d), skyMass) * k;
         float[] t = new float[3];
-        float band = (float) Math.exp(-lowBand(a, mass));
+        float band = (float) Math.exp(-lowBand(a, mass, skyMass));
         for (int i = 0; i < 3; i++) t[i] = (float) Math.exp(-Math.max(a.depth[i] + a.depth[3], MIN_DEPTH) * mass) * tf * band;
         float[] air = overcast(a, airlight(a, dir, mass));
         float[] lobe = glowLobe(a, dir);

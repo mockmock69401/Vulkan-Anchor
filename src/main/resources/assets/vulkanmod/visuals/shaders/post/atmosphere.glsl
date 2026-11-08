@@ -29,8 +29,8 @@
 //   depth      rgb the Rayleigh optical depth of one air mass, w the haze (Mie) optical depth of one air mass
 //   ambient    rgb the isotropic sky dome's brightness at full depth, scene units: multiply-scattered light, the low sun's
 //              twilight glow, night-sky light and, in rain, the diffused sunlight; along a path it builds up as
-//              1 - exp(-AMBIENT_DEPTH mass). w air masses per block of view distance for the aerial haze
-//              (fog strength / AtmosphereUniforms.AIR_MASS_BLOCKS)
+//              1 - exp(-AMBIENT_DEPTH mass). w air masses per block of view distance for the aerial haze far away
+//              (fog strength x distance haze / AtmosphereUniforms.AIR_MASS_BLOCKS; hazeMass adds the near veil on that rate)
 //   glow       rgb the sun-side glow's colour at the glow lobe's mean, w the moon glow's share of moonLight
 //   fog        x the ground fog's density per block at sea level (fog strength and rain applied; NO_SKY and FOG: the uniform
 //              density), y 1 / fog height (blocks^-1; 0 in NO_SKY and FOG: height independent), z the camera's height above sea
@@ -135,6 +135,8 @@ const float LOW_SHADOW_HIGH = 0.12;
 const float LOW_SHADOW_COS = 0.7;
 //The band also scatters this share of the dome's light (the sky lights the haze too: the earth's shadow is blue-grey, not black)
 const float LOW_DOME = 0.5;
+//How the band's depth grows along part of a sky path (lowBand): (share of the path)^LOW_PATH_POWER
+const float LOW_PATH_POWER = 1.5;
 //Vanilla's sunrise/sunset fan is suppressed on the side of the sky facing the sun: fully where the horizontal cosine to the sun's
 // azimuth is above FAN_SIDE_HIGH, not at all below FAN_SIDE_LOW (the fan spans the sun's half of the horizon)
 const float FAN_SIDE_LOW = -0.3;
@@ -148,10 +150,27 @@ const float OVERCAST_BLUE = 1.08;
 const float SKY_FOG_MIN_SLOPE = 0.001;
 const float FOG_SERIES = 0.001;
 const float HAZE_MAX_DISTANCE = 1000000.0;
-//Tuning round 1: the haze starts gently. Its optical depths use the distance d^3 / (d^2 + HAZE_ONSET^2): d^3/ONSET^2 near the
-// camera (6% at 100 blocks, 16% at 150: near terrain keeps its colour), about d - small far away (unchanged at the horizon and in the
-// sky). Never decreases with d.
-const float HAZE_ONSET = 400.0;
+//The haze starts gently. Its optical depths use the distance d^3 / (d^2 + HAZE_ONSET^2): d^3/ONSET^2 right by the camera, about
+// d - small beyond a few onsets (unchanged at the horizon and in the sky). Never decreases with d. 2026-11-09 (session 1b, the user: "the
+// aerial perspective is too weak"): 400 kept everything within 150 blocks clear and the haze only began at the render distance's edge,
+// where the border fog took over. 32 lets it start a few blocks out, as in the references (Luxium: fog start 8 blocks, a near fade of
+// about 40)
+const float HAZE_ONSET = 32.0;
+//2026-11-09 (session 1b): the aerial veil. Seen from a hill at noon, Luxium and Complementary Reimagined veil terrain 100 to 250 blocks
+// away in blue-grey and keep it there (Luxium: a maximum opacity of 0.64), while the far distance fades on into the sky. The aerial
+// haze's air mass along a view is therefore not just the distance over AIR_MASS_BLOCKS: near the camera it builds VEIL_GAIN times faster,
+// leveling off at VEIL_GAIN x VEIL_RANGE blocks' worth (about 3.5 air masses at fog strength 100) after a few VEIL_RANGE blocks of air:
+//   mass = ambient.w (d + VEIL_GAIN VEIL_RANGE (1 - exp(-p / VEIL_RANGE)))
+// with p the path's air weighted by exp(-height / VEIL_HEIGHT) above sea level (the boundary layer's haze thins upward: a high view, a
+// mountain top or a cloud has less of it). This compresses the distance like the "aerial perspective view distance scale" of Unreal
+// Engine's sky atmosphere (after Hillaire 2020, "A scalable and production ready sky and atmosphere rendering technique", EGSR) but only
+// near the camera, so Distant Horizons' far terrain keeps some contrast (about 4.5 air masses at 3000 blocks) and only fades into the sky
+// beyond it. The colour is the
+// sky's own in-scatter over that air mass (airlight: blue by day, warm toward a low sun through the low haze band), so the veil at any
+// distance is a sky of that many air masses in the view's direction
+const float VEIL_GAIN = 35.0;
+const float VEIL_RANGE = 300.0;
+const float VEIL_HEIGHT = 200.0;
 const float MIN_DEPTH = 0.000001;
 
 struct Atmosphere {
@@ -218,12 +237,17 @@ vec3 overcast(Atmosphere a, vec3 c) {
     return mix(c, vec3(OVERCAST_RED, OVERCAST_GREEN, OVERCAST_BLUE)*luminance(c), a.sunLight.w);
 }
 
-//The low haze band's optical depth along a path of m air masses (see LOW_DEPTH): by the sun's height and the overcast
-float lowBand(Atmosphere a, float m) {
+//The low haze band's optical depth along a path of m air masses toward a sky of skyMass air masses (see LOW_DEPTH): by the sun's
+// height and the overcast. A sky pixel's whole path (m = skyMass) has LOW_DEPTH m^2 / SKY_MAX_AIR_MASS. 2026-11-09 (session 1b): part of
+// that path, m of skyMass, has (m / skyMass)^LOW_PATH_POWER of it. 1a's m^2 (power 2) gave terrain a few hundred blocks away next to
+// none of the band's warm light, where Luxium and Complementary fill the land toward a setting sun with orange (F2); 1 (linear: a level
+// path is all in the low air) hazed even 50 blocks 17%. The whole path is unchanged, so the sky is too and far terrain still turns into it
+float lowBand(Atmosphere a, float m, float skyMass) {
     float w = (1.0 - smoothstep(LOW_SUN_LOW, LOW_SUN_HIGH, a.sun.y))*smoothstep(LOW_NIGHT_LOW, LOW_NIGHT_HIGH, a.sun.y)
             *(1.0 - clamp(a.sunLight.w, 0.0, 1.0));
-    float mm = max(m, 0.0);
-    return LOW_DEPTH*w*mm*mm/SKY_MAX_AIR_MASS;
+    float sm = max(skyMass, 0.0);
+    float share = sm > 0.0 ? clamp(m/sm, 0.0, 1.0) : 0.0;
+    return LOW_DEPTH*w*sm*sm/SKY_MAX_AIR_MASS*pow(share, LOW_PATH_POWER);
 }
 
 //The low haze band's light (see LOW_REDDENING): the sky's sunlight reddened further, at its luminance
@@ -255,7 +279,7 @@ vec3 airlight(Atmosphere a, vec3 dir, float mass) {
     vec3 km = (tau - SKY_REDDENING*(tauR + tauM)*a.fog.w/skyAirMass(dir.y))*m;
     vec3 sunPath = m*mix(1.0 - 0.5*km, (1.0 - exp(-km))/km, greaterThan(abs(km), vec3(FOG_SERIES)));
     vec3 air = sun*sunPath + moon*(1.0 - exp(-tau*m))/tau + a.ambient.rgb*(1.0 - exp(-AMBIENT_DEPTH*m));
-    float band = lowBand(a, m);
+    float band = lowBand(a, m, skyAirMass(dir.y));
     if (band > 0.0) {
         float t = exp(-band);
         float lit = smoothstep(LOW_SHADOW_LOW, LOW_SHADOW_HIGH, a.sun.y);
@@ -277,19 +301,31 @@ vec3 fogColour(Atmosphere a, vec3 dir) {
     return overcast(a, airlight(a, horizon, skyAirMass(0.0)));
 }
 
+//The mean of exp(-height / H) along a straight path of d blocks from a camera camHeight blocks above sea level with world dir.y = dirY,
+// invH = 1 / H (heights clamped at sea level, so at most 1): (e^-h0 - e^-h1) / (h1 - h0) in units of H, its series when they are close.
+// 1 with invH = 0
+float heightMean(float camHeight, float dirY, float d, float invH) {
+    float h0 = camHeight*invH;
+    float h1 = max(camHeight + dirY*d, 0.0)*invH;
+    float dh = h1 - h0;
+    float e0 = exp(-h0);
+    return abs(dh) > FOG_SERIES ? (e0 - exp(-h1))/dh : e0*(1.0 - 0.5*dh);
+}
+
 //Optical depth of the ground fog from the camera along a ray with world dir.y = dirY over dist blocks. The density is
 // fog.x exp(-height / fogHeight) (an exponential height fog), heights clamped at sea level (density at most fog.x); the integral
 // of an exponential along a straight line is closed-form: dist (e^-h0 - e^-h1) / (h1 - h0) in fog heights. Never decreases with
 // dist, never increases with the camera's height. With fog.y = 0 (NO_SKY, FOG) it is fog.x dist.
 float groundFogDepth(Atmosphere a, float dirY, float dist) {
     float d = dist > 0.0 ? min(dist, HAZE_MAX_DISTANCE) : 0.0;
-    float invH = a.fog.y;
-    float h0 = a.fog.z*invH;
-    float h1 = max(a.fog.z + dirY*d, 0.0)*invH;
-    float dh = h1 - h0;
-    float e0 = exp(-h0);
-    float mean = abs(dh) > FOG_SERIES ? (e0 - exp(-h1))/dh : e0*(1.0 - 0.5*dh);
-    return max(a.fog.x*d*mean, 0.0);
+    return max(a.fog.x*d*heightMean(a.fog.z, dirY, d, a.fog.y), 0.0);
+}
+
+//The aerial haze's air mass over a haze distance d (hazeDistance) along a view with world dir.y = dirY: the far rate ambient.w per block
+// plus the near veil (see VEIL_GAIN). Never decreases with d, never increases with the camera's height
+float hazeMass(Atmosphere a, float dirY, float d) {
+    float p = d*heightMean(a.fog.z, dirY, d, 1.0/VEIL_HEIGHT);
+    return max(a.ambient.w, 0.0)*(d + VEIL_GAIN*VEIL_RANGE*(1.0 - exp(-p/VEIL_RANGE)));
 }
 
 //The colour of the sky (infinitely far) in world direction dir, scene units: the air's in-scatter over the view's air mass, rain's
@@ -338,8 +374,8 @@ float hazeDistance(float d) {
 }
 
 //The haze between the camera and a surface dist blocks away along dir: the surface's colour becomes colour * transmittance +
-// inscatter. Two media: the aerial haze (the sky's own air over dist * ambient.w air masses, never more than the sky's air mass
-// in that direction) and the ground fog (groundFogDepth, coloured fogColour). Both carry their share of the sun-side glow.
+// inscatter. Two media: the aerial haze (the sky's own air over hazeMass air masses, the near veil included, never more than the
+// sky's air mass in that direction) and the ground fog (groundFogDepth, coloured fogColour). Both carry their share of the sun-side glow.
 // transmittance is per channel in [0, 1], never increases with dist, never decreases with the camera's height, and is 1 with fog
 // strength 0 (then inscatter is 0). As dist grows a black surface tends to exactly skyColour + sunGlow (far terrain fades into
 // the sky behind it; at and below the horizon the ground fog hides it entirely). amount (0..1) scales both optical depths (see
@@ -362,9 +398,9 @@ void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittan
     }
     //Final fix R5: the sky's air mass along dir and the glow's lobe are evaluated once for the path and the fog's sky behind it
     float skyMass = skyAirMass(dir.y);
-    float mass = min(d*a.ambient.w, skyMass)*k;
+    float mass = min(hazeMass(a, dir.y, d), skyMass)*k;
     vec3 tau = max(a.depth.rgb + a.depth.w, vec3(MIN_DEPTH));
-    vec3 ta = exp(-tau*mass)*exp(-lowBand(a, mass));
+    vec3 ta = exp(-tau*mass)*exp(-lowBand(a, mass, skyMass));
     transmittance = ta*tf;
     vec3 lobe = glowLobe(a, dir);
     inscatter = (overcast(a, airlight(a, dir, mass)) + lobe*glowGain(mass))*tf;
