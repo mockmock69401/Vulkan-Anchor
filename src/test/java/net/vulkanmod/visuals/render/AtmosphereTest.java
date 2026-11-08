@@ -653,9 +653,13 @@ class AtmosphereTest {
         AtmosphereMath.Atmosphere sunset = atmosphere(PLAYER, frame(S2_SUN, 0, 0, false, FOG, 193, new Matrix4f()), true);
         float[] s35 = AtmosphereMath.skyColour(sunset, fromWest(35, 0));
         assertTrue(lum(s35) > 0.3f && lum(s35) < 0.6f, "S2 35 degrees toward the sun " + lum(s35));
-        //S2's top (197, 178, 179) was pink (red above blue above green); since 2026-10-24 (the user's pick v3, OZONE_SCALE 1: "the
-        // sunset is only red") the green is kept and the sky toward the low sun is a warm cream, red above green above blue
-        assertTrue(s35[0] > s35[1] && s35[1] > s35[2], "warm cream " + Arrays.toString(s35));
+        //S2's top (197, 178, 179) was pink (red above blue above green). 2026-10-24 made it a warm cream (red above green above blue), which
+        // with the rest of the sky the same cream read grey-white (2026-11-09, session 1a, "the sunrise is grey"). Since session 1a it is a
+        // lavender: blue above green, the red near the green (the references at 30 degrees toward the sun: Luxium #FCCFE0, Complementary
+        // Reimagined #A48288, Fantasy #CA7CB0, all red above blue above green), far from the noon sky's red
+        assertTrue(s35[2] > s35[1] && s35[0] > 0.9f * s35[1], "lavender " + Arrays.toString(s35));
+        float[] noon35 = AtmosphereMath.skyColour(noon, fromWest(35, 0));
+        assertTrue(s35[0] / s35[1] > 1.2f * noon35[0] / noon35[1], "redder than noon " + Arrays.toString(s35) + " " + Arrays.toString(noon35));
         float[] s35side = AtmosphereMath.skyColour(sunset, fromWest(35, 40));
         assertTrue(lum(s35side) > 0.25f, "S2 the sky beside the sun " + lum(s35side));
         float[] nearSun = AtmosphereMath.skyColour(sunset, fromWest(3, 0)), nearGlow = AtmosphereMath.sunGlow(sunset, fromWest(3, 0));
@@ -695,13 +699,96 @@ class AtmosphereTest {
         float[] opposite = AtmosphereMath.skyColour(a, fromWest(30, 180));
         assertTrue(zenith[2] > zenith[1] && zenith[2] > 0.5f * zenith[0], "a mauve zenith " + Arrays.toString(zenith));
         assertTrue(towardSun[0] > towardSun[1] && towardSun[1] > towardSun[2], "orange toward the sun " + Arrays.toString(towardSun));
-        assertTrue(towardSun[1] > 0.2f * towardSun[0], "with its green kept, not a pure red " + Arrays.toString(towardSun));
+        //2026-11-09 (session 1a): burnt orange, as the references keep the sky of a sun on the horizon (Luxium #B96044: green about a
+        // quarter of the red in linear light), not a pure red
+        assertTrue(towardSun[1] > 0.15f * towardSun[0], "with its green kept, not a pure red " + Arrays.toString(towardSun));
         assertTrue(zenith[2] / zenith[0] > 2 * towardSun[2] / towardSun[0], "bluer up than toward the sun");
         assertTrue(opposite[2] / opposite[0] > towardSun[2] / towardSun[0], "bluer away from the sun");
-        //Above the S2 reference's sun height the sky keeps its tuned colours: no lift
+        //2026-11-09 (session 1a): the lift works at every sun height (it stopped at the S2 reference's 0.18, where the zenith took the
+        // ground's reddened light), on the reddening air mass the sunset light setting scales
         AtmosphereMath.Atmosphere high = atmosphere(PLAYER, frame(S2_SUN, 0, 0, false, FOG, 193, new Matrix4f()), true);
-        assertEquals(0f, high.fog()[3], 0f);
-        assertTrue(a.fog()[3] > 0f);
+        assertEquals(AtmosphereMath.airMass(0.18f), high.fog()[3], 1e-3f);
+        assertEquals(AtmosphereUniforms.SUN_MAX_AIR_MASS, a.fog()[3], 1e-3f, "capped on the horizon");
+    }
+
+    /** The low sun's sky at a time of day: its horizon toward the sun (1 degree up), beside it, away from it, and its top. */
+    private static float[][] lowSky(float timeOfDay) {
+        AtmosphereMath.Atmosphere a = atmosphere(SETTINGS, frame(timeOfDay, 0, 0, false, FOG, 130, new Matrix4f()), true);
+        float sx = Math.signum(a.sun()[0]);
+        float[] toward = {sx * (float) Math.cos(Math.toRadians(1)), (float) Math.sin(Math.toRadians(1)), 0};
+        float[] side = {0, (float) Math.sin(Math.toRadians(1)), (float) Math.cos(Math.toRadians(1))};
+        float[] away = {-toward[0], toward[1], 0};
+        float[] top = {sx * (float) Math.cos(Math.toRadians(40)), (float) Math.sin(Math.toRadians(40)), 0};
+        return new float[][]{AtmosphereMath.skyColour(a, toward), AtmosphereMath.skyColour(a, side), AtmosphereMath.skyColour(a, away),
+                AtmosphereMath.skyColour(a, top), AtmosphereMath.skyColour(a, new float[]{0, 1, 0})};
+    }
+
+    /** A Minecraft time (ticks) as vanilla's time of day (0 noon). */
+    private static float ticks(int t) {
+        double d = ((t / 24000.0 - 0.25) % 1 + 1) % 1;
+        return (float) ((2 * d + (0.5 - Math.cos(d * Math.PI) / 2)) / 3);
+    }
+
+    @Test
+    void theLowSunsSkyGradesByElevationAndDirection() {
+        //2026-11-09 (session 1a, the roadmap's SS2/SS3 sunsets and SR2 sunrise; refs/anchor/observations.md): the references put a warm
+        // band at the horizon toward the sun, keep the sky away from it cooler, and go lavender to blue toward the top. The build drew one
+        // cream-grey over the whole sky (SS2: red minus blue 18 at the horizon and at 30 degrees alike)
+        for (int t : new int[]{12200, 12500, 23500}) {
+            float[][] c = lowSky(ticks(t));
+            float[] toward = c[0], away = c[2], top = c[3], zenith = c[4];
+            assertTrue(toward[0] > 1.8f * toward[2] && toward[0] > toward[1] && toward[1] > toward[2], t + " a warm horizon toward the sun " + Arrays.toString(toward));
+            assertTrue(top[2] > top[1], t + " a cool top " + Arrays.toString(top));
+            assertTrue(zenith[2] > zenith[0] && zenith[2] > zenith[1], t + " a blue zenith " + Arrays.toString(zenith));
+            assertTrue(away[2] / away[0] > toward[2] / toward[0], t + " cooler away from the sun " + Arrays.toString(away));
+            assertTrue(top[2] / top[0] > 2 * toward[2] / toward[0], t + " cooler up than at the horizon");
+        }
+    }
+
+    @Test
+    void theSkyAroundASetSunIsBlueNotOneRed() {
+        //2026-11-09 (session 1a, "the sunset is only red"; SS4 and SR1): with the sun on or just under the horizon the build drew every
+        // direction one maroon (red 1.5 to 1.8 times blue, the side views as red as the sun's). The references keep a burnt orange band at the
+        // horizon toward the sun and a slate blue sky everywhere else (Luxium SS4 #596698 at the top, #6B6C7F away from the sun)
+        for (int t : new int[]{12800, 23000}) {
+            float[][] c = lowSky(ticks(t));
+            float[] toward = c[0], side = c[1], away = c[2], top = c[3], zenith = c[4];
+            //SS4 burnt orange; SR1 (sun 3.5 degrees down) a dusky warm arch, between Luxium's red-orange and Complementary's night
+            if (t == 12800) assertTrue(toward[0] > 1.5f * toward[2], t + " warm toward the sun " + Arrays.toString(toward));
+            assertTrue(toward[0] / toward[2] > 1.5f * away[0] / away[2], t + " warmer toward the sun " + Arrays.toString(toward) + " " + Arrays.toString(away));
+            for (float[] blue : new float[][]{side, away, top, zenith}) {
+                assertTrue(blue[2] > blue[0] && blue[2] > blue[1], t + " blue elsewhere " + Arrays.toString(blue));
+            }
+            //and not black: the twilight sky after sunset stays readable (about Complementary Reimagined's, darker than Luxium's)
+            assertTrue(lum(zenith) > 0.02f, t + " zenith " + lum(zenith));
+        }
+    }
+
+    @Test
+    void theSunriseIsCoolerAndBrighterThanTheSunsetAtTheSameHeight() {
+        //2026-11-09 (session 1a, the roadmap's direction): SR2 (23500) and SS3 (12500) have the same sun height
+        float[][] rise = lowSky(ticks(23500)), set = lowSky(ticks(12500));
+        assertTrue(rise[0][2] / rise[0][0] > set[0][2] / set[0][0], "a cooler horizon " + Arrays.toString(rise[0]) + " " + Arrays.toString(set[0]));
+        assertTrue(lum(rise[4]) > lum(set[4]), "a brighter zenith " + lum(rise[4]) + " " + lum(set[4]));
+    }
+
+    @Test
+    void theLowHazeBandIsOnlyThereWhileTheSunIsLow() {
+        //2026-11-09 (session 1a): no band at noon, at midnight or under a full overcast, so those skies keep their tuning
+        for (float t : new float[]{NOON, MIDNIGHT}) {
+            AtmosphereMath.Atmosphere a = sky(t, 0);
+            assertEquals(0f, AtmosphereMath.lowBand(a, AtmosphereMath.SKY_MAX_AIR_MASS), 0f, "t " + t);
+        }
+        AtmosphereMath.Atmosphere low = sky(ticks(12500), 0);
+        assertTrue(AtmosphereMath.lowBand(low, AtmosphereMath.SKY_MAX_AIR_MASS) > 3, "opaque on the horizon");
+        assertTrue(AtmosphereMath.lowBand(low, 1) < 0.05f, "next to nothing at the zenith");
+        AtmosphereMath.Atmosphere rain = atmosphere(SETTINGS, frame(ticks(12500), 1), true);
+        assertTrue(AtmosphereMath.lowBand(rain, AtmosphereMath.SKY_MAX_AIR_MASS) < 0.25f * AtmosphereMath.lowBand(low, AtmosphereMath.SKY_MAX_AIR_MASS), "rain greys it out");
+        //Its light keeps the sky's sunlight's luminance (a warmer hue, not more light) and is finite and non-negative
+        float[] l = AtmosphereMath.lowLight(low), sl = low.sunLight();
+        assertEquals(lum(new float[]{sl[0], sl[1], sl[2]}), lum(l), 1e-4f);
+        assertTrue(l[0] / l[2] > sl[0] / sl[2], "redder than the sky's sunlight");
+        assertArrayEquals(new float[3], AtmosphereMath.lowLight(sky(MIDNIGHT, 0)), 0f, "no sunlight, no band light");
     }
 
     @Test

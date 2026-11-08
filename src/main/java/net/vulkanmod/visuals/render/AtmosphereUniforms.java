@@ -72,10 +72,28 @@ public final class AtmosphereUniforms {
     public static final float SKY_REDDENING = AtmosphereMath.SKY_REDDENING, AMBIENT_REDDENING = 0.6f;
     /**
      * The isotropic sky dome (after Hillaire 2020's isotropic multiple-scattering idea), relative to the sky's sunlight: SKY_MULTI of
-     * it in the blue of the Rayleigh depth raised to AMBIENT_BLUE (the multiply-scattered sky light), plus TWILIGHT_SKY of it uncoloured
-     * while the sun is low (fading out by TWILIGHT_HEIGHT sun height): the bright pink-lavender sunset sky of refs S2/S13.
+     * it in the blue of the Rayleigh depth raised to AMBIENT_BLUE (the multiply-scattered sky light), plus the twilight dome while the sun
+     * is low: TWILIGHT_SKY times SKY_SUN, fading out by TWILIGHT_HEIGHT sun height, in the colour of twilightHue.
+     * 2026-11-09 (session 1a, "the sunset is only red" / "the sunrise is grey"): the twilight dome was 1.2 of the sky's sunlight, uncoloured
+     * (the column's warm white): it was 90% of the zenith at the SS2 sunset and the same cream in every direction, so the sky read grey-white;
+     * with the sun on the horizon it took the ground's red, so the whole sky read maroon. It is now the upper air's own colour (the hue of
+     * the light high in the column, scattered by Rayleigh's TWILIGHT_BLUE and filtered by the ozone it crossed: the blue of twilight, Hulburt
+     * 1953, "Explanation of the brightness and color of the sky, particularly the twilight sky", JOSA 43), at a fixed brightness that lasts
+     * until TWILIGHT_FADE_LOW sun height (civil twilight) instead of following the ground's dimming light.
      */
-    public static final float SKY_MULTI = 0.2f, AMBIENT_BLUE = 0.5f, TWILIGHT_SKY = 1.2f, TWILIGHT_HEIGHT = 0.45f;
+    public static final float SKY_MULTI = 0.2f, AMBIENT_BLUE = 0.5f, TWILIGHT_SKY = 0.15f, TWILIGHT_HEIGHT = 0.45f;
+    public static final float TWILIGHT_BLUE = 1.3f, TWILIGHT_OZONE = 0.7f, TWILIGHT_FADE_LOW = -0.15f;
+    /**
+     * 2026-11-09 (session 1a): the low sun's reddening air mass is capped here (the Kasten and Young air mass is about 38 on the horizon): at
+     * 38 the sky's sunlight was a pure red, and the references (Luxium, Complementary Reimagined, Fantasy) keep the sky of a sun on the
+     * horizon burnt orange, about the colour of a sun 2.5 degrees up.
+     */
+    public static final float SUN_MAX_AIR_MASS = 20.0f;
+    /**
+     * 2026-11-09 (session 1a, the roadmap: "the sunrise cooler and brighter than the sunset"): the morning sky (the sun in the east) takes
+     * MORNING_SATURATION of the low sun's reddening and MORNING_TWILIGHT times the twilight dome. The references draw both alike.
+     */
+    public static final float MORNING_SATURATION = 0.8f, MORNING_TWILIGHT = 1.15f;
     /** The moon's light relative to the sun's at the moonlight setting's 100. */
     public static final float MOON_SKY = 0.035f;
     /** Night-sky light (airglow, starlight): the dome's brightness on a moonless night, scene units. */
@@ -89,17 +107,6 @@ public final class AtmosphereUniforms {
      * player's 50 is the computed colour, the default 100 twice as saturated (the references' warm peach and pink).
      */
     public static final float SUNSET_SATURATION = 2.0f;
-    /**
-     * 2026-10-24 (CTE2: "the sunset is only red"): below this sun height (the tuning references' S2 sunset, about 10.7 degrees) the
-     * sky's in-scatter and the twilight dome take the sunlight of the air column above the ground (fog.w, columnTint), fully with the
-     * sun at the horizon; above it the references' ground-reddened colours stay as tuned.
-     */
-    public static final float LIFT_SUN_HEIGHT = 0.18f;
-    /**
-     * The twilight dome (isotropic: one colour over the whole sky) is cut by this share with the sun at the horizon, fading out
-     * up to LIFT_SUN_HEIGHT, so the in-scatter's gradient (orange toward the sun, darker above) shows (the user's pick v3).
-     */
-    public static final float TWILIGHT_LIFT_CUT = 0.5f;
     /** Full rain keeps 1 - GLOW_RAIN_CUT of the glow. */
     public static final float GLOW_RAIN_CUT = 0.8f;
     /** Full rain: RAIN_GREY of the overcast grey, the light dimmed by RAIN_DARK; a thunderstorm dims by THUNDER_DARK more. */
@@ -343,33 +350,31 @@ public final class AtmosphereUniforms {
         }
         b[3] = AtmosphereMath.ATMOSPHERE_SKY;
         float rain = clamp01(f.rain()), thunder = clamp01(f.thunder());
-        float sunset = clamp01(s.sunsetLight()) * SUNSET_SATURATION, moonlight = clamp01(s.moonlight()), glow = Math.max(0, finite(s.sunGlow()));
+        //2026-11-09: 0 with the sun in the west (evening) .. 1 in the east (morning)
+        float morning = AtmosphereMath.smoothstep(-0.1f, 0.1f, sun.x);
+        float sunset = clamp01(s.sunsetLight()) * SUNSET_SATURATION * (1 + (MORNING_SATURATION - 1) * morning), moonlight = clamp01(s.moonlight()), glow = Math.max(0, finite(s.sunGlow()));
         float[] tauR = rayleighDepths();
         float tauM = HAZE_DEPTH * (1 + RAIN_HAZE * rain);
-        float ms = AtmosphereMath.airMass(Math.max(sun.y, 0)), mm = AtmosphereMath.airMass(Math.max(-sun.y, 0));
+        float ms = Math.min(AtmosphereMath.airMass(Math.max(sun.y, 0)), SUN_MAX_AIR_MASS), mm = Math.min(AtmosphereMath.airMass(Math.max(-sun.y, 0)), SUN_MAX_AIR_MASS);
         //The moon's light fades in as the sun's fades out (none in the sky while the sun is up)
         float moonFade = 1 - dayFade;
         float[] ts = transmittance(tauR, tauM, SKY_REDDENING, ms, sunset), ta = transmittance(tauR, tauM, AMBIENT_REDDENING, ms, sunset);
-        //2026-10-24 (CTE2: "the sunset is only red"): the twilight dome takes the hue of the light the whole air column scatters, not of
-        // the light at the ground, at the ground light's brightness
-        float lift = 1 - AtmosphereMath.smoothstep(0, LIFT_SUN_HEIGHT, sun.y);
-        float[] tc = columnTint(tauR, tauM, AMBIENT_REDDENING, ms, sunset, ta);
-        for (int i = 0; i < 3; i++) tc[i] = ta[i] + (tc[i] - ta[i]) * lift;
+        float[] th = twilightHue(tauR, tauM, ms, sunset);
         float[] tm = transmittance(tauR, tauM, SKY_REDDENING, mm, sunset), tam = transmittance(tauR, tauM, AMBIENT_REDDENING, mm, sunset);
         float[] tint = skyTint(f.skyColour());
         float dim = (1 - RAIN_DARK * rain) * (1 - THUNDER_DARK * thunder);
         float sunAmount = SKY_SUN * dayFade * (1 + DAY_SKY_BOOST * AtmosphereMath.smoothstep(DAY_BOOST_LOW, DAY_BOOST_HIGH, sun.y)), moonAmount = SKY_SUN * MOON_SKY * moonlight * moonFade;
+        float twilightAmount = SKY_SUN * AtmosphereMath.smoothstep(TWILIGHT_FADE_LOW, 0, sun.y) * (1 + (MORNING_TWILIGHT - 1) * morning);
         float glowWeather = (1 - GLOW_RAIN_CUT * rain) * (1 - THUNDER_DARK * thunder);
         float diffuse = RAIN_DIFFUSE * rain;
         float twilight = TWILIGHT_SKY * (1 - AtmosphereMath.smoothstep(0, TWILIGHT_HEIGHT, sun.y));
-        twilight *= 1 - TWILIGHT_LIFT_CUT * lift;
         float[] blue = ambientBlue(tauR);
         for (int i = 0; i < 3; i++) {
             float sunLight = sunAmount * ts[i] * tint[i] * dim, moonLight = moonAmount * tm[i] * tint[i] * dim;
             b[4 + i] = sunLight * (1 - diffuse);
             b[8 + i] = moonLight * (1 - diffuse);
             b[12 + i] = tauR[i];
-            float dome = sunAmount * (ta[i] * SKY_MULTI * blue[i] + tc[i] * twilight) + moonAmount * tam[i] * SKY_MULTI * blue[i];
+            float dome = sunAmount * ta[i] * SKY_MULTI * blue[i] + twilightAmount * th[i] * twilight + moonAmount * tam[i] * SKY_MULTI * blue[i];
             b[16 + i] = (dome * tint[i] + NIGHT_SKY[i]) * dim + (sunLight + moonLight) * diffuse;
             b[20 + i] = sunAmount * GLOW_AMOUNT * glow * ts[i] * glowWeather;
         }
@@ -383,8 +388,9 @@ public final class AtmosphereUniforms {
         b[25] = 1 / fogHeight;
         b[26] = Math.max(0, finite(f.cameraY()) - finite(f.seaLevel()));
         //The sun's reddening air mass (the sunset light setting scales it, as transmittance does): atmosphere.glsl's airlight lifts it for
-        // light scattered high in the air
-        b[27] = lift * sunset * ms;
+        // light scattered high in the air (2026-11-09: at every sun height; it was only below sun height 0.18, so the SS2 zenith took the
+        // ground's reddened light) and deepens it in its low haze band (LOW_REDDENING)
+        b[27] = sunset * ms;
         return b;
     }
 
@@ -403,37 +409,44 @@ public final class AtmosphereUniforms {
     }
 
     /**
-     * Light through `fraction` of the extinction (Rayleigh plus haze) and the whole ozone absorption along `mass` air masses, at the
-     * luminance of that light and the hue of `saturation` times its optical depths (the sunset light setting: 0 leaves only its
-     * luminance, 1 the computed colour). 2026-10-24: scaling the depths, not the hue's distance from grey, keeps every channel above 0 and
-     * lets atmosphere.glsl undo the reddening by the same scaled depth (Atmosphere.fog.w).
+     * Light through `fraction` of the extinction (Rayleigh plus haze) and the ozone absorption along `mass` air masses, its hue saturated by
+     * `saturation` times its air's optical depths (the sunset light setting: 0 neutral, 1 the computed colour), the ozone's by up to 1.
+     * 2026-10-24: scaling the depths, not the hue's distance from grey, keeps every channel above 0 and lets atmosphere.glsl undo the
+     * reddening by the same scaled depth (Atmosphere.fog.w). 2026-11-09 (session 1a): its brightness is the computed colour's averaged over
+     * the air column (colMean), not at the ground: atmosphere.glsl's airlight lifts the reddening for the light scattered high in the air,
+     * and a deeper reddening kept at the ground's brightness came back that many times too bright up there.
      */
     static float[] transmittance(float[] tauR, float tauM, float fraction, float mass, float saturation) {
-        float[] t = new float[3], s = new float[3];
+        float[] s = new float[3], d = new float[3], e = new float[3];
+        float ozoneShare = Math.min(saturation, 1);
         for (int i = 0; i < 3; i++) {
-            float depth = (fraction * (tauR[i] + tauM) + OZONE_SCALE * OZONE_DEPTH[i]) * mass;
-            t[i] = (float) Math.exp(-depth);
-            s[i] = (float) Math.exp(-saturation * depth);
+            float air = fraction * (tauR[i] + tauM) * mass, ozone = OZONE_SCALE * OZONE_DEPTH[i] * mass;
+            float filtered = (float) Math.exp(-ozoneShare * ozone);
+            s[i] = (float) Math.exp(-saturation * air) * filtered;
+            d[i] = colMean(air) * (float) Math.exp(-ozone);
+            e[i] = colMean(saturation * air) * filtered;
         }
-        float l = PostMath.luminance(t[0], t[1], t[2]), ls = PostMath.luminance(s[0], s[1], s[2]);
-        for (int i = 0; i < 3; i++) s[i] = ls > 0 ? s[i] * l / ls : l;
+        float ld = PostMath.luminance(d[0], d[1], d[2]), le = PostMath.luminance(e[0], e[1], e[2]);
+        float k = le > 0 ? ld / le : 0;
+        for (int i = 0; i < 3; i++) s[i] *= k;
         return s;
     }
 
+    /** The mean of exp(-depth h) over h in 0..1, (1 - exp(-depth)) / depth: the density-weighted light of an exponential air column. */
+    static float colMean(float d) {
+        return d > 0.0001f ? (1 - (float) Math.exp(-d)) / d : 1 - 0.5f * d;
+    }
+
     /**
-     * The hue of the sunlight the whole air column scatters (each height h of an exponential atmosphere, weighted by its density,
-     * gets the light through exp(-h/H) of the column's depth: the mean is (1 - exp(-depth)) / depth) with the ozone above it all,
-     * at the luminance of `like`. Saturation as in transmittance.
+     * 2026-11-09 (session 1a): the twilight dome's colour: the sunlight averaged over the air column (colMean of the dome's reddening),
+     * scattered with Rayleigh's depth raised to TWILIGHT_BLUE, at luminance 1, then dimmed by TWILIGHT_OZONE of the ozone along `mass`
+     * (ozone absorbs: it takes red and green out, it does not move them into blue).
      */
-    static float[] columnTint(float[] tauR, float tauM, float fraction, float mass, float saturation, float[] like) {
+    static float[] twilightHue(float[] tauR, float tauM, float mass, float saturation) {
         float[] c = new float[3];
-        for (int i = 0; i < 3; i++) {
-            float depth = saturation * fraction * (tauR[i] + tauM) * mass;
-            float mean = depth > 0.0001f ? (1 - (float) Math.exp(-depth)) / depth : 1 - 0.5f * depth;
-            c[i] = mean * (float) Math.exp(-saturation * OZONE_SCALE * OZONE_DEPTH[i] * mass);
-        }
-        float l = PostMath.luminance(c[0], c[1], c[2]), want = PostMath.luminance(like[0], like[1], like[2]);
-        for (int i = 0; i < 3; i++) c[i] = l > 0 ? c[i] * want / l : want;
+        for (int i = 0; i < 3; i++) c[i] = colMean(saturation * AMBIENT_REDDENING * (tauR[i] + tauM) * mass) * (float) Math.pow(tauR[i], TWILIGHT_BLUE);
+        c = ColourMath.normalised(c);
+        for (int i = 0; i < 3; i++) c[i] *= (float) Math.exp(-TWILIGHT_OZONE * OZONE_DEPTH[i] * mass);
         return c;
     }
 
