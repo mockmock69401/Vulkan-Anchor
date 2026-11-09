@@ -142,6 +142,10 @@ public class VisualsConfig {
     /** 2026-10-21: how far plants and leaves sway in the wind (FoliageWind). */
     public int foliageWind = 100;
     public boolean farClouds = true;
+    /** 2026-11-09 (session 3): the far clouds' style (CloudMath.STYLE_VANILLA: vanilla's cell shape, STYLE_REALISTIC: cumulus and cirrus), the realistic clouds' coverage (percent, 100 = default) and quality (0..2 low, medium, high). */
+    public int cloudStyle = 0;
+    public int cloudCoverage = 100;
+    public int cloudQuality = 1;
     public boolean sunShadows = true;
     public boolean vanillaShadows = true;
     /** 2026-10-29: chunks around the camera the vanilla terrain casts sharp sun shadows in (ShadowMath.nearReach); 4 is the old 64 blocks. */

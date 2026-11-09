@@ -290,15 +290,19 @@ public final class AtmosphereMath {
         return new float[]{v, v, v};
     }
 
-    /** cloudColour: premultiplied rgb and coverage from a march (light-weighted coverage, coverage, distance). */
+    /**
+     * cloudColour: premultiplied rgb and coverage from a farCloudMarch result (sunlit weight, sky-lit weight, coverage, distance); a
+     * three-value vanilla-shape march (light-weighted coverage, coverage, distance) is taken as CloudMath.four makes it.
+     */
     public static float[] cloudColour(CloudLight c, float[] march) {
-        float x = march[0] > 0 ? march[0] : 0, y = march[1] > 0 ? Math.min(march[1], 1) : 0;
-        return new float[]{x * c.lit[0] + y * c.ambient[0], x * c.lit[1] + y * c.ambient[1], x * c.lit[2] + y * c.ambient[2], y};
+        float[] m = CloudMath.four(march);
+        float x = m[0] > 0 ? m[0] : 0, y = m[1] > 0 ? m[1] : 0, z = m[2] > 0 ? Math.min(m[2], 1) : 0;
+        return new float[]{x * c.lit[0] + y * c.ambient[0], x * c.lit[1] + y * c.ambient[1], x * c.lit[2] + y * c.ambient[2], z};
     }
 
     public static float[] cloudOver(Atmosphere a, CloudLight c, float[] march, float[] dir, float amount) {
         float[] cloud = cloudColour(c, march);
-        Haze h = haze(a, dir, march[2], amount);
+        Haze h = haze(a, dir, CloudMath.four(march)[3], amount);
         float[] out = new float[4];
         for (int i = 0; i < 3; i++) out[i] = cloud[i] * h.transmittance[i] + h.inscatter[i] * cloud[3];
         out[3] = cloud[3];

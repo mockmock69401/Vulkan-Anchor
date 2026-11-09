@@ -113,7 +113,7 @@ public final class VisualsSettingsPage {
         }
         Runnable refresh = () -> pages.forEach(OptionPage::updateOptionStates);
         for (Option<?> o : byKey.values()) {
-            if (o instanceof SwitchOption) o.setOnChange(refresh);
+            if (o instanceof SwitchOption || o instanceof CyclingOption) o.setOnChange(refresh);
         }
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
@@ -143,8 +143,10 @@ public final class VisualsSettingsPage {
         });
     }
 
+    //2026-11-09 (session 3): a choice counts as on when it is not its first entry (the cloud style: the realistic clouds)
     private static boolean on(Option<?> o) {
-        return Boolean.TRUE.equals(o.getNewValue());
+        Object v = o.getNewValue();
+        return Boolean.TRUE.equals(v) || v instanceof Integer i && i != 0;
     }
 
     private static Option<?> option(Item item) {

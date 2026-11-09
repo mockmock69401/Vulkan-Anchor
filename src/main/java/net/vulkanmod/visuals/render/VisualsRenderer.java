@@ -491,7 +491,7 @@ public final class VisualsRenderer {
         }
     }
 
-    /** P7h design 3.3, 3.7: vanilla's clouds.png (resource packs applied) as the cloud mask, nearest-sampled to MAP x MAP; null when unreadable (vanilla's clouds stay). */
+    /** P7h design 3.3, 3.7: vanilla's clouds.png (resource packs applied) as the cloud mask, nearest-sampled to MAP x MAP, with the realistic style's noise map (session 3); null when unreadable (vanilla's clouds stay). */
     private static byte[] loadCloudMap() {
         try (InputStream in = Minecraft.getInstance().getResourceManager().open(ResourceLocation.withDefaultNamespace("textures/environment/clouds.png"));
              NativeImage image = NativeImage.read(in)) {
@@ -501,7 +501,7 @@ public final class VisualsRenderer {
                     abgr[y * CloudMath.MAP + x] = image.getPixelRGBA(x * image.getWidth() / CloudMath.MAP, y * image.getHeight() / CloudMath.MAP);
                 }
             }
-            return CloudMath.mask(abgr);
+            return CloudMath.withNoise(CloudMath.mask(abgr));
         } catch (IOException | RuntimeException e) {
             VisualsLog.warn("Visuals far clouds off, clouds.png could not be read: " + e);
             return null;

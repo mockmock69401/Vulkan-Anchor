@@ -499,8 +499,8 @@ class AtmosphereTest {
         //The functions the composite and the reflection are written from
         for (String sig : List.of("vec3 skyColour(Atmosphere a, vec3 dir)", "vec3 sunGlow(Atmosphere a, vec3 dir)",
                 "void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittance, out vec3 inscatter)",
-                "vec3 applyHaze(Atmosphere a, vec3 colour, vec3 dir, float dist, float amount)", "vec4 cloudColour(CloudLight c, vec3 m)",
-                "vec4 cloudOver(Atmosphere a, CloudLight c, vec3 m, vec3 dir, float amount)", "float hazeAmount(Atmosphere a, float skyLight, bool isLod)",
+                "vec3 applyHaze(Atmosphere a, vec3 colour, vec3 dir, float dist, float amount)", "vec4 cloudColour(CloudLight c, vec4 m)",
+                "vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount)", "float hazeAmount(Atmosphere a, float skyLight, bool isLod)",
                 "bool atmosphereOn(Atmosphere a)", "vec3 fogColour(Atmosphere a, vec3 dir)")) {
             assertTrue(text.contains(sig), sig);
         }
