@@ -56,8 +56,9 @@ layout(location = 23) uniform vec4 atmosphereFog;
 layout(location = 24) uniform vec4 blockParams;
 layout(location = 25) uniform vec4 rainParams;
 layout(location = 26) uniform vec4 rippleParams;
-layout(location = 27) uniform vec4 reserved27;
-layout(location = 28) uniform vec4 reserved28;
+//2026-11-09 (session 5), CelestialUniforms: the discs' shape (water.glsl) and the aurora's parameters (aurora.glsl)
+layout(location = 27) uniform vec4 celestial;
+layout(location = 28) uniform vec4 auroraParams;
 layout(location = 29) uniform vec4 reserved29;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
@@ -66,6 +67,7 @@ layout(location = 29) uniform vec4 reserved29;
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
 
@@ -510,7 +512,11 @@ void main() {
     // The sun's glow and glint only where the ray is open: not behind ground beyond the water, and not under a hit's share (with the
     // mix below the glint keeps (1 - w)^2 at a broken cover's edge)
     float sunVisibility = sunVisibilityAt(p, size, dist, toView*nGeom);
-    vec3 sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w));
+    vec3 sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w), celestial);
+    //Session 5: the aurora in the water (AURORA_REFLECTION_STEPS samples), under the reflected clouds
+    if (auroraParams.x > 0.0) {
+        sky += aurora(r, auroraParams, AURORA_REFLECTION_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+    }
     if (cloudShape.w > 0.5 && atmosphereSky(a)) {
         vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
         sky = sky*(1.0 - cloud.a) + cloud.rgb;

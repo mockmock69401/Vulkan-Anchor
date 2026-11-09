@@ -1,6 +1,7 @@
 package net.vulkanmod.visuals.config;
 
 import net.vulkanmod.visuals.fsr.FsrSettings;
+import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShadowMath;
 
@@ -95,7 +96,11 @@ public final class VisualsOptionLayout {
                             //2026-11-09 (after session 3b): each cloud's size (a bigger cloud is also taller: a little more cost) and how many there are
                             new Item("cloud_size", Kind.PERCENT, CLOUD_SIZE_MIN, CLOUD_SIZE_MAX, Impact.LOW, "cloud_style"),
                             new Item("cloud_count", Kind.PERCENT, 0, CLOUD_COUNT_MAX, Impact.NONE, "cloud_style"),
-                            new Item("cloud_quality", Kind.CHOICE, 0, CloudMath.QUALITY_MAX, Impact.HIGH, "cloud_style"))))),
+                            new Item("cloud_quality", Kind.CHOICE, 0, CloudMath.QUALITY_MAX, Impact.HIGH, "cloud_style"),
+                            //2026-11-09 (session 5): round sun and moon; auroras (the strength greyed out with them off)
+                            new Item("celestial_shape", Kind.CHOICE, 0, CelestialUniforms.SHAPE_MAX, Impact.NONE, null),
+                            new Item("aurora", Kind.CHOICE, 0, CelestialUniforms.AURORA_MAX, Impact.LOW, null),
+                            new Item("aurora_strength", Kind.PERCENT, 0, CelestialUniforms.AURORA_STRENGTH_MAX, Impact.NONE, "aurora"))))),
             new Page("lighting", List.of(
                     new Block("shading", List.of(
                             percent("sun_shading", STRENGTH_MAX),
@@ -167,6 +172,9 @@ public final class VisualsOptionLayout {
             case "cloud_coverage" -> c.cloudCoverage;
             case "cloud_size" -> c.cloudSize;
             case "cloud_count" -> c.cloudCount;
+            case "celestial_shape" -> c.celestialShape;
+            case "aurora" -> c.aurora;
+            case "aurora_strength" -> c.auroraStrength;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
@@ -227,6 +235,9 @@ public final class VisualsOptionLayout {
             case "cloud_coverage" -> c.cloudCoverage = v;
             case "cloud_size" -> c.cloudSize = v;
             case "cloud_count" -> c.cloudCount = v;
+            case "celestial_shape" -> c.celestialShape = v;
+            case "aurora" -> c.aurora = v;
+            case "aurora_strength" -> c.auroraStrength = v;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;

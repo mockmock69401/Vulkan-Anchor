@@ -149,6 +149,14 @@ public class VisualsConfig {
     /** 2026-11-09 (after session 3b): the realistic clouds' size (percent, 100 = default; scales each cloud and the gaps between them) and count (percent, 100 = default, half the clumps the weather would grow; 200 keeps them all, as in 3b). */
     public int cloudSize = 100;
     public int cloudCount = 100;
+    /**
+     * 2026-11-09 (session 5): the sun's and moon's shape (CelestialUniforms.SHAPE_SQUARE vanilla's squares, SHAPE_ROUND), where auroras
+     * appear (AURORA_OFF, AURORA_END_ONLY, AURORA_NIGHT_AND_END: clear nights in the Overworld, strongest in cold biomes, and always in the
+     * End) and their strength (percent, 100 = default).
+     */
+    public int celestialShape = 0;
+    public int aurora = 2;
+    public int auroraStrength = 100;
     public boolean sunShadows = true;
     public boolean vanillaShadows = true;
     /** 2026-10-29: chunks around the camera the vanilla terrain casts sharp sun shadows in (ShadowMath.nearReach); 4 is the old 64 blocks. */

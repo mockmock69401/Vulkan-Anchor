@@ -11,7 +11,8 @@ import org.joml.Matrix4f;
  * 13 x the ripple strength (setting), y the reflection strength (setting), z the camera's sky exposure, w 1 for the reflective debug view;
  * 24 (2026-10-29) x the block reflections setting, y the frame number (the rough rays' noise); 25 (2026-10-29) x seconds wrapped at
  * RainRippleMath.TIME_WRAP, y the rain on the water (rain level x ripple setting); 26 (2026-11-09) x the ripple density setting (ratio);
- * 27..29 reserved, written 0. The cloud block (14..18) and the light volume (19..22) are written by their owners.
+ * 29 reserved, written 0. The cloud block (14..18), the light volume (19..22) and (2026-11-09, session 5) CelestialUniforms' discs' shape and
+ * aurora (27, 28) are written by their owners.
  */
 public final class ReflectionUniforms {
     /** Blocks; vanilla's sky fog end when it reports none. */
@@ -20,7 +21,7 @@ public final class ReflectionUniforms {
     public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, PROJ = 2, DEPTH = 3, INV_VIEW = 8, RIPPLE_A = 11, RIPPLE_B = 12, PARAMS = 13, BLOCK = 24, RAIN = 25, RIPPLE_PARAMS = 26;
     /** Where the Atmosphere struct goes, in field order (sun, sunLight, moonLight, depth, ambient, glow, fog). */
     public static final int[] ATMOSPHERE_SLOTS = {4, 5, 6, 7, 9, 10, 23};
-    public static final int RESERVED_FIRST = 27, RESERVED_LAST = 29;
+    public static final int RESERVED_FIRST = 29, RESERVED_LAST = 29;
 
     /**
      * on: the pass runs this frame. block: AtmosphereUniforms.block's 28 floats; offsets: RippleMath.offsets' 8 floats; ripples and

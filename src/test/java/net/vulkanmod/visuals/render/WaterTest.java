@@ -251,7 +251,7 @@ class WaterTest {
         for (float time : new float[]{NOON, SUNSET, 0.1f}) {
             Atmosphere a = atmosphere(time, 0, true);
             float[] sun = a.sun();
-            float[] centre = WaterMath.sunDisc(a, sun);
+            float[] centre = WaterMath.sunDisc(a, sun, WaterMath.SQUARE);
             assertEquals(PostMath.SUN_DISC_LUMINANCE, lum(centre), 0.5f, "luminance at time " + time);
             assertTrue(lum(centre) > AtmosphereMath.SHAFT_THRESHOLD * 10);
             //A square: the corner direction (both axes at 0.95 h) is inside, 1.1 h on one axis is outside
@@ -263,16 +263,102 @@ class WaterTest {
             float[] out = WaterMath.add(sun, WaterMath.scale(side, 1.1f * h));
             assertEquals(1, WaterMath.discCover(WaterMath.scale(corner, 1 / WaterMath.length(corner)), sun, h), 1e-4f);
             assertEquals(0, WaterMath.discCover(WaterMath.scale(out, 1 / WaterMath.length(out)), sun, h), 0);
-            assertArrayEquals(new float[3], WaterMath.sunDisc(a, new float[]{-sun[0], -sun[1], -sun[2]}), 0, "none behind");
-            assertArrayEquals(new float[3], WaterMath.discGlint(a, new float[]{-sun[0], -sun[1], -sun[2]}, 0, 1), 0, "no moon by day");
+            assertArrayEquals(new float[3], WaterMath.sunDisc(a, new float[]{-sun[0], -sun[1], -sun[2]}, WaterMath.SQUARE), 0, "none behind");
+            assertArrayEquals(new float[3], WaterMath.discGlint(a, new float[]{-sun[0], -sun[1], -sun[2]}, 0, 1, WaterMath.SQUARE), 0, "no moon by day");
         }
         //Rain hides both, no sky has neither, the moon shows at night
-        assertTrue(lum(WaterMath.sunDisc(atmosphere(NOON, 1, true), new float[]{0, 1, 0})) < 0.5f, "full rain");
-        assertArrayEquals(new float[3], WaterMath.sunDisc(atmosphere(NOON, 0, false), new float[]{0, 1, 0}), 0);
+        assertTrue(lum(WaterMath.sunDisc(atmosphere(NOON, 1, true), new float[]{0, 1, 0}, WaterMath.SQUARE)) < 0.5f, "full rain");
+        assertArrayEquals(new float[3], WaterMath.sunDisc(atmosphere(NOON, 0, false), new float[]{0, 1, 0}, WaterMath.SQUARE), 0);
         Atmosphere night = atmosphere(MIDNIGHT, 0, true);
         float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
-        assertTrue(lum(WaterMath.discGlint(night, moon, 0, 0)) > 0.3f, "the moon at night, unshadowed by the sun's maps");
-        assertArrayEquals(new float[3], WaterMath.sunDisc(night, night.sun()), 0, "no sun at night");
+        assertTrue(lum(WaterMath.discGlint(night, moon, 0, 0, WaterMath.SQUARE)) > 0.3f, "the moon at night, unshadowed by the sun's maps");
+        assertArrayEquals(new float[3], WaterMath.sunDisc(night, night.sun(), WaterMath.SQUARE), 0, "no sun at night");
+    }
+
+    /** A unit direction off centre by (along the rotation axis, along the path) in the disc's plane. */
+    private static float[] offDisc(float[] centre, float u, float v) {
+        float[] axis = {-centre[0] * centre[2], -centre[1] * centre[2], 1 - centre[2] * centre[2]};
+        axis = WaterMath.scale(axis, 1 / WaterMath.length(axis));
+        float[] side = WaterMath.cross(axis, centre);
+        float[] d = WaterMath.add(centre, WaterMath.add(WaterMath.scale(axis, u), WaterMath.scale(side, v)));
+        return WaterMath.scale(d, 1 / WaterMath.length(d));
+    }
+
+    private static float[] round(int phase) {
+        return new float[]{WaterMath.CELESTIAL_ROUND, phase, 0, 0};
+    }
+
+    /**
+     * 2026-11-09 (session 5, the user: "an option to make the sun and moon round"): the round sun is a circle of the square's half size
+     * (the square's corners are outside, the same radius along the axis and the diagonal is the same), limb-darkened around a mean of 1 so
+     * its middle is brighter than its rim and both stay above the shafts' threshold; the square slot draws exactly the old square.
+     */
+    @Test
+    void theRoundSunIsACircleWithADarkenedRim() {
+        Atmosphere a = atmosphere(SUNSET, 0, true);
+        float[] sun = a.sun();
+        float h = WaterMath.SUN_ROUND_RADIUS;
+        float[] cel = round(0);
+        assertEquals(0, WaterMath.sunShape(offDisc(sun, 0.9f * h, 0.9f * h), sun, cel), 0, "the square's corner is outside");
+        assertTrue(WaterMath.sunShape(offDisc(sun, 0.9f * h, 0.9f * h), sun, WaterMath.SQUARE) > 0.99f, "inside the square");
+        float axis = WaterMath.sunShape(offDisc(sun, 0.7f * h, 0), sun, cel);
+        float diag = WaterMath.sunShape(offDisc(sun, 0.7f * h / (float) Math.sqrt(2), 0.7f * h / (float) Math.sqrt(2)), sun, cel);
+        assertEquals(axis, diag, 1e-3f, "round");
+        float centre = WaterMath.sunShape(sun, sun, cel), rim = WaterMath.sunShape(offDisc(sun, 0.97f * h, 0), sun, cel);
+        assertEquals(1 / (1 - WaterMath.SUN_LIMB_DARKENING / 3), centre, 1e-4f, "the limb-darkened middle");
+        assertTrue(rim < 0.7f * centre && rim > 0, "a darker rim: " + rim);
+        assertTrue(lum(WaterMath.sunDisc(a, offDisc(sun, 0.97f * h, 0), cel)) > AtmosphereMath.SHAFT_THRESHOLD * 2, "the shafts see the rim");
+        //The same disc mirrored on calm water
+        assertEquals(lum(WaterMath.sunDisc(a, sun, cel)), lum(WaterMath.discGlint(a, sun, 0, 1, cel)), 1e-4f);
+        assertEquals(0, lum(WaterMath.discGlint(a, offDisc(sun, 0.9f * h, 0.9f * h), 0, 1, cel)), 0);
+        //Square: the shape slot changes nothing
+        float[] d = offDisc(sun, 0.5f * h, -0.3f * h);
+        assertEquals(WaterMath.discCover(d, sun, WaterMath.SUN_HALF_SIZE), WaterMath.sunShape(d, sun, WaterMath.SQUARE), 0);
+    }
+
+    /**
+     * Session 5: the round moon keeps vanilla's phases. Full (0) lights the whole disc, new (4) only the earthshine; the quarters light one
+     * half, opposite halves waning (2) and waxing (6); its rippled glint shrinks with the lit share. The composite draws it in the sky only
+     * when round, and then drops vanilla's square moon around it (vanillaMoonKept); the square keeps everything as before.
+     */
+    @Test
+    void theRoundMoonKeepsItsPhases() {
+        Atmosphere night = atmosphere(MIDNIGHT, 0, true);
+        float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
+        float r = WaterMath.MOON_ROUND_RADIUS;
+        //Vanilla's phase art grows and shrinks along the rotation axis (world z): left -z, right +z here
+        float[] left = offDisc(moon, -0.5f * r, 0), right = offDisc(moon, 0.5f * r, 0);
+        float max = 1, min = WaterMath.MOON_EARTHSHINE * 1.01f;
+        assertTrue(WaterMath.moonShape(left, moon, round(0)) > 0.6f && WaterMath.moonShape(right, moon, round(0)) > 0.6f, "full");
+        assertTrue(WaterMath.moonShape(left, moon, round(4)) <= min && WaterMath.moonShape(right, moon, round(4)) <= min, "new: earthshine only");
+        float l2 = WaterMath.moonShape(left, moon, round(2)), r2 = WaterMath.moonShape(right, moon, round(2));
+        float l6 = WaterMath.moonShape(left, moon, round(6)), r6 = WaterMath.moonShape(right, moon, round(6));
+        assertTrue((l2 > 0.5f) != (r2 > 0.5f), "a quarter lights one half: " + l2 + " " + r2);
+        assertTrue((l2 > 0.5f) == (r6 > 0.5f) && (r2 > 0.5f) == (l6 > 0.5f), "waning and waxing light opposite halves");
+        assertTrue(r2 > 0.5f && l6 > 0.5f, "as vanilla's art: the last quarter lit toward +z, the first toward -z");
+        assertTrue(WaterMath.moonShape(offDisc(moon, 0.9f * r, 0.9f * r), moon, round(0)) == 0, "round: the corner is outside");
+        assertTrue(WaterMath.moonShape(moon, moon, round(0)) <= max);
+        assertEquals(1, WaterMath.moonLit(round(0)), 1e-6f);
+        assertEquals(0, WaterMath.moonLit(round(4)), 1e-6f);
+        assertEquals(0.5f, WaterMath.moonLit(round(2)), 1e-6f);
+        assertEquals(1, WaterMath.moonLit(WaterMath.SQUARE), 0);
+        assertTrue(lum(WaterMath.discGlint(night, moon, 1, 1, round(4))) < 1e-6f, "no glint from a new moon");
+        //The sky: only the round moon is drawn by W6, and vanilla's square moon is dropped around it
+        assertArrayEquals(new float[3], WaterMath.moonDisc(night, moon, WaterMath.SQUARE), 0);
+        assertTrue(lum(WaterMath.moonDisc(night, moon, round(0))) > 0.2f);
+        assertEquals(1, WaterMath.vanillaMoonKept(night, moon, WaterMath.SQUARE), 0);
+        assertEquals(0, WaterMath.vanillaMoonKept(night, moon, round(0)), 0);
+        assertEquals(1, WaterMath.vanillaMoonKept(night, offDisc(moon, 0, 2 * WaterMath.VANILLA_MOON_MASK), round(0)), 0, "stars away from the moon stay");
+        assertTrue(WaterMath.VANILLA_MOON_MASK > r, "the mask covers the round moon");
+        //Never negative or NaN over the disc, any phase
+        for (int phase = 0; phase < 8; phase++) {
+            for (float u = -1.2f; u <= 1.2f; u += 0.1f) {
+                for (float v = -1.2f; v <= 1.2f; v += 0.1f) {
+                    float m = WaterMath.moonShape(offDisc(moon, u * r, v * r), moon, round(phase));
+                    assertTrue(m >= 0 && m <= 1 && Float.isFinite(m), phase + " " + u + " " + v + ": " + m);
+                }
+            }
+        }
     }
 
     @Test
@@ -284,18 +370,18 @@ class WaterTest {
         //On calm water the square's corner shines; on rippled water only the round lobe near the centre does
         float[] corner = WaterMath.add(sun, WaterMath.add(WaterMath.scale(axis, 0.9f * h), WaterMath.scale(WaterMath.cross(axis, sun), 0.9f * h)));
         corner = WaterMath.scale(corner, 1 / WaterMath.length(corner));
-        assertTrue(lum(WaterMath.discGlint(a, corner, 0, 1)) > 10);
-        assertTrue(lum(WaterMath.discGlint(a, corner, 1, 1)) < 0.5f);
-        float centre = lum(WaterMath.discGlint(a, sun, 1, 1));
+        assertTrue(lum(WaterMath.discGlint(a, corner, 0, 1, WaterMath.SQUARE)) > 10);
+        assertTrue(lum(WaterMath.discGlint(a, corner, 1, 1, WaterMath.SQUARE)) < 0.5f);
+        float centre = lum(WaterMath.discGlint(a, sun, 1, 1, WaterMath.SQUARE));
         assertEquals(PostMath.SUN_DISC_LUMINANCE * WaterMath.GLINT_PEAK, centre, 0.5f);
         //Round: equal at the same angle along the axis and the diagonal
         float t = 0.02f;
         float[] alongAxis = WaterMath.add(sun, WaterMath.scale(axis, t));
         float[] diagonal = WaterMath.add(sun, WaterMath.scale(WaterMath.add(axis, WaterMath.cross(axis, sun)), t / (float) Math.sqrt(2)));
-        assertEquals(lum(WaterMath.discGlint(a, WaterMath.scale(alongAxis, 1 / WaterMath.length(alongAxis)), 1, 1)),
-                lum(WaterMath.discGlint(a, WaterMath.scale(diagonal, 1 / WaterMath.length(diagonal)), 1, 1)), 0.05f);
+        assertEquals(lum(WaterMath.discGlint(a, WaterMath.scale(alongAxis, 1 / WaterMath.length(alongAxis)), 1, 1, WaterMath.SQUARE)),
+                lum(WaterMath.discGlint(a, WaterMath.scale(diagonal, 1 / WaterMath.length(diagonal)), 1, 1, WaterMath.SQUARE)), 0.05f);
         //The sun visibility at the water (an island's shadow) takes the glint
-        float[] shadowed = WaterMath.reflectedSky(a, sun, 1, 0, 1);
+        float[] shadowed = WaterMath.reflectedSky(a, sun, 1, 0, 1, WaterMath.SQUARE);
         float[] plain = WaterMath.add(AtmosphereMath.skyColour(a, sun), AtmosphereMath.sunGlow(a, sun));
         assertArrayEquals(plain, shadowed, 1e-5f);
     }
@@ -364,17 +450,17 @@ class WaterTest {
         //2026-11-09 (the user: at sunrise the sun's reflection showed through icebergs and hills)
         Atmosphere a = atmosphere(SUNSET, 0, true);
         float[] sun = a.sun();
-        float[] open = WaterMath.reflectedSky(a, sun, 1, 1, 1), shut = WaterMath.reflectedSky(a, sun, 1, 1, 0);
+        float[] open = WaterMath.reflectedSky(a, sun, 1, 1, 1, WaterMath.SQUARE), shut = WaterMath.reflectedSky(a, sun, 1, 1, 0, WaterMath.SQUARE);
         float[] skyOnly = AtmosphereMath.skyColour(a, sun);
         assertArrayEquals(skyOnly, shut, 1e-5f, "blocked: the sky colour, no glow, no glint");
         assertTrue(lum(open) > lum(shut) + 5, "open: the glint");
-        float[] half = WaterMath.reflectedSky(a, sun, 1, 1, 0.5f);
+        float[] half = WaterMath.reflectedSky(a, sun, 1, 1, 0.5f, WaterMath.SQUARE);
         assertEquals(lum(skyOnly) + 0.5f * (lum(open) - lum(skyOnly)), lum(half), 1e-3f, "linear in the open share");
         //The march's verdict is geometry: it takes the moon's glint too (the sun's shadow maps do not)
         Atmosphere night = atmosphere(MIDNIGHT, 0, true);
         float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
-        assertArrayEquals(AtmosphereMath.skyColour(night, moon), WaterMath.reflectedSky(night, moon, 1, 1, 0), 1e-6f);
-        assertTrue(lum(WaterMath.reflectedSky(night, moon, 1, 0, 1)) > lum(AtmosphereMath.skyColour(night, moon)) + 0.1f);
+        assertArrayEquals(AtmosphereMath.skyColour(night, moon), WaterMath.reflectedSky(night, moon, 1, 1, 0, WaterMath.SQUARE), 1e-6f);
+        assertTrue(lum(WaterMath.reflectedSky(night, moon, 1, 0, 1, WaterMath.SQUARE)) > lum(AtmosphereMath.skyColour(night, moon)) + 0.1f);
         //A step blocks only behind ground beyond the reflecting point (view z: more negative is farther), above its plane, not water/ice
         float dist = 50;
         float clear = WaterMath.reflectHitClearance(dist);
@@ -387,7 +473,7 @@ class WaterTest {
         assertFalse(WaterMath.reflectBlocksSky(-WaterMath.GLASS_REFLECTION, 2, dist, -110, -100, -50), "ice");
         //The pass marches before it builds the missed ray's sky, and gives the sky the open share
         assertTrue(COMP.contains("reflectBlocksSky(texelFetch(sceneLit, q, 0).a, dot(toWorld*(scene - v0), nGeom), dist, rayZ, scene.z, v0.z)"));
-        assertTrue(COMP.contains("reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w))"));
+        assertTrue(COMP.contains("reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w), celestial)"));
         assertTrue(COMP.indexOf("w = marchReflection(view, toView*r") < COMP.indexOf("reflectedSky(a, r, ripple"), "the march first");
     }
 
@@ -395,7 +481,7 @@ class WaterTest {
     void theMoonsGlintDoesNotTakeTheSunsShadow() {
         Atmosphere night = atmosphere(MIDNIGHT, 0, true);
         float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
-        float[] shadowed = WaterMath.reflectedSky(night, moon, 1, 0, 1), lit = WaterMath.reflectedSky(night, moon, 1, 1, 1);
+        float[] shadowed = WaterMath.reflectedSky(night, moon, 1, 0, 1, WaterMath.SQUARE), lit = WaterMath.reflectedSky(night, moon, 1, 1, 1, WaterMath.SQUARE);
         assertArrayEquals(lit, shadowed, 1e-6f);
         assertTrue(lum(shadowed) > lum(WaterMath.add(AtmosphereMath.skyColour(night, moon), AtmosphereMath.sunGlow(night, moon))) + 0.1f);
         //The sun visibility is upsampled as W5's lightingAt does, with distances from the depth (no lightTex in this pass)
@@ -562,7 +648,8 @@ class WaterTest {
     void valuesWriteEverySlotW6OwnsAndTheShaderDeclaresTheOthersSlots() {
         List<Integer> owned = new ArrayList<>();
         for (int i = 0; i <= 13; i++) owned.add(i);
-        for (int i = 23; i <= 29; i++) owned.add(i);
+        for (int i = 23; i <= 26; i++) owned.add(i);
+        owned.add(29);//27, 28: CelestialUniforms (session 5)
         ReflectionUniforms.Values v = on(SETTINGS, RippleMath.offsets(100.5, -20.25, new double[]{1, 2, 3, 4, 5, 6}));
         assertTrue(v.on());
         assertWrites(v::write, owned);
@@ -572,6 +659,7 @@ class WaterTest {
         assertWrites(w -> LightVolumeUniforms.off().write(w, LightVolumeUniforms.REFLECTION_FIRST), light);
         AtmosphereUniforms.Values atmosphere = AtmosphereUniforms.compute(SETTINGS, frame(SUNSET, 0, new float[]{0.47f, 0.65f, 1}, null), SERIAL, true, false);
         assertWrites(w -> CloudUniforms.compute(SETTINGS, null, atmosphere, SERIAL, true, true, 32).write(w, CloudUniforms.REFLECTION_FIRST), clouds);
+        assertWrites(CelestialUniforms.off()::writeReflection, List.of(CelestialUniforms.REFLECTION_CELESTIAL, CelestialUniforms.REFLECTION_AURORA));
         //Values: the depth parameters' fixed meaning, the atmosphere block where the shader reads it, the ripple offsets
         LooseUniformWriter w = new LooseUniformWriter(meta());
         v.write(w);
@@ -662,8 +750,8 @@ class WaterTest {
         //The hash's finaliser constants and the documented functions for the composite
         assertTrue(GLSL.contains("0x7feb352du") && GLSL.contains("0x846ca68bu"));
         for (String fn : new String[]{"vec3 waterTransmittance(float len)", "vec3 waterColour(vec3 behind, float len, vec3 light)",
-                "float reflectionMark(float kind)", "float reflectivity(float mark, float cosTheta)", "vec3 sunDisc(Atmosphere a, vec3 dir)",
-                "vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility)", "vec3 rippleNormal(vec2 rel, vec4 offsetsA, vec4 offsetsB, float strength, float density, float footprint)"}) {
+                "float reflectionMark(float kind)", "float reflectivity(float mark, float cosTheta)", "vec3 sunDisc(Atmosphere a, vec3 dir, vec4 celestial)",
+                "vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility, vec4 celestial)", "vec3 rippleNormal(vec2 rel, vec4 offsetsA, vec4 offsetsB, float strength, float density, float footprint)"}) {
             assertTrue(GLSL.contains(fn), fn);
         }
         //water.glsl declares no uniforms or bindings (the composite imports it)

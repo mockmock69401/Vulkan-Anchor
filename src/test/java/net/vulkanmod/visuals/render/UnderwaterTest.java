@@ -83,7 +83,7 @@ class UnderwaterTest {
                 "underwaterLookup(from, r, true, size, found, path)", "underwaterLookup(from, reflect(dir, -n), false, size, found, path)",
                 "underwaterMirrored(dir, n, found*underwaterExposure(), path, w, light, visibility)",
                 "underwaterScreenOf(transpose(mat3(invView))*worldDir, invVanillaProj[0][0], invVanillaProj[1][1])",
-                "skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r)", "shown = underwaterView(p, size, dir, dist, false, shown);"}) {
+                "skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r, celestial)", "shown = underwaterView(p, size, dir, dist, false, shown);"}) {
             assertTrue(COMP.contains(call), call);
         }
         //The settings screen's range is the shader's
