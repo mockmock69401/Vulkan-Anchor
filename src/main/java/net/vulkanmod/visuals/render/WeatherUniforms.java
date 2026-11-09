@@ -8,7 +8,8 @@ import org.joml.Matrix4f;
  * 2026-11-09 (session 6, the user: vanilla's rain and snow look thick and too vanilla; shader-drawn rain and snow with an on/off setting):
  * weather.comp's slots. 0..3 the view (the inverse projections without the TAA jitter, the inverse view, the depth parameters), 4..7 the
  * light volume (LightVolumeUniforms.write at WEATHER_FIRST), 8..12 weatherPixel's camera, frac, params, rain and snow (weather.glsl), 13
- * and 14 the drops' tints, 15 the splashes (x the time wrapped at SPLASH_WRAP periods; 2026-11-10).
+ * and 14 the drops' tints, 15 the splashes (x the time wrapped at SPLASH_WRAP periods; 2026-11-10), 16 the rings on the water (x their
+ * time, y the rain on the water: ReflectionUniforms' slot 25; zw RippleMath.offsets' first octave), whose drops throw up the crowns.
  * <p>
  * The strength follows vanilla's rain and thunder levels: the share of cells holding a drop is RAIN_SHARE (SNOW_SHARE) x the density
  * setting x the rain level, THUNDER_EXTRA more in a thunderstorm, and the coverage COVERAGE_BASE + (1 - COVERAGE_BASE) x the rain level
@@ -17,7 +18,7 @@ import org.joml.Matrix4f;
  */
 public final class WeatherUniforms {
     public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, INV_VIEW = 2, DEPTH_PARAMS = 3, WEATHER_FIRST = 4, CAMERA = 8, FRAC = 9,
-            PARAMS = 10, RAIN = 11, SNOW = 12, RAIN_TINT = 13, SNOW_TINT = 14, SPLASH = 15;
+            PARAMS = 10, RAIN = 11, SNOW = 12, RAIN_TINT = 13, SNOW_TINT = 14, SPLASH = 15, WATER = 16;
     /** The density setting's range (percent; 100 = the tuned share). */
     public static final int DENSITY_MAX = 200;
     /** Fall speeds (blocks per second): vanilla's rain texture falls about this fast, its snow a little over a block a second. */
@@ -40,7 +41,7 @@ public final class WeatherUniforms {
     public static final float VELOCITY_SECONDS = 0.1f, TELEPORT_BLOCKS = 8.0f;
 
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f invView, boolean lodValid, float[] camera,
-                         float[] frac, float[] params, float[] rain, float[] snow, float[] splash) {
+                         float[] frac, float[] params, float[] rain, float[] snow, float[] splash, float[] water) {
         public void write(LooseUniformWriter w) {
             if (!this.on) return;
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection);
@@ -55,6 +56,7 @@ public final class WeatherUniforms {
             w.putVec4(RAIN_TINT, RAIN_COLOUR[0], RAIN_COLOUR[1], RAIN_COLOUR[2], 0);
             w.putVec4(SNOW_TINT, SNOW_COLOUR[0], SNOW_COLOUR[1], SNOW_COLOUR[2], 0);
             w.putVec4(SPLASH, this.splash[0], 0, 0, 0);
+            w.putVec4(WATER, this.water[0], this.water[1], this.water[2], this.water[3]);
         }
     }
 
@@ -62,7 +64,7 @@ public final class WeatherUniforms {
     }
 
     public static Values off() {
-        return new Values(false, null, null, null, false, null, null, null, null, null, null);
+        return new Values(false, null, null, null, false, null, null, null, null, null, null, null);
     }
 
     /** Whether the shader draws the weather this frame instead of vanilla (the setting on, the post-process on, a frame to draw). */
@@ -74,11 +76,12 @@ public final class WeatherUniforms {
      * The overlay's values, off (nothing dispatched) without the setting, with no rain (rain level 0: clear, the Nether, the End), with
      * the camera in a fluid (the water's surface hides the rain above it) or without a view. camera the eye (world), velocity the
      * camera's (blocks per second), seconds the flow clock (stopped while paused); invVanillaProjection unjittered; rainNear / snowNear
-     * whether the precipitation map holds that kind (PrecipitationMap.hasRain, hasSnow: the shader walks only the kinds there are).
+     * whether the precipitation map holds that kind (PrecipitationMap.hasRain, hasSnow: the shader walks only the kinds there are); water the
+     * rings on the water (slot 16; null: none).
      */
     public static Values compute(PostProcessSettings s, float rain, float thunder, boolean inFluid, Matrix4f invVanillaProjection, Matrix4f invLodProjection,
                                  Matrix4f invView, boolean lodValid, int height, double x, double y, double z, float[] velocity, double seconds,
-                                 boolean rainNear, boolean snowNear) {
+                                 boolean rainNear, boolean snowNear, float[] water) {
         if (!wanted(s) || !(rain > 0) || inFluid || invVanillaProjection == null || invView == null || height <= 0) return off();
         float r = Math.min(rain, 1), th = Float.isFinite(thunder) ? Math.max(0, Math.min(thunder, 1)) : 0;
         float density = s.weatherDensity();
@@ -93,7 +96,8 @@ public final class WeatherUniforms {
         float[] v = velocity != null && velocity.length == 3 ? velocity : new float[3];
         return new Values(true, invVanillaProjection, invLodProjection != null ? invLodProjection : invVanillaProjection, invView, lodValid, camera, frac,
                 params, motion(RAIN_FALL, v, WeatherMath.RAIN_PERIOD, seconds, EXPOSURE), motion(SNOW_FALL, v, WeatherMath.SNOW_PERIOD, seconds, SNOW_EXPOSURE),
-                new float[]{(float) wrap(seconds, (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP), 0, 0, 0});
+                new float[]{(float) wrap(seconds, (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP), 0, 0, 0},
+                water != null && water.length == 4 ? water : new float[4]);
     }
 
     /**

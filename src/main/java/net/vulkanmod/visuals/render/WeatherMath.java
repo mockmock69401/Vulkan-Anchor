@@ -53,6 +53,19 @@ public final class WeatherMath {
     public static final int SPLASH_EVENTS = 64;
     public static final int SPLASH_WRAP = 1024;
     public static final float SPLASH_GRAZE = 0.2f;
+    public static final float IMPACT_LIFE = 0.12f;
+    public static final float IMPACT_CROWN = 0.03f;
+    public static final float IMPACT_RIM = 0.004f;
+    public static final float IMPACT_JET = 0.045f;
+    public static final float IMPACT_JET_WIDTH = 0.004f;
+    public static final int IMPACT_DROPLETS = 2;
+    public static final float IMPACT_DROPLET = 0.005f;
+    public static final float IMPACT_HOP = 0.05f;
+    public static final float IMPACT_THROW = 0.07f;
+    public static final float IMPACT_ALPHA = 0.7f;
+    public static final float IMPACT_END = 10.0f;
+    public static final float IMPACT_FADE = 4.0f;
+    public static final int WEATHER_FLAG_WATER = 1 << 27;
     public static final int WEATHER_PRIME_X = 73856093;
     public static final int WEATHER_PRIME_Z = 19349663;
     public static final int WEATHER_PRIME_Y = 50331653;
@@ -82,9 +95,15 @@ public final class WeatherMath {
      * below WEATHER_TEMPERATURE_Y; known always set.
      */
     public static int pack(int height, int snowLine, boolean precipitation, boolean snowLow) {
+        return pack(height, snowLine, precipitation, snowLow, false);
+    }
+
+    /** 2026-11-10: with water at the column's top (the crowns of the rings' drops). */
+    public static int pack(int height, int snowLine, boolean precipitation, boolean snowLow, boolean water) {
         int h = Math.max(Y_MIN, Math.min(Y_MAX, height)) + WEATHER_Y_BIAS;
         int s = Math.max(Y_MIN, Math.min(Y_MAX, snowLine)) + WEATHER_Y_BIAS;
-        return h | (s << 12) | (precipitation ? WEATHER_FLAG_PRECIPITATION : 0) | (snowLow ? WEATHER_FLAG_SNOW_LOW : 0) | WEATHER_FLAG_KNOWN;
+        return h | (s << 12) | (precipitation ? WEATHER_FLAG_PRECIPITATION : 0) | (snowLow ? WEATHER_FLAG_SNOW_LOW : 0) | (water ? WEATHER_FLAG_WATER : 0)
+                | WEATHER_FLAG_KNOWN;
     }
 
     public static int hash(int x, int y, int z, int seed) {
@@ -224,6 +243,49 @@ public final class WeatherMath {
                 tMax[a] += tDelta[a];
             }
         }
+    }
+
+    /** weatherImpact: the crowns (premultiplied rgb, alpha) over a scene pixel; water {rings' time, rain on the water, ripple offset x, z}. */
+    public static float[] impact(float[] rel, float[] dir, float dist, float[] camera, float[] frac, float[] params, float[] water, Map map, Light light) {
+        float[] none = new float[4];
+        if (dist >= IMPACT_END || !(water[1] > 0)) return none;
+        int camX = (int) camera[0], camZ = (int) camera[2];
+        int texel = map.at((camX + (int) Math.floor(frac[0] + rel[0])) & WEATHER_MAP_MASK, (camZ + (int) Math.floor(frac[2] + rel[2])) & WEATHER_MAP_MASK);
+        float y = camera[3] + rel[1];
+        float top = height(texel);
+        if ((texel & WEATHER_FLAG_WATER) == 0 || kind(texel, (int) Math.floor(camera[3])) != RAIN || y >= top || y < top - 1) return none;
+        float posX = rel[0] + water[2], posZ = rel[2] + water[3];
+        float t = dist / Math.max(Math.abs(dir[1]), SPLASH_GRAZE);
+        float alpha = 0;
+        for (int layer = 0; layer < 2; layer++) {
+            float qx = posX / RainRippleMath.RAIN_RIPPLE_CELL + layer * 0.5f, qz = posZ / RainRippleMath.RAIN_RIPPLE_CELL + layer * 0.5f;
+            float bx = (float) Math.floor(qx), bz = (float) Math.floor(qz);
+            for (int j = -1; j <= 1; j++) {
+                for (int i = -1; i <= 1; i++) {
+                    float[] d = RainRippleMath.drop(bx + i, bz + j, layer, water[1], water[0]);
+                    if (d == null) continue;
+                    float tau = d[2] * RainRippleMath.RAIN_RIPPLE_CYCLE / IMPACT_LIFE;
+                    if (tau >= 1) continue;
+                    float cx = (d[0] - layer * 0.5f) * RainRippleMath.RAIN_RIPPLE_CELL - water[2];
+                    float cz = (d[1] - layer * 0.5f) * RainRippleMath.RAIN_RIPPLE_CELL - water[3];
+                    float[] foot = {cx, rel[1], cz};
+                    float a = coverage(Math.abs((float) Math.hypot(rel[0] - cx, rel[2] - cz) - IMPACT_CROWN * (float) Math.sqrt(tau)), IMPACT_RIM, t, frac[3], IMPACT_ALPHA);
+                    float[] jet = raySegment(dir, foot, new float[]{cx, rel[1] + IMPACT_JET * 4 * tau * (1 - tau), cz});
+                    a = Math.max(a, coverage(jet[0], IMPACT_JET_WIDTH, jet[1], frac[3], IMPACT_ALPHA));
+                    for (int k = 0; k < IMPACT_DROPLETS; k++) {
+                        float angle = 6.2831853f * ((float) k / IMPACT_DROPLETS + d[0] * 3.7f + d[1] * 1.3f);
+                        float[] p = {cx + (float) Math.cos(angle) * IMPACT_THROW * tau, rel[1] + IMPACT_HOP * 4 * tau * (1 - tau), cz + (float) Math.sin(angle) * IMPACT_THROW * tau};
+                        float[] h = raySegment(dir, p, p);
+                        a = Math.max(a, coverage(h[0], IMPACT_DROPLET, h[1], frac[3], IMPACT_ALPHA));
+                    }
+                    alpha = Math.max(alpha, a * (1 - tau));
+                }
+            }
+        }
+        alpha *= (1 - smoothstep(IMPACT_END - IMPACT_FADE, IMPACT_END, dist)) * params[2];
+        if (alpha <= 0) return none;
+        float[] c = light.at(rel[0], rel[1], rel[2], false);
+        return new float[]{c[0] * alpha, c[1] * alpha, c[2] * alpha, alpha};
     }
 
     /** weatherSplash: the splash (premultiplied rgb, alpha) over a scene pixel at rel along unit dir at distance dist; splash[0] the wrapped time. */

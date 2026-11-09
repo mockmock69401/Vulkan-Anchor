@@ -30,11 +30,17 @@ public final class PrecipitationMap {
 
         /** The climate of the biome at (x, y, z) (vanilla reads the biome at the camera's height). */
         Climate climate(int x, int y, int z);
+
+        /** 2026-11-10: whether the column's top MOTION_BLOCKING block holds water (looked up with the climate). */
+        default boolean water(int x, int z) {
+            return false;
+        }
     }
 
     private final int[] texels = new int[SIZE * SIZE];
     private final int[] climateX = new int[SIZE * SIZE], climateZ = new int[SIZE * SIZE];
     private final Climate[] climates = new Climate[SIZE * SIZE];
+    private final boolean[] water = new boolean[SIZE * SIZE];
     private int cursor;
     private boolean rain, snow;
 
@@ -61,6 +67,7 @@ public final class PrecipitationMap {
         java.util.Arrays.fill(this.texels, 0);
         java.util.Arrays.fill(this.climateX, Integer.MIN_VALUE);
         java.util.Arrays.fill(this.climates, null);
+        java.util.Arrays.fill(this.water, false);
     }
 
     /** The map around the camera's block (cx, cy, cz); true when a texel changed (the map must be uploaded again). */
@@ -99,7 +106,7 @@ public final class PrecipitationMap {
                 int i = index(x, z);
                 Climate c = this.climateX[i] == x && this.climateZ[i] == z ? this.climates[i] : null;
                 int h = c == null ? NO_HEIGHT : level.height(x, z);
-                int texel = h == NO_HEIGHT ? 0 : WeatherMath.pack(h, c.snowLine(), c.precipitation(), c.snowLow());
+                int texel = h == NO_HEIGHT ? 0 : WeatherMath.pack(h, c.snowLine(), c.precipitation(), c.snowLow(), this.water[i]);
                 //Only the columns the shader's walk can reach (its far layer's end and a cell)
                 if (Math.abs(x - cx) <= REACH && Math.abs(z - cz) <= REACH) {
                     int kind = WeatherMath.kind(texel, cy);
@@ -117,11 +124,15 @@ public final class PrecipitationMap {
 
     private void lookUp(Columns level, int i, int x, int y, int z) {
         Climate c;
+        boolean w;
         try {
             c = level.climate(x, y, z);
+            w = c != null && c.precipitation() && level.water(x, z);
         } catch (RuntimeException e) {
             c = Climate.NONE;
+            w = false;
         }
+        this.water[i] = w;
         this.climates[i] = c != null ? c : Climate.NONE;
         this.climateX[i] = x;
         this.climateZ[i] = z;

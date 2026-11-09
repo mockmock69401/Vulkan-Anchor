@@ -535,7 +535,7 @@ public final class VisualsRenderer {
      * is kept only while it rains or snows. A failure (a modded level) draws no shader weather this frame.
      */
     private void prepareWeather(PostProcessSettings settings, ClientLevel level, Vec3 camera, AtmosphereUniforms.Values atmosphere,
-                                LightVolumeUniforms.Values light, int height, long serial) {
+                                LightVolumeUniforms.Values light, ReflectionUniforms.Values reflection, int height, long serial) {
         WeatherUniforms.Values values = WeatherUniforms.off();
         int[] map = null;
         try {
@@ -562,13 +562,22 @@ public final class VisualsRenderer {
                 values = WeatherUniforms.compute(settings, frame.rain(), frame.thunder(), frame.cameraFluid() != AtmosphereFrame.CameraFluid.NONE,
                         WeatherUniforms.unjitteredInverse(atmosphere.invVanillaProjection(), TaaJitter.appliedNdc()), atmosphere.invLodProjection(),
                         atmosphere.invView(), atmosphere.lodValid(), height, camera.x, camera.y, camera.z, this.weatherVelocity, now,
-                        this.precipitation.hasRain(), this.precipitation.hasSnow());
+                        this.precipitation.hasRain(), this.precipitation.hasSnow(), waterRain(reflection));
             }
         } catch (RuntimeException e) {
             values = WeatherUniforms.off();
             map = null;
         }
         this.post.prepareWeather(this.upload, values, light, map);
+    }
+
+    /**
+     * 2026-11-10: the rings on the water as the reflection pass draws them this frame (its rain time and rain on the water, the first ripple
+     * octave's offset), for the crowns of their drops; null without the reflection pass (no rings, no crowns).
+     */
+    static float[] waterRain(ReflectionUniforms.Values reflection) {
+        if (reflection == null || !reflection.on() || reflection.offsets() == null || reflection.offsets().length < 2) return null;
+        return new float[]{reflection.rainTime(), reflection.rain(), reflection.offsets()[0], reflection.offsets()[1]};
     }
 
     /** P7e-2: vanilla's sky colour at the camera, the reflections' fallback zenith; null when it cannot be read. */
@@ -825,7 +834,7 @@ public final class VisualsRenderer {
             this.post.prepare(this.upload, atmosphere, lighting, reflection, clouds, shadow, light, this.heldLight,
                     BloomFog.compute(settings, this.atmosphere, serial, hasSkyLight, this.skyExposure.value()), volumetric);
             //2026-11-09 (session 6): the shader weather (its precipitation map uploaded when it changed)
-            this.prepareWeather(settings, level, camera, atmosphere, light, main.height(), serial);
+            this.prepareWeather(settings, level, camera, atmosphere, light, reflection, main.height(), serial);
             //TAA pass (2026-10-15): with this frame's camera (the post-process frame's matrices), which the next frame reprojects from
             boolean taa = settings.taa() && this.post.taaAvailable() && this.atmosphere != null && this.atmosphere.serial() == serial;
             this.post.prepareTaa(this.upload, taa ? new VkTaa.Frame(this.atmosphere.invVanillaProjection(), this.atmosphere.invLodProjection(),
