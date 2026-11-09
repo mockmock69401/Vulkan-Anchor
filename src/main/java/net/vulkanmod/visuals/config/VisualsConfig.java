@@ -157,6 +157,12 @@ public class VisualsConfig {
     public int celestialShape = 0;
     public int aurora = 2;
     public int auroraStrength = 100;
+    /**
+     * 2026-11-09 (session 6): rain and snow drawn by the shader (thin streaks and small flakes in depth layers, none under roofs) in place
+     * of vanilla's weather columns; off draws vanilla's exactly as before. The density (percent, 100 = default) scales how many drops fall.
+     */
+    public boolean shaderWeather = true;
+    public int weatherDensity = 100;
     public boolean sunShadows = true;
     public boolean vanillaShadows = true;
     /** 2026-10-29: chunks around the camera the vanilla terrain casts sharp sun shadows in (ShadowMath.nearReach); 4 is the old 64 blocks. */

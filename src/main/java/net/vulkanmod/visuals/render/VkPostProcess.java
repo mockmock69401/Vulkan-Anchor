@@ -74,7 +74,13 @@ public final class VkPostProcess {
     //2026-11-09 (session 2b): and the depth before the translucent terrain at 17 (what lies behind the water's surface seen from below)
     COPY_BEFORE_TRANSLUCENT = 17,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
-    LIGHTING_TERRAIN_ALBEDO = 17;
+    LIGHTING_TERRAIN_ALBEDO = 17,
+    //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
+    // at 4, 5, the lightmap at 6; post_final.frag reads the overlay at 3 (post_blit.frag at 1)
+    WEATHER_OUT = 0, WEATHER_MAIN_DEPTH = 1, WEATHER_LOD_DEPTH = 2, WEATHER_MAP = 3, WEATHER_LIGHT_DATA = 4, WEATHER_LIGHT_READY = 5,
+    WEATHER_LIGHTMAP = 6, FINAL_WEATHER = 3;
+    /** 2026-11-09 (session 6): the weather overlay, premultiplied display colour and coverage (weather.comp). */
+    static final int WEATHER_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     /**
@@ -104,6 +110,15 @@ public final class VkPostProcess {
     private final VkGpuBuffer volumetricUniformBuffer;
     private boolean volumetricOn;
     private final VkGraphicsProgram finalDraw;
+    //2026-11-09 (session 6): the shader weather: its program (null when it could not be built: vanilla's weather stays), uniforms, the
+    // precipitation map (PrecipitationMap, R32_UINT) and whether this frame drew the overlay
+    private final VkComputeProgram weather;
+    private final LooseUniformWriter weatherUniforms;
+    private final VkGpuBuffer weatherUniformBuffer;
+    private final VkImage2D precipitationMap;
+    private long precipitationSerial = -1;
+    private boolean weatherOn, weatherDrawn;
+    private VkImage2D weatherImage;
     private final VkAmbientOcclusion ao;//W10
     private final LooseUniformWriter copyUniforms, prefilterUniforms, downUniforms, upUniforms, shaftMaskUniforms, shaftBlurUniforms, finalUniforms;
     private final LooseUniformWriter lightingUniforms, reflectionUniforms;
@@ -236,6 +251,73 @@ public final class VkPostProcess {
             }
         }
         this.taa = taa;
+        VkComputeProgram weather = null;
+        LooseUniformWriter weatherUniforms = null;
+        VkGpuBuffer weatherUniformBuffer = null;
+        VkImage2D precipitationMap = null;
+        try {
+            weather = VkComputeProgram.of("postWeather");
+            weatherUniforms = new LooseUniformWriter(weather.meta());
+            if (weatherUniforms.inUniformBuffer()) {
+                weatherUniformBuffer = VkGpuBuffer.device(weatherUniforms.buffer().remaining(), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+            }
+            precipitationMap = VkImage2D.create(VK_FORMAT_R32_UINT, PrecipitationMap.SIZE, PrecipitationMap.SIZE, 1,
+                    VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        } catch (RuntimeException | LinkageError e) {
+            if (weather != null) weather.free();
+            if (weatherUniformBuffer != null) weatherUniformBuffer.free();
+            if (precipitationMap != null) precipitationMap.free();
+            weather = null;
+            weatherUniforms = null;
+            weatherUniformBuffer = null;
+            precipitationMap = null;
+            VisualsLog.warn("Visuals shader weather not created, vanilla's rain and snow stay: " + e);
+        }
+        this.weather = weather;
+        this.weatherUniforms = weatherUniforms;
+        this.weatherUniformBuffer = weatherUniformBuffer;
+        this.precipitationMap = precipitationMap;
+    }
+
+    /** 2026-11-09 (session 6): whether the shader weather can be drawn (its program was built). */
+    public boolean weatherAvailable() {
+        return this.weather != null;
+    }
+
+    /**
+     * 2026-11-09 (session 6): before the upload commit, the weather overlay's values (off: nothing dispatched, the final draw blends
+     * nothing) with the light volume's block, and the precipitation map's texels to upload (null: unchanged since the last upload; see
+     * precipitationMapStale).
+     */
+    public void prepareWeather(VkUploadStream upload, WeatherUniforms.Values values, LightVolumeUniforms.Values light, int[] map) {
+        this.weatherOn = false;
+        if (this.weather == null || !values.on()) return;
+        if (map != null) {
+            ByteBuffer pixels = MemoryUtil.memAlloc(map.length * 4).order(java.nio.ByteOrder.nativeOrder());
+            try {
+                pixels.asIntBuffer().put(map);
+                upload.uploadImage(this.precipitationMap, 0, 0, 0, PrecipitationMap.SIZE, PrecipitationMap.SIZE, MemoryUtil.memAddress(pixels));
+            } finally {
+                MemoryUtil.memFree(pixels);
+            }
+            this.precipitationSerial = VkFrames.serial();
+        } else if (this.precipitationMapStale()) {
+            return;
+        }
+        values.write(this.weatherUniforms);
+        light.write(this.weatherUniforms, WeatherUniforms.WEATHER_FIRST);
+        if (this.weatherUniformBuffer != null) upload.upload(this.weatherUniformBuffer, 0, this.weatherUniforms.buffer());
+        this.weatherOn = true;
+    }
+
+    /** 2026-11-09 (session 6): whether the precipitation map must be sent again (none yet, or its upload's frame was dropped). */
+    public boolean precipitationMapStale() {
+        return this.precipitationSerial < 0 || VkFrames.isDropped(this.precipitationSerial);
+    }
+
+    /** 2026-11-09 (session 6): whether this frame drew the weather overlay (the final draw blends it). */
+    public boolean weatherDrawn() {
+        return this.weatherDrawn;
     }
 
     /** Every dispatch but the copy and the draw push their values; only the copy has an uploaded uniform block. */
@@ -259,10 +341,11 @@ public final class VkPostProcess {
             this.lightBlurImage = null;
             this.sunImage = null;
             this.plantSunImage = null;
+            this.weatherImage = null;
         }
         int[][] sizes = PostMath.bloomSizes(width, height);
         VkImage2D[] bloom = new VkImage2D[sizes.length];
-        VkImage2D scene = null, sceneLit = null, shaftMaskImage = null, shaftImage = null, lightImage = null, lightBlurImage = null, sunImage = null, plantSunImage = null;
+        VkImage2D scene = null, sceneLit = null, shaftMaskImage = null, shaftImage = null, lightImage = null, lightBlurImage = null, sunImage = null, plantSunImage = null, weatherImage = null;
         try {
             int usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             scene = VkImage2D.create(SCENE_FORMAT, width, height, 1, usage);
@@ -276,8 +359,10 @@ public final class VkPostProcess {
             sunImage = VkImage2D.create(LIGHT_FORMAT, (width + 1) / 2, (height + 1) / 2, 1, usage);
             //2026-10-15: plant pixels' own sun visibility, at full resolution
             plantSunImage = VkImage2D.create(PLANT_SUN_FORMAT, width, height, 1, usage);
+            //2026-11-09 (session 6): the weather overlay, at full resolution (the streaks are a few pixels wide)
+            weatherImage = VkImage2D.create(WEATHER_FORMAT, width, height, 1, usage);
         } catch (RuntimeException e) {
-            destroy(concat(new VkImage2D[]{scene, sceneLit, shaftMaskImage, shaftImage, lightImage, lightBlurImage, sunImage, plantSunImage}, bloom));
+            destroy(concat(new VkImage2D[]{scene, sceneLit, shaftMaskImage, shaftImage, lightImage, lightBlurImage, sunImage, plantSunImage, weatherImage}, bloom));
             throw e;
         }
         this.scene = scene;
@@ -289,6 +374,7 @@ public final class VkPostProcess {
         this.lightBlurImage = lightBlurImage;
         this.sunImage = sunImage;
         this.plantSunImage = plantSunImage;
+        this.weatherImage = weatherImage;
         this.width = width;
         this.height = height;
         this.ao.ensureSize(width, height, this.deferred);
@@ -298,7 +384,7 @@ public final class VkPostProcess {
     }
 
     private VkImage2D[] images() {
-        return concat(new VkImage2D[]{this.scene, this.sceneLit, this.shaftMaskImage, this.shaftImage, this.lightImage, this.lightBlurImage, this.sunImage, this.plantSunImage}, this.bloom);
+        return concat(new VkImage2D[]{this.scene, this.sceneLit, this.shaftMaskImage, this.shaftImage, this.lightImage, this.lightBlurImage, this.sunImage, this.plantSunImage, this.weatherImage}, this.bloom);
     }
 
     private static VkImage2D[] concat(VkImage2D[] fixed, VkImage2D[] rest) {
@@ -476,6 +562,31 @@ public final class VkPostProcess {
         }
         VkGpuTimer.mark(cmd, "post.shafts");
         this.computeShafts(cmd, depths);
+        VkGpuTimer.mark(cmd, "post.weather");
+        this.computeWeather(cmd, depths, data, ready, light.lightmap());
+    }
+
+    /**
+     * 2026-11-09 (session 6): the shader weather overlay (weather.comp) while it rains or snows with the setting on; else the overlay only
+     * moves to the read layout the final draw binds it in (and is not read).
+     */
+    private void computeWeather(VkCommandBuffer cmd, Depths depths, VkGpuBuffer data, VkGpuBuffer ready, long lightmap) {
+        this.weatherDrawn = false;
+        if (!this.weatherOn) {
+            this.weatherImage.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, COMPUTE_AND_FRAGMENT, COMPUTE_AND_FRAGMENT,
+                    VK_ACCESS_SHADER_READ_BIT);
+            return;
+        }
+        this.weatherImage.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_WRITE_BIT);
+        VkBindings bindings = new VkBindings().storageImage(WEATHER_OUT, this.weatherImage.view()).sampledView(WEATHER_MAIN_DEPTH, depths.main(), this.nearest)
+                .sampledView(WEATHER_LOD_DEPTH, depths.lod(), this.nearest).sampled(WEATHER_MAP, this.precipitationMap, this.nearest)
+                .storage(WEATHER_LIGHT_DATA, data).storage(WEATHER_LIGHT_READY, ready).sampledView(WEATHER_LIGHTMAP, lightmap, this.linear);
+        if (this.weatherUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.weatherUniformBuffer);
+        this.weather.dispatchWithPush(cmd, bindings, this.weatherUniformBuffer == null ? this.weatherUniforms.buffer() : null,
+                groups(this.width), groups(this.height), 1);
+        toRead(cmd, this.weatherImage);
+        this.weatherDrawn = true;
     }
 
     private void computeLighting(VkCommandBuffer cmd, long mainColourView, Depths depths, long lodLight, long terrainAlbedo) {
@@ -651,12 +762,14 @@ public final class VkPostProcess {
     /** Inside the resumed main pass, after compute(): one full-screen strip over Reforged's viewport and scissor; no depth is read. */
     public void draw(VkCommandBuffer cmd, PostUniforms.Values values) {
         if (this.smaaDrawn && this.drawnImage != null) {
-            this.smaa.draw(cmd, this.nearest, this.drawnImage, PostMath.sharpenStrength(this.taaDrawn));
+            this.smaa.draw(cmd, this.nearest, this.drawnImage, PostMath.sharpenStrength(this.taaDrawn), this.weatherImage, this.weatherDrawn);
             return;
         }
         values.write(this.finalUniforms);
+        //2026-11-09 (session 6): screenParams.w 1 blends the weather overlay (0: as before, the overlay is bound but not read)
+        values.writeWeather(this.finalUniforms, this.weatherDrawn);
         VkBindings bindings = new VkBindings().sampled(FINAL_SCENE, this.scene, this.nearest).sampled(FINAL_BLOOM, this.bloom[0], this.linear)
-                .sampled(FINAL_SHAFTS, this.shaftImage, this.linear);
+                .sampled(FINAL_SHAFTS, this.shaftImage, this.linear).sampled(FINAL_WEATHER, this.weatherImage, this.nearest);
         this.finalDraw.bind(cmd, VkContext.boundRenderPassHandle(), VkContext.boundRenderPassKey(), bindings, this.finalUniforms);
         vkCmdDraw(cmd, 4, 1, 0, 0);
     }
@@ -664,6 +777,7 @@ public final class VkPostProcess {
     /** Call when a frame starts recording: transitions of a dropped frame are undone. */
     public void tick() {
         this.cloudMap.tick();
+        if (this.precipitationMap != null) this.precipitationMap.tick();
         this.lodLightStandIn.tick();
         this.ao.tick();
         if (this.smaa != null) this.smaa.tick();
@@ -696,6 +810,9 @@ public final class VkPostProcess {
         VkSamplers.free(this.nearest);
         VkSamplers.free(this.linear);
         this.cloudMap.free();
+        if (this.weather != null) this.weather.free();
+        if (this.weatherUniformBuffer != null) this.weatherUniformBuffer.free();
+        if (this.precipitationMap != null) this.precipitationMap.free();
         this.lightStandIn.free();
         this.lodLightStandIn.free();
         if (this.scene != null) destroy(this.images());
@@ -708,5 +825,6 @@ public final class VkPostProcess {
         this.lightBlurImage = null;
         this.sunImage = null;
         this.plantSunImage = null;
+        this.weatherImage = null;
     }
 }

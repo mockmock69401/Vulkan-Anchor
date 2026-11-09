@@ -116,6 +116,15 @@ public final class VisualsRenderer {
     private float climate = Float.NaN;
     private long climateNanos;
     private final FlowClock flowClock = new FlowClock();
+    /**
+     * 2026-11-09 (session 6): the shader weather's precipitation map, the level it reads (rebuilt for a new level), and the camera's
+     * velocity the streaks follow (WeatherUniforms.followVelocity) with the last position and flow time it was followed from.
+     */
+    private final PrecipitationMap precipitation = new PrecipitationMap();
+    private LevelPrecipitation precipitationLevel;
+    private ClientLevel precipitationOf;
+    private float[] weatherVelocity = new float[3];
+    private double weatherLastX = Double.NaN, weatherLastY, weatherLastZ, weatherLastSeconds;
     private VkUploadStream upload;
     private VkDownloadStream download;
     private LightVolumeSystem lightVolumes;
@@ -520,6 +529,48 @@ public final class VisualsRenderer {
         }
     }
 
+    /**
+     * 2026-11-09 (session 6): the shader weather's values for this frame (WeatherUniforms) and its precipitation map around the camera,
+     * given to the post-process before the upload commit. The camera's velocity is followed every frame (the streaks lean with it); the map
+     * is kept only while it rains or snows. A failure (a modded level) draws no shader weather this frame.
+     */
+    private void prepareWeather(PostProcessSettings settings, ClientLevel level, Vec3 camera, AtmosphereUniforms.Values atmosphere,
+                                LightVolumeUniforms.Values light, int height, long serial) {
+        WeatherUniforms.Values values = WeatherUniforms.off();
+        int[] map = null;
+        try {
+            double now = this.flowSeconds;
+            if (!Double.isNaN(this.weatherLastX)) {
+                this.weatherVelocity = WeatherUniforms.followVelocity(this.weatherVelocity, camera.x - this.weatherLastX, camera.y - this.weatherLastY,
+                        camera.z - this.weatherLastZ, now - this.weatherLastSeconds);
+            }
+            this.weatherLastX = camera.x;
+            this.weatherLastY = camera.y;
+            this.weatherLastZ = camera.z;
+            this.weatherLastSeconds = now;
+            AtmosphereFrame frame = this.atmosphere;
+            if (WeatherUniforms.wanted(settings) && this.post.weatherAvailable() && frame != null && frame.serial() == serial && frame.rain() > 0) {
+                if (this.precipitationOf != level) {
+                    this.precipitationOf = level;
+                    this.precipitationLevel = new LevelPrecipitation(level);
+                    this.precipitation.clear();
+                }
+                this.precipitationLevel.newFrame();
+                boolean changed = this.precipitation.update(this.precipitationLevel, (int) Math.floor(camera.x), (int) Math.floor(camera.y),
+                        (int) Math.floor(camera.z), PrecipitationMap.BUDGET);
+                if (changed || this.post.precipitationMapStale()) map = this.precipitation.texels();
+                values = WeatherUniforms.compute(settings, frame.rain(), frame.thunder(), frame.cameraFluid() != AtmosphereFrame.CameraFluid.NONE,
+                        WeatherUniforms.unjitteredInverse(atmosphere.invVanillaProjection(), TaaJitter.appliedNdc()), atmosphere.invLodProjection(),
+                        atmosphere.invView(), atmosphere.lodValid(), height, camera.x, camera.y, camera.z, this.weatherVelocity, now,
+                        this.precipitation.hasRain(), this.precipitation.hasSnow());
+            }
+        } catch (RuntimeException e) {
+            values = WeatherUniforms.off();
+            map = null;
+        }
+        this.post.prepareWeather(this.upload, values, light, map);
+    }
+
     /** P7e-2: vanilla's sky colour at the camera, the reflections' fallback zenith; null when it cannot be read. */
     private static float[] skyColour(ClientLevel level, float partialTick) {
         try {
@@ -773,6 +824,8 @@ public final class VisualsRenderer {
             this.heldLight.update(this.upload, settings.heldLight() && light.on());
             this.post.prepare(this.upload, atmosphere, lighting, reflection, clouds, shadow, light, this.heldLight,
                     BloomFog.compute(settings, this.atmosphere, serial, hasSkyLight, this.skyExposure.value()), volumetric);
+            //2026-11-09 (session 6): the shader weather (its precipitation map uploaded when it changed)
+            this.prepareWeather(settings, level, camera, atmosphere, light, main.height(), serial);
             //TAA pass (2026-10-15): with this frame's camera (the post-process frame's matrices), which the next frame reprojects from
             boolean taa = settings.taa() && this.post.taaAvailable() && this.atmosphere != null && this.atmosphere.serial() == serial;
             this.post.prepareTaa(this.upload, taa ? new VkTaa.Frame(this.atmosphere.invVanillaProjection(), this.atmosphere.invLodProjection(),
@@ -825,6 +878,10 @@ public final class VisualsRenderer {
                 VkGpuTimer.mark(cmd, "end");
                 //2026-10-30 (audit): vanilla's clouds are left out next frame only after this frame's far clouds were drawn
                 FarClouds.set(clouds.on());
+                //2026-11-09 (session 6): vanilla's rain and snow are left out from the next frame on while the shader can draw them (the
+                // setting on, its pass built, this frame's atmosphere captured: without it, as in a modded dimension, vanilla's stays)
+                ShaderWeather.set(WeatherUniforms.wanted(settings) && this.post.weatherAvailable() && this.atmosphere != null
+                        && this.atmosphere.serial() == serial);
                 this.postFailures = 0;
             } finally {
                 VkContext.invalidatePipelineCache();//the post-process pipeline replaced the one Reforged has cached

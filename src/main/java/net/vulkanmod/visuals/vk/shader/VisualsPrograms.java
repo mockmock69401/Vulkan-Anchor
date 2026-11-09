@@ -43,7 +43,9 @@ final class VisualsPrograms {
         add(c, "shafts.BLUR", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/shafts.comp"));
         add(c, "shafts.VL", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/volumetric.comp"));
         add(c, "shafts.VL_BLUR", defs(), c.compute("post/volumetric_blur.comp"));
-        add(c, "postFinal", defs("USE_ZERO_ONE_DEPTH", ""), c.vertex("post/fullscreen.vert"), c.fragment("post/post_final.frag"));
+        //2026-11-09 (session 6): the shader weather overlay (VkPostProcess.weather), blended by postFinal or postBlit
+        add(c, "postWeather", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/weather.comp"));
+        add(c, "postFinal", defs("USE_ZERO_ONE_DEPTH", ""),c.vertex("post/fullscreen.vert"), c.fragment("post/post_final.frag"));
         //SMAA after the tone mapping (the final colour into an image, three passes, a blit into the main pass) and the TAA before it
         add(c, "postLdr", defs(), c.compute("post/post_ldr.comp"));
         add(c, "postTaa", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/post_taa.comp"));
