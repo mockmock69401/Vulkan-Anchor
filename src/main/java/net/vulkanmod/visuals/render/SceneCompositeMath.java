@@ -24,8 +24,11 @@ public final class SceneCompositeMath {
     public static final float UNDERGROUND_SKY_EXPOSURE = 0.7f, DAY_BLOCK_EXPOSURE = 1.0f;
     /** Tuning round 1: dimensions without sky light. */
     public static final float NO_SKY_EXPOSURE = 1.7f;
-    /** Tuning round 2: the view with the camera under water (final fix R2: the camera's fluid, slot 29 .y). */
-    public static final float UNDERWATER_EXPOSURE = 2.0f;
+    /**
+     * Tuning round 2: the view with the camera under water (final fix R2: the camera's fluid, slot 29 .y). 2026-11-09 (session 2b): 2 -> 1.3,
+     * on what the view shows only; the composite's water and Snell's window take none (kelp and the floor stand out of the water again).
+     */
+    public static final float UNDERWATER_EXPOSURE = 1.3f;
     /** B3: vanilla's cloud layer widened by this many blocks plus a share of the distance. */
     public static final float VANILLA_CLOUD_MARGIN = 0.5f, VANILLA_CLOUD_MARGIN_SHARE = 0.01f;
     /** B3: the sky light a cell must hold to count as cloud air. */
@@ -76,7 +79,10 @@ public final class SceneCompositeMath {
     public static final float DEBUG_UNKNOWN_RED = 0.25f, DEBUG_UNKNOWN_GREEN = 0.0f, DEBUG_UNKNOWN_BLUE = 0.25f;
 
     // ---- the composite's slots (boundary 3.2) ----
-    public static final int SLOTS = 35;
+    public static final int SLOTS = 46;
+    /** 2026-11-09 (session 2b): UnderwaterUniforms' slots 35..38 and the air's struct Atmosphere at 39..45. */
+    public static final int UNDERWATER_PARAMS = UnderwaterUniforms.PARAMS, UNDERWATER_RIPPLE_A = UnderwaterUniforms.RIPPLE_A,
+            UNDERWATER_RIPPLE_B = UnderwaterUniforms.RIPPLE_B, UNDERWATER_LIGHT = UnderwaterUniforms.LIGHT, AIR_FIRST = UnderwaterUniforms.AIR_FIRST;
     public static final int LIGHTING = 10, WATER = 11, CLOUD_SHAPE = 12, CLOUD_LIT = 14, CLOUD_AMBIENT = 15, CLOUD_LIGHT_DIR = 16, LIGHT_CAMERA = 18,
             LIGHT_FRAC = 19, LIGHT_MODE = 21, LIGHT_SUN = 22, LIGHT_SHADE = 23, HELD_ORIGIN = 24, HELD_EYE = 34, VANILLA_SKY = 26, VANILLA_FOG = 27, STAR_GATE = 28,
             LOOK = 29, BORDER_FOG = 30, BLOCK_LIGHT = 31, MOON_LIGHT = 32, GLOW = 33;
@@ -313,7 +319,13 @@ public final class SceneCompositeMath {
      * terrainAlbedoAt's colour before the lightmap (display rgb) where it holds, else null (read only with the terrain light's source 2).
      */
     public record Pixel(float[] colour, boolean sky, float[] dir, float dist, boolean fromLod, float[] normal, float[] lt, float plantSun,
-                        float[] light, float sideSky, float held, boolean cloud, float[] cloudMarch, float ao, float[] albedo) {
+                        float[] light, float sideSky, float held, boolean cloud, float[] cloudMarch, float ao, float[] albedo, Surface surface) {
+        /** A pixel with an albedo, nothing fetched for the surface from below (Surface.NONE). */
+        public Pixel(float[] colour, boolean sky, float[] dir, float dist, boolean fromLod, float[] normal, float[] lt, float plantSun,
+                     float[] light, float sideSky, float held, boolean cloud, float[] cloudMarch, float ao, float[] albedo) {
+            this(colour, sky, dir, dist, fromLod, normal, lt, plantSun, light, sideSky, held, cloud, cloudMarch, ao, albedo, Surface.NONE);
+        }
+
         /** A pixel without an albedo. */
         public Pixel(float[] colour, boolean sky, float[] dir, float dist, boolean fromLod, float[] normal, float[] lt, float plantSun,
                      float[] light, float sideSky, float held, boolean cloud, float[] cloudMarch, float ao) {
@@ -325,6 +337,48 @@ public final class SceneCompositeMath {
                      float[] light, float sideSky, float held, boolean cloud, float[] cloudMarch) {
             this(colour, sky, dir, dist, fromLod, normal, lt, plantSun, light, sideSky, held, cloud, cloudMarch, 1, null);
         }
+    }
+
+    /**
+     * 2026-11-09 (session 2b): what underwaterView fetches where the view rises to the water's surface: footprint, the blocks one pixel
+     * covers there along the view (t / focal / dir.y); land, underwaterLandBehind at the pixel (-1 none); landColour, the main colour
+     * (display rgb) at the pixel the ripples' turn moves the land to (the pixel's own where it does not move).
+     */
+    public record Surface(float footprint, float land, float[] landColour) {
+        public static final Surface NONE = new Surface(0, -1, null);
+    }
+
+    /** The composite's cameraUnderwater: the camera in water (slot 29 .y) and the composite drawing the water (slot 35 .y above 0). */
+    public static boolean cameraUnderwater(float[][] slots) {
+        return slots[LOOK][1] > 0.5f && slots[UNDERWATER_PARAMS][1] > 0;
+    }
+
+    /** The composite's underwaterView: the pixel seen from inside water (shown: what it shows, at the underwater exposure). */
+    public static float[] underwaterView(Pixel px, float[][] slots, float[] shown) {
+        float[] params = slots[UNDERWATER_PARAMS], lightSlot = slots[UNDERWATER_LIGHT];
+        float surfaceUp = params[0], h0 = Math.max(surfaceUp, 0), visibility = params[1];
+        float[] light = {lightSlot[0], lightSlot[1], lightSlot[2]};
+        float t = UnderwaterMath.underwaterSurfaceDistance(surfaceUp, px.dir);
+        if (!UnderwaterMath.underwaterThroughSurface(surfaceUp, t, px.dir[1], px.dist, px.sky)) {
+            return UnderwaterMath.underwaterMedium(shown, px.sky ? UnderwaterMath.UNDERWATER_LONGEST : px.dist, surfaceUp > 0 ? px.dir[1] : Math.min(px.dir[1], 0),
+                    h0, light, visibility);
+        }
+        float[] a = slots[UNDERWATER_RIPPLE_A], b = slots[UNDERWATER_RIPPLE_B];
+        float[] n = WaterMath.rippleNormal(px.dir[0] * t, px.dir[2] * t, new float[]{a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]}, params[2], params[3],
+                px.surface.footprint());
+        float[] r = UnderwaterMath.underwaterRefract(px.dir, n);
+        float[] above = new float[3];
+        if (UnderwaterMath.dot(r, r) > 0.5f) {
+            Atmosphere air = new Atmosphere(slots[AIR_FIRST], slots[AIR_FIRST + 1], slots[AIR_FIRST + 2], slots[AIR_FIRST + 3], slots[AIR_FIRST + 4],
+                    slots[AIR_FIRST + 5], slots[AIR_FIRST + 6]);
+            if (px.surface.land() > 0 || !AtmosphereMath.atmosphereSky(air)) {
+                float[] c = px.surface.landColour() != null ? px.surface.landColour() : px.colour;
+                above = new float[]{PostMath.displayToLinear(c[0]), PostMath.displayToLinear(c[1]), PostMath.displayToLinear(c[2])};
+            } else {
+                above = add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r));
+            }
+        }
+        return UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(px.dir, n, above, light, visibility), t, px.dir[1], h0, light, visibility);
     }
 
     /** scene_copy.comp albedoMatches: albedo (display) times vanilla's lightmap at (block, sky) gives vanilla's pixel (display rgb). */
@@ -359,6 +413,7 @@ public final class SceneCompositeMath {
         float[] scene = {PostMath.displayToLinear(px.colour[0]), PostMath.displayToLinear(px.colour[1]), PostMath.displayToLinear(px.colour[2])};
         Atmosphere a = atmosphere(slots);
         if (px.sky) {
+            if (cameraUnderwater(slots)) return rgba(underwaterView(px, slots, new float[3]), 0);
             if (!AtmosphereMath.atmosphereOn(a) || a.mode() == AtmosphereMath.ATMOSPHERE_NO_SKY) return rgba(scale(scene, underwaterExposure(slots[LOOK])), 0);
             float[] sky = add(add(AtmosphereMath.skyColour(a, px.dir), AtmosphereMath.sunGlow(a, px.dir)),
                     add(WaterMath.sunDisc(a, px.dir), AtmosphereMath.vanillaStars(a, px.dir, scene, slots[VANILLA_SKY], slots[VANILLA_FOG], slots[STAR_GATE])));
@@ -528,7 +583,9 @@ public final class SceneCompositeMath {
             }
             for (int i = 0; i < 3; i++) hazed[i] = fog[i] + (hazed[i] - fog[i]) * t;
         }
-        return rgba(scale(farCloudsOver(a, slots, hazed, px.dir, px.cloudMarch), underwaterExposure(look)), passRan && !cloud ? WaterMath.reflectionMark(kind) : 0);
+        float[] shown = scale(farCloudsOver(a, slots, hazed, px.dir, px.cloudMarch), underwaterExposure(look));
+        if (cameraUnderwater(slots)) shown = underwaterView(px, slots, shown);
+        return rgba(shown, passRan && !cloud ? WaterMath.reflectionMark(kind) : 0);
     }
 
     /** B18: the light debug views. */

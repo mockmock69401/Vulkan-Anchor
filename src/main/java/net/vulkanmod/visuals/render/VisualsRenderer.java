@@ -10,7 +10,9 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.extensions.IForgeDimensionSpecialEffects;
@@ -122,6 +124,9 @@ public final class VisualsRenderer {
     private VkPostProcess post;
     private VkDepthCapture depthCapture;
     private LightingChoice lightingChoice = LightingChoice.NONE;
+    //2026-11-09 (session 2b): this frame's camera is in water with the post-process on: the depth before the translucent terrain is
+    // taken for the composite (what lies behind the surface seen from below) even though the lighting pass is off
+    private boolean captureUnderwater;
     private ShadowFrame shadowFrame;
     private AtmosphereFrame atmosphere;
     /** The extensions' LOD inputs, valid only for their serial. */
@@ -189,6 +194,26 @@ public final class VisualsRenderer {
         return SkyExposure.OPEN_AIR_FULL;
     }
 
+    /**
+     * 2026-11-09 (session 2b): the water's open surface above the eye (blocks): up the eye's column while it holds water, to the top
+     * water block's fluid height; 0 when the eye is in no water, the column is capped by a solid block or runs past SURFACE_SCAN.
+     */
+    static float surfaceAbove(ClientLevel level, double eyeX, double eyeY, double eyeZ) {
+        BlockPos.MutableBlockPos pos = BlockPos.containing(eyeX, eyeY, eyeZ).mutable();
+        if (!level.getFluidState(pos).is(FluidTags.WATER)) return 0;
+        for (int i = 0; i < UnderwaterUniforms.SURFACE_SCAN; i++) {
+            pos.move(0, 1, 0);
+            if (pos.getY() >= level.getMaxBuildHeight()) return 0;
+            if (level.getFluidState(pos).is(FluidTags.WATER)) continue;
+            if (level.getBlockState(pos).isSolidRender(level, pos)) return 0;
+            pos.move(0, -1, 0);
+            FluidState top = level.getFluidState(pos);
+            float up = (float) (pos.getY() + top.getHeight(level, pos) - eyeY);
+            return up > 0 ? up : 0;
+        }
+        return 0;
+    }
+
     /** The vanilla render distance in blocks, which the fog is judged against (the lighting, the atmosphere and DH's composite). */
     public static float vanillaRenderDistance() {
         return Minecraft.getInstance().options.getEffectiveRenderDistance() * 16;
@@ -239,6 +264,8 @@ public final class VisualsRenderer {
                 this.skyExposure.update(SkyExposure.target(level.getBrightness(LightLayer.SKY, camera) / 15f, airAbove(level, camera)), System.nanoTime());
             }
             this.lightingChoice = LightingChoice.of(serial, settings, this.post != null && !this.postFailed, this.atmosphere != null, fogCoversAll, hasSky);
+            this.captureUnderwater = settings.enabled() && this.post != null && !this.postFailed
+                    && cameraFluid(Minecraft.getInstance().gameRenderer.getMainCamera().getFluidInCamera()) == AtmosphereFrame.CameraFluid.WATER;
             //Sun-step crossfade (2026-10-16): the shadows' time of day moves between ticks while the day runs, never back (SmoothDayTime)
             float shadowTime = 0.5f;
             if (level != null) {
@@ -555,7 +582,7 @@ public final class VisualsRenderer {
      */
     public void captureDepth(int slot) {
         if (this.failed || this.closed || this.depthCapture == null || this.captureFailed || !VkContext.recordingFrame()) return;
-        if (this.lightingChoice.serial() != VkFrames.serial() || !this.lightingChoice.any()) return;
+        if (this.lightingChoice.serial() != VkFrames.serial() || !(this.lightingChoice.any() || this.captureUnderwater)) return;
         //endMainPass forgets Reforged's bound framebuffer, so the main target is read first
         VkContext.MainTarget main = VkContext.captureMainTarget();
         if (main == null || main.width() <= 0 || main.height() <= 0) return;
@@ -632,6 +659,13 @@ public final class VisualsRenderer {
             //2026-10-30 (audit): after the LOD inputs not drawn this frame are dropped (the far clouds and the shafts used their reach)
             float farSections = farSections(lod);
             boolean copies = this.depthCapture != null && this.depthCapture.captured(serial, main.width(), main.height());
+            //2026-11-09 (session 2b): with the camera in water, the open surface above it and its sky light
+            float surfaceUp = 0, skyAccess = 0;
+            if (this.atmosphere != null && this.atmosphere.serial() == serial && this.atmosphere.cameraInWater()) {
+                surfaceUp = surfaceAbove(level, camera.x, camera.y, camera.z);
+                skyAccess = level.getBrightness(LightLayer.SKY, BlockPos.containing(camera)) / 15f;
+            }
+            this.post.prepareUnderwater(UnderwaterUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, surfaceUp, skyAccess, copies));
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
                     atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight);
             //P7j design 3.3, P7f-2: the last valid cascades, rebased to this frame's sun views (which exist only when this frame

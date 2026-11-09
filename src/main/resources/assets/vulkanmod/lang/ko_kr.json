@@ -50,6 +50,8 @@
   "vulkanmod.visuals.water_ripple_speed.tooltip": "물결이 흐르는 속도. 0이면 멈춥니다",
   "vulkanmod.visuals.water_ripple_density": "물결 촘촘함",
   "vulkanmod.visuals.water_ripple_density.tooltip": "물결이 얼마나 촘촘한지. 100이 기본값이고, 높이면 파장이 짧은 잔물결이, 낮추면 길고 매끈한 너울이 됩니다. 물결의 기울기는 그대로입니다",
+  "vulkanmod.visuals.underwater_visibility": "수중 가시거리",
+  "vulkanmod.visuals.underwater_visibility.tooltip": "물속에서 얼마나 멀리 보이는지. 100이 기본값이고, 높이면 물이 맑아지고 낮추면 탁해집니다. 위를 올려다보면 수면에 일렁이는 창으로 하늘이 보입니다",
   "vulkanmod.visuals.foliage_wind": "식물 바람",
   "vulkanmod.visuals.foliage_wind.tooltip": "풀, 꽃, 나뭇잎이 바람에 흔들립니다. 물결 속도를 따르고 비가 오면 빨라집니다. 0이면 멈춥니다",
   "vulkanmod.visuals.far_clouds": "먼 구름",

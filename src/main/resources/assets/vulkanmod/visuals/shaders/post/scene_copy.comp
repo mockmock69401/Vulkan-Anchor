@@ -24,6 +24,10 @@
 // mix(1, E, look), look = W4's slot 29 .x (the sun-shading setting / 100); they do not depend on whether the lighting pass ran, and the
 // sky-light ones skip only light an active light volume does not know yet (a section still loading; with the volume off every pixel takes them). Final fix R2: under water is slot 29 .y (the
 // camera's fluid), not the fog colour.
+// 2026-11-09 (session 2b): with the camera in water every pixel, sky included, is then seen through the water (underwaterView,
+// underwater.glsl): what it shows (at UNDERWATER_EXPOSURE) through the water between, and where the view rises to the surface (slots
+// 35..38) Snell's window onto the sky of the air above (slots 39..45, W4's struct Atmosphere as if the camera were in the open air) or
+// the land behind the surface (the depth before the translucent terrain, binding 17), rippled, and the water mirrored outside it.
 // SceneCompositeMath mirrors every const and the per-pixel combination here (SceneCompositeTest): change both together.
 layout(local_size_x = 8, local_size_y = 8) in;
 
@@ -48,6 +52,9 @@ layout(binding = 14, r32ui) uniform readonly restrict uimage2D terrainLight;
 layout(binding = 15, r32ui) uniform readonly restrict uimage2D terrainAlbedo;
 //2026-10-29: the main colour right after the translucent terrain (VkDepthCapture.captureColour; mainColour itself when not taken)
 layout(binding = 16) uniform sampler2D colourAfterTranslucent;
+//2026-11-09 (session 2b): vanilla's depth right before its translucent terrain (VkDepthCapture BEFORE; the main depth when not taken,
+// then slot 38 .w is 0 and it is not read): what lies behind the water's surface seen from below
+layout(binding = 17) uniform sampler2D beforeTranslucent;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -100,6 +107,23 @@ layout(location = 32) uniform vec4 moonLightColour;
 layout(location = 33) uniform vec4 glowParams;
 //2026-10-31: the held light: the eye this frame relative to the light volume's camera block corner, w the held level (HeldLightSystem)
 layout(location = 34) uniform vec4 heldEye;
+//2026-11-09 (session 2b), UnderwaterUniforms: x the water's surface above the camera's eye (blocks; 0 with no open surface above or the
+// camera not in water), y the underwater visibility setting (ratio; 0: no water of the composite's own), z the ripple strength, w the
+// ripple density (settings, ratios)
+layout(location = 35) uniform vec4 underwaterParams;
+//RippleMath.offsets (the reflection's slots 11, 12)
+layout(location = 36) uniform vec4 underwaterRippleA;
+layout(location = 37) uniform vec4 underwaterRippleB;
+//rgb the daylight entering the water at the surface (scene units), w 1 when the depth before the translucent terrain is this frame's
+layout(location = 38) uniform vec4 underwaterLight;
+//W4's struct Atmosphere of the air above the water (ATMOSPHERE_SKY as if the camera were in the open air; NONE without sky light)
+layout(location = 39) uniform vec4 airSun;
+layout(location = 40) uniform vec4 airSunLight;
+layout(location = 41) uniform vec4 airMoonLight;
+layout(location = 42) uniform vec4 airDepth;
+layout(location = 43) uniform vec4 airAmbient;
+layout(location = 44) uniform vec4 airGlow;
+layout(location = 45) uniform vec4 airFog;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -107,6 +131,7 @@ layout(location = 34) uniform vec4 heldEye;
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
 
@@ -133,8 +158,11 @@ const float DAY_BLOCK_EXPOSURE = 1.0;
 const float NO_SKY_EXPOSURE = 1.7;
 //Tuning round 2: with the camera under water the whole view is seen at UNDERWATER_EXPOSURE (refs/S5 is about 1.8, its darkest quarter
 // 2.4 of vanilla's light). Final fix R2: under water is the camera's fluid (slot 29 .y: swamp and mangrove water too; lava, powder snow
-// and a modded blue fog are not)
-const float UNDERWATER_EXPOSURE = 2.0;
+// and a modded blue fog are not). 2026-11-09 (session 2b): 2 -> 1.3, on what the view shows only (the water's own colour and Snell's
+// window take none): 2 lifted vanilla's fogged image; through the composite's water it lifted kelp and the floor to the water's own
+// brightness, so they hardly stood out (Complementary Reimagined's are dark silhouettes), and a floor seen from just above the surface
+// (no exposure) jumped brighter once the camera dipped under
+const float UNDERWATER_EXPOSURE = 1.3;
 //B3: vanilla's cloud layer (cloudShape x, y while the far clouds are off) widened by this many blocks plus a share of the distance
 // (also for a flat layer of thickness 0, vanilla's fast clouds)
 const float VANILLA_CLOUD_MARGIN = 0.5;
@@ -425,6 +453,74 @@ float underwaterExposure() {
     return lookParams.y > 0.5 ? looked(UNDERWATER_EXPOSURE, lookWeight()) : 1.0;
 }
 
+//2026-11-09 (session 2b): the camera is inside water (slot 29 .y) and the composite draws the water (slot 35 .y above 0: fog strength
+// above 0; at 0 the view is as vanilla's water fog leaves it)
+bool cameraUnderwater() {
+    return lookParams.y > 0.5 && underwaterParams.y > 0.0;
+}
+
+//The land behind the water's surface (t blocks along the view) at pixel q: its distance past the surface from the depth before the
+// translucent terrain, -1 for none (the sky, past UNDERWATER_LAND_MAX, or no copy this frame)
+float underwaterLandBehind(ivec2 q, ivec2 size, float t) {
+    if (underwaterLight.w < 0.5) {
+        return -1.0;
+    }
+    float depth = texelFetch(beforeTranslucent, q, 0).r;
+    if (depth == FAR) {
+        return -1.0;
+    }
+    float behind = length(viewPosition(invVanillaProj, pixelUvGl(q, size), depth)) - t;
+    return behind > 0.0 && behind < UNDERWATER_LAND_MAX ? behind : -1.0;
+}
+
+//2026-11-09 (session 2b): pixel p seen from inside water along dir (world), dist blocks away (sky: nothing in front), showing `shown`
+// (scene units, at the underwater exposure): through the water between (underwaterMedium) or, where the view rises to the surface,
+// Snell's window (underwaterWindow) onto the air's sky along the refracted view, or onto the land behind the surface moved by the
+// ripples' turn of the view, and the water mirrored past the critical angle
+vec3 underwaterView(ivec2 p, ivec2 size, vec3 dir, float dist, bool sky, vec3 shown) {
+    float surfaceUp = underwaterParams.x;
+    float h0 = max(surfaceUp, 0.0);
+    vec3 light = underwaterLight.rgb;
+    float visibility = underwaterParams.y;
+    float t = underwaterSurfaceDistance(surfaceUp, dir);
+    if (!underwaterThroughSurface(surfaceUp, t, dir.y, dist, sky)) {
+        //Without an open surface above, the water does not brighten upward
+        return underwaterMedium(shown, sky ? UNDERWATER_LONGEST : dist, surfaceUp > 0.0 ? dir.y : min(dir.y, 0.0), h0, light, visibility);
+    }
+    //The rippled surface where the view meets it, faded by the blocks one pixel covers there (W5's blocks per pixel, foreshortened)
+    float focal = 0.5*float(size.y)/max(abs(invVanillaProj[1][1]), 0.000001);
+    float footprint = t/focal/max(dir.y, RIPPLE_MIN_COS);
+    vec3 n = rippleNormal(dir.xz*t, underwaterRippleA, underwaterRippleB, underwaterParams.z, underwaterParams.w, footprint);
+    vec3 r = underwaterRefract(dir, n);
+    vec3 above = vec3(0.0);
+    if (dot(r, r) > 0.5) {
+        Atmosphere air = Atmosphere(airSun, airSunLight, airMoonLight, airDepth, airAmbient, airGlow, airFog);
+        float land = underwaterLandBehind(p, size, t);
+        if (land > 0.0 || !atmosphereSky(air)) {
+            //The land behind (vanilla's colour: lit as in the open air), moved on screen by the ripples' turn of the view, its parallax
+            // land / (t + land); only onto land behind the same surface
+            ivec2 q = p;
+            vec3 level = underwaterRefract(dir, vec3(0.0, 1.0, 0.0));
+            if (land > 0.0 && dot(level, level) > 0.5) {
+                vec3 turn = transpose(mat3(invView))*(r - level)*(land/(t + land));
+                vec2 shift = vec2(turn.x, -turn.y)*focal;
+                float sl = length(shift);
+                if (sl > UNDERWATER_REFRACT_MAX_PIXELS) {
+                    shift *= UNDERWATER_REFRACT_MAX_PIXELS/sl;
+                }
+                q = clamp(p + ivec2(round(shift)), ivec2(0), size - 1);
+                if (underwaterLandBehind(q, size, t) <= 0.0) {
+                    q = p;
+                }
+            }
+            above = vanillaToScene(texelFetch(mainColour, q, 0).rgb);
+        } else {
+            above = skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r);
+        }
+    }
+    return underwaterMedium(underwaterWindow(dir, n, above, light, visibility), t, dir.y, h0, light, visibility);
+}
+
 //The mode the exposures follow (slot 29 .w: W4's mode as if the atmosphere were drawn)
 bool exposureMode(float mode) {
     return abs(lookParams.w - mode) < 0.5;
@@ -646,7 +742,13 @@ void main() {
     bool fromLod;
     if (!scenePositionFrom(p, size, view, fromLod)) {
         //Sky: W4's sky and glow, W6's disc, vanilla's stars and moon through W4, then the far clouds (they cover the disc). Without an
-        // atmosphere, and without sky light (B17: no sun or sky effects; the End keeps its sky box), the game's pixel
+        // atmosphere, and without sky light (B17: no sun or sky effects; the End keeps its sky box), the game's pixel. 2026-11-09
+        // (session 2b): from inside water nothing in front: the water itself, or Snell's window where the view rises to the surface
+        if (cameraUnderwater()) {
+            vec3 skyDir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
+            imageStore(sceneOut, p, vec4(underwaterView(p, size, skyDir, UNDERWATER_LONGEST, true, vec3(0.0)), 0.0));
+            return;
+        }
         if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5) {
             imageStore(sceneOut, p, vec4(scene*underwaterExposure(), 0.0));
             return;
@@ -895,6 +997,11 @@ void main() {
     //2026-10-29 (the user: raindrops took the water's reflection): a pixel drawn over after the translucent terrain (rain and snow
     // particles, splashes, ripples) keeps no mark, so it stays as drawn instead of being mirrored over
     bool overdrawn = overdrawnAfterTranslucent(texelFetch(colourAfterTranslucent, p, 0).rgb, colour.rgb);
-    imageStore(sceneOut, p, vec4(lit*underwaterExposure(),
+    //2026-11-09 (session 2b): from inside water, through the water (or the surface's window)
+    vec3 shown = lit*underwaterExposure();
+    if (cameraUnderwater()) {
+        shown = underwaterView(p, size, dir, dist, false, shown);
+    }
+    imageStore(sceneOut, p, vec4(shown,
             passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0));
 }
