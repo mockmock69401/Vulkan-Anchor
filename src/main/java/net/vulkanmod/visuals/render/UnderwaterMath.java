@@ -23,10 +23,13 @@ public final class UnderwaterMath {
     public static final float UNDERWATER_MIN_UP = 0.001f;
     /** A pixel lies on or behind the surface when it stands at least as high as the surface less SLACK blocks and SHARE of its distance. */
     public static final float UNDERWATER_SURFACE_SHARE = 0.002f, UNDERWATER_SURFACE_SLACK = 0.05f;
-    /** Land behind the surface farther than this counts as sky (scene_copy's underwaterLandBehind). */
+    /** Land behind the surface farther than this counts as sky (scene_copy's underwaterSideAt). */
     public static final float UNDERWATER_LAND_MAX = 512.0f;
-    /** The land's wobble on screen is at most this many pixels (scene_copy's underwaterView). */
-    public static final float UNDERWATER_REFRACT_MAX_PIXELS = 32.0f;
+    /**
+     * 2026-11-09 (fix session after 2b): a screen lookup (scene_copy's underwaterLookup) fades out over UNDERWATER_LOOKUP_EDGE of the
+     * screen at its edges; its second step takes at least UNDERWATER_LOOKUP_MIN blocks of the ray.
+     */
+    public static final float UNDERWATER_LOOKUP_EDGE = 0.08f, UNDERWATER_LOOKUP_MIN = 1.0f;
 
     private UnderwaterMath() {
     }
@@ -101,15 +104,37 @@ public final class UnderwaterMath {
         return WaterMath.WATER_F0 + (1 - WaterMath.WATER_F0) * (float) Math.pow(1 - c, WaterMath.FRESNEL_POWER);
     }
 
-    /** The surface from below along d: above through the window (times the n^2 gain), the water below mirrored. */
-    public static float[] underwaterWindow(float[] d, float[] n, float[] above, float[] light, float visibility) {
-        float f = underwaterReflectance(d, n);
+    /**
+     * What the surface mirrors for a view d off the upward normal n: what the screen shows along the reflected ray (seen, path blocks
+     * from the surface) with weight, else the endless water below, each through the water between it and the surface.
+     */
+    public static float[] underwaterMirrored(float[] d, float[] n, float[] seen, float path, float weight, float[] light, float visibility) {
         //GLSL's reflect(d, -n): the reflection off the downward face
         float dn = -dot(d, n);
-        float downY = d[1] - 2 * dn * -n[1];
-        float[] mirrored = underwaterInscatter(UNDERWATER_LONGEST, Math.min(downY, 0), 0, light, visibility);
+        float y = Math.min(d[1] - 2 * dn * -n[1], 0);
+        float[] deep = underwaterInscatter(UNDERWATER_LONGEST, y, 0, light, visibility);
+        float[] near = underwaterMedium(seen, path, y, 0, light, visibility);
+        float w = Math.max(0, Math.min(1, weight));
+        return new float[]{deep[0] + (near[0] - deep[0]) * w, deep[1] + (near[1] - deep[1]) * w, deep[2] + (near[2] - deep[2]) * w};
+    }
+
+    /** The surface from below along d: above through the window (times the n^2 gain), below (underwaterMirrored) reflected. */
+    public static float[] underwaterWindow(float[] d, float[] n, float[] above, float[] below) {
+        float f = underwaterReflectance(d, n);
         float gain = UNDERWATER_WINDOW_GAIN * (1 - f);
-        return new float[]{above[0] * gain + mirrored[0] * f, above[1] * gain + mirrored[1] * f, above[2] * gain + mirrored[2] * f};
+        return new float[]{above[0] * gain + below[0] * f, above[1] * gain + below[1] * f, above[2] * gain + below[2] * f};
+    }
+
+    /** A view-space direction's place on the screen (GL uv, y up) for a perspective projection whose inverse has ix, iy on its diagonal; (-1, -1) behind. */
+    public static float[] underwaterScreenOf(float[] v, float ix, float iy) {
+        if (v[2] > -1e-4f) return new float[]{-1, -1};
+        return new float[]{v[0] / (-v[2] * ix) * 0.5f + 0.5f, v[1] / (-v[2] * iy) * 0.5f + 0.5f};
+    }
+
+    /** How much a screen lookup at uv counts: 1 inside, falling to 0 at the screen's edges and 0 past them. */
+    public static float underwaterEdgeFade(float[] uv) {
+        float e = Math.min(Math.min(uv[0], 1 - uv[0]), Math.min(uv[1], 1 - uv[1])) / UNDERWATER_LOOKUP_EDGE;
+        return Math.max(0, Math.min(1, e));
     }
 
     static float dot(float[] a, float[] b) {

@@ -336,7 +336,7 @@ public final class VkShadowMaps {
             if (vanillaOn && this.vanilla != null && slice == 0) {
                 VkGpuTimer.mark(cmd, c.vanillaLabel);
                 this.vanilla.draw(cmd, this.renderPass, c.pending, ShadowMath.vanillaRadius(c.which, renderDistanceChunks,
-                        ShadowMath.nearReach(VisualsConfig.get().shadowDistance, renderDistanceChunks), ext.stream().anyMatch(VisualsExtension::castsFarTerrain)));
+                        ShadowMath.nearReach(VisualsConfig.get().shadowDistance, renderDistanceChunks)));
                 c.vanillaStats = this.vanilla.stats();
             }
             vkCmdEndRenderPass(cmd);

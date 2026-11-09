@@ -83,20 +83,25 @@ public final class ShadowMath {
         return vanillaRadius(which, renderDistanceChunks, VanillaShadowCasters.REACH);
     }
 
-    /** The same with nearReach (nearReach(shadowDistance)) for the close and near cascades. */
+    /**
+     * The same with nearReach (nearReach(shadowDistance)) for the close and near cascades. 2026-11-09 (the user: with Distant Horizons
+     * the sun shadows ended in a circle about the shadow distance around the player): the far cascade takes the vanilla terrain out to
+     * the render distance whether or not LODs cast too. From 2026-10-29 it took it only out to the shadow distance while LODs cast,
+     * expecting the LODs to cover the rest; but DH does not draw its LODs where vanilla chunks stand, so nothing cast between the
+     * shadow distance and the render distance.
+     */
     public static float vanillaRadius(Which which, int renderDistanceChunks, float nearReach) {
-        return vanillaRadius(which, renderDistanceChunks, nearReach, false);
+        if (which == Which.FAR) return Math.min(renderDistanceChunks * 16f, FAR_VANILLA_MAX);
+        return nearReach;
     }
 
     /**
-     * 2026-10-29 (the user: flying from the LODs into loaded chunks, shadows went missing, then moved): with LODs casting past the
-     * vanilla terrain (lodBeyond: VisualsExtension.castsFarTerrain), the far cascade takes the vanilla terrain only out to nearReach
-     * too. Before, its vanilla casters reached the render distance: flying in, the casters changed LOD to vanilla at the render
-     * distance (nothing cast where the chunks were not built yet), back to LOD at the near cascade's edge, and to vanilla again at
-     * the shadow distance. Now they change once, at the shadow distance, where the chunks are built.
+     * 2026-10-29 (the user: flying from the LODs into loaded chunks, shadows went missing, then moved): while the vanilla terrain casts
+     * too, LODs cast only past nearReach (the shadow distance) in every cascade; in the far one they overlap the vanilla terrain out to
+     * the render distance, and the depth map keeps the nearer caster of the two. So flying in, a chunk not built yet still casts by its
+     * LOD and a built one by its blocks; nothing changes at the render distance.
      */
-    public static float vanillaRadius(Which which, int renderDistanceChunks, float nearReach, boolean lodBeyond) {
-        if (which == Which.FAR) return lodBeyond ? nearReach : Math.min(renderDistanceChunks * 16f, FAR_VANILLA_MAX);
+    public static float lodCutoff(float nearReach) {
         return nearReach;
     }
 

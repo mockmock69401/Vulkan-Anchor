@@ -1506,7 +1506,8 @@ class SceneCompositeTest {
      * 2026-11-09 (session 2b; the user: looking up through the surface the land above did not ripple): from inside water, where the view
      * rises to the open surface above, the composite shows Snell's window: the air's sky (W4's SKY mode as if in the open air) along the
      * refracted view, far brighter than the water mirrored outside it; anything in front of the surface (kelp) is seen through the water
-     * as before; land behind the surface is vanilla's colour there (from the pixel the shader moves it to by the ripples).
+     * as before; land above the surface is vanilla's colour where the shader's lookup along the refracted ray found it (fix session
+     * after 2b), and beyond the window the surface mirrors what its lookup along the reflected ray found under the water.
      */
     @Test
     void fromInsideWaterTheSurfaceAboveIsSnellsWindow() {
@@ -1526,7 +1527,8 @@ class SceneCompositeTest {
         float[] skyUp = rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, UP), s, LIGHTMAP));
         float[] r = UnderwaterMath.underwaterRefract(UP, n);
         float[] above = add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r));
-        float[] want = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, above, light, vis), surfaceUp, 1, surfaceUp, light, vis);
+        float[] deepUp = UnderwaterMath.underwaterMirrored(UP, n, new float[3], 0, 0, light, vis);
+        float[] want = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, above, deepUp), surfaceUp, 1, surfaceUp, light, vis);
         assertArrayEquals(want, skyUp, 1e-4f);
         SceneCompositeMath.Pixel face = new SceneCompositeMath.Pixel(new float[]{0.2f, 0.3f, 0.8f, OPAQUE}, false, UP, surfaceUp, false, new float[]{0, -1, 0},
                 NAN4, -1, new float[]{15, 0, 1}, 0, 0, false, new float[3]);
@@ -1540,12 +1542,29 @@ class SceneCompositeTest {
                 NAN4, -1, new float[]{12, 0, 1}, 0, 0, false, new float[3]);
         float[] kelpShown = scale(linear(kelp.colour()), SceneCompositeMath.UNDERWATER_EXPOSURE);
         assertArrayEquals(UnderwaterMath.underwaterMedium(kelpShown, surfaceUp * 0.5f, 1, surfaceUp, light, vis), rgb(SceneCompositeMath.composite(kelp, s, LIGHTMAP)), 1e-5f);
-        //Land behind the surface: vanilla's colour (at the pixel the shader moves it to) through the window
+        //Land above the surface: vanilla's colour where the lookup along the refracted ray found it, through the window; half found, half the sky
         float[] tree = {0.25f, 0.4f, 0.15f};
         SceneCompositeMath.Pixel land = new SceneCompositeMath.Pixel(new float[]{0.2f, 0.3f, 0.8f, OPAQUE}, false, UP, surfaceUp, false, new float[]{0, -1, 0},
-                NAN4, -1, new float[]{15, 0, 1}, 0, 0, false, new float[3], 1, null, new SceneCompositeMath.Surface(0, 20, tree));
-        float[] landWant = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, linear(tree), light, vis), surfaceUp, 1, surfaceUp, light, vis);
+                NAN4, -1, new float[]{15, 0, 1}, 0, 0, false, new float[3], 1, null, new SceneCompositeMath.Surface(0, 1, tree, 0, null, 0));
+        float[] landWant = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, linear(tree), deepUp), surfaceUp, 1, surfaceUp, light, vis);
         assertArrayEquals(landWant, rgb(SceneCompositeMath.composite(land, s, LIGHTMAP)), 1e-5f);
+        SceneCompositeMath.Pixel edge = new SceneCompositeMath.Pixel(new float[]{0.2f, 0.3f, 0.8f, OPAQUE}, false, UP, surfaceUp, false, new float[]{0, -1, 0},
+                NAN4, -1, new float[]{15, 0, 1}, 0, 0, false, new float[3], 1, null, new SceneCompositeMath.Surface(0, 0.5f, tree, 0, null, 0));
+        float[] halfAbove = {(above[0] + linear(tree)[0]) / 2, (above[1] + linear(tree)[1]) / 2, (above[2] + linear(tree)[2]) / 2};
+        assertArrayEquals(UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, halfAbove, deepUp), surfaceUp, 1, surfaceUp, light, vis),
+                rgb(SceneCompositeMath.composite(edge, s, LIGHTMAP)), 1e-5f);
+        //Beyond the window: the riverbed the lookup along the reflected ray found (at the underwater exposure, 5 blocks from the surface),
+        // not the endless water; where it found nothing, the endless water as before
+        float[] bed = {0.45f, 0.4f, 0.3f};
+        float t60 = surfaceUp / side[1];
+        float[] nSide = WaterMath.rippleNormal(side[0] * t60, side[2] * t60, new float[]{a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]},
+                s[SceneCompositeMath.UNDERWATER_PARAMS][2], s[SceneCompositeMath.UNDERWATER_PARAMS][3], 0);
+        SceneCompositeMath.Pixel bedSky = new SceneCompositeMath.Pixel(new float[]{1, 1, 1, 1}, true, side, UnderwaterMath.UNDERWATER_LONGEST, false, new float[3],
+                NAN4, -1, new float[]{15, 0, 1}, 0, 0, false, new float[3], 1, null, new SceneCompositeMath.Surface(0, 0, null, 1, bed, 5));
+        float[] bedSeen = UnderwaterMath.underwaterMirrored(side, nSide, scale(linear(bed), SceneCompositeMath.UNDERWATER_EXPOSURE), 5, 1, light, vis);
+        float[] bedWant = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(side, nSide, new float[3], bedSeen), t60, side[1], surfaceUp, light, vis);
+        assertArrayEquals(bedWant, rgb(SceneCompositeMath.composite(bedSky, s, LIGHTMAP)), 1e-5f);
+        assertFalse(java.util.Arrays.equals(mirrored, bedWant), "the mirror shows the bed, not the endless water");
         //Without an open surface above (a capped column) there is no window: the water all the way
         float[][] capped = scene(DEFAULT, underWater(NOON, WATER_FOG), true, true, 1, 0);
         assertArrayEquals(throughWater(new float[3], UnderwaterMath.UNDERWATER_LONGEST, UP, capped), rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, UP), capped, LIGHTMAP)), 1e-6f);

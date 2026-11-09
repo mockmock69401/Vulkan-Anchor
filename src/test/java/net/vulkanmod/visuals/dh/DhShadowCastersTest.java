@@ -36,7 +36,8 @@ class DhShadowCastersTest {
         assertEquals(512f, DhShadowCasters.cutoff("shadows.far", true, 32));
         assertEquals(512f, DhShadowCasters.cutoff("shadows.far", true, 48));
         assertEquals(32f, DhShadowCasters.cutoff("shadows.far", true, 2));
-        //2026-10-29: while the LODs cast, every cascade's vanilla terrain ends at the shadow distance
+        //2026-10-29: while the LODs cast, they cast past the shadow distance in every cascade (2026-11-09: in the far one alongside the
+        // vanilla terrain, which reaches the render distance there)
         assertEquals(64f, DhShadowCasters.cutoff("shadows.far", true, 12, 4));
         assertEquals(160f, DhShadowCasters.cutoff("shadows.far", true, 32, 10));
         assertEquals(64f, DhShadowCasters.cutoff("shadows.near", true, 12, 4));

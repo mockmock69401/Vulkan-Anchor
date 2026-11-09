@@ -28,11 +28,11 @@ final class DhShadowCasters {
     }
 
     /**
-     * The same at a shadow distance in chunks (VisualsConfig.shadowDistance), while the LODs cast: then every cascade's vanilla
-     * terrain ends at the shadow distance (ShadowMath.vanillaRadius's lodBeyond) and the LODs cast past it.
+     * The same at a shadow distance in chunks (VisualsConfig.shadowDistance), while the LODs cast: then they cast past the shadow
+     * distance in every cascade (ShadowMath.lodCutoff; in the far one alongside the vanilla terrain out to the render distance).
      */
     static float cutoff(String cascade, boolean vanillaShadows, int renderDistanceChunks, int shadowDistanceChunks) {
-        return vanillaShadows ? ShadowMath.vanillaRadius(which(cascade), renderDistanceChunks, ShadowMath.nearReach(shadowDistanceChunks, renderDistanceChunks), true) : 0;
+        return vanillaShadows ? ShadowMath.lodCutoff(ShadowMath.nearReach(shadowDistanceChunks, renderDistanceChunks)) : 0;
     }
 
     /**

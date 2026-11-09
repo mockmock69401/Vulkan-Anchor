@@ -3,6 +3,7 @@ package net.vulkanmod.visuals.render;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
 import org.joml.Matrix4f;
+import org.joml.Vector4f;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -66,7 +67,9 @@ class UnderwaterTest {
                 "vec3 underwaterMedium(vec3 colour, float d, float y, float h0, vec3 light, float visibility)",
                 "float underwaterSurfaceDistance(float surfaceUp, vec3 dir)", "bool underwaterThroughSurface(float surfaceUp, float t, float dirY, float dist, bool sky)",
                 "vec3 underwaterRefract(vec3 d, vec3 n)", "float underwaterReflectance(vec3 d, vec3 n)",
-                "vec3 underwaterWindow(vec3 d, vec3 n, vec3 above, vec3 light, float visibility)"}) {
+                "vec3 underwaterMirrored(vec3 d, vec3 n, vec3 seen, float path, float weight, vec3 light, float visibility)",
+                "vec3 underwaterWindow(vec3 d, vec3 n, vec3 above, vec3 below)", "vec2 underwaterScreenOf(vec3 v, float ix, float iy)",
+                "float underwaterEdgeFade(vec2 uv)"}) {
             assertTrue(GLSL.contains(fn), fn);
         }
         //It builds on water.glsl: the body colour the water shows from above, the ripples, Schlick's term
@@ -76,7 +79,10 @@ class UnderwaterTest {
         //The composite calls it with its slots and the ripples
         for (String call : new String[]{"#import <vulkanmod:visuals/post/underwater.glsl>", "layout(binding = 17) uniform sampler2D beforeTranslucent;",
                 "rippleNormal(dir.xz*t, underwaterRippleA, underwaterRippleB, underwaterParams.z, underwaterParams.w, footprint)",
-                "underwaterMedium(underwaterWindow(dir, n, above, light, visibility), t, dir.y, h0, light, visibility)",
+                "underwaterMedium(underwaterWindow(dir, n, above, below), t, dir.y, h0, light, visibility)",
+                "underwaterLookup(from, r, true, size, found, path)", "underwaterLookup(from, reflect(dir, -n), false, size, found, path)",
+                "underwaterMirrored(dir, n, found*underwaterExposure(), path, w, light, visibility)",
+                "underwaterScreenOf(transpose(mat3(invView))*worldDir, invVanillaProj[0][0], invVanillaProj[1][1])",
                 "skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r)", "shown = underwaterView(p, size, dir, dist, false, shown);"}) {
             assertTrue(COMP.contains(call), call);
         }
@@ -176,16 +182,61 @@ class UnderwaterTest {
         }
         //Through the window the sky comes in brighter by n^2 (less the reflected share); beyond it, the water below mirrored
         float[] sky = {0.5f, 0.7f, 1.0f};
-        float[] zenith = UnderwaterMath.underwaterWindow(UP, UP, sky, DAY, 1);
+        float[] zenith = UnderwaterMath.underwaterWindow(UP, UP, sky, UnderwaterMath.underwaterMirrored(UP, UP, new float[3], 0, 0, DAY, 1));
         float[] mirroredDown = UnderwaterMath.underwaterInscatter(UnderwaterMath.UNDERWATER_LONGEST, -1, 0, DAY, 1);
         for (int i = 0; i < 3; i++) {
             assertEquals(sky[i] * UnderwaterMath.UNDERWATER_WINDOW_GAIN * (1 - WaterMath.WATER_F0) + mirroredDown[i] * WaterMath.WATER_F0, zenith[i], 1e-5f);
         }
-        float[] beyond = UnderwaterMath.underwaterWindow(fromZenith(60), UP, sky, DAY, 1);
+        float[] beyond = UnderwaterMath.underwaterWindow(fromZenith(60), UP, sky, UnderwaterMath.underwaterMirrored(fromZenith(60), UP, new float[3], 0, 0, DAY, 1));
         float[] mirrored = UnderwaterMath.underwaterInscatter(UnderwaterMath.UNDERWATER_LONGEST, -0.5f, 0, DAY, 1);
         assertArrayEquals(mirrored, beyond, 1e-5f);
         //The window is far brighter than the mirrored water around it
         assertTrue(zenith[2] > 3 * beyond[2]);
+    }
+
+    /**
+     * Fix session after 2b (the user: from just under a river's surface little of the world above showed, the rest flat blue): beyond
+     * the window the surface mirrors what the screen shows along the reflected ray (the riverbed), seen through the water between it
+     * and the surface, and falls back to the endless deep water where nothing is found; inside the window the land above replaces the
+     * sky where it was found.
+     */
+    @Test
+    void theMirrorShowsTheWaterBelowAndTheWindowTheLandAbove() {
+        float[] d = fromZenith(60), bed = {0.3f, 0.25f, 0.2f};
+        float[] deep = UnderwaterMath.underwaterInscatter(UnderwaterMath.UNDERWATER_LONGEST, -0.5f, 0, DAY, 1);
+        assertArrayEquals(deep, UnderwaterMath.underwaterMirrored(d, UP, bed, 4, 0, DAY, 1), 1e-6f, "nothing found: the deep water");
+        assertArrayEquals(bed, UnderwaterMath.underwaterMirrored(d, UP, bed, 0, 1, DAY, 1), 1e-6f, "right at the surface: the bed itself");
+        float[] near = UnderwaterMath.underwaterMirrored(d, UP, bed, 4, 1, DAY, 1);
+        assertArrayEquals(UnderwaterMath.underwaterMedium(bed, 4, -0.5f, 0, DAY, 1), near, 1e-6f, "through the water between");
+        float[] half = UnderwaterMath.underwaterMirrored(d, UP, bed, 4, 0.5f, DAY, 1);
+        for (int i = 0; i < 3; i++) assertEquals((near[i] + deep[i]) / 2, half[i], 1e-6f);
+        float[] far = UnderwaterMath.underwaterMirrored(d, UP, bed, 200, 1, DAY, 1);
+        assertArrayEquals(deep, far, 2e-3f, "far away the mirrored bed fades into the water");
+        //Beyond the critical angle all of it is the mirror; at the zenith nearly all the window
+        assertArrayEquals(near, UnderwaterMath.underwaterWindow(d, UP, new float[]{9, 9, 9}, near), 1e-6f);
+        float[] land = {0.1f, 0.3f, 0.05f};
+        float[] up = UnderwaterMath.underwaterWindow(UP, UP, land, near);
+        for (int i = 0; i < 3; i++) {
+            assertEquals(land[i] * UnderwaterMath.UNDERWATER_WINDOW_GAIN * (1 - WaterMath.WATER_F0) + near[i] * WaterMath.WATER_F0, up[i], 1e-6f);
+        }
+    }
+
+    /** The lookups' screen position inverts the composite's view ray (viewpos.glsl's viewPosition), and fades out at the screen's edges. */
+    @Test
+    void aDirectionFindsItsPixelAndTheEdgesFadeTheLookup() {
+        Matrix4f proj = new Matrix4f().setPerspective((float) Math.toRadians(70), 16f / 9f, 0.05f, 1024f, true);
+        Matrix4f inv = new Matrix4f(proj).invert();
+        for (float[] uv : new float[][]{{0.5f, 0.5f}, {0.1f, 0.9f}, {0.93f, 0.2f}, {0.0f, 1.0f}}) {
+            Vector4f v = new Vector4f(uv[0] * 2 - 1, uv[1] * 2 - 1, 0.7f, 1).mul(inv);
+            float[] got = UnderwaterMath.underwaterScreenOf(new float[]{v.x / v.w, v.y / v.w, v.z / v.w}, inv.m00(), inv.m11());
+            assertEquals(uv[0], got[0], 1e-4f);
+            assertEquals(uv[1], got[1], 1e-4f);
+        }
+        assertArrayEquals(new float[]{-1, -1}, UnderwaterMath.underwaterScreenOf(new float[]{0, 0, 1}, inv.m00(), inv.m11()), 0f, "behind the camera");
+        assertEquals(1f, UnderwaterMath.underwaterEdgeFade(new float[]{0.5f, 0.5f}), 0f);
+        assertEquals(0.5f, UnderwaterMath.underwaterEdgeFade(new float[]{0.04f, 0.5f}), 1e-5f);
+        assertEquals(0f, UnderwaterMath.underwaterEdgeFade(new float[]{1.0f, 0.5f}), 0f);
+        assertEquals(0f, UnderwaterMath.underwaterEdgeFade(new float[]{-1, -1}), 0f, "off the screen");
     }
 
     /** The ripples (water.glsl's world-anchored normals) bend the view by place, so the window and the sky in it wobble. */

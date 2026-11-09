@@ -21,8 +21,17 @@
 // ripples wobble it; beyond it the surface mirrors the water below (total internal reflection), whose colour is the medium's looking
 // down. Between them Schlick's Fresnel term (in the less dense medium's angle, so it reaches 1 at the critical angle and the rim is
 // continuous) mixes reflection and transmission. Radiance entering a denser medium rises by n^2 (the n^2 law of radiance: Mobley 1994,
-// ch. 4), so the window is brighter than the sky itself. Land behind the surface (the depth before the translucent terrain) is taken from
-// the screen, moved by the refraction's wobble.
+// ch. 4), so the window is brighter than the sky itself.
+//
+// WHAT THE WINDOW AND THE MIRROR SHOW (2026-11-09, fix session after 2b; the user: from just under a river's surface, looking toward the
+// horizon, almost nothing above the water showed: the sky and trees as a thin band at the top, the rest the water's own blue). The banks
+// and trees stand low in the air's sky, so seen straight from the camera they lie outside the window, where the surface showed only
+// the colour of endless deep water. Both sides now look along their own ray from where the view meets the surface: the window along the
+// refracted ray (so the land above is squeezed into the window with the sky, rippled, as Snell's law puts it), the mirror along the
+// reflected ray (so the surface mirrors the riverbed and the banks below it). The composite finds what lies along such a ray on its
+// screen: the pixel of the ray's direction from the camera, then the pixel of the point that far along the ray (the camera is a few
+// blocks from the surface; what it sees is farther). A ray off the screen, or onto the wrong side of the surface, fades to the sky
+// (window) or the deep water (mirror), over UNDERWATER_LOOKUP_EDGE of the screen at its edges.
 
 #import <vulkanmod:visuals/post/water.glsl>
 
@@ -58,8 +67,10 @@ const float UNDERWATER_SURFACE_SHARE = 0.002;
 const float UNDERWATER_SURFACE_SLACK = 0.05;
 //Land behind the surface farther than this (blocks) counts as sky
 const float UNDERWATER_LAND_MAX = 512.0;
-//The land's wobble on screen is at most this many pixels
-const float UNDERWATER_REFRACT_MAX_PIXELS = 32.0;
+//A screen lookup fades out over this share of the screen at its edges
+const float UNDERWATER_LOOKUP_EDGE = 0.08;
+//The shortest stretch of a ray (blocks) the lookup's second step takes: what the camera sees there is at least this far from the surface
+const float UNDERWATER_LOOKUP_MIN = 1.0;
 
 //The visibility setting as sigma's divisor: clamped to its range, 1 when not a number
 float underwaterVisibility(float visibility) {
@@ -120,11 +131,33 @@ float underwaterReflectance(vec3 d, vec3 n) {
     return WATER_F0 + (1.0 - WATER_F0)*pow(1.0 - c, FRESNEL_POWER);
 }
 
+//What the surface mirrors (it reflects the view d back down off the upward normal n): what the screen shows along the reflected ray
+// (seen, at the underwater exposure; path blocks from the surface) with weight, else the endless water below (light: the daylight at
+// the surface), each through the water between it and the surface
+vec3 underwaterMirrored(vec3 d, vec3 n, vec3 seen, float path, float weight, vec3 light, float visibility) {
+    float y = min(reflect(d, -n).y, 0.0);
+    vec3 deep = underwaterInscatter(UNDERWATER_LONGEST, y, 0.0, light, visibility);
+    return mix(deep, underwaterMedium(seen, path, y, 0.0, light, visibility), clamp(weight, 0.0, 1.0));
+}
+
 //The surface from below as the water just under it sees it along d, before the water between it and the camera: above (the sky or
-// land along the refracted view, scene units) through the window, the water below mirrored (light: the daylight at the surface)
-vec3 underwaterWindow(vec3 d, vec3 n, vec3 above, vec3 light, float visibility) {
+// land along the refracted view, scene units) through the window, below (underwaterMirrored) reflected
+vec3 underwaterWindow(vec3 d, vec3 n, vec3 above, vec3 below) {
     float f = underwaterReflectance(d, n);
-    vec3 down = reflect(d, -n);
-    vec3 mirrored = underwaterInscatter(UNDERWATER_LONGEST, min(down.y, 0.0), 0.0, light, visibility);
-    return above*(UNDERWATER_WINDOW_GAIN*(1.0 - f)) + mirrored*f;
+    return above*(UNDERWATER_WINDOW_GAIN*(1.0 - f)) + below*f;
+}
+
+//A view-space direction's place on the screen (GL uv: 0..1, y up) for a perspective projection whose inverse has ix, iy on its diagonal
+// (the inverse's x and y scale); (-1, -1) behind the camera
+vec2 underwaterScreenOf(vec3 v, float ix, float iy) {
+    if (v.z > -1e-4) {
+        return vec2(-1.0);
+    }
+    return vec2(v.x/(-v.z*ix), v.y/(-v.z*iy))*0.5 + 0.5;
+}
+
+//How much a screen lookup at uv counts: 1 inside, falling to 0 at the screen's edges and 0 past them
+float underwaterEdgeFade(vec2 uv) {
+    vec2 e = min(uv, vec2(1.0) - uv)/UNDERWATER_LOOKUP_EDGE;
+    return clamp(min(e.x, e.y), 0.0, 1.0);
 }

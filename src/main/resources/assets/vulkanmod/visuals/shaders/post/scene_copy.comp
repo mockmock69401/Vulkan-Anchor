@@ -459,24 +459,61 @@ bool cameraUnderwater() {
     return lookParams.y > 0.5 && underwaterParams.y > 0.0;
 }
 
-//The land behind the water's surface (t blocks along the view) at pixel q: its distance past the surface from the depth before the
-// translucent terrain, -1 for none (the sky, past UNDERWATER_LAND_MAX, or no copy this frame)
-float underwaterLandBehind(ivec2 q, ivec2 size, float t) {
+//2026-11-09 (fix session after 2b): the pixel a direction from the camera (world) lands on, and how much a lookup there counts
+// (underwaterEdgeFade: 0 off the screen or behind the camera)
+ivec2 underwaterPixelOf(vec3 worldDir, ivec2 size, out float fade) {
+    vec2 uv = underwaterScreenOf(transpose(mat3(invView))*worldDir, invVanillaProj[0][0], invVanillaProj[1][1]);
+    fade = underwaterEdgeFade(uv);
+    return clamp(ivec2(floor(vec2(uv.x, 1.0 - uv.y)*vec2(size))), ivec2(0), size - 1);
+}
+
+//Where the depth before the translucent terrain (binding 17) puts pixel q, camera-relative (world, blocks), when it lies on the asked
+// side of the water's surface above (above: behind the surface, within UNDERWATER_LAND_MAX past it; else under the water, in front
+// of the surface); false for the sky, the other side, or no copy this frame
+bool underwaterSideAt(ivec2 q, ivec2 size, bool above, out vec3 at) {
+    at = vec3(0.0);
     if (underwaterLight.w < 0.5) {
-        return -1.0;
+        return false;
     }
     float depth = texelFetch(beforeTranslucent, q, 0).r;
     if (depth == FAR) {
-        return -1.0;
+        return false;
     }
-    float behind = length(viewPosition(invVanillaProj, pixelUvGl(q, size), depth)) - t;
-    return behind > 0.0 && behind < UNDERWATER_LAND_MAX ? behind : -1.0;
+    at = mat3(invView)*viewPosition(invVanillaProj, pixelUvGl(q, size), depth);
+    float dist = length(at);
+    vec3 dirQ = at/max(dist, 1e-6);
+    float tq = underwaterSurfaceDistance(underwaterParams.x, dirQ);
+    if (!underwaterThroughSurface(underwaterParams.x, tq, dirQ.y, dist, false)) {
+        return !above;
+    }
+    return above && dist - tq < UNDERWATER_LAND_MAX;
+}
+
+//What the screen shows along the ray leaving the surface at `from` (camera-relative, blocks) in direction ray, on the asked side of the
+// surface (underwaterSideAt): the pixel of the ray's direction from the camera, then the pixel of the point as far along the ray as what
+// that one shows. Returns the lookup's weight (0: nothing found), with vanilla's colour there (scene units) and its distance from `from`
+float underwaterLookup(vec3 from, vec3 ray, bool above, ivec2 size, out vec3 colour, out float path) {
+    colour = vec3(0.0);
+    path = 0.0;
+    float fade;
+    vec3 at;
+    ivec2 q = underwaterPixelOf(ray, size, fade);
+    if (fade <= 0.0 || !underwaterSideAt(q, size, above, at)) {
+        return 0.0;
+    }
+    q = underwaterPixelOf(from + ray*max(length(at - from), UNDERWATER_LOOKUP_MIN), size, fade);
+    if (fade <= 0.0 || !underwaterSideAt(q, size, above, at)) {
+        return 0.0;
+    }
+    colour = vanillaToScene(texelFetch(mainColour, q, 0).rgb);
+    path = length(at - from);
+    return fade;
 }
 
 //2026-11-09 (session 2b): pixel p seen from inside water along dir (world), dist blocks away (sky: nothing in front), showing `shown`
 // (scene units, at the underwater exposure): through the water between (underwaterMedium) or, where the view rises to the surface,
-// Snell's window (underwaterWindow) onto the air's sky along the refracted view, or onto the land behind the surface moved by the
-// ripples' turn of the view, and the water mirrored past the critical angle
+// Snell's window (underwaterWindow) onto the air's sky and the land along the refracted view, and past the critical angle the water
+// below mirrored along the reflected view (fix session after 2b: both looked up on the screen, underwater.glsl's header)
 vec3 underwaterView(ivec2 p, ivec2 size, vec3 dir, float dist, bool sky, vec3 shown) {
     float surfaceUp = underwaterParams.x;
     float h0 = max(surfaceUp, 0.0);
@@ -492,33 +529,20 @@ vec3 underwaterView(ivec2 p, ivec2 size, vec3 dir, float dist, bool sky, vec3 sh
     float footprint = t/focal/max(dir.y, RIPPLE_MIN_COS);
     vec3 n = rippleNormal(dir.xz*t, underwaterRippleA, underwaterRippleB, underwaterParams.z, underwaterParams.w, footprint);
     vec3 r = underwaterRefract(dir, n);
+    vec3 from = dir*t;
+    vec3 found;
+    float path;
     vec3 above = vec3(0.0);
     if (dot(r, r) > 0.5) {
+        //The air's sky along the refracted view, or (no sky light) vanilla's own pixel; the land above where the screen has it
         Atmosphere air = Atmosphere(airSun, airSunLight, airMoonLight, airDepth, airAmbient, airGlow, airFog);
-        float land = underwaterLandBehind(p, size, t);
-        if (land > 0.0 || !atmosphereSky(air)) {
-            //The land behind (vanilla's colour: lit as in the open air), moved on screen by the ripples' turn of the view, its parallax
-            // land / (t + land); only onto land behind the same surface
-            ivec2 q = p;
-            vec3 level = underwaterRefract(dir, vec3(0.0, 1.0, 0.0));
-            if (land > 0.0 && dot(level, level) > 0.5) {
-                vec3 turn = transpose(mat3(invView))*(r - level)*(land/(t + land));
-                vec2 shift = vec2(turn.x, -turn.y)*focal;
-                float sl = length(shift);
-                if (sl > UNDERWATER_REFRACT_MAX_PIXELS) {
-                    shift *= UNDERWATER_REFRACT_MAX_PIXELS/sl;
-                }
-                q = clamp(p + ivec2(round(shift)), ivec2(0), size - 1);
-                if (underwaterLandBehind(q, size, t) <= 0.0) {
-                    q = p;
-                }
-            }
-            above = vanillaToScene(texelFetch(mainColour, q, 0).rgb);
-        } else {
-            above = skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r);
-        }
+        above = atmosphereSky(air) ? skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r) : vanillaToScene(texelFetch(mainColour, p, 0).rgb);
+        float w = underwaterLookup(from, r, true, size, found, path);
+        above = mix(above, found, w);
     }
-    return underwaterMedium(underwaterWindow(dir, n, above, light, visibility), t, dir.y, h0, light, visibility);
+    float w = underwaterLookup(from, reflect(dir, -n), false, size, found, path);
+    vec3 below = underwaterMirrored(dir, n, found*underwaterExposure(), path, w, light, visibility);
+    return underwaterMedium(underwaterWindow(dir, n, above, below), t, dir.y, h0, light, visibility);
 }
 
 //The mode the exposures follow (slot 29 .w: W4's mode as if the atmosphere were drawn)
