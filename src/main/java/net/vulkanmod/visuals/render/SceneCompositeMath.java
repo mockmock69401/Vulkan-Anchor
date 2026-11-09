@@ -341,11 +341,12 @@ public final class SceneCompositeMath {
 
     /**
      * 2026-11-09 (session 2b): what underwaterView fetches where the view rises to the water's surface: footprint, the blocks one pixel
-     * covers there along the view (t / focal / dir.y); land, underwaterLandBehind at the pixel (-1 none); landColour, the main colour
-     * (display rgb) at the pixel the ripples' turn moves the land to (the pixel's own where it does not move).
+     * covers there along the view (t / focal / dir.y). Fix session after 2b: what its two screen lookups (scene_copy's underwaterLookup)
+     * found: along the refracted ray the land above (landWeight, its main colour, display rgb), along the reflected ray what lies under
+     * the water (mirrorWeight, its main colour, its distance from the surface); weight 0 where nothing was found.
      */
-    public record Surface(float footprint, float land, float[] landColour) {
-        public static final Surface NONE = new Surface(0, -1, null);
+    public record Surface(float footprint, float landWeight, float[] landColour, float mirrorWeight, float[] mirrorColour, float mirrorPath) {
+        public static final Surface NONE = new Surface(0, 0, null, 0, null, 0);
     }
 
     /** The composite's cameraUnderwater: the camera in water (slot 29 .y) and the composite drawing the water (slot 35 .y above 0). */
@@ -371,14 +372,22 @@ public final class SceneCompositeMath {
         if (UnderwaterMath.dot(r, r) > 0.5f) {
             Atmosphere air = new Atmosphere(slots[AIR_FIRST], slots[AIR_FIRST + 1], slots[AIR_FIRST + 2], slots[AIR_FIRST + 3], slots[AIR_FIRST + 4],
                     slots[AIR_FIRST + 5], slots[AIR_FIRST + 6]);
-            if (px.surface.land() > 0 || !AtmosphereMath.atmosphereSky(air)) {
-                float[] c = px.surface.landColour() != null ? px.surface.landColour() : px.colour;
-                above = new float[]{PostMath.displayToLinear(c[0]), PostMath.displayToLinear(c[1]), PostMath.displayToLinear(c[2])};
-            } else {
-                above = add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r));
-            }
+            above = AtmosphereMath.atmosphereSky(air) ? add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r))
+                    : displayLinear(px.colour);
+            if (px.surface.landWeight() > 0) above = mix(above, displayLinear(px.surface.landColour()), px.surface.landWeight());
         }
-        return UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(px.dir, n, above, light, visibility), t, px.dir[1], h0, light, visibility);
+        float[] seen = px.surface.mirrorWeight() > 0 ? scale(displayLinear(px.surface.mirrorColour()), underwaterExposure(slots[LOOK])) : new float[3];
+        float[] below = UnderwaterMath.underwaterMirrored(px.dir, n, seen, px.surface.mirrorPath(), px.surface.mirrorWeight(), light, visibility);
+        return UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(px.dir, n, above, below), t, px.dir[1], h0, light, visibility);
+    }
+
+    private static float[] displayLinear(float[] c) {
+        return new float[]{PostMath.displayToLinear(c[0]), PostMath.displayToLinear(c[1]), PostMath.displayToLinear(c[2])};
+    }
+
+    private static float[] mix(float[] a, float[] b, float w) {
+        float k = Math.max(0, Math.min(1, w));
+        return new float[]{a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k};
     }
 
     /** scene_copy.comp albedoMatches: albedo (display) times vanilla's lightmap at (block, sky) gives vanilla's pixel (display rgb). */

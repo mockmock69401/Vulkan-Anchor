@@ -101,9 +101,13 @@ class ShadowMathTest {
         assertEquals(32f, ShadowMath.nearReach(0));
         assertEquals(128f, ShadowMath.vanillaRadius(ShadowMath.Which.CLOSE, 32, ShadowMath.nearReach(8)));
         assertEquals(512f, ShadowMath.vanillaRadius(ShadowMath.Which.FAR, 32, ShadowMath.nearReach(8)));
-        //2026-10-29: with LODs casting past it, the far cascade's vanilla terrain ends at the shadow distance as well
-        assertEquals(128f, ShadowMath.vanillaRadius(ShadowMath.Which.FAR, 32, ShadowMath.nearReach(8), true));
-        assertEquals(64f, ShadowMath.vanillaRadius(ShadowMath.Which.NEAR, 12, ShadowMath.nearReach(4), true));
+        //2026-11-09 (the user: with DH the shadows ended about the shadow distance): LODs or not, the far cascade's vanilla terrain
+        // reaches the render distance; the LODs cast past the shadow distance alongside it
+        assertEquals(192f, ShadowMath.vanillaRadius(ShadowMath.Which.FAR, 12, ShadowMath.nearReach(4)));
+        assertEquals(64f, ShadowMath.vanillaRadius(ShadowMath.Which.NEAR, 12, ShadowMath.nearReach(4)));
+        assertEquals(64f, ShadowMath.lodCutoff(ShadowMath.nearReach(4)));
+        assertTrue(ShadowMath.lodCutoff(ShadowMath.nearReach(4)) < ShadowMath.vanillaRadius(ShadowMath.Which.FAR, 12, ShadowMath.nearReach(4)),
+                "the LODs and the vanilla terrain overlap in the far cascade: no gap where DH draws no LODs over loaded chunks");
         //audit: never past the render distance (no vanilla section there, no LOD caster inside the reach)
         assertEquals(128f, ShadowMath.nearReach(10, 8));
         assertEquals(160f, ShadowMath.nearReach(10, 12));
