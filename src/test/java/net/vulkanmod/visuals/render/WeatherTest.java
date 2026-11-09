@@ -305,26 +305,26 @@ class WeatherTest {
         Matrix4f inv = new Matrix4f().perspective((float) Math.toRadians(70), 16 / 9f, 0.05f, 512).invert();
         PostProcessSettings on = PostProcessSettings.from(new VisualsConfig());
         assertTrue(on.shaderWeather(), "on by default");
-        assertFalse(WeatherUniforms.compute(on, 0, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true).on(), "clear");
-        assertFalse(WeatherUniforms.compute(settings(c -> c.shaderWeather = false), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true).on());
-        assertFalse(WeatherUniforms.compute(settings(c -> c.enabled = false), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true).on());
-        assertFalse(WeatherUniforms.compute(on, 1, 0, true, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true).on(), "in water");
-        WeatherUniforms.Values light = WeatherUniforms.compute(on, 0.3f, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true);
-        WeatherUniforms.Values full = WeatherUniforms.compute(on, 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true);
-        WeatherUniforms.Values storm = WeatherUniforms.compute(on, 1, 1, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true);
-        WeatherUniforms.Values dense = WeatherUniforms.compute(settings(c -> c.weatherDensity = 200), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true);
+        assertFalse(WeatherUniforms.compute(on, 0, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null).on(), "clear");
+        assertFalse(WeatherUniforms.compute(settings(c -> c.shaderWeather = false), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null).on());
+        assertFalse(WeatherUniforms.compute(settings(c -> c.enabled = false), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null).on());
+        assertFalse(WeatherUniforms.compute(on, 1, 0, true, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null).on(), "in water");
+        WeatherUniforms.Values light = WeatherUniforms.compute(on, 0.3f, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
+        WeatherUniforms.Values full = WeatherUniforms.compute(on, 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
+        WeatherUniforms.Values storm = WeatherUniforms.compute(on, 1, 1, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
+        WeatherUniforms.Values dense = WeatherUniforms.compute(settings(c -> c.weatherDensity = 200), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
         assertTrue(light.params()[0] < full.params()[0] && full.params()[0] < storm.params()[0], "more drops with more rain and thunder");
         assertTrue(light.params()[2] < full.params()[2]);
         assertEquals(Math.min(1, 2 * full.params()[0]), dense.params()[0], 1e-6);
         assertTrue(storm.params()[0] <= 1 && storm.params()[1] <= 1);
         //A kind the map around the camera does not hold is not walked
-        WeatherUniforms.Values rainOnly = WeatherUniforms.compute(on, 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, false);
+        WeatherUniforms.Values rainOnly = WeatherUniforms.compute(on, 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, false, null);
         assertEquals(0, rainOnly.params()[1], 0);
         assertEquals(full.params()[0], rainOnly.params()[0], 0);
         //The pixel's angle from the projection: 2 tan(35 degrees) / 1440
         assertEquals(2 * Math.tan(Math.toRadians(35)) / 1440, full.frac()[3], 1e-7);
         //The camera's block modulo the hash period, its y exact
-        WeatherUniforms.Values far = WeatherUniforms.compute(on, 1, 0, false, inv, inv, new Matrix4f(), false, 1440, -4097.25, 64.5, 9000.75, null, 0, true, true);
+        WeatherUniforms.Values far = WeatherUniforms.compute(on, 1, 0, false, inv, inv, new Matrix4f(), false, 1440, -4097.25, 64.5, 9000.75, null, 0, true, true, null);
         assertEquals(Math.floorMod(-4098, 4096), far.camera()[0], 0);
         assertEquals(Math.floorMod(9000, 4096), far.camera()[2], 0);
         assertEquals(64.5f, far.camera()[3], 0);
@@ -416,7 +416,46 @@ class WeatherTest {
         org.spongepowered.asm.mixin.injection.Redirect r = m.getAnnotation(org.spongepowered.asm.mixin.injection.Redirect.class);
         assertNotNull(r);
         assertEquals("tickRain", r.method()[0]);
-        assertTrue(PASS.contains("layout(location = 15) uniform vec4 splashParams;") && PASS.contains("weatherSplash(mat3(invView)*view, dir, sceneDist"));
+        assertTrue(PASS.contains("layout(location = 15) uniform vec4 splashParams;") && PASS.contains("weatherSplash(rel, dir, sceneDist"));
         assertEquals(15, WeatherUniforms.SPLASH);
+    }
+
+    @Test
+    void crownsRiseWhereTheRingsDropsLandOnOpenWaterAndOnlyThen() {
+        //2026-11-10 (the user: rain on the water looked low-effort): a sea column (water at its top, surface 8/9 into the top block)
+        WeatherMath.Map sea = (tx, tz) -> WeatherMath.pack(64, WeatherMath.Y_MAX, true, false, true);
+        WeatherMath.Map land = (tx, tz) -> WeatherMath.pack(64, WeatherMath.Y_MAX, true, false, false);
+        float surface = 63 + 8 / 9f;
+        //Find a drop of the rings' grid near (104, 199) and a time just after it lands
+        float[] offset = {0.37f, 1.91f};
+        float cell = RainRippleMath.RAIN_RIPPLE_CELL;
+        float[] relCentre = null;
+        float landTime = 0;
+        outer:
+        for (int i = 0; i < 40; i++) {
+            float[] d = RainRippleMath.drop((float) Math.floor((104 - (CAMERA[0] + FRAC[0]) + offset[0]) / cell) + i % 5, (float) Math.floor((199 - (CAMERA[2] + FRAC[2]) + offset[1]) / cell) + i / 5, 0, 1, 0);
+            if (d == null) continue;
+            //its age at time 0 is d[2]: it lands again at (1 - d[2]) cycles
+            landTime = (1 - d[2]) * RainRippleMath.RAIN_RIPPLE_CYCLE;
+            relCentre = new float[]{d[0] * cell - offset[0], d[1] * cell - offset[1]};
+            break outer;
+        }
+        assertNotNull(relCentre);
+        //A pixel right on the drop's rim, seen from above at the drop's moment plus a little: lit; long after: dark
+        float[] rel = {relCentre[0] + WeatherMath.IMPACT_CROWN * (float) Math.sqrt(0.3f), surface - CAMERA[3], relCentre[1]};
+        float dist = (float) Math.sqrt(rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]);
+        float[] dir = {rel[0] / dist, rel[1] / dist, rel[2] / dist};
+        WeatherMath.Light white = (a, b, c, snow) -> WHITE;
+        float fresh = WeatherMath.impact(rel, dir, dist, CAMERA, FRAC, PARAMS, new float[]{landTime + 0.3f * WeatherMath.IMPACT_LIFE, 1, offset[0], offset[1]}, sea, white)[3];
+        float late = WeatherMath.impact(rel, dir, dist, CAMERA, FRAC, PARAMS, new float[]{landTime + 2 * WeatherMath.IMPACT_LIFE, 1, offset[0], offset[1]}, sea, white)[3];
+        assertTrue(fresh > 0.05f, "a crown at the drop's moment: " + fresh);
+        assertTrue(late < fresh * 0.2f, "gone soon after: " + late);
+        //Not on land, not without rain on the water, not above the water's column
+        assertEquals(0, WeatherMath.impact(rel, dir, dist, CAMERA, FRAC, PARAMS, new float[]{landTime + 0.3f * WeatherMath.IMPACT_LIFE, 1, offset[0], offset[1]}, land, white)[3], 0);
+        assertEquals(0, WeatherMath.impact(rel, dir, dist, CAMERA, FRAC, PARAMS, new float[]{landTime + 0.3f * WeatherMath.IMPACT_LIFE, 0, offset[0], offset[1]}, sea, white)[3], 0);
+        //The pass imports the rings before the model and blends the crowns with the splashes
+        assertTrue(PASS.indexOf("visuals/post/rainripple.glsl>") < PASS.indexOf("visuals/post/weather.glsl>"));
+        assertTrue(PASS.contains("layout(location = 16) uniform vec4 waterRain;") && PASS.contains("weatherImpact(rel, dir, sceneDist"));
+        assertEquals(16, WeatherUniforms.WATER);
     }
 }

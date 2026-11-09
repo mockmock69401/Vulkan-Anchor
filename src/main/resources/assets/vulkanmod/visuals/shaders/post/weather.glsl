@@ -1,5 +1,6 @@
 //2026-11-09 (session 6, the user: "vanilla's rain and snow look thick and too vanilla"): the shader-drawn rain and snow that replace
-// vanilla's weather columns when the Shader Weather setting is on. No uniforms or bindings; the includer defines, BEFORE importing this:
+// vanilla's weather columns when the Shader Weather setting is on. No uniforms or bindings; the includer imports water.glsl and
+// rainripple.glsl (2026-11-10: weatherImpact shares the rings' drops) and defines, BEFORE importing this:
 //   uint weatherMapAt(ivec2 texel)        the precipitation map's packed column (PrecipitationMap; texel = world column & WEATHER_MAP_MASK)
 //   vec3 weatherLight(vec3 rel, bool snow) the colour (display values) of a drop at rel (blocks from the camera)
 // WeatherMath.java mirrors every const and function here: change both together (WeatherTest compares them). WeatherUniforms writes the
@@ -101,6 +102,24 @@ const int SPLASH_EVENTS = 64;
 const int SPLASH_WRAP = 1024;
 //The ground's footprint grows as the view grazes it: the pixel's angle over max(|dir.y|, SPLASH_GRAZE)
 const float SPLASH_GRAZE = 0.2;
+//2026-11-10 (the user: "rain hitting the water looks low-effort; rebuild it from the references"): each raindrop that rings the water
+// (rainripple.glsl's rainRippleDrop: the same spot and moment) first throws up a crown: for IMPACT_LIFE seconds a rim growing to IMPACT_CROWN
+// (IMPACT_RIM half thick) on the surface, a jet rising IMPACT_JET and falling back (IMPACT_JET_WIDTH), and IMPACT_DROPLETS droplets
+// (IMPACT_DROPLET) hopping IMPACT_HOP high and IMPACT_THROW out, fading as (1 - age), IMPACT_ALPHA at a core; out to IMPACT_END blocks,
+// fading over the last IMPACT_FADE. Only on water a rained-on column holds at its top (the map's water flag)
+const float IMPACT_LIFE = 0.12;
+const float IMPACT_CROWN = 0.03;
+const float IMPACT_RIM = 0.004;
+const float IMPACT_JET = 0.045;
+const float IMPACT_JET_WIDTH = 0.004;
+const int IMPACT_DROPLETS = 2;
+const float IMPACT_DROPLET = 0.005;
+const float IMPACT_HOP = 0.05;
+const float IMPACT_THROW = 0.07;
+const float IMPACT_ALPHA = 0.7;
+const float IMPACT_END = 10.0;
+const float IMPACT_FADE = 4.0;
+const int WEATHER_FLAG_WATER = 134217728;
 //Hash constants (Teschner et al. 2003 primes, Wellons 2018's finaliser, as aurora.glsl)
 const int WEATHER_PRIME_X = 73856093;
 const int WEATHER_PRIME_Z = 19349663;
@@ -288,6 +307,62 @@ void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 ca
 
 //The weather over one pixel (premultiplied rgb, alpha) along dir up to the scene at sceneDist (blocks; very large for the sky): the
 // rain's walk and the snow's (each only while the map around the camera holds that kind: its share above 0); the arguments as weatherDrop's
+//2026-11-10: the crowns of the drops that ring the water (rainripple.glsl, imported with water.glsl before this file) over a scene pixel at
+// rel along dir at dist; water: x the rings' time (seconds, reflection.comp's rainParams.x), y the rain on the water (its rainParams.y; 0:
+// none), zw water.glsl's first ripple offset (the rings' anchor); premultiplied rgb and alpha
+vec4 weatherImpact(vec3 rel, vec3 dir, float dist, vec4 camera, vec4 frac, vec4 params, vec4 water) {
+    if (dist >= IMPACT_END || !(water.y > 0.0)) {
+        return vec4(0.0);
+    }
+    ivec3 cam = ivec3(camera.xyz);
+    vec3 w = frac.xyz + rel;
+    uint texel = weatherMapAt((cam.xz + ivec2(floor(w.xz))) & WEATHER_MAP_MASK);
+    float y = camera.w + rel.y;
+    float top = float(weatherHeight(texel));
+    if ((texel & uint(WEATHER_FLAG_WATER)) == 0u || weatherKind(texel, int(floor(camera.w))) != 1 || y >= top || y < top - 1.0) {
+        return vec4(0.0);
+    }
+    vec2 pos = rel.xz + water.zw;
+    float t = dist/max(abs(dir.y), SPLASH_GRAZE);
+    float alpha = 0.0;
+    for (int layer = 0; layer < 2; layer++) {
+        vec2 q = pos/RAIN_RIPPLE_CELL + float(layer)*0.5;
+        vec2 base = floor(q);
+        for (int j = -1; j <= 1; j++) {
+            for (int i = -1; i <= 1; i++) {
+                vec2 centre;
+                float age;
+                if (!rainRippleDrop(base + vec2(float(i), float(j)), layer, water.y, water.x, centre, age)) {
+                    continue;
+                }
+                float tau = age*RAIN_RIPPLE_CYCLE/IMPACT_LIFE;
+                if (tau >= 1.0) {
+                    continue;
+                }
+                //The drop's spot from the camera, on this pixel's surface
+                vec2 c = (centre - float(layer)*0.5)*RAIN_RIPPLE_CELL - water.zw;
+                vec3 foot = vec3(c.x, rel.y, c.y);
+                float fade = 1.0 - tau;
+                float a = weatherCoverage(abs(length(rel.xz - c) - IMPACT_CROWN*sqrt(tau)), IMPACT_RIM, t, frac.w, IMPACT_ALPHA);
+                vec3 jet = raySegment(dir, foot, foot + vec3(0.0, IMPACT_JET*4.0*tau*(1.0 - tau), 0.0));
+                a = max(a, weatherCoverage(jet.x, IMPACT_JET_WIDTH, jet.y, frac.w, IMPACT_ALPHA));
+                for (int k = 0; k < IMPACT_DROPLETS; k++) {
+                    float angle = 6.2831853*(float(k)/float(IMPACT_DROPLETS) + centre.x*3.7 + centre.y*1.3);
+                    vec3 d = foot + vec3(cos(angle)*IMPACT_THROW*tau, IMPACT_HOP*4.0*tau*(1.0 - tau), sin(angle)*IMPACT_THROW*tau);
+                    vec3 h = raySegment(dir, d, d);
+                    a = max(a, weatherCoverage(h.x, IMPACT_DROPLET, h.y, frac.w, IMPACT_ALPHA));
+                }
+                alpha = max(alpha, a*fade);
+            }
+        }
+    }
+    alpha *= (1.0 - smoothstep(IMPACT_END - IMPACT_FADE, IMPACT_END, dist))*params.z;
+    if (alpha <= 0.0) {
+        return vec4(0.0);
+    }
+    return vec4(weatherLight(rel, false)*alpha, alpha);
+}
+
 //2026-11-10: the splash over a scene pixel at rel (blocks from the camera; dir its unit view direction, dist its distance), premultiplied
 // rgb and alpha; splash: x the time in seconds wrapped at SPLASH_WRAP periods; the other arguments as weatherDrop's
 vec4 weatherSplash(vec3 rel, vec3 dir, float dist, vec4 camera, vec4 frac, vec4 params, vec4 splash) {

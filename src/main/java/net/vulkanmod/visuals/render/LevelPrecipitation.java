@@ -2,6 +2,7 @@ package net.vulkanmod.visuals.render;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -38,6 +39,13 @@ final class LevelPrecipitation implements PrecipitationMap.Columns {
             this.chunk = this.level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, false);
         }
         return this.chunk == null ? PrecipitationMap.NO_HEIGHT : this.chunk.getHeight(Heightmap.Types.MOTION_BLOCKING, x & 15, z & 15) + 1;
+    }
+
+    /** 2026-11-10: the column's top MOTION_BLOCKING block holds water (MOTION_BLOCKING counts fluids). */
+    @Override
+    public boolean water(int x, int z) {
+        int h = this.height(x, z);
+        return h != PrecipitationMap.NO_HEIGHT && this.chunk.getFluidState(this.pos.set(x, h - 1, z)).is(FluidTags.WATER);
     }
 
     @Override

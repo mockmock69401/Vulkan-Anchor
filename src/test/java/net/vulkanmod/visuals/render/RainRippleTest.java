@@ -26,7 +26,7 @@ class RainRippleTest {
             assertEquals(want, ((Number) RainRippleMath.class.getField(m.group(2)).get(null)).doubleValue(), 1e-6 * Math.max(1, Math.abs(want)), m.group(2));
             found++;
         }
-        assertEquals(9, found);
+        assertEquals(10, found);
         for (Field f : RainRippleMath.class.getFields()) {
             if (!Modifier.isStatic(f.getModifiers()) || f.getType() != float.class) continue;
             assertTrue(Pattern.compile("const\\s+float\\s+" + f.getName() + "\\b").matcher(GLSL).find(), f.getName());
@@ -54,9 +54,9 @@ class RainRippleTest {
     @Test
     void ringsOnlyInTheRainAndFadingFarAway() {
         assertEquals(0f, peak(0, 3.3f, 0.01f), "no rain, no rings");
-        float near = peak(1, 3.3f, 0.01f);
-        assertTrue(near > 0.05f && near < 1.5f, "visible, not a storm sea: " + near);
-        assertTrue(peak(1, 3.3f, 0.2f) < near * 0.5f, "a pixel wider than the crest smooths them out");
+        float near = peak(1, 3.3f, 0.002f);
+        assertTrue(near > 0.05f && near < 0.6f, "visible, not a storm sea: " + near);
+        assertTrue(peak(1, 3.3f, 0.02f) < near * 0.5f, "a pixel wider than the crest smooths them out");
         assertEquals(0f, peak(1, 3.3f, 1f), "far away: none");
         assertEquals(RainRippleMath.RAIN_RIPPLE_SHINE, RainRippleMath.shine(new float[]{5, 0}), 1e-6f, "a crest shines at most this much");
         assertEquals(0f, RainRippleMath.shine(new float[]{0, 0}));
@@ -65,6 +65,29 @@ class RainRippleTest {
         float[] b = RainRippleMath.slope(1.37f + RippleMath.RIPPLE_PERIOD, 2.11f, 5f, 1, 0.01f);
         assertEquals(a[0], b[0], 1e-3f);
         assertEquals(a[1], b[1], 1e-3f);
+        //2026-11-10 (rebuilt from the references): a ring is a packet of several thin crests (the slope changes sign more than twice
+        // along a radius through it), small (none past the radius and the envelope), and gone at the end of its cycle
+        int signs = 0;
+        float prev = 0;
+        for (float r = 0.001f; r < 0.25f; r += 0.0005f) {
+            float v = RainRippleMath.packet(r, 0.4f);
+            if (v != 0 && prev != 0 && Math.signum(v) != Math.signum(prev)) signs++;
+            if (Math.abs(v) > 1e-4f) prev = v;
+        }
+        assertTrue(signs >= 4, "crests in one ring: " + signs);
+        assertEquals(0, RainRippleMath.packet(RainRippleMath.RAIN_RIPPLE_RADIUS + 3 * RainRippleMath.RAIN_RIPPLE_WIDTH, 0.99f), 1e-3);
+        assertEquals(0, RainRippleMath.packet(0.05f, 1f), 1e-6);
+        //Many drops: over a block of water in full rain, about 30 land a second
+        int drops = 0;
+        for (int layer = 0; layer < 2; layer++) {
+            for (int i = 0; i < 40; i++) {
+                for (int j = 0; j < 40; j++) {
+                    if (RainRippleMath.drop(i, j, layer, 1, 0) != null) drops++;
+                }
+            }
+        }
+        float perBlockSecond = drops / (40 * 40 * RainRippleMath.RAIN_RIPPLE_CELL * RainRippleMath.RAIN_RIPPLE_CELL) / RainRippleMath.RAIN_RIPPLE_CYCLE;
+        assertTrue(perBlockSecond > 20 && perBlockSecond < 50, "drops per block per second: " + perBlockSecond);
         //They move: another moment, another pattern
         float[] c = RainRippleMath.slope(1.37f, 2.11f, 5.4f, 1, 0.01f);
         assertTrue(Math.abs(a[0] - c[0]) + Math.abs(a[1] - c[1]) > 0 || Math.abs(a[0]) + Math.abs(a[1]) == 0);

@@ -35,6 +35,9 @@ layout(location = 13) uniform vec4 rainTint;
 layout(location = 14) uniform vec4 snowTint;
 //2026-11-10, WeatherUniforms: the splashes on the ground (weatherSplash): x the time wrapped at SPLASH_WRAP periods, yzw 0
 layout(location = 15) uniform vec4 splashParams;
+//2026-11-10, WeatherUniforms: the rings on the water (weatherImpact): x their time and y the rain on the water (reflection.comp's
+// rainParams), zw water.glsl's first ripple offset (RippleMath.offsets)
+layout(location = 16) uniform vec4 waterRain;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -84,6 +87,9 @@ vec3 weatherLight(vec3 rel, bool snow) {
     return light*(snow ? snowTint.rgb : rainTint.rgb);
 }
 
+//2026-11-10: the rings' drops (rainripple.glsl needs water.glsl's hash and ripple period)
+#import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/rainripple.glsl>
 #import <vulkanmod:visuals/post/weather.glsl>
 
 void main() {
@@ -99,7 +105,12 @@ void main() {
     vec4 acc = weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion);
     //2026-11-10: the splashes on the ground behind the drops
     if (scene && acc.a <= WEATHER_OPAQUE) {
-        vec4 s = weatherSplash(mat3(invView)*view, dir, sceneDist, weatherCamera, weatherFrac, weatherParams, splashParams);
+        vec3 rel = mat3(invView)*view;
+        vec4 s = weatherSplash(rel, dir, sceneDist, weatherCamera, weatherFrac, weatherParams, splashParams);
+        //2026-11-10: and the crowns of the drops that ring the water
+        vec4 c = weatherImpact(rel, dir, sceneDist, weatherCamera, weatherFrac, weatherParams, waterRain);
+        s.rgb += (1.0 - s.a)*c.rgb;
+        s.a += (1.0 - s.a)*c.a;
         acc.rgb += (1.0 - acc.a)*s.rgb;
         acc.a += (1.0 - acc.a)*s.a;
     }
