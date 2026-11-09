@@ -354,8 +354,88 @@ public final class CloudMath {
 
     // ---- the noise map (CPU only): cloudMap's g, b, a channels ----
 
-    /** Seeds of the three channels' noises. */
-    private static final int SEED_WEATHER = 11, SEED_CIRRUS = 23, SEED_TOWER = 37, SEED_WARP = 51;
+    /** Seeds of the channels' noises (SEED_COUNT: which clouds the count keeps). */
+    private static final int SEED_WEATHER = 11, SEED_CIRRUS = 23, SEED_TOWER = 37, SEED_WARP = 51, SEED_COUNT = 63;
+
+    /**
+     * 2026-11-09 (after session 3b): the cloud size and count settings, as fractions (1 = 100%). The size scales the weather and tower
+     * noises' cells (each cumulus and the gaps between them; the 3D erosion, the cauliflower, keeps its size) and, by (1 + size) / 2, the
+     * layer's thickness, so a bigger cloud is also taller. The count keeps COUNT_KEEP x count of the clouds the weather would grow (all of
+     * them from count 1 / COUNT_KEEP): each cloud at the default coverage (a 4-connected patch of texels above 1 - REAL_COVER) owns the
+     * texels nearer to it than to any other, and a hash of the cloud picks whether it stays; a dropped cloud's texels are scaled by
+     * COUNT_DROP, so it is gone at coverages up to 1 - COUNT_DROP and only heavy rain or a high coverage setting brings part of it back.
+     * The kept clouds keep their values exactly. The coverage (cloudOffset.w) still thresholds what is left: it swells or thins every
+     * cloud at once.
+     */
+    public static final int SIZE_MIN = 50, SIZE_MAX = 200, COUNT_MAX = 200;
+    public static final float COUNT_KEEP = 0.5f, COUNT_DROP = 0.5f;
+
+    /** The layer's thickness at a cloud size (fraction): REAL_THICKNESS at 1. */
+    public static float realThickness(float size) {
+        return REAL_THICKNESS * (1 + size) / 2;
+    }
+
+    /** An octave's cells over the map at a cloud size: base / size, whole, from 1 to MAP / 2 (two texels a cell at least). */
+    static int cells(int base, float size) {
+        return Math.max(1, Math.min(MAP / 2, Math.round(base / size)));
+    }
+
+    /** The share of the clumps the count keeps (0..1). */
+    public static float countKept(float count) {
+        return clamp01(COUNT_KEEP * count);
+    }
+
+    /**
+     * The count on an equalised weather map (in place): every texel goes to its nearest cloud (the 4-connected patches above
+     * 1 - REAL_COVER, flooded outward over the wrapping map), and the texels of a cloud whose hash is not below k are scaled by COUNT_DROP.
+     */
+    static void keepClouds(float[] weather, float k) {
+        int n = MAP, size = n * n;
+        int[] owner = new int[size];
+        java.util.Arrays.fill(owner, -1);
+        int[] queue = new int[size];
+        int head = 0, tail = 0;
+        for (int i = 0; i < size; i++) {
+            if (weather[i] <= 1 - REAL_COVER || owner[i] >= 0) continue;
+            //A new cloud, named by its first texel
+            int start = tail;
+            owner[i] = i;
+            queue[tail++] = i;
+            for (int h = start; h < tail; h++) {
+                int j = queue[h], x = j % n, z = j / n;
+                for (int m : new int[]{z * n + (x + 1) % n, z * n + (x + n - 1) % n, ((z + 1) % n) * n + x, ((z + n - 1) % n) * n + x}) {
+                    if (owner[m] < 0 && weather[m] > 1 - REAL_COVER) {
+                        owner[m] = i;
+                        queue[tail++] = m;
+                    }
+                }
+            }
+        }
+        //The clear texels go to the nearest cloud (breadth first from every cloud texel at once)
+        for (head = 0; head < tail; head++) {
+            int j = queue[head], x = j % n, z = j / n;
+            for (int m : new int[]{z * n + (x + 1) % n, z * n + (x + n - 1) % n, ((z + 1) % n) * n + x, ((z + n - 1) % n) * n + x}) {
+                if (owner[m] < 0) {
+                    owner[m] = owner[j];
+                    queue[tail++] = m;
+                }
+            }
+        }
+        for (int i = 0; i < size; i++) {
+            if (owner[i] >= 0 && cloudHash(owner[i]) >= k) weather[i] *= COUNT_DROP;
+        }
+    }
+
+    /** 0..1 for the cloud named by its first texel, even over the clouds. */
+    static float cloudHash(int texel) {
+        int h = texel * REAL_PRIME_X ^ SEED_COUNT * REAL_PRIME_Z;
+        h ^= h >>> 16;
+        h *= 0x7feb352d;
+        h ^= h >>> 15;
+        h *= 0x846ca68b;
+        h ^= h >>> 16;
+        return (h & 0xFFFFFF) / 16777216f;
+    }
 
     /** A periodic 2D gradient noise (Perlin 2002's quintic fade) about -1..1 at (x, z) lattice units, repeating every nx by nz cells. */
     static float gradient(float x, float z, int nx, int nz, int seed) {
@@ -378,7 +458,7 @@ public final class CloudMath {
         return (float) (Math.cos(angle) * dx + Math.sin(angle) * dz);
     }
 
-    /** Fractal sums of gradient noise over the MAP x MAP torus: octave k has cellsX[k] x cellsZ[k] cells and weight weights[k]; (wx, wz) warp the texel first. */
+    /** Fractal sums of gradient noise over the MAP x MAP torus: octave k has cellsX[k] x cellsZ[k] cells and weight weights[k]. */
     private static float fbm(float tx, float tz, int[] cellsX, int[] cellsZ, float[] weights, int seed) {
         float v = 0;
         for (int k = 0; k < weights.length; k++) {
@@ -397,31 +477,46 @@ public final class CloudMath {
         return out;
     }
 
+    /** noiseMap at the default size and count (1, 1). */
+    public static float[][] noiseMap() {
+        return noiseMap(1, 1);
+    }
+
     /**
      * The realistic style's three noises over the cloud map, MAP x MAP texels each (index z * MAP + x), equalised, repeating with the
-     * map: [0] the weather (where cumulus grow: octaves of 192 to 24 blocks, shifted up to 48 blocks by a 768-block noise so the patches are not round;
-     * 3b: from 256 to 32, so the cumulus stand as separate rounded clumps rather than wide slabs),
-     * [1] the cirrus (streaks four times longer along x, the drift, than across, bent by the shift), [2] the towers' height.
+     * map: [0] the weather (where cumulus grow: octaves of 192 to 24 blocks at size 1, shifted up to 48 blocks by a 768-block noise so the
+     * patches are not round; 3b: from 256 to 32, so the cumulus stand as separate rounded clumps rather than wide slabs), then thinned by
+     * the count (keepClouds: below count 1 / COUNT_KEEP it no longer fills its share evenly), [1] the cirrus (streaks four times longer
+     * along x, the drift, than across, bent by the shift; size and count leave it), [2] the towers' height (scaled with the size).
      */
-    public static float[][] noiseMap() {
+    public static float[][] noiseMap(float size, float count) {
         int n = MAP * MAP;
         float[] weather = new float[n], cirrus = new float[n], tower = new float[n];
+        int[] w = {cells(16, size), cells(32, size), cells(64, size), cells(128, size)}, t = {cells(16, size), cells(32, size)};
         for (int z = 0; z < MAP; z++) {
             for (int x = 0; x < MAP; x++) {
                 int i = z * MAP + x;
                 float wx = 4 * gradient(x * 4f / MAP, z * 4f / MAP, 4, 4, SEED_WARP), wz = 4 * gradient(x * 4f / MAP + 0.5f, z * 4f / MAP + 0.5f, 4, 4, SEED_WARP + 1);
-                weather[i] = fbm(x + wx, z + wz, new int[]{16, 32, 64, 128}, new int[]{16, 32, 64, 128}, new float[]{1, 0.6f, 0.3f, 0.15f}, SEED_WEATHER);
+                weather[i] = fbm(x + wx, z + wz, w, w, new float[]{1, 0.6f, 0.3f, 0.15f}, SEED_WEATHER);
                 cirrus[i] = fbm(x + wx, z + 2 * wz, new int[]{4, 8, 16, 32}, new int[]{16, 32, 64, 96}, new float[]{1, 0.55f, 0.3f, 0.1f}, SEED_CIRRUS);
-                tower[i] = fbm(x, z, new int[]{16, 32}, new int[]{16, 32}, new float[]{1, 0.5f}, SEED_TOWER);
+                tower[i] = fbm(x, z, t, t, new float[]{1, 0.5f}, SEED_TOWER);
             }
         }
-        return new float[][]{equalise(weather), equalise(cirrus), equalise(tower)};
+        weather = equalise(weather);
+        float k = countKept(count);
+        if (k < 1) keepClouds(weather, k);
+        return new float[][]{weather, equalise(cirrus), equalise(tower)};
     }
 
     /** The cloud map with the noise map in its g, b, a channels (r keeps vanilla's mask, which the cell shape reads); a copy of rgba. */
     public static byte[] withNoise(byte[] rgba) {
+        return withNoise(rgba, 1, 1);
+    }
+
+    /** withNoise at a cloud size and count (fractions, 1 = 100%). */
+    public static byte[] withNoise(byte[] rgba, float size, float count) {
         byte[] out = rgba.clone();
-        float[][] noise = noiseMap();
+        float[][] noise = noiseMap(size, count);
         for (int i = 0; i < MAP * MAP; i++) {
             for (int c = 0; c < 3; c++) out[i * 4 + 1 + c] = (byte) Math.round(noise[c][i] * 255);
         }

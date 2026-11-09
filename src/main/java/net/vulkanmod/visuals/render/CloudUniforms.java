@@ -106,7 +106,8 @@ public final class CloudUniforms {
             if (realistic) {
                 //Only while drawn: otherwise vanilla's own clouds may be up and the composite finds them by vanilla's layer
                 v[0] += CloudMath.REAL_LIFT;
-                v[1] = CloudMath.REAL_THICKNESS;
+                //After 3b: a bigger cloud size also thickens the layer (CloudMath.realThickness)
+                v[1] = CloudMath.realThickness(settings.cloudSize());
                 float phase = settings.taa() ? (float) ((serial * (double) REAL_PHASE_STEP) % 1.0) : 0;
                 v[6] = 1 + Math.max(0, Math.min(2, settings.cloudQuality())) + Math.max(0, Math.min(REAL_PHASE_MAX, phase));
                 v[7] = realCover(settings.cloudCoverage(), frame.rain(), frame.thunder());

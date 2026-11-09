@@ -224,8 +224,8 @@ class VisualsRendererWiringTest {
     @Test
     void theRendererDrivesTheFarClouds() throws Exception {
         List<String> init = calls(SYSTEM, "<init>");
-        assertTrue(init.contains("VkPostProcess.queueCloudMap") && init.contains("VisualsRenderer.loadCloudMap"), init.toString());
-        List<String> load = calls(SYSTEM, "loadCloudMap");
+        assertTrue(init.contains("VkPostProcess.queueCloudMap") && init.contains("VisualsRenderer.loadCloudMask") && init.contains("CloudMath.withNoise"), init.toString());
+        List<String> load = calls(SYSTEM, "loadCloudMask");
         assertTrue(load.contains("NativeImage.read") && load.contains("NativeImage.getPixelRGBA") && load.contains("CloudMath.mask"), load.toString());
         List<String> frame = calls(SYSTEM, "cloudFrame");
         assertTrue(frame.contains("DimensionSpecialEffects.getCloudHeight") && frame.contains("Options.getCloudsType")
@@ -234,6 +234,10 @@ class VisualsRendererWiringTest {
         assertTrue(calls(SYSTEM, "captureAtmosphere").contains("AtmosphereFrame.withClouds"), calls(SYSTEM, "captureAtmosphere").toString());
         List<String> post = calls(SYSTEM, "postProcess");
         assertTrue(post.contains("CloudUniforms.compute") && post.contains("VkPostProcess.cloudMapReady"), post.toString());
+        //After 3b: the cloud size and count rebuild the noise map off the render thread, before the block is computed
+        assertTrue(post.indexOf("VisualsRenderer.refreshCloudMap") >= 0 && post.indexOf("VisualsRenderer.refreshCloudMap") < post.indexOf("CloudUniforms.compute"), post.toString());
+        List<String> refresh = calls(SYSTEM, "refreshCloudMap");
+        assertTrue(refresh.contains("CompletableFuture.supplyAsync") && refresh.contains("VkPostProcess.updateCloudMap"), refresh.toString());
         assertTrue(post.lastIndexOf("FarClouds.set") > post.indexOf("CloudUniforms.compute"), post.toString());
         //P7h task 4 review: a dimension that draws its own clouds keeps them; a skipped or failed frame and a shutdown clear the flag
         assertTrue(frame.contains("VisualsRenderer$OwnClouds.get"), frame.toString());

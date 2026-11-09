@@ -117,6 +117,7 @@ public final class VkPostProcess {
     private byte[] cloudMapData;
     private boolean cloudMapReal;
     private long cloudMapSerial = -1;
+    private boolean cloudMapWasReady;
     //2026-10-29: this frame's entity shadow map (0: none, the main depth stands in)
     private long entityShadowView;
     //2026-10-29: this frame's colour right after the translucent terrain (0: none, the main colour stands in: nothing differs)
@@ -318,11 +319,24 @@ public final class VkPostProcess {
         this.cloudMapReal = rgba != null;
         this.cloudMapData = rgba != null ? rgba : new byte[CloudMath.MAP * CloudMath.MAP * 4];
         this.cloudMapSerial = -1;
+        this.cloudMapWasReady = false;
     }
 
-    /** P7h design 3.5: a real map whose upload frame has completed (not dropped). */
+    /**
+     * 2026-11-09 (after session 3b): the same mask with a new noise map (the cloud size or count changed), uploaded like the first. The
+     * map stays ready: the upload stream's barrier orders the copy after earlier frames' reads, and this frame reads the new map.
+     */
+    public void updateCloudMap(byte[] rgba) {
+        if (!this.cloudMapReal || rgba == null || rgba.length != this.cloudMapData.length) return;
+        this.cloudMapData = rgba;
+        this.cloudMapSerial = -1;
+    }
+
+    /** P7h design 3.5: a real map whose upload frame has completed (not dropped); after 3b, once ready it stays ready through updateCloudMap. */
     public boolean cloudMapReady() {
-        return this.cloudMapReal && this.cloudMapSerial >= 0 && VkFrames.completedSerial() >= this.cloudMapSerial && !VkFrames.isDropped(this.cloudMapSerial);
+        if (this.cloudMapReal && this.cloudMapWasReady) return true;
+        this.cloudMapWasReady = this.cloudMapReal && this.cloudMapSerial >= 0 && VkFrames.completedSerial() >= this.cloudMapSerial && !VkFrames.isDropped(this.cloudMapSerial);
+        return this.cloudMapWasReady;
     }
 
     /**
