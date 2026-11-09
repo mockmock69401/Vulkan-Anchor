@@ -28,9 +28,14 @@ public final class LightingUniforms {
                          float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView,
                          float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections) {
         public void writeLighting(LooseUniformWriter w) {
+            this.writeLighting(w, false);
+        }
+
+        /** 2026-11-09: waterMarks: this frame's terrain filled the albedo image, whose water marks the pass then reads (depthParams.w). */
+        public void writeLighting(LooseUniformWriter w, boolean waterMarks) {
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection).putMat4(INV_LOD_PROJ, this.invLodProjection).putMat4(PROJ, this.projection);
             w.putVec4(SUN, this.sunView[0], this.sunView[1], this.sunView[2], this.sunWeight > 0 ? 1 : 0);
-            w.putVec4(DEPTH, LodClamp.CLAMP_THRESHOLD, this.lodValid ? 1 : 0, this.vanillaCopies ? 1 : 0, 0);
+            w.putVec4(DEPTH, LodClamp.CLAMP_THRESHOLD, this.lodValid ? 1 : 0, this.vanillaCopies ? 1 : 0, waterMarks ? 1 : 0);
             w.putVec4(UP, this.upView[0], this.upView[1], this.upView[2], this.cameraYFrac);
             w.putVec4(EAST, this.eastView[0], this.eastView[1], this.eastView[2], 0);
         }

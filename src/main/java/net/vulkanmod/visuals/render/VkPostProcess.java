@@ -72,7 +72,9 @@ public final class VkPostProcess {
     //2026-10-29: the copy reads the main colour right after the translucent terrain at 16 (VkDepthCapture.captureColour)
     COPY_COLOUR_AFTER = 16,
     //2026-11-09 (session 2b): and the depth before the translucent terrain at 17 (what lies behind the water's surface seen from below)
-    COPY_BEFORE_TRANSLUCENT = 17;
+    COPY_BEFORE_TRANSLUCENT = 17,
+    //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
+    LIGHTING_TERRAIN_ALBEDO = 17;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     /**
@@ -367,7 +369,7 @@ public final class VkPostProcess {
         light.write(this.copyUniforms, LightVolumeUniforms.COPY_FIRST);
         held.writeCopy(this.copyUniforms, light.on() ? light.camera() : null);
         if (this.copyUniformBuffer != null) upload.upload(this.copyUniformBuffer, 0, this.copyUniforms.buffer());
-        lighting.writeLighting(this.lightingUniforms);
+        lighting.writeLighting(this.lightingUniforms, light.terrain());
         shadow.write(this.lightingUniforms);
         shadow.writeSteps(this.lightingUniforms);
         shadow.writeClose(this.lightingUniforms);
@@ -405,7 +407,7 @@ public final class VkPostProcess {
         VkGpuBuffer held = light.held() != null ? light.held() : this.lightStandIn;
         long lodLight = light.lodLight() != 0 ? light.lodLight() : this.lodLightStandIn.view();
         VkGpuTimer.mark(cmd, "post.lighting");
-        this.computeLighting(cmd, mainColourView, depths, lodLight);
+        this.computeLighting(cmd, mainColourView, depths, lodLight, light.terrainAlbedo());
         VkGpuTimer.mark(cmd, "post.ao");
         this.ao.compute(cmd, mainColourView, depths.main(), depths.lod(), this.lightImage, this.sunImage, this.nearest);
         VkGpuTimer.mark(cmd, "post.copy");
@@ -453,7 +455,7 @@ public final class VkPostProcess {
         this.computeShafts(cmd, depths);
     }
 
-    private void computeLighting(VkCommandBuffer cmd, long mainColourView, Depths depths, long lodLight) {
+    private void computeLighting(VkCommandBuffer cmd, long mainColourView, Depths depths, long lodLight, long terrainAlbedo) {
         if (!this.lightingOn) {
             //The copy skips the lighting (lighting.z 0) but still binds the image, which must be in the read layout
             this.lightBlurImage.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, COMPUTE_AND_FRAGMENT,
@@ -480,7 +482,8 @@ public final class VkPostProcess {
                 .sampledView(LIGHTING_MAIN_COLOUR, mainColourView, this.nearest)//2026-10-15: the plant marker
                 .storageImage(LIGHTING_PLANT_SUN, this.plantSunImage.view())
                 .sampledView(LIGHTING_LOD_LIGHT, lodLight, this.nearest)//2026-10-19: the LOD pixels' faces
-                .sampledView(SHADOW_ENTITY, this.entityShadowView != 0 ? this.entityShadowView : depths.main(), this.nearest);
+                .sampledView(SHADOW_ENTITY, this.entityShadowView != 0 ? this.entityShadowView : depths.main(), this.nearest)
+                .storageImage(LIGHTING_TERRAIN_ALBEDO, terrainAlbedo);//2026-11-09: the water marks (read when depthParams.w is 1)
         if (this.lightingUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.lightingUniformBuffer);
         this.lighting.dispatchWithPush(cmd, bindings, this.lightingUniformBuffer == null ? this.lightingUniforms.buffer() : null,
                 groups(this.lightImage.width), groups(this.lightImage.height), 1);

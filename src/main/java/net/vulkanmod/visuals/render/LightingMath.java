@@ -89,6 +89,14 @@ public final class LightingMath {
     /** The depth steps the height and distance steps are measured over (one step rebuilt in float often moves nothing far away). */
     public static final float KIND_PROBE_STEPS = 16.0f;
     public static final float WATER_MAX_LENGTH = 1024.0f, KIND_MIN_LENGTH = 0.015625f;
+    /**
+     * 2026-11-09 (the user: seen from high above, frozen rivers and seas changed look across a line): where this frame's terrain marked
+     * its water (terrain_light.glsl's writeWaterMark, TerrainLightMath.packWaterMark), a translucent surface is water when the mark is
+     * its own depth within WATER_MARK_STEPS depth steps, else ice/glass/slime, at every distance. Values at or above WATER_MARK_LIMIT
+     * are albedos (a uint in the shader: long here, so the field check skips it).
+     */
+    public static final float WATER_MARK_STEPS = 2.0f;
+    public static final long WATER_MARK_LIMIT = 0x40000000L;
     /** B4: the LOD water match, in main depth steps and blocks. */
     public static final float LOD_WATER_DEPTH_STEPS = 64.0f, LOD_WATER_MATCH_MIN = 1.0f;
     public static final float DEPTH_STEP = 5.9604645e-8f;
@@ -306,6 +314,12 @@ public final class LightingMath {
      */
     public static Surface classify(float u, float v, Depths d, Matrix4fc invVanilla, Matrix4fc invLod, boolean lodValid, boolean copiesValid,
                                    float cameraYFrac, Vector3fc upView, Vector3fc normalView, float pixelBlocks) {
+        return classify(u, v, d, invVanilla, invLod, lodValid, copiesValid, cameraYFrac, upView, normalView, pixelBlocks, false, 0);
+    }
+
+    /** 2026-11-09: as above with the terrain's albedo image value at the pixel (albedo), read when marksValid (depthParams.w). */
+    public static Surface classify(float u, float v, Depths d, Matrix4fc invVanilla, Matrix4fc invLod, boolean lodValid, boolean copiesValid,
+                                   float cameraYFrac, Vector3fc upView, Vector3fc normalView, float pixelBlocks, boolean marksValid, int albedo) {
         if (d.main() == FAR) return new Surface(true, false, SKY_DISTANCE, 0);
         Vector3f view = viewPosition(invVanilla, u, v, d.main());
         boolean fromLod = false;
@@ -327,6 +341,7 @@ public final class LightingMath {
         float vanillaLength = 0;
         float vanillaHeightStep = 0;
         float vanillaStride = 1;
+        int vanillaMark = -1;
         if (!fromLod) {
             if (copiesValid && d.after() < d.before() && d.main() >= d.after()) {
                 vanillaTranslucent = true;
@@ -343,6 +358,7 @@ public final class LightingMath {
                 Vector3f next = viewPosition(invVanilla, u, v, probe);
                 vanillaHeightStep = Math.abs(new Vector3f(next).sub(surface).dot(upView)) / steps;
                 vanillaStride = Math.abs(next.length() - surface.length()) / steps / (KIND_STEP_SHARE * Math.max(surface.length() * pixelBlocks, 1e-6f));
+                if (marksValid) vanillaMark = waterMarked(albedo, d.after()) ? 1 : 0;
             }
             if (!vanillaTranslucent && lodValid && d.lod() != FAR && d.lod() < d.lodOpaque()) {
                 Vector3f l = viewPosition(invLod, u, v, d.lod());
@@ -360,9 +376,15 @@ public final class LightingMath {
                 kind = kindLength(d.lodOpaque() == FAR ? -1 : viewPosition(invLod, u, v, d.lodOpaque()).length(), view.length());
             }
         } else if (vanillaTranslucent) {
-            kind = vanillaKind(vanillaLength, view, normalView, upView, cameraYFrac, vanillaHeightStep, vanillaStride <= KIND_STRIDE_MAX);
+            kind = vanillaKind(vanillaLength, view, normalView, upView, cameraYFrac, vanillaHeightStep, vanillaStride <= KIND_STRIDE_MAX, vanillaMark);
         }
         return new Surface(false, fromLod, view.length(), kind);
+    }
+
+    /** lighting.comp's waterMarked: the albedo image's value mark is a water mark at the translucent surface's depth (after). */
+    public static boolean waterMarked(int mark, float after) {
+        long m = Integer.toUnsignedLong(mark);
+        return m != 0 && m < WATER_MARK_LIMIT && Math.abs(Float.intBitsToFloat(mark) - after) <= WATER_MARK_STEPS * DEPTH_STEP;
     }
 
     static float kindLength(float behind, float surface) {
@@ -375,6 +397,13 @@ public final class LightingMath {
      * resolved false: the depth is too coarse to rebuild a normal: water.
      */
     static float vanillaKind(float length, Vector3fc view, Vector3fc normal, Vector3fc upView, float cameraYFrac, float heightStep, boolean resolved) {
+        return vanillaKind(length, view, normal, upView, cameraYFrac, heightStep, resolved, -1);
+    }
+
+    /** 2026-11-09: waterMark 1 (marked water) or 0 (not water) decides alone; -1 (no marks this frame) leaves it to the tests. */
+    static float vanillaKind(float length, Vector3fc view, Vector3fc normal, Vector3fc upView, float cameraYFrac, float heightStep, boolean resolved,
+                             int waterMark) {
+        if (waterMark >= 0) return waterMark > 0 ? length : -length;
         if (!resolved) return length;
         if (Math.abs(normal.dot(upView)) < HORIZONTAL_MIN) return -length;
         float y = cameraYFrac + view.dot(upView);

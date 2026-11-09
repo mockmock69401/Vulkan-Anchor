@@ -38,7 +38,11 @@ void main() {
         discard;
     }
     if (LightOut > 0.5) {
-        writeSceneLight(lightLevels, vec4(texel.rgb * albedoTint, texel.a), vertexDistance <= FogStart, terrainTinted(albedoTint));
+        bool nearest = writeSceneLight(lightLevels, vec4(texel.rgb * albedoTint, texel.a), vertexDistance <= FogStart, terrainTinted(albedoTint));
+        //2026-11-09: water marks its pixel for the lighting pass, which tells water from ice by it (terrain_light.glsl)
+        if (vertexColor.a > 1.5 && nearest) {
+            writeWaterMark();
+        }
     }
     fragColor = linear_fog(color, vertexDistance, FogStart, FogEnd, FogColor);
 }

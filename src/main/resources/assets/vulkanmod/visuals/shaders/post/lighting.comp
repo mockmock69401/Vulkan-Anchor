@@ -31,13 +31,16 @@ layout(binding = 14) uniform sampler2D shadowCloseMapB;
 layout(binding = 15) uniform usampler2D lodLight;
 //2026-10-29: the entity shadow map (VkEntityShadows), drawn this frame when entityParams.x is 1
 layout(binding = 16) uniform sampler2D shadowEntityMap;
+//2026-11-09: the terrain's albedo image (TerrainLightTarget), read for its water marks when depthParams.w is 1 (this frame's terrain
+// filled it; terrain_light.glsl's writeWaterMark)
+layout(binding = 17, r32ui) uniform readonly restrict uimage2D terrainAlbedo;
 
 //Clean LightingUniforms.writeLighting
 layout(location = 0) uniform mat4 invVanillaProj;
 layout(location = 1) uniform mat4 invLodProj;
 layout(location = 2) uniform mat4 proj;//view to clip
 layout(location = 3) uniform vec4 sunView;//xyz toward the sun (view space), w 1 when sun shading is on
-layout(location = 4) uniform vec4 depthParams;//x LodClamp.CLAMP_THRESHOLD, y 1 when the LOD depth is valid, z 1 when the translucent copies are
+layout(location = 4) uniform vec4 depthParams;//x LodClamp.CLAMP_THRESHOLD, y 1 when the LOD depth is valid, z 1 when the translucent copies are, w 1 when the terrain's water marks are (2026-11-09)
 layout(location = 5) uniform vec4 upView;//xyz world up (view space), w the camera's y fraction
 //Clean ShadowUniforms: view space to each map's clip space (orthographic, depth 0..1, row 0 of a map at ndc y -1)
 layout(location = 6) uniform mat4 shadowNear;
@@ -95,6 +98,15 @@ const float BOUNDARY_STEP_MAX = 0.005;
 const float KIND_STEP_SHARE = 0.1;
 const float KIND_STRIDE_MAX = 16.0;
 const float KIND_PROBE_STEPS = 16.0;
+//2026-11-09 (the user: seen from high above, frozen rivers and seas changed look across a line, a circle around the player): past
+// BOUNDARY_STEP_MAX the test above called all ice water, and from high up that starts some 70 blocks out. Where this frame's terrain
+// marked its water (terrain_light.glsl's writeWaterMark: a water fragment's window depth in the albedo image, nearest kept), the mark
+// decides instead: a translucent surface is water where the mark is its own depth (the copy right after the translucent terrain) within
+// WATER_MARK_STEPS depth steps, any other is ice, glass or slime, at every distance. Ice sits on water whose own top is 1.1 blocks
+// lower; that is farther than WATER_MARK_STEPS steps out to about 550 blocks of view depth, past vanilla's render distance. A mark is a
+// depth's float bits (bits 30 and 31 clear); WATER_MARK_LIMIT and above is an albedo
+const uint WATER_MARK_LIMIT = 1073741824u;
+const float WATER_MARK_STEPS = 2.0;
 //The translucent kind's length: at most WATER_MAX_LENGTH (nothing behind: also that), at least KIND_MIN_LENGTH (never 0)
 const float WATER_MAX_LENGTH = 1024.0;
 const float KIND_MIN_LENGTH = 0.015625;
@@ -282,10 +294,19 @@ float kindLength(float behind, float surface) {
     return behind < 0.0 ? WATER_MAX_LENGTH : clamp(behind - surface, KIND_MIN_LENGTH, WATER_MAX_LENGTH);
 }
 
+//Whether the albedo image's value mark is a water mark at the translucent surface's depth (after)
+bool waterMarked(uint mark, float after) {
+    return mark != 0u && mark < WATER_MARK_LIMIT && abs(uintBitsToFloat(mark) - after) <= WATER_MARK_STEPS*DEPTH_STEP;
+}
+
 //B5: a horizontal vanilla translucent surface on a whole world y is ice/glass/slime, any other horizontal one water; vertical ones glass.
 // heightStep: how far one depth step moves the surface's world y (a coarser depth cannot tell a boundary: water); resolved false: the
-// depth is too coarse to rebuild a normal (water)
-float vanillaKind(float len, vec3 view, vec3 n, float heightStep, bool resolved) {
+// depth is too coarse to rebuild a normal (water). 2026-11-09: waterMark 1 (marked water) or 0 (no mark: not water) decides alone;
+// -1 (no marks this frame) leaves it to the tests above
+float vanillaKind(float len, vec3 view, vec3 n, float heightStep, bool resolved, int waterMark) {
+    if (waterMark >= 0) {
+        return waterMark > 0 ? len : -len;
+    }
     if (!resolved) {
         return len;
     }
@@ -321,6 +342,7 @@ void main() {
         float vanillaLength = 0.0;
         float vanillaHeightStep = 0.0;
         float vanillaStride = 1.0;
+        int vanillaMark = -1;
         if (!fromLod) {
             float mainD = texelFetch(mainDepth, p, 0).r;
             if (depthParams.z > 0.5) {
@@ -337,6 +359,9 @@ void main() {
                     vanillaHeightStep = abs(dot(next - surface, upView.xyz))/steps;
                     //The pixels the kind's normal spans: one depth step at most KIND_STEP_SHARE of the neighbours' spacing
                     vanillaStride = abs(length(next) - length(surface))/steps/(KIND_STEP_SHARE*max(length(surface)*pixelBlocks, 1e-6));
+                    if (depthParams.w > 0.5) {
+                        vanillaMark = waterMarked(imageLoad(terrainAlbedo, p).r, after) ? 1 : 0;
+                    }
                 }
             }
             if (!vanillaTranslucent && lodOn) {
@@ -371,7 +396,7 @@ void main() {
                 vec3 kindNormal = resolved && vanillaStride > 1.0
                         ? snapNormal(depthNormalStride(mainDepth, invVanillaProj, p, fullSize, view, int(ceil(vanillaStride))), eastView.xyz, upView.xyz)
                         : n;
-                kind = vanillaKind(vanillaLength, view, kindNormal, vanillaHeightStep, resolved);
+                kind = vanillaKind(vanillaLength, view, kindNormal, vanillaHeightStep, resolved, vanillaMark);
             }
         }
         float dist = length(view);

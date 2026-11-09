@@ -180,9 +180,14 @@ vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility) {
 }
 
 //The sky seen in a reflected direction r without the clouds (B8): the sky colour for the direction, its glow and the discs (or
-// glints, discGlint with the sun visibility at the water). Finite and non-negative
-vec3 reflectedSky(Atmosphere a, vec3 r, float ripple, float sunVisibility) {
-    return skyColour(a, r) + sunGlow(a, r) + discGlint(a, r, ripple, sunVisibility);
+// glints, discGlint with the sun visibility at the water). Finite and non-negative. 2026-11-09 (the user: at sunrise the sun's
+// reflection showed through icebergs and hills): sunOpen 0..1 is how much of the reflected ray the scene leaves open toward the sky
+// (reflection.comp: 0 where the march saw the ray pass behind terrain beyond the water, 1 - the hit's weight where it hit). It takes
+// the glow around the sun (or the moon) and both glints: the march sees terrain at any distance on screen, while the shadow maps
+// (sunVisibility, the sun's glint only) know it only near the camera. The sky colour itself stays (B8)
+vec3 reflectedSky(Atmosphere a, vec3 r, float ripple, float sunVisibility, float sunOpen) {
+    float open = sunOpen > 0.0 ? min(sunOpen, 1.0) : 0.0;
+    return skyColour(a, r) + (sunGlow(a, r) + discGlint(a, r, ripple, sunVisibility))*open;
 }
 
 //What a ray that finds nothing on screen reflects: the (hazed, clouded) sky where the water sees it (skyAccess 1), the water's own
@@ -363,4 +368,16 @@ bool reflectAcceptsHit(float hitMark, float heightAbove, float dist) {
 //The weight of a hit by the share 0..1 of its neighbourhood the hit surface covers
 float reflectCoverWeight(float covered) {
     return smoothstep(COVER_LOW, COVER_HIGH, covered);
+}
+
+//2026-11-09 (the user: at sunrise the sun's reflection showed through icebergs and hills): whether a step of the reflected ray says
+// the sky along it is blocked, though no hit was taken (the thickness test misses rays that graze a far hill near its foot, and the
+// clearance rejects the hill's foot itself). The ray (view z rayZ) has passed behind the surface the screen shows there (view z
+// sceneZ; view z is negative in front of the camera), that surface lies beyond the reflecting point (originZ), stands above its plane
+// (heightAbove, blocks, more than the hit clearance) and is no reflective translucent (hitMark, as reflectAcceptsHit). The water lies
+// below the camera, so a ray from it that passes behind ground standing beyond it runs into that ground (a height field: only an
+// overhang, a canopy, lets such a ray through)
+bool reflectBlocksSky(float hitMark, float heightAbove, float dist, float rayZ, float sceneZ, float originZ) {
+    bool translucent = abs(hitMark) >= REFLECT_MARK_MIN && hitMark >= -WATER_REFLECTION;
+    return !translucent && rayZ < sceneZ && sceneZ < originZ && heightAbove > reflectHitClearance(dist);
 }

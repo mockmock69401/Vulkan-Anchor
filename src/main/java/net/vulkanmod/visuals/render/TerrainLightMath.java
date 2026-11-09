@@ -94,6 +94,25 @@ public final class TerrainLightMath {
         return Math.round(Math.max(0, Math.min(1, c)) * 255);
     }
 
+    /**
+     * 2026-11-09: a water fragment's mark in the albedo image (terrain_light.glsl's packWaterMark): its window depth's float bits, which
+     * for a depth in (0, 1] leave bits 30 and 31 clear (never an albedo, below every albedo for the atomic min). At least
+     * TERRAIN_WATER_MARK_MIN, so a depth of 0 is not "nothing written".
+     */
+    public static final float TERRAIN_WATER_MARK_MIN = 1.0e-20f;
+    /** Marks lie below this (bits 30 and 31 clear); a uint in the shader, a long here. */
+    public static final long TERRAIN_WATER_MARK_LIMIT = 0x40000000L;
+
+    public static int packWaterMark(float depth) {
+        return Float.floatToRawIntBits(Math.max(TERRAIN_WATER_MARK_MIN, Math.min(1, depth)));
+    }
+
+    /** writeWaterMark's effect on the albedo image's value: the mark replaces 0, an albedo or a farther mark. */
+    public static int writeWaterMark(int albedo, int mark) {
+        long seen = Integer.toUnsignedLong(albedo);
+        return seen != 0 && seen < TERRAIN_WATER_MARK_LIMIT && seen <= Integer.toUnsignedLong(mark) ? albedo : mark;
+    }
+
     /** terrainAlbedoAt: the display rgb when albedo was written by the fragment the light value light holds, else null. */
     public static float[] albedoAt(int light, int albedo) {
         if ((albedo & TERRAIN_ALBEDO_WRITTEN) == 0) return null;

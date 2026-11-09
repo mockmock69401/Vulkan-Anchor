@@ -151,8 +151,13 @@ public final class WaterMath {
         return add(scale(glintOf(sunRadiance(a), r, a.sun(), SUN_HALF_SIZE, ripple), v), glintOf(moonRadiance(a), r, moonCentre(a), MOON_HALF_SIZE, ripple));
     }
 
-    public static float[] reflectedSky(Atmosphere a, float[] r, float ripple, float sunVisibility) {
-        return add(add(AtmosphereMath.skyColour(a, r), AtmosphereMath.sunGlow(a, r)), discGlint(a, r, ripple, sunVisibility));
+    /**
+     * The reflected sky: sky colour, the glow and the discs' glints. 2026-11-09: sunOpen 0..1 (reflection.comp: 0 where the march saw
+     * the ray pass behind ground beyond the water, else 1 - the hit's weight) takes the glow and both glints; the sky colour stays.
+     */
+    public static float[] reflectedSky(Atmosphere a, float[] r, float ripple, float sunVisibility, float sunOpen) {
+        float open = sunOpen > 0 ? Math.min(sunOpen, 1) : 0;
+        return add(AtmosphereMath.skyColour(a, r), scale(add(AtmosphereMath.sunGlow(a, r), discGlint(a, r, ripple, sunVisibility)), open));
     }
 
     public static float[] reflectFallback(float[] sky, float[] own, float skyAccess) {
@@ -164,9 +169,9 @@ public final class WaterMath {
      * reflection.comp's colour for a missed ray, without the clouds: the reflected sky hazed along the view to the water (dist blocks,
      * haze amount), then the fallback by the water's sky access; for the tests.
      */
-    public static float[] missedRay(Atmosphere a, float[] view, float dist, float amount, float[] r, float ripple, float sunVisibility, float[] own,
-                                    float skyAccess) {
-        return reflectFallback(AtmosphereMath.applyHaze(a, reflectedSky(a, r, ripple, sunVisibility), view, dist, amount), own, skyAccess);
+    public static float[] missedRay(Atmosphere a, float[] view, float dist, float amount, float[] r, float ripple, float sunVisibility, float sunOpen,
+                                    float[] own, float skyAccess) {
+        return reflectFallback(AtmosphereMath.applyHaze(a, reflectedSky(a, r, ripple, sunVisibility, sunOpen), view, dist, amount), own, skyAccess);
     }
 
     // ---- ripples ----
@@ -270,6 +275,16 @@ public final class WaterMath {
 
     public static float reflectCoverWeight(float covered) {
         return smoothstep(COVER_LOW, COVER_HIGH, covered);
+    }
+
+    /**
+     * 2026-11-09: whether a march step says the sky along the reflected ray is blocked: the ray (view z rayZ) passed behind the surface
+     * shown there (sceneZ), which lies beyond the reflecting point (originZ), stands above its plane by more than the hit clearance and
+     * is no reflective translucent.
+     */
+    public static boolean reflectBlocksSky(float hitMark, float heightAbove, float dist, float rayZ, float sceneZ, float originZ) {
+        boolean translucent = Math.abs(hitMark) >= REFLECT_MARK_MIN && hitMark >= -WATER_REFLECTION;
+        return !translucent && rayZ < sceneZ && sceneZ < originZ && heightAbove > reflectHitClearance(dist);
     }
 
     // ---- the march's thickness (reflection.comp) ----

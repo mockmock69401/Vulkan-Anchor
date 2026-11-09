@@ -61,6 +61,31 @@ class TerrainLightMathTest {
     }
 
     @Test
+    void aWaterMarkIsNeverAnAlbedoAndTheNearestWaterKeepsIt() {
+        //2026-11-09: water leaves its depth's float bits in the albedo image (lighting.comp tells water from ice by it)
+        int near = TerrainLightMath.packWaterMark(0.9990f), far = TerrainLightMath.packWaterMark(0.9995f);
+        for (int m : new int[]{near, far, TerrainLightMath.packWaterMark(0), TerrainLightMath.packWaterMark(1)}) {
+            assertTrue(m != 0 && Integer.toUnsignedLong(m) < TerrainLightMath.TERRAIN_WATER_MARK_LIMIT, "bits 30 and 31 clear");
+            assertNull(TerrainLightMath.albedoAt(TerrainLightMath.pack(0.999f, 15, 0), m), "never read as an albedo");
+        }
+        int albedo = TerrainLightMath.packAlbedo(0.2f, 0.3f, 0.4f, TerrainLightMath.pack(0.999f, 15, 0));
+        assertEquals(near, TerrainLightMath.writeWaterMark(0, near), "over nothing written");
+        assertEquals(near, TerrainLightMath.writeWaterMark(albedo, near), "over the floor's albedo");
+        assertEquals(near, TerrainLightMath.writeWaterMark(TerrainLightMath.writeWaterMark(0, far), near), "a nearer water's");
+        assertEquals(near, TerrainLightMath.writeWaterMark(TerrainLightMath.writeWaterMark(0, near), far), "a farther water's does not replace it");
+        assertTrue(PACK.contains("const float TERRAIN_WATER_MARK_MIN = " + TerrainLightMath.TERRAIN_WATER_MARK_MIN + ";")
+                || PACK.contains("const float TERRAIN_WATER_MARK_MIN = 1.0e-20;"));
+        assertTrue(PACK.contains("const uint TERRAIN_WATER_MARK_LIMIT = " + TerrainLightMath.TERRAIN_WATER_MARK_LIMIT + "u;"));
+        assertTrue(PACK.contains("return floatBitsToUint(clamp(depth, TERRAIN_WATER_MARK_MIN, 1.0));"));
+        assertTrue(PACK.contains("if (seen != 0u && seen < TERRAIN_WATER_MARK_LIMIT && seen <= mark) {"));
+        //Only the pixel's nearest water fragment marks (the fragment shader runs before the depth test: hidden water must not mark the shore)
+        for (String f : new String[]{core("basic/terrain/terrain.fsh"), core("basic/terrain/terrain_z.fsh")}) {
+            assertTrue(f.contains("bool nearest = writeSceneLight(") && f.contains("if (vertexColor.a > 1.5 && nearest) {") && f.contains("writeWaterMark();"));
+        }
+        assertTrue(PACK.contains("return v <= before;"));
+    }
+
+    @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {
         Pattern p = Pattern.compile("(?m)^\\s*const\\s+(float|uint|int)\\s+(TERRAIN_(?:LIGHT|ALBEDO)_(?!MATCH_)\\w+)\\s*=\\s*([0-9.]+)u?\\s*;");
         int found = 0;

@@ -163,10 +163,13 @@ bool marchBehind(float rayZ, float sceneZ, float thick) {
 }
 
 //The march from v0 (view space) along rView. Returns the hit's weight (0: none) with its colour and the reflected path's length
-// from v0 to the hit; nGeom is the reflecting surface's world normal, dist its view distance
-float marchReflection(vec3 v0, vec3 rView, vec3 nGeom, float dist, ivec2 p, ivec2 size, mat3 toWorld, out vec3 colour, out float pathLength) {
+// from v0 to the hit; nGeom is the reflecting surface's world normal, dist its view distance. 2026-11-09: blocked is 1 when a step
+// before the hit (or with none) passed behind ground standing beyond v0 (reflectBlocksSky): the sky along the ray is hidden there
+float marchReflection(vec3 v0, vec3 rView, vec3 nGeom, float dist, ivec2 p, ivec2 size, mat3 toWorld, out vec3 colour, out float pathLength,
+                      out float blocked) {
     colour = vec3(0.0);
     pathLength = 0.0;
+    blocked = 0.0;
     float len = REFLECT_RAY_LENGTH;
     if (rView.z > 0.0) {
         len = min(len, (-REFLECT_NEAR - v0.z)/rView.z);
@@ -206,7 +209,12 @@ float marchReflection(vec3 v0, vec3 rView, vec3 nGeom, float dist, ivec2 p, ivec
         float rayZ = mix(v0.z*k0, v1.z*k1, s)/k;
         vec3 scene;
         ivec2 q = marchPixel(s0 + ds*s, size);
-        if (marchPosition(q, size, scene) && marchBehind(rayZ, scene.z, marchThickness(scene.z, rayZ - prevZ))) {
+        bool onScene = marchPosition(q, size, scene);
+        if (onScene && blocked < 0.5 && rayZ < scene.z && scene.z < v0.z
+                && reflectBlocksSky(texelFetch(sceneLit, q, 0).a, dot(toWorld*(scene - v0), nGeom), dist, rayZ, scene.z, v0.z)) {
+            blocked = 1.0;
+        }
+        if (onScene && marchBehind(rayZ, scene.z, marchThickness(scene.z, rayZ - prevZ))) {
             //Refine between the last step in front and this one
             float lo = prevS;
             float hi = s;
@@ -383,7 +391,8 @@ vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
     if (max(f.r, max(f.g, f.b)) >= REFLECT_MIN_MARCH) {
         vec3 hitColour;
         float pathLength;
-        float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength);
+        float blocked;
+        float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
         if (w > 0.0) {
             vec3 hitWorld = world + r*pathLength;
             float extra = max(dist + pathLength - length(hitWorld), 0.0);
@@ -485,24 +494,29 @@ void main() {
             }
         }
     }
-    //What a missed ray reflects: the sky for its direction with the far clouds, the discs (glints), hazed like the water (B8, B10)
+    //The march first (2026-11-09): what it finds says how much of the sky along the ray is open to the sun's glow and glint
+    float w = 0.0;
+    float blocked = 0.0;
+    vec3 hitColour = vec3(0.0);
+    float pathLength = 0.0;
+    if (f >= REFLECT_MIN_MARCH) {
+        w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
+    }
+    //What a missed ray reflects: the sky for its direction with the far clouds, the discs (glints), hazed like the water (B8, B10).
+    // The sun's glow and glint only where the ray is open: not behind ground beyond the water, and not under a hit's share (with the
+    // mix below the glint keeps (1 - w)^2 at a broken cover's edge)
     float sunVisibility = sunVisibilityAt(p, size, dist, toView*nGeom);
-    vec3 sky = reflectedSky(a, r, ripple, sunVisibility);
+    vec3 sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w));
     if (cloudShape.w > 0.5 && atmosphereSky(a)) {
         vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
         sky = sky*(1.0 - cloud.a) + cloud.rgb;
     }
     vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
-    if (f >= REFLECT_MIN_MARCH) {
-        vec3 hitColour;
-        float pathLength;
-        float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength);
-        if (w > 0.0) {
-            //The hit's pixel is already hazed over its own distance from the camera: add the haze of the rest of the longer path
-            vec3 hitWorld = world + r*pathLength;
-            float extra = max(dist + pathLength - length(hitWorld), 0.0);
-            reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
-        }
+    if (w > 0.0) {
+        //The hit's pixel is already hazed over its own distance from the camera: add the haze of the rest of the longer path
+        vec3 hitWorld = world + r*pathLength;
+        float extra = max(dist + pathLength - length(hitWorld), 0.0);
+        reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
     }
     //2026-10-29: the rings' crests catch a share of the mirrored light
     imageStore(sceneOut, p, vec4(mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine, 1.0));
