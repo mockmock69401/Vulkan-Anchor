@@ -92,6 +92,9 @@ public final class VisualsOptionLayout {
                             //2026-11-09 (session 3): the realistic clouds and their settings (greyed out with the vanilla shape)
                             new Item("cloud_style", Kind.CHOICE, 0, CloudMath.STYLE_MAX, Impact.HIGH, "far_clouds"),
                             new Item("cloud_coverage", Kind.PERCENT, 0, CLOUD_COVERAGE_MAX, Impact.NONE, "cloud_style"),
+                            //2026-11-09 (after session 3b): each cloud's size (a bigger cloud is also taller: a little more cost) and how many there are
+                            new Item("cloud_size", Kind.PERCENT, CLOUD_SIZE_MIN, CLOUD_SIZE_MAX, Impact.LOW, "cloud_style"),
+                            new Item("cloud_count", Kind.PERCENT, 0, CLOUD_COUNT_MAX, Impact.NONE, "cloud_style"),
                             new Item("cloud_quality", Kind.CHOICE, 0, CloudMath.QUALITY_MAX, Impact.HIGH, "cloud_style"))))),
             new Page("lighting", List.of(
                     new Block("shading", List.of(
@@ -162,6 +165,8 @@ public final class VisualsOptionLayout {
             case "far_clouds" -> c.farClouds ? 1 : 0;
             case "cloud_style" -> c.cloudStyle;
             case "cloud_coverage" -> c.cloudCoverage;
+            case "cloud_size" -> c.cloudSize;
+            case "cloud_count" -> c.cloudCount;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
@@ -220,6 +225,8 @@ public final class VisualsOptionLayout {
             case "far_clouds" -> c.farClouds = v != 0;
             case "cloud_style" -> c.cloudStyle = v;
             case "cloud_coverage" -> c.cloudCoverage = v;
+            case "cloud_size" -> c.cloudSize = v;
+            case "cloud_count" -> c.cloudCount = v;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;

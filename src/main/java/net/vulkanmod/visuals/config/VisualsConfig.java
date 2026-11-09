@@ -146,6 +146,9 @@ public class VisualsConfig {
     public int cloudStyle = 0;
     public int cloudCoverage = 100;
     public int cloudQuality = 1;
+    /** 2026-11-09 (after session 3b): the realistic clouds' size (percent, 100 = default; scales each cloud and the gaps between them) and count (percent, 100 = default, half the clumps the weather would grow; 200 keeps them all, as in 3b). */
+    public int cloudSize = 100;
+    public int cloudCount = 100;
     public boolean sunShadows = true;
     public boolean vanillaShadows = true;
     /** 2026-10-29: chunks around the camera the vanilla terrain casts sharp sun shadows in (ShadowMath.nearReach); 4 is the old 64 blocks. */

@@ -113,6 +113,8 @@ vec3 cloudMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir) {
 // cloudShape.x is the cumulus base relative to the camera (CloudMath.REAL_LIFT above vanilla's layer) and y its thickness.
 // cloudMap's g, b, a channels hold CloudMath.noiseMap, each equalised to an even 0..1 and repeating every CLOUD_MAP texels (vanilla's
 // 3072-block period, so the offset's wrap never shows): g the weather (where cumulus grow), b the cirrus streaks, a the towers' height.
+// After 3b (2026-11-09) the cloud size and count settings live on the CPU side only: the size scales the g and a noises' cells and
+// cloudShape.y (CloudMath.realThickness), the count removes whole clumps from g (CloudMath.noiseMap); nothing here reads them.
 // The model follows Schneider and Vos 2015 ("The Real-time Volumetric Cloudscapes of Horizon Zero Dawn", SIGGRAPH Advances in Real-Time
 // Rendering): a 2D coverage, a height profile with rounded bases and domed tops, 3D noise eroding the edges, Beer's law toward the light
 // and their powder term. The light is integrated per segment as in Hillaire 2016 ("Physically Based Sky, Atmosphere and Cloud

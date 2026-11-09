@@ -42,6 +42,7 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -122,6 +123,10 @@ public final class VisualsRenderer {
     //2026-10-29: the entity shadow map; null without sun shadows or when it could not be built
     private VkEntityShadows entityShadows;
     private VkPostProcess post;
+    /** After 3b: vanilla's cloud mask, the size and count the uploaded noise map was built for, and a rebuild in progress (refreshCloudMap). */
+    private byte[] cloudMask;
+    private float cloudMapSize = 1, cloudMapCount = 1;
+    private CompletableFuture<byte[]> cloudMapBuild;
     private VkDepthCapture depthCapture;
     private LightingChoice lightingChoice = LightingChoice.NONE;
     //2026-11-09 (session 2b): this frame's camera is in water with the post-process on: the depth before the translucent terrain is
@@ -159,7 +164,14 @@ public final class VisualsRenderer {
             //2026-10-29: with the sun shadows only
             this.entityShadows = this.shadows != null ? VkEntityShadows.create() : null;
             this.post = createPostProcess(this.deferred);
-            if (this.post != null) this.post.queueCloudMap(loadCloudMap());
+            if (this.post != null) {
+                //After 3b: the noise map follows the cloud size and count (refreshCloudMap rebuilds it when they change)
+                PostProcessSettings clouds = PostProcessSettings.from(VisualsConfig.get());
+                this.cloudMask = loadCloudMask();
+                this.cloudMapSize = clouds.cloudSize();
+                this.cloudMapCount = clouds.cloudCount();
+                this.post.queueCloudMap(this.cloudMask != null ? CloudMath.withNoise(this.cloudMask, this.cloudMapSize, this.cloudMapCount) : null);
+            }
             this.depthCapture = this.post == null ? null : createDepthCapture(this.deferred);
             VkFrames.addListener(this.frameListener);
             this.listening = true;
@@ -491,8 +503,31 @@ public final class VisualsRenderer {
         }
     }
 
-    /** P7h design 3.3, 3.7: vanilla's clouds.png (resource packs applied) as the cloud mask, nearest-sampled to MAP x MAP, with the realistic style's noise map (session 3); null when unreadable (vanilla's clouds stay). */
-    private static byte[] loadCloudMap() {
+    /**
+     * 2026-11-09 (after session 3b): when the cloud size or count setting changes, the noise map is rebuilt off the render thread (about a
+     * tenth of a second) and uploaded when done; meanwhile the old map stays. A failed build keeps the old map.
+     */
+    private void refreshCloudMap(PostProcessSettings settings) {
+        if (this.cloudMask == null || this.post == null) return;
+        if (this.cloudMapBuild != null) {
+            if (!this.cloudMapBuild.isDone()) return;
+            byte[] built = this.cloudMapBuild.getNow(null);
+            this.cloudMapBuild = null;
+            if (built != null) this.post.updateCloudMap(built);
+        }
+        float size = settings.cloudSize(), count = settings.cloudCount();
+        if (size == this.cloudMapSize && count == this.cloudMapCount) return;
+        this.cloudMapSize = size;
+        this.cloudMapCount = count;
+        byte[] mask = this.cloudMask;
+        this.cloudMapBuild = CompletableFuture.supplyAsync(() -> CloudMath.withNoise(mask, size, count)).exceptionally(e -> {
+            VisualsLog.warn("Visuals cloud map rebuild failed, the clouds keep their old size and count: " + e);
+            return null;
+        });
+    }
+
+    /** P7h design 3.3, 3.7: vanilla's clouds.png (resource packs applied) as the cloud mask (CloudMath.mask), nearest-sampled to MAP x MAP; null when unreadable (vanilla's clouds stay). The realistic style's noise map goes in by CloudMath.withNoise (session 3). */
+    private static byte[] loadCloudMask() {
         try (InputStream in = Minecraft.getInstance().getResourceManager().open(new ResourceLocation("minecraft", "textures/environment/clouds.png"));
              NativeImage image = NativeImage.read(in)) {
             int[] abgr = new int[CloudMath.MAP * CloudMath.MAP];
@@ -501,7 +536,7 @@ public final class VisualsRenderer {
                     abgr[y * CloudMath.MAP + x] = image.getPixelRGBA(x * image.getWidth() / CloudMath.MAP, y * image.getHeight() / CloudMath.MAP);
                 }
             }
-            return CloudMath.withNoise(CloudMath.mask(abgr));
+            return CloudMath.mask(abgr);
         } catch (IOException | RuntimeException e) {
             VisualsLog.warn("Visuals far clouds off, clouds.png could not be read: " + e);
             return null;
@@ -683,6 +718,7 @@ public final class VisualsRenderer {
                     this.entityShadows != null ? this.entityShadows.view() : 0);
             ReflectionUniforms.Values reflection = plan.reflections() ? ReflectionUniforms.compute(settings, this.lightingChoice, lighting,
                     this.atmosphere, atmosphere.night(), this.skyExposure.value(), this.frameId, this.flowSeconds) : ReflectionUniforms.off();
+            refreshCloudMap(settings);
             CloudUniforms.Values clouds = CloudUniforms.compute(settings, this.atmosphere, atmosphere, serial, hasSkyLight,
                     this.post.cloudMapReady(), farSections);
             if (lighting.on()) {

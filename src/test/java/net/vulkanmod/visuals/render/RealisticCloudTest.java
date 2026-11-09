@@ -63,7 +63,8 @@ class RealisticCloudTest {
     /** The noise map's channels are equalised (an even 0..1, so the coverage is the share it leaves) and the mask channel is kept. */
     @Test
     void theNoiseMapIsEqualisedAndKeepsTheMask() {
-        float[][] n = CloudMath.noiseMap();
+        //(every cloud kept: the default count removes some from the weather channel, theCountRemovesWholeCloudsAndKeepsTheRest)
+        float[][] n = CloudMath.noiseMap(1, 2);
         for (float[] c : n) {
             int below = 0;
             float min = 1, max = 0;
@@ -81,7 +82,7 @@ class RealisticCloudTest {
         byte[] with = CloudMath.withNoise(mask);
         assertEquals((byte) 255, with[0]);
         assertEquals((byte) 0, with[4], "r is the mask only");
-        assertEquals(Math.round(n[0][1] * 255), with[5] & 0xFF);
+        assertEquals(Math.round(CloudMath.noiseMap()[0][1] * 255), with[5] & 0xFF);
         assertEquals((byte) 0, mask[1], "a copy");
     }
 
@@ -154,7 +155,7 @@ class RealisticCloudTest {
         java.util.Collections.sort(bases);
         java.util.Collections.sort(tops);
         int n = bases.size();
-        assertTrue(n > 3000, "cloudy columns " + n);
+        assertTrue(n > 1200, "cloudy columns " + n);
         float lowest = bases.get(0);
         long cut = bases.stream().filter(b -> b <= lowest + 3).count();
         assertTrue(cut < 0.05 * n, "bases within 3 blocks of the lowest: " + cut + " of " + n);
@@ -186,6 +187,91 @@ class RealisticCloudTest {
         assertTrue(mean[1] < CloudMath.REAL_NOISE_MEAN, "1 octave " + mean[1]);
         assertEquals(CloudMath.REAL_NOISE_MEAN, CloudMath.erosion(1, 2, 3, 0));
         assertEquals(1f, CloudMath.lumps(0.5f, 0, 0, 64) + Math.abs(2 * CloudMath.valueNoise(0.5f, 0, 0, 64) - 1), 1e-6f);
+    }
+
+    /** Texels of the weather channel a cumulus grows on at the default coverage (g above 1 - REAL_COVER). */
+    private static boolean[] cloudy(float[] weather) {
+        boolean[] c = new boolean[weather.length];
+        for (int i = 0; i < weather.length; i++) c[i] = weather[i] > 1 - CloudMath.REAL_COVER;
+        return c;
+    }
+
+    private static int count(boolean[] c) {
+        int n = 0;
+        for (boolean b : c) if (b) n++;
+        return n;
+    }
+
+    /**
+     * After 3b (2026-11-09): the count removes whole clouds and leaves the others as they were. Count 100% keeps COUNT_KEEP of the cloudy
+     * texels (fewer clouds than 3b by default), 200% keeps them all (3b's map exactly), 0 none; the texels still cloudy at 100% almost all
+     * keep 3b's value exactly, and fewer, not smaller, clouds means the separate patches drop by about as much. A dropped cloud is scaled by
+     * COUNT_DROP, so only a coverage above 1 - COUNT_DROP (heavy rain, a high setting) brings part of it back.
+     */
+    @Test
+    void theCountRemovesWholeCloudsAndKeepsTheRest() {
+        float[] all = CloudMath.noiseMap(1, 2)[0], half = CloudMath.noiseMap(1, 1)[0], none = CloudMath.noiseMap(1, 0)[0];
+        assertArrayEquals(CloudMath.noiseMap(1, 5)[0], all, "count 200% and above keep every clump");
+        boolean[] ca = cloudy(all), ch = cloudy(half);
+        assertEquals(0, count(cloudy(none)));
+        double kept = count(ch) / (double) count(ca);
+        assertEquals(CloudMath.COUNT_KEEP, kept, 0.12, "share of the cloudy texels kept at count 100%");
+        int same = 0;
+        for (int i = 0; i < ch.length; i++) {
+            assertTrue(!ch[i] || ca[i], "the count only removes");
+            if (ch[i] && Math.abs(half[i] - all[i]) < 1e-6f) same++;
+        }
+        assertEquals(count(ch), same, "kept clouds unchanged");
+        int pa = patches(ca), ph = patches(ch);
+        assertEquals(kept, ph / (double) pa, 0.2, "patches " + ph + " of " + pa);
+        assertEquals(0.5f, CloudMath.countKept(1), 1e-6f);
+        assertEquals(1f, CloudMath.countKept(CloudMath.COUNT_MAX / 100f), 1e-6f);
+    }
+
+    /** Separate cloudy patches on the map (4-connected, wrapping). */
+    private static int patches(boolean[] c) {
+        int n = CloudMath.MAP, found = 0;
+        boolean[] seen = new boolean[c.length];
+        java.util.ArrayDeque<Integer> q = new java.util.ArrayDeque<>();
+        for (int i = 0; i < c.length; i++) {
+            if (!c[i] || seen[i]) continue;
+            found++;
+            seen[i] = true;
+            q.add(i);
+            while (!q.isEmpty()) {
+                int j = q.poll(), x = j % n, z = j / n;
+                for (int k : new int[]{z * n + (x + 1) % n, z * n + (x + n - 1) % n, ((z + 1) % n) * n + x, ((z + n - 1) % n) * n + x}) {
+                    if (c[k] && !seen[k]) {
+                        seen[k] = true;
+                        q.add(k);
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    /**
+     * After 3b: the size scales each cloud and the gaps between them over the same share of the sky: at 200% there are about a quarter as
+     * many cloudy patches (twice as wide each way), at 50% about four times as many; the share covered stays; the layer thickens with the
+     * size ((1 + size) / 2), so bigger clouds are also taller.
+     */
+    @Test
+    void theSizeScalesEachCloud() {
+        boolean[] small = cloudy(CloudMath.noiseMap(0.5f, 2)[0]), normal = cloudy(CloudMath.noiseMap(1, 2)[0]), big = cloudy(CloudMath.noiseMap(2, 2)[0]);
+        int ps = patches(small), pn = patches(normal), pb = patches(big);
+        assertTrue(pb < 0.5 * pn && ps > 2 * pn, "patches at 50 / 100 / 200%: " + ps + " / " + pn + " / " + pb);
+        for (boolean[] c : new boolean[][]{small, big}) assertEquals(count(normal), count(c), 0.02 * c.length);
+        assertEquals(CloudMath.REAL_THICKNESS, CloudMath.realThickness(1), 1e-6f);
+        assertEquals(1.5f * CloudMath.REAL_THICKNESS, CloudMath.realThickness(2), 1e-4f);
+        assertEquals(0.75f * CloudMath.REAL_THICKNESS, CloudMath.realThickness(0.5f), 1e-4f);
+        //The octaves stay whole cells over the map (seamless at the offset's wrap) and at least two texels a cell
+        for (float size : new float[]{0.5f, 0.77f, 1, 1.3f, 2}) {
+            for (int base : new int[]{16, 32, 64, 128}) {
+                int cells = CloudMath.cells(base, size);
+                assertTrue(cells >= 1 && cells <= CloudMath.MAP / 2, base + " at " + size + ": " + cells);
+            }
+        }
     }
 
     private static float share(CloudMath.Realistic r, float y) {
@@ -326,6 +412,12 @@ class RealisticCloudTest {
             c.taa = false;
         }), frame(0, 7), 7).slots();
         assertEquals(2f, noTaa[6], "medium, no jitter phase without TAA");
+        //After 3b: the cloud size thickens the layer
+        float[] big = clouds(settings(c -> {
+            c.cloudStyle = CloudMath.STYLE_REALISTIC;
+            c.cloudSize = 200;
+        }), frame(0), 1).slots();
+        assertEquals(CloudMath.realThickness(2), big[1], 1e-4f);
         float[] rain = clouds(settings(c -> c.cloudStyle = CloudMath.STYLE_REALISTIC), frame(1), 1).slots();
         assertEquals(CloudMath.REAL_COVER * (1 + CloudUniforms.REAL_RAIN), rain[7], 1e-5f);
         float[] clear = clouds(settings(c -> {
@@ -387,6 +479,19 @@ class RealisticCloudTest {
         assertEquals(CloudMath.QUALITY_MAX, c.cloudQuality);
         VisualsOptionLayout.set(c, coverage, 150);
         assertEquals(1.5f, PostProcessSettings.from(c).cloudCoverage(), 1e-6f);
+        //After 3b: size and count, also under the style, 100 each by default
+        VisualsOptionLayout.Item size = item("cloud_size"), count = item("cloud_count");
+        assertEquals("cloud_style", size.requires());
+        assertEquals("cloud_style", count.requires());
+        assertEquals(100, VisualsOptionLayout.defaultValue(size));
+        assertEquals(100, VisualsOptionLayout.defaultValue(count));
+        assertEquals(CloudMath.SIZE_MIN, size.min());
+        assertEquals(CloudMath.SIZE_MAX, size.max());
+        assertEquals(CloudMath.COUNT_MAX, count.max());
+        VisualsOptionLayout.set(c, size, 10);
+        VisualsOptionLayout.set(c, count, 999);
+        assertEquals(CloudMath.SIZE_MIN / 100f, PostProcessSettings.from(c).cloudSize(), 1e-6f);
+        assertEquals(CloudMath.COUNT_MAX / 100f, PostProcessSettings.from(c).cloudCount(), 1e-6f);
     }
 
     private static VisualsOptionLayout.Item item(String key) {
