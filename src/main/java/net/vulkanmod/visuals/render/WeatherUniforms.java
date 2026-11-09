@@ -8,7 +8,7 @@ import org.joml.Matrix4f;
  * 2026-11-09 (session 6, the user: vanilla's rain and snow look thick and too vanilla; shader-drawn rain and snow with an on/off setting):
  * weather.comp's slots. 0..3 the view (the inverse projections without the TAA jitter, the inverse view, the depth parameters), 4..7 the
  * light volume (LightVolumeUniforms.write at WEATHER_FIRST), 8..12 weatherPixel's camera, frac, params, rain and snow (weather.glsl), 13
- * and 14 the drops' tints.
+ * and 14 the drops' tints, 15 the splashes (x the time wrapped at SPLASH_WRAP periods; 2026-11-10).
  * <p>
  * The strength follows vanilla's rain and thunder levels: the share of cells holding a drop is RAIN_SHARE (SNOW_SHARE) x the density
  * setting x the rain level, THUNDER_EXTRA more in a thunderstorm, and the coverage COVERAGE_BASE + (1 - COVERAGE_BASE) x the rain level
@@ -17,7 +17,7 @@ import org.joml.Matrix4f;
  */
 public final class WeatherUniforms {
     public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, INV_VIEW = 2, DEPTH_PARAMS = 3, WEATHER_FIRST = 4, CAMERA = 8, FRAC = 9,
-            PARAMS = 10, RAIN = 11, SNOW = 12, RAIN_TINT = 13, SNOW_TINT = 14;
+            PARAMS = 10, RAIN = 11, SNOW = 12, RAIN_TINT = 13, SNOW_TINT = 14, SPLASH = 15;
     /** The density setting's range (percent; 100 = the tuned share). */
     public static final int DENSITY_MAX = 200;
     /** Fall speeds (blocks per second): vanilla's rain texture falls about this fast, its snow a little over a block a second. */
@@ -40,7 +40,7 @@ public final class WeatherUniforms {
     public static final float VELOCITY_SECONDS = 0.1f, TELEPORT_BLOCKS = 8.0f;
 
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f invView, boolean lodValid, float[] camera,
-                         float[] frac, float[] params, float[] rain, float[] snow) {
+                         float[] frac, float[] params, float[] rain, float[] snow, float[] splash) {
         public void write(LooseUniformWriter w) {
             if (!this.on) return;
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection);
@@ -54,6 +54,7 @@ public final class WeatherUniforms {
             w.putVec4(SNOW, this.snow[0], this.snow[1], this.snow[2], this.snow[3]);
             w.putVec4(RAIN_TINT, RAIN_COLOUR[0], RAIN_COLOUR[1], RAIN_COLOUR[2], 0);
             w.putVec4(SNOW_TINT, SNOW_COLOUR[0], SNOW_COLOUR[1], SNOW_COLOUR[2], 0);
+            w.putVec4(SPLASH, this.splash[0], 0, 0, 0);
         }
     }
 
@@ -61,7 +62,7 @@ public final class WeatherUniforms {
     }
 
     public static Values off() {
-        return new Values(false, null, null, null, false, null, null, null, null, null);
+        return new Values(false, null, null, null, false, null, null, null, null, null, null);
     }
 
     /** Whether the shader draws the weather this frame instead of vanilla (the setting on, the post-process on, a frame to draw). */
@@ -91,7 +92,8 @@ public final class WeatherUniforms {
         float[] frac = {(float) (x - bx), (float) (y - by), (float) (z - bz), pixelAngle};
         float[] v = velocity != null && velocity.length == 3 ? velocity : new float[3];
         return new Values(true, invVanillaProjection, invLodProjection != null ? invLodProjection : invVanillaProjection, invView, lodValid, camera, frac,
-                params, motion(RAIN_FALL, v, WeatherMath.RAIN_PERIOD, seconds, EXPOSURE), motion(SNOW_FALL, v, WeatherMath.SNOW_PERIOD, seconds, SNOW_EXPOSURE));
+                params, motion(RAIN_FALL, v, WeatherMath.RAIN_PERIOD, seconds, EXPOSURE), motion(SNOW_FALL, v, WeatherMath.SNOW_PERIOD, seconds, SNOW_EXPOSURE),
+                new float[]{(float) wrap(seconds, (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP), 0, 0, 0});
     }
 
     /**

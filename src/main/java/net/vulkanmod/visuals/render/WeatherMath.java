@@ -38,6 +38,21 @@ public final class WeatherMath {
     public static final int WEATHER_FALL_WRAP = 256;
     public static final float WEATHER_SIZE_SPREAD = 0.3f;
     public static final float WEATHER_BRIGHT_SPREAD = 0.25f;
+    public static final float SPLASH_CELL = 0.5f;
+    public static final float SPLASH_PERIOD = 0.55f;
+    public static final float SPLASH_LIFE = 0.16f;
+    public static final float SPLASH_RADIUS = 0.1f;
+    public static final float SPLASH_RING = 0.008f;
+    public static final float SPLASH_ALPHA = 0.65f;
+    public static final int SPLASH_FLECKS = 4;
+    public static final float SPLASH_FLECK = 0.01f;
+    public static final float SPLASH_THROW = 1.1f;
+    public static final float SPLASH_SURFACE = 0.02f;
+    public static final float SPLASH_END = 16.0f;
+    public static final float SPLASH_FADE = 6.0f;
+    public static final int SPLASH_EVENTS = 64;
+    public static final int SPLASH_WRAP = 1024;
+    public static final float SPLASH_GRAZE = 0.2f;
     public static final int WEATHER_PRIME_X = 73856093;
     public static final int WEATHER_PRIME_Z = 19349663;
     public static final int WEATHER_PRIME_Y = 50331653;
@@ -209,6 +224,41 @@ public final class WeatherMath {
                 tMax[a] += tDelta[a];
             }
         }
+    }
+
+    /** weatherSplash: the splash (premultiplied rgb, alpha) over a scene pixel at rel along unit dir at distance dist; splash[0] the wrapped time. */
+    public static float[] splash(float[] rel, float[] dir, float dist, float[] camera, float[] frac, float[] params, float[] splash, Map map, Light light) {
+        float[] none = new float[4];
+        if (dist >= SPLASH_END || params[0] <= 0) return none;
+        int camX = (int) camera[0], camZ = (int) camera[2];
+        float wx = frac[0] + rel[0], wz = frac[2] + rel[2];
+        int columnX = camX + (int) Math.floor(wx), columnZ = camZ + (int) Math.floor(wz);
+        int texel = map.at(columnX & WEATHER_MAP_MASK, columnZ & WEATHER_MAP_MASK);
+        if (kind(texel, (int) Math.floor(camera[3])) != RAIN || Math.abs(camera[3] + rel[1] - height(texel)) > SPLASH_SURFACE) return none;
+        float gx = camX + wx, gz = camZ + wz;
+        int cellX = (int) Math.floor(gx / SPLASH_CELL), cellZ = (int) Math.floor(gz / SPLASH_CELL);
+        float inX = gx - cellX * SPLASH_CELL, inZ = gz - cellZ * SPLASH_CELL;
+        int mask = (int) (WEATHER_WRAP / SPLASH_CELL) - 1;
+        float[] r = bytes(hash(cellX & mask, 0, cellZ & mask, 8 * WEATHER_LAYERS));
+        float cycle = splash[0] / SPLASH_PERIOD + r[0];
+        float event = (float) Math.floor(cycle);
+        float age = (cycle - event) * SPLASH_PERIOD / SPLASH_LIFE;
+        if (age >= 1) return none;
+        float[] e = bytes(hash(cellX & mask, ((int) event) & (SPLASH_EVENTS - 1), cellZ & mask, 8 * WEATHER_LAYERS + 1));
+        if (e[3] >= params[0]) return none;
+        float cx = mix(0.25f, 0.75f, e[0]) * SPLASH_CELL, cz = mix(0.25f, 0.75f, e[1]) * SPLASH_CELL;
+        float radius = SPLASH_RADIUS * (float) Math.sqrt(age);
+        float t = dist / Math.max(Math.abs(dir[1]), SPLASH_GRAZE);
+        float alpha = coverage(Math.abs((float) Math.hypot(inX - cx, inZ - cz) - radius), SPLASH_RING, t, frac[3], SPLASH_ALPHA);
+        for (int k = 0; k < SPLASH_FLECKS; k++) {
+            float a = 6.2831853f * ((k + e[2]) / SPLASH_FLECKS);
+            float px = cx + (float) Math.cos(a) * radius * SPLASH_THROW, pz = cz + (float) Math.sin(a) * radius * SPLASH_THROW;
+            alpha = Math.max(alpha, coverage((float) Math.hypot(inX - px, inZ - pz), SPLASH_FLECK, t, frac[3], SPLASH_ALPHA));
+        }
+        alpha *= (1 - age) * (1 - age) * (1 - smoothstep(SPLASH_END - SPLASH_FADE, SPLASH_END, dist)) * params[2];
+        if (alpha <= 0) return none;
+        float[] c = light.at(rel[0], rel[1], rel[2], false);
+        return new float[]{c[0] * alpha, c[1] * alpha, c[2] * alpha, alpha};
     }
 
     /**

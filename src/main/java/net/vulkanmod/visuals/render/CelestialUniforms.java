@@ -12,7 +12,8 @@ import net.vulkanmod.visuals.vk.LooseUniformWriter;
  * TAA, else 0)</li>
  * </ul>
  * The aurora's strength is the setting's (aurora strength x the mode) times, in a dimension with a sun (the Overworld), the night (none
- * while the sun is above NIGHT_HIGH, full below NIGHT_LOW), the weather (rain keeps 1 - RAIN_CUT, a thunderstorm 1 - THUNDER_CUT more:
+ * while the sun is above NIGHT_HIGH, full below NIGHT_LOW), the weather (only clear skies: gone once the rain level reaches RAIN_FADE,
+ * 2026-11-10 at the user's word, snow too since it is the same level; a thunderstorm 1 - THUNDER_CUT more:
  * the overcast hides it) and the climate (cold biomes full, warm ones WARM_SHARE: auroras belong to high latitudes); in the End
  * always END_SHARE; nowhere else (the Nether).
  */
@@ -26,8 +27,13 @@ public final class CelestialUniforms {
     public static final int AURORA_STRENGTH_MAX = 200;
     /** The night by the sun's height (sine of elevation): no aurora above NIGHT_HIGH, all of it below NIGHT_LOW (about 17 degrees down). */
     public static final float NIGHT_HIGH = -0.05f, NIGHT_LOW = -0.3f;
-    /** Full rain keeps 1 - RAIN_CUT of the aurora, a full thunderstorm 1 - THUNDER_CUT of that. */
-    public static final float RAIN_CUT = 0.8f, THUNDER_CUT = 1.0f;
+    /**
+     * 2026-11-10 (the user: "auroras only in clear weather; in rain or snow they must not show, even at night"): the aurora fades out as the
+     * rain level (vanilla's, rain and snow alike) rises from 0 to RAIN_FADE (smoothstep; vanilla moves the level by 0.01 a tick, so it
+     * fades over about 1.5 seconds as the weather turns, and back as it clears); a thunderstorm keeps 1 - THUNDER_CUT. Session 5 kept 20%
+     * in full rain.
+     */
+    public static final float RAIN_FADE = 0.3f, THUNDER_CUT = 1.0f;
     /**
      * The climate: biomes at or below COLD_TEMPERATURE (snowy: vanilla's snow falls below 0.15) see all of it, those at or above
      * WARM_TEMPERATURE (plains 0.8, desert 2.0) WARM_SHARE; the share follows the camera's biome over CLIMATE_SECONDS (no jump at a border).
@@ -101,7 +107,7 @@ public final class CelestialUniforms {
         if (sky == Sky.END) return mode >= AURORA_END_ONLY ? s.auroraStrength() * END_SHARE : 0;
         if (sky != Sky.SUN || mode < AURORA_NIGHT_AND_END) return 0;
         float night = AtmosphereMath.smoothstep(NIGHT_HIGH, NIGHT_LOW, finite(sunHeight, 1));
-        float weather = (1 - RAIN_CUT * clamp01(rain)) * (1 - THUNDER_CUT * clamp01(thunder));
+        float weather = (1 - AtmosphereMath.smoothstep(0, RAIN_FADE, clamp01(rain))) * (1 - THUNDER_CUT * clamp01(thunder));
         float c = clamp01(climate);
         return s.auroraStrength() * night * weather * (WARM_SHARE + (1 - WARM_SHARE) * c);
     }
