@@ -161,8 +161,9 @@ public final class CloudMath {
     // ---- Session 3 (2026-11-09): the realistic style. clouds.glsl's realistic part mirrored (change both together), and its noise map ----
 
     /** clouds.glsl's REAL_* constants (see there). */
-    public static final float REAL_COVER = 0.38f, REAL_TOP_MIN = 0.3f, REAL_TOWER = 0.45f, REAL_BOTTOM = 0.08f, REAL_ROUND = 0.3f;
-    public static final float REAL_ERODE = 0.65f, REAL_NOISE_CELL = 48, REAL_NOISE_CELL2 = 16, REAL_NOISE_DETAIL = 0.45f, REAL_DENSITY = 0.45f;
+    public static final float REAL_COVER = 0.38f, REAL_TOP_MIN = 0.3f, REAL_TOWER = 0.45f, REAL_BOTTOM = 0.35f, REAL_ROUND = 0.35f, REAL_BASE_LIFT = 0.25f;
+    public static final float REAL_ERODE = 0.6f, REAL_NOISE_CELL = 48, REAL_NOISE_CELL2 = 16, REAL_NOISE_CELL3 = 6, REAL_NOISE_DETAIL = 0.45f,
+            REAL_NOISE_DETAIL2 = 0.25f, REAL_NOISE_MEAN = 0.6f, REAL_DENSITY = 0.45f;
     public static final int REAL_SAMPLES_LOW = 16, REAL_SAMPLES_MEDIUM = 32, REAL_SAMPLES_HIGH = 56, REAL_SAMPLES_MIN = 8;
     public static final float REAL_STEP = 4;
     public static final int REAL_LIGHT_LOW = 2, REAL_LIGHT_MEDIUM = 3, REAL_LIGHT_HIGH = 4;
@@ -176,9 +177,10 @@ public final class CloudMath {
 
     /**
      * CPU side: the cumulus base REAL_LIFT blocks above vanilla's layer (vanilla's sits about 130 blocks over the sea; the cumulus then
-     * stand about 260 over it, so a 200-block tower spans some 40 degrees overhead, as a real one at 1.5 km), REAL_THICKNESS thick.
+     * stand about 260 over it, so a 200-block tower spans some 40 degrees overhead, as a real one at 1.5 km), REAL_THICKNESS thick
+     * (3b: 96 to 144, so the towers stand about as tall as they are wide).
      */
-    public static final float REAL_LIFT = 128, REAL_THICKNESS = 96;
+    public static final float REAL_LIFT = 128, REAL_THICKNESS = 144;
     /** The cloud style setting: vanilla's cell shape (the far clouds as before session 3) or the realistic clouds. */
     public static final int STYLE_VANILLA = 0, STYLE_REALISTIC = 1, STYLE_MAX = 1;
     /** The cloud quality setting: low, medium, high (cloudOffset.z's whole part is the setting plus 1). */
@@ -190,7 +192,7 @@ public final class CloudMath {
 
     /** farCloudMarch's counts: (samples, light samples, erosion octaves) for quality 1..3 (cloudOffset.z's whole part). */
     public static int[] quality(int q) {
-        return q >= 3 ? new int[]{REAL_SAMPLES_HIGH, REAL_LIGHT_HIGH, 2} : q == 2 ? new int[]{REAL_SAMPLES_MEDIUM, REAL_LIGHT_MEDIUM, 2}
+        return q >= 3 ? new int[]{REAL_SAMPLES_HIGH, REAL_LIGHT_HIGH, 3} : q == 2 ? new int[]{REAL_SAMPLES_MEDIUM, REAL_LIGHT_MEDIUM, 3}
                 : new int[]{REAL_SAMPLES_LOW, REAL_LIGHT_LOW, 1};
     }
 
@@ -231,12 +233,18 @@ public final class CloudMath {
         return mix(mix(a, b, uy), mix(c, d, uy), uz);
     }
 
-    /** realErosion: octaves 0 the mean, 1 the first octave, 2 with the billows (|2n - 1|). */
+    /** realErosion: octaves 0 the mean (REAL_NOISE_MEAN), 1 the first octave, 2 and 3 with the lumps (1 - |2n - 1|). */
     public static float erosion(float x, float y, float z, int octaves) {
-        if (octaves <= 0) return 0.5f;
+        if (octaves <= 0) return REAL_NOISE_MEAN;
         float e = valueNoise(x / REAL_NOISE_CELL, y / REAL_NOISE_CELL, z / REAL_NOISE_CELL, MAP * CLOUD_CELL / REAL_NOISE_CELL);
-        if (octaves >= 2) e = mix(e, Math.abs(2 * valueNoise(x / REAL_NOISE_CELL2, y / REAL_NOISE_CELL2, z / REAL_NOISE_CELL2, MAP * CLOUD_CELL / REAL_NOISE_CELL2) - 1), REAL_NOISE_DETAIL);
+        if (octaves >= 2) e = mix(e, lumps(x / REAL_NOISE_CELL2, y / REAL_NOISE_CELL2, z / REAL_NOISE_CELL2, MAP * CLOUD_CELL / REAL_NOISE_CELL2), REAL_NOISE_DETAIL);
+        if (octaves >= 3) e = mix(e, lumps(x / REAL_NOISE_CELL3, y / REAL_NOISE_CELL3, z / REAL_NOISE_CELL3, MAP * CLOUD_CELL / REAL_NOISE_CELL3), REAL_NOISE_DETAIL2);
         return e;
+    }
+
+    /** realLumps: 1 - |2n - 1| of the value noise: low inside rounded lumps, 1 along the creases between them. */
+    static float lumps(float x, float y, float z, float n) {
+        return 1 - Math.abs(2 * valueNoise(x, y, z, n) - 1);
     }
 
     /** realDensity: the cumulus density 0..1 at camera-relative (x, y, z). */
@@ -246,9 +254,9 @@ public final class CloudMath {
         float mx = r.offsetX + x, mz = r.offsetZ + z;
         float s = (noise(map, mx, mz, 1) - 1 + f) / f;
         if (s <= 0) return 0;
-        float top = mix(REAL_TOP_MIN, 1, s) * mix(1 - REAL_TOWER, 1, noise(map, mx, mz, 3));
-        float hp = h / top;
-        if (hp >= 1) return 0;
+        float tower = noise(map, mx, mz, 3), lift = REAL_BASE_LIFT * (1 - tower);
+        float hp = (h - lift) / ((1 - lift) * mix(REAL_TOP_MIN, 1, s) * mix(1 - REAL_TOWER, 1, tower));
+        if (!(hp > 0 && hp < 1)) return 0;
         float d = s * smoothstep(0, REAL_BOTTOM, hp) * (1 - smoothstep(REAL_ROUND, 1, hp));
         float e = REAL_ERODE * erosion(mx, y - r.base, mz, octaves);
         return Math.max((d - e) / (1 - e), 0);
@@ -391,7 +399,8 @@ public final class CloudMath {
 
     /**
      * The realistic style's three noises over the cloud map, MAP x MAP texels each (index z * MAP + x), equalised, repeating with the
-     * map: [0] the weather (where cumulus grow: octaves of 256 to 32 blocks, shifted up to 48 blocks by a 768-block noise so the patches are not round),
+     * map: [0] the weather (where cumulus grow: octaves of 192 to 24 blocks, shifted up to 48 blocks by a 768-block noise so the patches are not round;
+     * 3b: from 256 to 32, so the cumulus stand as separate rounded clumps rather than wide slabs),
      * [1] the cirrus (streaks four times longer along x, the drift, than across, bent by the shift), [2] the towers' height.
      */
     public static float[][] noiseMap() {
@@ -401,7 +410,7 @@ public final class CloudMath {
             for (int x = 0; x < MAP; x++) {
                 int i = z * MAP + x;
                 float wx = 4 * gradient(x * 4f / MAP, z * 4f / MAP, 4, 4, SEED_WARP), wz = 4 * gradient(x * 4f / MAP + 0.5f, z * 4f / MAP + 0.5f, 4, 4, SEED_WARP + 1);
-                weather[i] = fbm(x + wx, z + wz, new int[]{12, 24, 48, 96}, new int[]{12, 24, 48, 96}, new float[]{1, 0.6f, 0.3f, 0.15f}, SEED_WEATHER);
+                weather[i] = fbm(x + wx, z + wz, new int[]{16, 32, 64, 128}, new int[]{16, 32, 64, 128}, new float[]{1, 0.6f, 0.3f, 0.15f}, SEED_WEATHER);
                 cirrus[i] = fbm(x + wx, z + 2 * wz, new int[]{4, 8, 16, 32}, new int[]{16, 32, 64, 96}, new float[]{1, 0.55f, 0.3f, 0.1f}, SEED_CIRRUS);
                 tower[i] = fbm(x, z, new int[]{16, 32}, new int[]{16, 32}, new float[]{1, 0.5f}, SEED_TOWER);
             }
