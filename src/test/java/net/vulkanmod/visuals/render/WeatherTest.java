@@ -349,4 +349,74 @@ class WeatherTest {
         assertFalse(WeatherUniforms.wanted(settings(c -> c.shaderWeather = false)));
         assertFalse(WeatherUniforms.wanted(null));
     }
+
+    /** A pixel on the ground at world (x, y, z) seen from CAMERA: its offset, direction and distance. */
+    private static float[][] ground(float x, float y, float z) {
+        float[] rel = {x - (CAMERA[0] + FRAC[0]), y - CAMERA[3], z - (CAMERA[2] + FRAC[2])};
+        float d = (float) Math.sqrt(rel[0] * rel[0] + rel[1] * rel[1] + rel[2] * rel[2]);
+        return new float[][]{rel, {rel[0] / d, rel[1] / d, rel[2] / d}, {d}};
+    }
+
+    /** The mean splash coverage over a 6x6 block patch of ground at height y (16 samples a block) at time seconds. */
+    private static float meanSplash(WeatherMath.Map map, float y, double seconds) {
+        float[] splash = {(float) WeatherUniforms.wrap(seconds, (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP), 0, 0, 0};
+        double sum = 0;
+        int n = 0;
+        for (float x = 102; x < 108; x += 1 / 16f) {
+            for (float z = 196; z < 202; z += 1 / 16f) {
+                float[][] g = ground(x, y, z);
+                sum += WeatherMath.splash(g[0], g[1], g[2][0], CAMERA, FRAC, PARAMS, splash, map, (a, b, c, snow) -> WHITE)[3];
+                n++;
+            }
+        }
+        return (float) (sum / n);
+    }
+
+    @Test
+    void splashesHitOnlyTheTopsOfRainedOnColumnsAndAreShortLived() {
+        //2026-11-10 (the user: the rain bouncing off the grass still looks vanilla): on open grass (top at 68, the first free block)
+        WeatherMath.Map grass = map((x, z) -> 68, false);
+        float open = 0;
+        for (int i = 0; i < 8; i++) open += meanSplash(grass, 68, 3.1 + i * 0.07) / 8;
+        assertTrue(open > 1e-4f && open < 0.05f, "subtle splashes on open grass: " + open);
+        //Water's surface (8/9 of a block) lies below its column's height: no splash there (the 2a ripples stay)
+        assertEquals(0, meanSplash(grass, 67 + 8 / 9f, 3.1), 0);
+        //Under a roof (the column's height is the roof's) and where it snows: none
+        assertEquals(0, meanSplash(map((x, z) -> 74, false), 68, 3.1), 0);
+        assertEquals(0, meanSplash(map((x, z) -> 68, true), 68, 3.1), 0);
+        //No rain share (clear, or the setting's density 0): none
+        float[][] g = ground(104.3f, 68, 199.2f);
+        assertEquals(0, WeatherMath.splash(g[0], g[1], g[2][0], CAMERA, FRAC, new float[]{0, 0, 1, 0}, new float[4], grass, (a, b, c, snow) -> WHITE)[3], 0);
+        //A spot is lit only for a short part of the period: over many instants, at most about SPLASH_LIFE / SPLASH_PERIOD of the time
+        int lit = 0, n = 400;
+        for (int i = 0; i < n; i++) {
+            float[] splash = {(float) (i * WeatherMath.SPLASH_PERIOD * 0.37), 0, 0, 0};
+            for (float dx = 0; dx < 0.5f; dx += 0.01f) {
+                if (WeatherMath.splash(ground(104.25f + dx, 68, 199.25f)[0], ground(104.25f + dx, 68, 199.25f)[1], ground(104.25f + dx, 68, 199.25f)[2][0],
+                        CAMERA, FRAC, PARAMS, splash, grass, (a, b, c, snow) -> WHITE)[3] > 0) {
+                    lit++;
+                    break;
+                }
+            }
+        }
+        assertTrue(lit > 0 && lit <= n * (WeatherMath.SPLASH_LIFE / WeatherMath.SPLASH_PERIOD) * 1.3, "lit " + lit + " of " + n);
+        //The wrapped time repeats exactly: the splashes are the same one wrap later
+        double wrap = (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP;
+        assertEquals(meanSplash(grass, 68, 3.1), meanSplash(grass, 68, 3.1 + wrap), 1e-6);
+        assertEquals(0, WeatherMath.SPLASH_WRAP % WeatherMath.SPLASH_EVENTS);
+        //A splash stays inside its cell (the ring and the thrown flecks), so one cell's lookup finds all of it
+        assertTrue(0.25f * WeatherMath.SPLASH_CELL >= WeatherMath.SPLASH_RADIUS * WeatherMath.SPLASH_THROW + WeatherMath.SPLASH_FLECK);
+    }
+
+    @Test
+    void vanillasRainParticlesAreLeftOutOnlyWhileTheShaderDrawsTheWeather() throws Exception {
+        java.lang.reflect.Method m = Class.forName("net.vulkanmod.mixin.visuals.LevelRendererWeatherMixin", false, getClass().getClassLoader())
+                .getDeclaredMethod("visuals$rainSplash", net.minecraft.client.multiplayer.ClientLevel.class, net.minecraft.core.particles.ParticleOptions.class,
+                        double.class, double.class, double.class, double.class, double.class, double.class);
+        org.spongepowered.asm.mixin.injection.Redirect r = m.getAnnotation(org.spongepowered.asm.mixin.injection.Redirect.class);
+        assertNotNull(r);
+        assertEquals("tickRain", r.method()[0]);
+        assertTrue(PASS.contains("layout(location = 15) uniform vec4 splashParams;") && PASS.contains("weatherSplash(mat3(invView)*view, dir, sceneDist"));
+        assertEquals(15, WeatherUniforms.SPLASH);
+    }
 }

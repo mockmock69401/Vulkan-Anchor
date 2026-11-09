@@ -157,8 +157,8 @@ class AuroraTest {
     }
 
     /**
-     * CelestialUniforms: Off / End only / Night and End; in the Overworld only at night (by the sun's height), weaker in rain and gone in a
-     * storm, fuller in cold biomes; always in the End; never in the Nether; nothing with the post-process off. The time wraps, the End flag
+     * CelestialUniforms: Off / End only / Night and End; in the Overworld only at night (by the sun's height) and in clear weather (2026-11-10:
+     * gone in rain or snow, fading with the rain level), fuller in cold biomes; always in the End; never in the Nether; nothing with the post-process off. The time wraps, the End flag
      * is z, the shape and moon phase go to the celestial slot.
      */
     @Test
@@ -171,7 +171,16 @@ class AuroraTest {
         assertEquals(0, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, noon, 0, 0, 1), 0);
         float d = CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, dusk, 0, 0, 1);
         assertTrue(d > 0 && d < night, "fades in with the sun's height: " + d);
-        assertEquals(1 - CelestialUniforms.RAIN_CUT, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, 1, 0, 1), 1e-6f);
+        assertEquals(0, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, 1, 0, 1), 0, "rain or snow hides it");
+        assertEquals(0, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, CelestialUniforms.RAIN_FADE, 0, 1), 0);
+        float turning = CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, 0.1f, 0, 1);
+        assertTrue(turning > 0 && turning < night, "fades as the weather turns: " + turning);
+        float t0 = 1, previous = 2;
+        for (float r = 0; r <= 1.0001f; r += 0.05f) {
+            float a = CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, r, 0, 1);
+            assertTrue(a <= previous + 1e-6f, "falls monotonically with the rain level");
+            previous = a;
+        }
         assertEquals(0, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, 1, 1, 1), 1e-6f, "a storm hides it");
         assertEquals(CelestialUniforms.WARM_SHARE, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, 0, 0, 0), 1e-6f);
         assertEquals(1, CelestialUniforms.climate(0), 0, "snowy");

@@ -33,6 +33,8 @@ layout(location = 11) uniform vec4 rainMotion;
 layout(location = 12) uniform vec4 snowMotion;
 layout(location = 13) uniform vec4 rainTint;
 layout(location = 14) uniform vec4 snowTint;
+//2026-11-10, WeatherUniforms: the splashes on the ground (weatherSplash): x the time wrapped at SPLASH_WRAP periods, yzw 0
+layout(location = 15) uniform vec4 splashParams;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -91,7 +93,15 @@ void main() {
         return;
     }
     vec3 view;
-    float sceneDist = scenePosition(p, size, view) ? length(view) : 1e30;
+    bool scene = scenePosition(p, size, view);
+    float sceneDist = scene ? length(view) : 1e30;
     vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(p, size)));
-    imageStore(weatherOut, p, weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion));
+    vec4 acc = weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion);
+    //2026-11-10: the splashes on the ground behind the drops
+    if (scene && acc.a <= WEATHER_OPAQUE) {
+        vec4 s = weatherSplash(mat3(invView)*view, dir, sceneDist, weatherCamera, weatherFrac, weatherParams, splashParams);
+        acc.rgb += (1.0 - acc.a)*s.rgb;
+        acc.a += (1.0 - acc.a)*s.a;
+    }
+    imageStore(weatherOut, p, acc);
 }

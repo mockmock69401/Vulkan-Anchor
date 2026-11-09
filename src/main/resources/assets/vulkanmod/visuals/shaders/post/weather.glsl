@@ -23,6 +23,8 @@
 //     far rain thins out instead of flickering). A drop's radiance is about the light around it (Garg and Nayar 2004: a drop refracts a
 //     wide cone of the environment), so it is a pale tint lit as vanilla lights its weather: the lightmap at the drop's sky and block light.
 //   - Snowflakes are the same with a slow fall, a sway and a round flake (a short segment of the flake's motion).
+//   - 2026-11-10: splashes on the ground (weatherSplash) in place of vanilla's rain particles: tiny rings and flecks where the rain hits the
+//     top of an open column, world-anchored and short-lived (see SPLASH_*).
 //   - Where: a column's drops fall only above vanilla's MOTION_BLOCKING height (the first free block: no rain under roofs, leaves or in
 //     caves; water's surface stops it), in biomes with precipitation, as snow where vanilla's rule says so (Biome.getPrecipitationAt at
 //     max(camera y - WEATHER_EVAL_DROP, height), WEATHER_TEMPERATURE_Y and the snow line from the CPU), and only in front of the scene's
@@ -76,6 +78,29 @@ const int WEATHER_FALL_WRAP = 256;
 //Each drop's width and brightness vary by this much either way
 const float WEATHER_SIZE_SPREAD = 0.3;
 const float WEATHER_BRIGHT_SPREAD = 0.25;
+//2026-11-10 (the user: "the rain bouncing off the grass still looks vanilla"): splashes on the ground in place of vanilla's rain particles.
+// The ground is cut into SPLASH_CELL squares; each fires a splash once every SPLASH_PERIOD seconds at a random phase and a new random spot
+// (in the cell's middle half), kept with the rain's share of cells (about vanilla's rate in full rain: 6 to 7 a block per second). A splash
+// lives SPLASH_LIFE seconds: a ring growing to SPLASH_RADIUS (SPLASH_RING half thick) and SPLASH_FLECKS flecks (SPLASH_FLECK) thrown out to
+// SPLASH_THROW times it, fading as (1 - age)^2. Only on the top of a rained-on column (the pixel within SPLASH_SURFACE of its MOTION_BLOCKING
+// height: not under roofs, not on water, whose surface lies below the block line and keeps its ripples), out to SPLASH_END blocks, fading over
+// the last SPLASH_FADE. The time arrives wrapped at SPLASH_WRAP periods (a multiple of the SPLASH_EVENTS spots each cell cycles through)
+const float SPLASH_CELL = 0.5;
+const float SPLASH_PERIOD = 0.55;
+const float SPLASH_LIFE = 0.16;
+const float SPLASH_RADIUS = 0.1;
+const float SPLASH_RING = 0.008;
+const float SPLASH_ALPHA = 0.65;
+const int SPLASH_FLECKS = 4;
+const float SPLASH_FLECK = 0.01;
+const float SPLASH_THROW = 1.1;
+const float SPLASH_SURFACE = 0.02;
+const float SPLASH_END = 16.0;
+const float SPLASH_FADE = 6.0;
+const int SPLASH_EVENTS = 64;
+const int SPLASH_WRAP = 1024;
+//The ground's footprint grows as the view grazes it: the pixel's angle over max(|dir.y|, SPLASH_GRAZE)
+const float SPLASH_GRAZE = 0.2;
 //Hash constants (Teschner et al. 2003 primes, Wellons 2018's finaliser, as aurora.glsl)
 const int WEATHER_PRIME_X = 73856093;
 const int WEATHER_PRIME_Z = 19349663;
@@ -263,6 +288,52 @@ void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 ca
 
 //The weather over one pixel (premultiplied rgb, alpha) along dir up to the scene at sceneDist (blocks; very large for the sky): the
 // rain's walk and the snow's (each only while the map around the camera holds that kind: its share above 0); the arguments as weatherDrop's
+//2026-11-10: the splash over a scene pixel at rel (blocks from the camera; dir its unit view direction, dist its distance), premultiplied
+// rgb and alpha; splash: x the time in seconds wrapped at SPLASH_WRAP periods; the other arguments as weatherDrop's
+vec4 weatherSplash(vec3 rel, vec3 dir, float dist, vec4 camera, vec4 frac, vec4 params, vec4 splash) {
+    if (dist >= SPLASH_END || params.x <= 0.0) {
+        return vec4(0.0);
+    }
+    ivec3 cam = ivec3(camera.xyz);
+    vec3 w = frac.xyz + rel;
+    ivec2 column = cam.xz + ivec2(floor(w.xz));
+    uint texel = weatherMapAt(column & WEATHER_MAP_MASK);
+    if (weatherKind(texel, int(floor(camera.w))) != 1 || abs(camera.w + rel.y - float(weatherHeight(texel))) > SPLASH_SURFACE) {
+        return vec4(0.0);
+    }
+    //The ground in world blocks modulo WEATHER_WRAP (exact enough in float: under 4096)
+    vec2 g = vec2(cam.xz) + w.xz;
+    ivec2 cell = ivec2(floor(g/SPLASH_CELL));
+    vec2 inCell = g - vec2(cell)*SPLASH_CELL;
+    int mask = int(float(WEATHER_WRAP)/SPLASH_CELL) - 1;
+    vec4 r = weatherBytes(weatherHash(ivec3(cell & mask, 0), uint(8*WEATHER_LAYERS)));
+    float cycle = splash.x/SPLASH_PERIOD + r.x;
+    float event = floor(cycle);
+    float age = fract(cycle)*SPLASH_PERIOD/SPLASH_LIFE;
+    if (age >= 1.0) {
+        return vec4(0.0);
+    }
+    vec4 e = weatherBytes(weatherHash(ivec3(cell & mask, int(event) & (SPLASH_EVENTS - 1)), uint(8*WEATHER_LAYERS + 1)));
+    if (e.w >= params.x) {
+        return vec4(0.0);
+    }
+    vec2 centre = mix(vec2(0.25), vec2(0.75), e.xy)*SPLASH_CELL;
+    vec2 d = inCell - centre;
+    float radius = SPLASH_RADIUS*sqrt(age);
+    float t = dist/max(abs(dir.y), SPLASH_GRAZE);
+    float alpha = weatherCoverage(abs(length(d) - radius), SPLASH_RING, t, frac.w, SPLASH_ALPHA);
+    for (int k = 0; k < SPLASH_FLECKS; k++) {
+        float a = 6.2831853*((float(k) + e.z)/float(SPLASH_FLECKS));
+        vec2 p = centre + vec2(cos(a), sin(a))*radius*SPLASH_THROW;
+        alpha = max(alpha, weatherCoverage(length(inCell - p), SPLASH_FLECK, t, frac.w, SPLASH_ALPHA));
+    }
+    alpha *= (1.0 - age)*(1.0 - age)*(1.0 - smoothstep(SPLASH_END - SPLASH_FADE, SPLASH_END, dist))*params.z;
+    if (alpha <= 0.0) {
+        return vec4(0.0);
+    }
+    return vec4(weatherLight(rel, false)*alpha, alpha);
+}
+
 vec4 weatherPixel(vec3 dir, float sceneDist, vec4 camera, vec4 frac, vec4 params, vec4 rain, vec4 snow) {
     vec4 acc = vec4(0.0);
     if (params.x > 0.0) {
