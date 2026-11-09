@@ -115,7 +115,7 @@ jar 이름을 `<이름>.jar.disabled`로 바꾸는 것입니다(CurseForge의 "d
 ./gradlew assemble
 ```
 
-jar는 `build/libs/VulkanAnchor_1.21.1-0.1.1.jar`에 만들어집니다(옆의 `-sources.jar`는 개발용입니다). 테스트는
+jar는 `build/libs/VulkanAnchor_1.21.1-0.2.0.jar`에 만들어집니다(옆의 `-sources.jar`는 개발용입니다). 테스트는
 `./gradlew test`로 실행합니다. 빌드에는 JDK 21이 필요하고, NeoForge와 LWJGL을 포함한 나머지는 Gradle이 내려받습니다.
 `tools/`의 FSR 구조체 레이아웃 확인 프로그램은 Windows에서 MSVC 2022로 컴파일했고 그 출력이 저장소에 들어 있어서,
 빌드에 C 컴파일러는 필요하지 않습니다.

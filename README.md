@@ -119,7 +119,7 @@ Notes:
 ./gradlew assemble
 ```
 
-The jar is written to `build/libs/VulkanAnchor_1.21.1-0.1.1.jar` (the `-sources.jar` next
+The jar is written to `build/libs/VulkanAnchor_1.21.1-0.2.0.jar` (the `-sources.jar` next
 to it is for development). Run the tests with `./gradlew test`. The build needs JDK 21; Gradle downloads everything
 else, including NeoForge and LWJGL. On Windows, the FSR struct-layout probe in `tools/` was compiled with MSVC 2022 and
 its output is checked in; the build does not need a C compiler.
