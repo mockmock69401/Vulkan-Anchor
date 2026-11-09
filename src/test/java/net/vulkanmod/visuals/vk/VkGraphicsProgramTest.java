@@ -73,8 +73,9 @@ class VkGraphicsProgramTest {
     /** The final draws read their images by gl_FragCoord, so only the fragment stage binds and holds the loose uniforms. */
     @Test
     void theFinalDrawsKeepTheirLooseUniformsInTheFragmentStage() {
-        assertEquals(new TreeSet<>(Set.of("2:0 SAMPLER F", "2:1 SAMPLER F", "2:2 SAMPLER F")), merged("postFinal"));
-        assertEquals(new TreeSet<>(Set.of("2:0 SAMPLER F")), merged("postBlit"));
+        //2026-11-09 (session 6): with the weather overlay (postFinal 3, postBlit 1)
+        assertEquals(new TreeSet<>(Set.of("2:0 SAMPLER F", "2:1 SAMPLER F", "2:2 SAMPLER F", "2:3 SAMPLER F")), merged("postFinal"));
+        assertEquals(new TreeSet<>(Set.of("2:0 SAMPLER F", "2:1 SAMPLER F")), merged("postBlit"));
         assertEquals(VK_SHADER_STAGE_FRAGMENT_BIT, VkGraphicsProgram.looseUniformStage(metas("postFinal")[0], metas("postFinal")[1]));
         assertEquals(VK_SHADER_STAGE_FRAGMENT_BIT, VkGraphicsProgram.looseUniformStage(metas("postBlit")[0], metas("postBlit")[1]));
     }

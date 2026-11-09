@@ -3,20 +3,17 @@
 // 0 = plain copy). An unsharp mask on the four-neighbour cross, clamped to the neighbourhood's range so it cannot overshoot into
 // halos (the limiting idea of contrast-adaptive sharpening, Lottes 2019, AMD FidelityFX CAS, GPUOpen). Mirrored by PostMath.sharpen.
 layout(binding = 0) uniform sampler2D aaTex;
-layout(location = 0) uniform vec4 sharpen;
+layout(location = 0) uniform vec4 sharpen;//x the strength, y 1 when the weather overlay is blended
+//2026-11-09 (session 6): the shader weather overlay (weather.comp), blended over the anti-aliased colour after the sharpening, so
+// neither TAA's history nor SMAA touches the thin moving streaks
+layout(binding = 1) uniform sampler2D weatherTex;
 
 out vec4 colour;
 
 //Strength 1 adds the full difference from the four neighbours' mean
 const float SHARPEN_GAIN = 0.25;
 
-void main() {
-    ivec2 p = ivec2(gl_FragCoord.xy);
-    vec3 c = texelFetch(aaTex, p, 0).rgb;
-    if (sharpen.x <= 0.0) {
-        colour = vec4(c, 1.0);
-        return;
-    }
+vec3 sharpened(ivec2 p, vec3 c) {
     ivec2 last = textureSize(aaTex, 0) - 1;
     vec3 n = texelFetch(aaTex, clamp(p + ivec2(0, -1), ivec2(0), last), 0).rgb;
     vec3 s = texelFetch(aaTex, clamp(p + ivec2(0, 1), ivec2(0), last), 0).rgb;
@@ -25,5 +22,18 @@ void main() {
     vec3 lo = min(c, min(min(n, s), min(e, w)));
     vec3 hi = max(c, max(max(n, s), max(e, w)));
     vec3 sharp = c + (4.0*c - n - s - e - w)*(sharpen.x*SHARPEN_GAIN);
-    colour = vec4(clamp(sharp, lo, hi), 1.0);
+    return clamp(sharp, lo, hi);
+}
+
+void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec3 c = texelFetch(aaTex, p, 0).rgb;
+    if (sharpen.x > 0.0) {
+        c = sharpened(p, c);
+    }
+    if (sharpen.y > 0.5) {
+        vec4 w = texelFetch(weatherTex, p, 0);
+        c = c*(1.0 - w.a) + w.rgb;
+    }
+    colour = vec4(c, 1.0);
 }

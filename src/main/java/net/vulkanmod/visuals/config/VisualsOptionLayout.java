@@ -4,6 +4,7 @@ import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShadowMath;
+import net.vulkanmod.visuals.render.WeatherUniforms;
 
 import java.util.List;
 
@@ -100,7 +101,10 @@ public final class VisualsOptionLayout {
                             //2026-11-09 (session 5): round sun and moon; auroras (the strength greyed out with them off)
                             new Item("celestial_shape", Kind.CHOICE, 0, CelestialUniforms.SHAPE_MAX, Impact.NONE, null),
                             new Item("aurora", Kind.CHOICE, 0, CelestialUniforms.AURORA_MAX, Impact.LOW, null),
-                            new Item("aurora_strength", Kind.PERCENT, 0, CelestialUniforms.AURORA_STRENGTH_MAX, Impact.NONE, "aurora"))))),
+                            new Item("aurora_strength", Kind.PERCENT, 0, CelestialUniforms.AURORA_STRENGTH_MAX, Impact.NONE, "aurora"),
+                            //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns) and how many drops fall
+                            toggle("shader_weather", Impact.LOW, null),
+                            new Item("weather_density", Kind.PERCENT, 0, WeatherUniforms.DENSITY_MAX, Impact.NONE, "shader_weather"))))),
             new Page("lighting", List.of(
                     new Block("shading", List.of(
                             percent("sun_shading", STRENGTH_MAX),
@@ -175,6 +179,8 @@ public final class VisualsOptionLayout {
             case "celestial_shape" -> c.celestialShape;
             case "aurora" -> c.aurora;
             case "aurora_strength" -> c.auroraStrength;
+            case "shader_weather" -> c.shaderWeather ? 1 : 0;
+            case "weather_density" -> c.weatherDensity;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
@@ -238,6 +244,8 @@ public final class VisualsOptionLayout {
             case "celestial_shape" -> c.celestialShape = v;
             case "aurora" -> c.aurora = v;
             case "aurora_strength" -> c.auroraStrength = v;
+            case "shader_weather" -> c.shaderWeather = v != 0;
+            case "weather_density" -> c.weatherDensity = v;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;

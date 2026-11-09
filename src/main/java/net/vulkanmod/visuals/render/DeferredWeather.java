@@ -15,7 +15,7 @@ import org.joml.Matrix4f;
  */
 public final class DeferredWeather {
     private static final Matrix4f MODEL_VIEW = new Matrix4f();
-    private static boolean pending, replaying;
+    private static boolean pending, replaying, rain;
     private static LightTexture lightTexture;
     private static float partialTick;
     private static double camX, camY, camZ;
@@ -24,9 +24,16 @@ public final class DeferredWeather {
     private DeferredWeather() {
     }
 
-    /** LevelRendererWeatherMixin at renderSnowAndRain's head: true when it is recorded (the caller cancels vanilla's draw). */
+    /**
+     * LevelRendererWeatherMixin at renderSnowAndRain's head: true when it is recorded or, 2026-11-09 (session 6), left out because the
+     * shader draws the weather (ShaderWeather); the caller then cancels vanilla's draw. With the shader weather the call is still
+     * recorded (without the rain) while the far clouds are drawn, so the world border after it stays deferred as before.
+     */
     public static boolean deferRain(LightTexture light, float tick, double x, double y, double z) {
-        if (replaying || !FarClouds.replacesVanilla() || Minecraft.useShaderTransparency()) return false;
+        if (replaying) return false;
+        boolean shader = ShaderWeather.replacesVanilla();
+        if (!FarClouds.replacesVanilla() || Minecraft.useShaderTransparency()) return shader;
+        rain = !shader;
         lightTexture = light;
         partialTick = tick;
         camX = x;
@@ -67,7 +74,7 @@ public final class DeferredWeather {
         }
         RenderSystem.depthMask(false);
         try {
-            renderer.visuals$renderSnowAndRain(lightTexture, partialTick, camX, camY, camZ);
+            if (rain) renderer.visuals$renderSnowAndRain(lightTexture, partialTick, camX, camY, camZ);
             if (border != null) renderer.visuals$renderWorldBorder(border);
         } finally {
             RenderSystem.depthMask(true);

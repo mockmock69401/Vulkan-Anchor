@@ -201,11 +201,13 @@ final class VkSmaa {
 
     /**
      * Inside the resumed main pass, in place of post_final's draw: image (the anti-aliased colour) sharpened by strength
-     * (PostMath.sharpenStrength), one full-screen strip.
+     * (PostMath.sharpenStrength), one full-screen strip. 2026-11-09 (session 6): the weather overlay (in the read layout) blended over it
+     * when weather is true.
      */
-    void draw(VkCommandBuffer cmd, long nearest, VkImage2D image, float strength) {
-        this.blitUniforms.putVec4(0, strength, 0, 0, 0);
-        this.blit.bind(cmd, VkContext.boundRenderPassHandle(), VkContext.boundRenderPassKey(), new VkBindings().sampled(0, image, nearest), this.blitUniforms);
+    void draw(VkCommandBuffer cmd, long nearest, VkImage2D image, float strength, VkImage2D overlay, boolean weather) {
+        this.blitUniforms.putVec4(0, strength, weather ? 1 : 0, 0, 0);
+        this.blit.bind(cmd, VkContext.boundRenderPassHandle(), VkContext.boundRenderPassKey(), new VkBindings().sampled(0, image, nearest)
+                .sampled(1, overlay, nearest), this.blitUniforms);
         vkCmdDraw(cmd, 4, 1, 0, 0);
     }
 

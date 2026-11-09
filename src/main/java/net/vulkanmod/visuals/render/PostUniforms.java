@@ -27,6 +27,11 @@ public final class PostUniforms {
             w.putVec4(COOL, this.cool[0], this.cool[1], this.cool[2], this.contrast - 1);
             w.putVec4(SCREEN, 1f / Math.max(1, this.width), 1f / Math.max(1, this.height), this.vignette, 0);
         }
+
+        /** 2026-11-09 (session 6): after write, post_final.frag's screen slot with w 1 when it blends the weather overlay (0 as write leaves it). */
+        public void writeWeather(LooseUniformWriter w, boolean weather) {
+            w.putVec4(SCREEN, 1f / Math.max(1, this.width), 1f / Math.max(1, this.height), this.vignette, weather ? 1 : 0);
+        }
     }
 
     private PostUniforms() {
