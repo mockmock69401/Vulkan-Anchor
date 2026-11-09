@@ -99,11 +99,23 @@ final class VisualsOptionScreenPilot {
         m.invoke(screen, args);
     }
 
+    /** 2026-11-10 (session 4): an option's own name (a range option's getName() is a literal with its value, which hid every slider). */
+    private static final Field NAME;
+
+    static {
+        try {
+            NAME = Option.class.getDeclaredField("name");
+            NAME.setAccessible(true);
+        } catch (NoSuchFieldException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     private static Option<?> find(VOptionScreen screen, String key) throws ReflectiveOperationException {
         for (OptionPage page : pages(screen)) {
             for (OptionBlock block : page.optionBlocks) {
                 for (Option<?> o : block.options()) {
-                    if (o.getName().getContents() instanceof TranslatableContents t && t.getKey().equals(KEY_PREFIX + key)) return o;
+                    if (NAME.get(o) instanceof Component c && c.getContents() instanceof TranslatableContents t && t.getKey().equals(KEY_PREFIX + key)) return o;
                 }
             }
         }

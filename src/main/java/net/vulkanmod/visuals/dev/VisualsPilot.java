@@ -274,6 +274,12 @@ public final class VisualsPilot {
                     VisualsLog.info("Visuals pilot: " + a[0] + " = " + a[1]);
                     return 0;
                 }
+                case "preset" -> {
+                    //preset N: session 4's performance preset (VisualsPresets.apply), as choosing it on the page and applying
+                    net.vulkanmod.visuals.config.VisualsPresets.apply(VisualsConfig.get(), Integer.parseInt(arg.trim()));
+                    VisualsLog.info("Visuals pilot: preset " + arg);
+                    return 0;
+                }
                 case "gui" -> {
                     mc.options.hideGui = arg.equals("off");
                     if (mc.options.hideGui) mc.gui.getChat().clearMessages(false);

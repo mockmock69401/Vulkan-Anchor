@@ -26,7 +26,7 @@ class VisualsConfigTest {
              "lightShafts": 50, "moonlight": 50, "aoStrength": 100, "sunShading": 100, "waterDepth": 100, "waterReflections": 100,
              "waterRipples": 100, "waterRippleSpeed": 100, "farClouds": true, "sunShadows": true, "vanillaShadows": true,
              "skyLightAmbient": 100, "perPixelLight": true, "lightColour": 70, "heldLight": true, "antiAliasing": 3, "edgeCover": true,
-             "taa": true, "dhLods": true, "dhShadows": true, "revision": 5}
+             "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "revision": 6}
             """;
 
     private static List<Field> settingFields() {
@@ -135,6 +135,9 @@ class VisualsConfigTest {
         assertEquals(150, p.exposure);
         assertEquals(VisualsConfig.currentRevision(), p.revision);
         p.exposure = defaults.exposure;
+        //session 4: a file without the preset field is Custom (VisualsPresetsTest)
+        assertEquals(VisualsPresets.CUSTOM, p.preset);
+        p.preset = defaults.preset;
         assertSameValues(defaults, p);
 
         Path junk = dir.resolve("junk.json");
@@ -147,7 +150,10 @@ class VisualsConfigTest {
         Files.write(junk, new byte[]{(byte) 0xff, (byte) 0xfe, 0, 1});
         assertSameValues(defaults, VisualsConfig.read(junk));
         Files.writeString(junk, "{\"exposure\": \"loud\"}");
-        assertSameValues(defaults, VisualsConfig.read(junk));
+        VisualsConfig loud = VisualsConfig.read(junk);
+        assertEquals(VisualsPresets.CUSTOM, loud.preset, "an object without the preset field is Custom");
+        loud.preset = defaults.preset;
+        assertSameValues(defaults, loud);
     }
 
     @Test
@@ -159,9 +165,10 @@ class VisualsConfigTest {
         assertEquals(130, c.exposure);
         assertEquals(0, c.bloomStrength);
         assertFalse(c.taa);
+        assertEquals(VisualsPresets.CUSTOM, c.preset, "session 4: a file before the preset is Custom");
         Files.writeString(old, "{\"exposure\": 130, \"revision\": 0}");
         assertEquals(VisualsConfig.currentRevision(), VisualsConfig.read(old).revision);
-        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": 5", "\"revision\": 99"));
+        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": 6", "\"revision\": 99"));
         assertEquals(99, VisualsConfig.read(old).revision, "a newer file is left alone");
     }
 
@@ -172,6 +179,8 @@ class VisualsConfigTest {
         c.farClouds = false;
         c.fogHeight = 77;
         c.antiAliasing = 4;
+        //session 4: far clouds and anti-aliasing are preset settings, so these values are Custom (a High left in the file reads back Custom)
+        c.preset = VisualsPresets.CUSTOM;
         c.lightDebug = 3;
         Path file = dir.resolve("sub/dir/c.json");
         c.write(file);

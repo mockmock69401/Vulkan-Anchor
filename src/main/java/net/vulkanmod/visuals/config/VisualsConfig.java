@@ -23,7 +23,10 @@ public class VisualsConfig {
     private static volatile VisualsConfig instance = new VisualsConfig();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting()
             .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.TRANSIENT, Modifier.STATIC).create();
-    private static final int REVISION = 5;
+    /** 6 (2026-11-10, session 4): the preset field; an older file has none and loads as Custom. */
+    private static final int REVISION = 6;
+    /** The first revision with the preset field. */
+    static final int PRESET_REVISION = 6;
     private static final Logger LOGGER = LogManager.getLogger("VulkanMod Visuals");
 
     public static Path path() {
@@ -44,6 +47,8 @@ public class VisualsConfig {
      * warning); a field that is missing keeps its default, and a field of the wrong type keeps its default (with a warning)
      * without costing the other fields. Values are not clamped here (PostProcessSettings and the option layout do that). A file
      * older than currentRevision() is brought to it: no revision so far changed a field's meaning, so every value is kept.
+     * Revision 6 (session 4) added the preset: a file older than that (or without a preset) loads as Custom with every value as
+     * saved, and a saved level whose settings no longer all have its values is Custom too (VisualsPresets.validated).
      */
     public static VisualsConfig read(Path file) {
         VisualsConfig c = new VisualsConfig();
@@ -76,6 +81,9 @@ public class VisualsConfig {
                 LOGGER.warn("Visuals setting {} in {} is invalid ({}), using its default", f.getName(), file, e.getMessage());
             }
         }
+        int fileRevision = json.has("revision") ? c.revision : 0;
+        if (fileRevision < PRESET_REVISION || !json.has("preset")) c.preset = VisualsPresets.CUSTOM;
+        c.preset = VisualsPresets.validated(c);
         if (c.revision < REVISION) c.revision = REVISION;
         return c;
     }
@@ -108,6 +116,8 @@ public class VisualsConfig {
 
     //Defaults (final fix R3): the settings the screen checks were tuned with. A percentage's 100 is still the package's full strength;
     // the look ships at these values
+    /** 2026-11-10 (session 4): VisualsPresets' level (POTATO..ULTRA) or CUSTOM. The defaults below are the High level's values. */
+    public int preset = VisualsPresets.DEFAULT;
     public boolean enabled = true;
     public int exposure = 100;
     public int toneStrength = 100;
