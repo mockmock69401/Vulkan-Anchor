@@ -44,16 +44,17 @@ class RealisticCloudTest {
             if (!Modifier.isStatic(f.getModifiers()) || !f.getName().startsWith("REAL_") || f.getName().equals("REAL_LIFT") || f.getName().equals("REAL_THICKNESS")) continue;
             assertTrue(Pattern.compile("const\\s+(float|int)\\s+" + f.getName() + "\\b").matcher(text).find(), f.getName() + " missing in clouds.glsl");
         }
-        //The two noise periods divide vanilla's 3072-block period (the offset wraps there)
+        //The three noise periods divide vanilla's 3072-block period (the offset wraps there)
         assertEquals(0, CloudMath.PERIOD % CloudMath.REAL_NOISE_CELL, 1e-9);
         assertEquals(0, CloudMath.PERIOD % CloudMath.REAL_NOISE_CELL2, 1e-9);
+        assertEquals(0, CloudMath.PERIOD % CloudMath.REAL_NOISE_CELL3, 1e-9);
         //The style's dispatch and the reflection's cheap march
         assertTrue(text.contains("vec4 farCloudMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter)"));
         assertTrue(text.contains("int samples = q >= 3 ? REAL_SAMPLES_HIGH : (q == 2 ? REAL_SAMPLES_MEDIUM : REAL_SAMPLES_LOW);"));
-        assertTrue(text.contains("samples, lights, q >= 2 ? 2 : 1);"));
+        assertTrue(text.contains("samples, lights, q >= 2 ? 3 : 1);"));
         assertArrayEquals(new int[]{CloudMath.REAL_SAMPLES_LOW, CloudMath.REAL_LIGHT_LOW, 1}, CloudMath.quality(1));
-        assertArrayEquals(new int[]{CloudMath.REAL_SAMPLES_MEDIUM, CloudMath.REAL_LIGHT_MEDIUM, 2}, CloudMath.quality(2));
-        assertArrayEquals(new int[]{CloudMath.REAL_SAMPLES_HIGH, CloudMath.REAL_LIGHT_HIGH, 2}, CloudMath.quality(3));
+        assertArrayEquals(new int[]{CloudMath.REAL_SAMPLES_MEDIUM, CloudMath.REAL_LIGHT_MEDIUM, 3}, CloudMath.quality(2));
+        assertArrayEquals(new int[]{CloudMath.REAL_SAMPLES_HIGH, CloudMath.REAL_LIGHT_HIGH, 3}, CloudMath.quality(3));
         String reflection = ShaderFiles.read("post/reflection.comp");
         assertTrue(reflection.contains("realMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, 0, 1)"));
         assertTrue(ShaderFiles.read("post/scene_copy.comp").contains("farCloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)))"));
@@ -90,7 +91,8 @@ class RealisticCloudTest {
         for (int c = 1; c < 4; c++) {
             assertEquals(CloudMath.noise(MAP, 17.3f, 905.1f, c), CloudMath.noise(MAP, 17.3f + 3072, 905.1f - 3072, c), 1e-5f);
         }
-        assertEquals(CloudMath.erosion(33.3f, 20.5f, 1201.7f, 2), CloudMath.erosion(33.3f + 3072, 20.5f, 1201.7f + 3072, 2), 1e-5f);
+        //(the 6-block octave's lattice fraction loses some float precision 512 cells out)
+        assertEquals(CloudMath.erosion(33.3f, 20.5f, 1201.7f, 3), CloudMath.erosion(33.3f + 3072, 20.5f, 1201.7f + 3072, 3), 1e-4f);
         CloudMath.Realistic a = layer(0.6f), b = new CloudMath.Realistic(200, CloudMath.REAL_THICKNESS, 8192, 1000 + 3072, 1500 - 3072, 0.6f);
         float[] dir = {0.6f, 0.5f, 0.62f};
         float l = (float) Math.sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
@@ -98,21 +100,92 @@ class RealisticCloudTest {
         assertArrayEquals(CloudMath.realMarch(MAP, a, new float[3], dir, 1e6f, UP, 0.5f, 32, 3, 2), CloudMath.realMarch(MAP, b, new float[3], dir, 1e6f, UP, 0.5f, 32, 3, 2), 1e-3f);
     }
 
-    /** Nothing outside the layer or at coverage 0; more coverage, more cloud; a tower is wider low than high (domes, flat bases). */
+    /** Nothing outside the layer or at coverage 0; more coverage, more cloud; a tower is wider low than high (domes). */
     @Test
     void theDensityFollowsTheCoverageAndTheProfile() {
         assertEquals(0f, CloudMath.realDensity(MAP, layer(1), 10, 199, 10, 2));
         assertEquals(0f, CloudMath.realDensity(MAP, layer(1), 10, 200 + CloudMath.REAL_THICKNESS + 1, 10, 2));
         float last = -1;
         for (float cover : new float[]{0, 0.25f, 0.5f, 0.75f, 1}) {
-            float share = share(layer(cover), 200 + 0.2f * CloudMath.REAL_THICKNESS);
+            float share = share(layer(cover), 200 + 0.3f * CloudMath.REAL_THICKNESS);
             if (cover == 0) assertEquals(0f, share);
             assertTrue(share >= last, cover + ": " + share + " < " + last);
             last = share;
         }
-        assertTrue(share(layer(0.5f), 200 + 0.15f * CloudMath.REAL_THICKNESS) > share(layer(0.5f), 200 + 0.7f * CloudMath.REAL_THICKNESS) * 2,
+        //(3b: the bases now lie from about 0.15 of the layer up, so the low probe sits at 0.3)
+        assertTrue(share(layer(0.5f), 200 + 0.3f * CloudMath.REAL_THICKNESS) > share(layer(0.5f), 200 + 0.7f * CloudMath.REAL_THICKNESS) * 2,
                 "the towers narrow toward their tops");
-        assertTrue(share(layer(0.5f), 200 + 0.15f * CloudMath.REAL_THICKNESS) > 0.1f, "default coverage leaves visible cumulus");
+        assertTrue(share(layer(0.5f), 200 + 0.3f * CloudMath.REAL_THICKNESS) > 0.1f, "default coverage leaves visible cumulus");
+    }
+
+    /**
+     * Session 3b (2026-11-09): the cumulus are rounded, not cut at one height. Per cloudy column (a 13 x 29 block grid over the period)
+     * the lowest and highest block with density over 0.05: before 3b 94% of the bases lay within 3 blocks of the lowest (a knife-cut
+     * base, the user's "sliced" clouds) and the tops spanned 15 to 56 blocks. Now the base rises toward a clump's thin edges and its
+     * height varies from clump to clump, and the tops are taller and more varied.
+     */
+    @Test
+    void theBasesAreRoundedAndVaryPerClump() {
+        CloudMath.Realistic r = layer(CloudMath.REAL_COVER);
+        java.util.List<Float> bases = new java.util.ArrayList<>(), tops = new java.util.ArrayList<>();
+        double thinBase = 0, thickBase = 0;
+        int thin = 0, thick = 0;
+        for (int x = 0; x < 3072; x += 13) {
+            for (int z = 0; z < 3072; z += 29) {
+                float lo = -1, hi = -1;
+                for (float y = 200; y < 200 + CloudMath.REAL_THICKNESS; y += 1) {
+                    if (CloudMath.realDensity(MAP, r, x, y, z, 3) > 0.05f) {
+                        if (lo < 0) lo = y - 200;
+                        hi = y - 200;
+                    }
+                }
+                if (lo < 0) continue;
+                bases.add(lo);
+                tops.add(hi);
+                if (hi - lo < 20) {
+                    thinBase += lo;
+                    thin++;
+                } else if (hi - lo > 50) {
+                    thickBase += lo;
+                    thick++;
+                }
+            }
+        }
+        java.util.Collections.sort(bases);
+        java.util.Collections.sort(tops);
+        int n = bases.size();
+        assertTrue(n > 3000, "cloudy columns " + n);
+        float lowest = bases.get(0);
+        long cut = bases.stream().filter(b -> b <= lowest + 3).count();
+        assertTrue(cut < 0.05 * n, "bases within 3 blocks of the lowest: " + cut + " of " + n);
+        assertTrue(bases.get(n * 9 / 10) - bases.get(n / 10) >= 8, "base spread " + bases.get(n / 10) + ".." + bases.get(n * 9 / 10));
+        assertTrue(tops.get(n * 9 / 10) - tops.get(n / 10) >= 35, "top spread " + tops.get(n / 10) + ".." + tops.get(n * 9 / 10));
+        assertTrue(tops.get(n / 2) > 0.35f * CloudMath.REAL_THICKNESS, "median top " + tops.get(n / 2));
+        assertTrue(thin > 100 && thick > 100, thin + " thin, " + thick + " thick columns");
+        assertTrue(thinBase / thin > thickBase / thick + 3, "thin columns (a clump's edges) sit higher: " + thinBase / thin + " vs " + thickBase / thick);
+    }
+
+    /**
+     * The erosion's octaves: the lumps (1 - |2n - 1|) are low inside rounded lumps and 1 along the creases between them (the cauliflower
+     * edge); the light march's flat REAL_NOISE_MEAN is the medium and high qualities' mean erosion, between the low quality's and theirs.
+     */
+    @Test
+    void theErosionsMeanIsTheLightMarchs() {
+        java.util.Random rnd = new java.util.Random(5);
+        double[] mean = new double[4];
+        int n = 40000;
+        for (int i = 0; i < n; i++) {
+            float x = rnd.nextFloat() * 3072, y = rnd.nextFloat() * CloudMath.REAL_THICKNESS, z = rnd.nextFloat() * 3072;
+            for (int o = 1; o <= 3; o++) {
+                float e = CloudMath.erosion(x, y, z, o);
+                assertTrue(e >= 0 && e <= 1, "" + e);
+                mean[o] += e / n;
+            }
+        }
+        assertEquals(mean[3], CloudMath.REAL_NOISE_MEAN, 0.03, "3 octaves " + mean[3]);
+        assertTrue(mean[1] < CloudMath.REAL_NOISE_MEAN, "1 octave " + mean[1]);
+        assertEquals(CloudMath.REAL_NOISE_MEAN, CloudMath.erosion(1, 2, 3, 0));
+        assertEquals(1f, CloudMath.lumps(0.5f, 0, 0, 64) + Math.abs(2 * CloudMath.valueNoise(0.5f, 0, 0, 64) - 1), 1e-6f);
     }
 
     private static float share(CloudMath.Realistic r, float y) {
@@ -137,7 +210,7 @@ class RealisticCloudTest {
         int n = 0;
         for (int x = 0; x < 3072; x += 41) {
             for (int z = 0; z < 3072; z += 43) {
-                float yl = 200 + 0.1f * CloudMath.REAL_THICKNESS, yh = 200 + 0.5f * CloudMath.REAL_THICKNESS;
+                float yl = 200 + 0.25f * CloudMath.REAL_THICKNESS, yh = 200 + 0.5f * CloudMath.REAL_THICKNESS;
                 if (CloudMath.realDensity(MAP, r, x, yl, z, 1) > 0 && CloudMath.realDensity(MAP, r, x, yh, z, 1) > 0) {
                     low += CloudMath.lightDepth(MAP, r, x, yl, z, UP, CloudMath.REAL_LIGHT_HIGH);
                     high += CloudMath.lightDepth(MAP, r, x, yh, z, UP, CloudMath.REAL_LIGHT_HIGH);

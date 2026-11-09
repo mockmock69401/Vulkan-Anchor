@@ -114,7 +114,7 @@ vec3 cloudMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir) {
 // cloudMap's g, b, a channels hold CloudMath.noiseMap, each equalised to an even 0..1 and repeating every CLOUD_MAP texels (vanilla's
 // 3072-block period, so the offset's wrap never shows): g the weather (where cumulus grow), b the cirrus streaks, a the towers' height.
 // The model follows Schneider and Vos 2015 ("The Real-time Volumetric Cloudscapes of Horizon Zero Dawn", SIGGRAPH Advances in Real-Time
-// Rendering): a 2D coverage, a height profile with flat bases and domed tops, 3D noise eroding the edges, Beer's law toward the light
+// Rendering): a 2D coverage, a height profile with rounded bases and domed tops, 3D noise eroding the edges, Beer's law toward the light
 // and their powder term. The light is integrated per segment as in Hillaire 2016 ("Physically Based Sky, Atmosphere and Cloud
 // Rendering in Frostbite"), with the multiple-scattering octaves of Wrenninge, Kulla and Lundqvist 2013 ("Oz: The Great and Volumetric").
 //The cumulus may cover this share of the sky at coverage 100% (before the noise erodes the edges)
@@ -123,16 +123,25 @@ const float REAL_COVER = 0.38;
 // up to REAL_TOWER
 const float REAL_TOP_MIN = 0.3;
 const float REAL_TOWER = 0.45;
-//The base rounds in over REAL_BOTTOM of a tower's height; the density thins from REAL_ROUND of it to the top (domes)
-const float REAL_BOTTOM = 0.08;
-const float REAL_ROUND = 0.3;
-//The 3D noise eats up to REAL_ERODE from the edges: octaves of REAL_NOISE_CELL and REAL_NOISE_CELL2 blocks (both divide the period),
-// the second folded into billows (|2n - 1|, creases between rounded lumps) and weighted REAL_NOISE_DETAIL. Without the noise (the light
-// march, the reflection) its mean is taken
-const float REAL_ERODE = 0.65;
+//Session 3b (2026-11-09): the density rises over REAL_BOTTOM of a tower's height from its base and thins from REAL_ROUND of it to the top.
+// The wide bottom ramp lets the erosion reach the base: where the weather is weak (a clump's edges) the noise eats more of the ramp, so
+// the base rises toward the edges and is lumpy, not cut flat at one height (session 3's 0.08 ramp left 94% of the bases within 3 blocks
+// of each other: the user's "sliced" clouds). Each tower's base also sits up to REAL_BASE_LIFT of the layer higher where the a channel
+// is low (shorter towers start higher), so neighbouring clumps differ in base as well as in top
+const float REAL_BOTTOM = 0.35;
+const float REAL_ROUND = 0.35;
+const float REAL_BASE_LIFT = 0.25;
+//The 3D noise eats up to REAL_ERODE from the edges: octaves of REAL_NOISE_CELL, REAL_NOISE_CELL2 and REAL_NOISE_CELL3 blocks (all divide
+// the period), the finer two folded into lumps (1 - |2n - 1|: low inside rounded lumps, 1 along the creases, so the edge bulges into
+// cauliflower) and weighted REAL_NOISE_DETAIL and REAL_NOISE_DETAIL2 (3b: the third octave, and lumps instead of session 3's billows,
+// which left sharp ridges). Without the noise (the light march, the reflection) REAL_NOISE_MEAN is taken: the three octaves' mean
+const float REAL_ERODE = 0.6;
 const float REAL_NOISE_CELL = 48.0;
 const float REAL_NOISE_CELL2 = 16.0;
+const float REAL_NOISE_CELL3 = 6.0;
 const float REAL_NOISE_DETAIL = 0.45;
+const float REAL_NOISE_DETAIL2 = 0.25;
+const float REAL_NOISE_MEAN = 0.6;
 //Extinction per block at density 1
 const float REAL_DENSITY = 0.45;
 //Samples through the layer by quality (low, medium, high), at most one per REAL_STEP blocks of the span; the light march's samples
@@ -217,14 +226,22 @@ float realValueNoise(vec3 x, float n) {
     return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
 }
 
-//The erosion noise 0..1 at q (x, z on the cloud map, y above the base): octaves 0 its mean, 1 the first octave, 2 with the billows
+//1 - |2n - 1| of the value noise at x (lattice units, repeating every n cells): low inside rounded lumps, 1 along the creases between them
+float realLumps(vec3 x, float n) {
+    return 1.0 - abs(2.0*realValueNoise(x, n) - 1.0);
+}
+
+//The erosion noise 0..1 at q (x, z on the cloud map, y above the base): octaves 0 its mean, 1 the first octave, 2 and 3 with the lumps
 float realErosion(vec3 q, int octaves) {
     if (octaves <= 0) {
-        return 0.5;
+        return REAL_NOISE_MEAN;
     }
     float e = realValueNoise(q/REAL_NOISE_CELL, CLOUD_MAP*CLOUD_CELL/REAL_NOISE_CELL);
     if (octaves >= 2) {
-        e = mix(e, abs(2.0*realValueNoise(q/REAL_NOISE_CELL2, CLOUD_MAP*CLOUD_CELL/REAL_NOISE_CELL2) - 1.0), REAL_NOISE_DETAIL);
+        e = mix(e, realLumps(q/REAL_NOISE_CELL2, CLOUD_MAP*CLOUD_CELL/REAL_NOISE_CELL2), REAL_NOISE_DETAIL);
+    }
+    if (octaves >= 3) {
+        e = mix(e, realLumps(q/REAL_NOISE_CELL3, CLOUD_MAP*CLOUD_CELL/REAL_NOISE_CELL3), REAL_NOISE_DETAIL2);
     }
     return e;
 }
@@ -242,9 +259,9 @@ float realDensity(vec3 p, int octaves) {
     if (s <= 0.0) {
         return 0.0;
     }
-    float top = mix(REAL_TOP_MIN, 1.0, s)*mix(1.0 - REAL_TOWER, 1.0, n.a);
-    float hp = h/top;
-    if (hp >= 1.0) {
+    float lift = REAL_BASE_LIFT*(1.0 - n.a);
+    float hp = (h - lift)/((1.0 - lift)*mix(REAL_TOP_MIN, 1.0, s)*mix(1.0 - REAL_TOWER, 1.0, n.a));
+    if (!(hp > 0.0 && hp < 1.0)) {
         return 0.0;
     }
     float d = s*smoothstep(0.0, REAL_BOTTOM, hp)*(1.0 - smoothstep(REAL_ROUND, 1.0, hp));
@@ -361,5 +378,5 @@ vec4 farCloudMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float ji
     int q = int(floor(cloudOffset.z));
     int samples = q >= 3 ? REAL_SAMPLES_HIGH : (q == 2 ? REAL_SAMPLES_MEDIUM : REAL_SAMPLES_LOW);
     int lights = q >= 3 ? REAL_LIGHT_HIGH : (q == 2 ? REAL_LIGHT_MEDIUM : REAL_LIGHT_LOW);
-    return realMarch(origin, dir, maxDist, lightDir, fract(jitter + fract(cloudOffset.z)), samples, lights, q >= 2 ? 2 : 1);
+    return realMarch(origin, dir, maxDist, lightDir, fract(jitter + fract(cloudOffset.z)), samples, lights, q >= 2 ? 3 : 1);
 }
