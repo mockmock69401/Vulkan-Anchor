@@ -381,6 +381,49 @@ class LightingMathTest {
     }
 
     @Test
+    void theTerrainsWaterMarksTellIceFromWaterAtAnyDistance() {
+        //2026-11-09 (the user: seen from high above, frozen rivers and seas changed look across a line around the player): ice past
+        // BOUNDARY_STEP_MAX was water. With this frame's water marks the mark decides
+        for (float height : new float[]{60, 197, 300}) {
+            float iceDy = 63 - (63 + height + 0.5f);
+            for (int k = 0; k < 50; k++) {
+                Vector3f dir = new Vector3f(0.3f, -1, -1.2f - k * 0.01f);
+                float[] s = screen(PROJ, alongRay(dir, iceDy)), f = screen(PROJ, alongRay(dir, iceDy - 3));
+                //The water's own top under the ice (61 + 8/9): the mark a water fragment there leaves (unrounded: gl_FragCoord.z)
+                float[] under = screen(PROJ, alongRay(dir, iceDy - 1 - 1f / 9));
+                LightingMath.Depths d = new LightingMath.Depths(d24(s[2]), d24(f[2]), d24(s[2]), 1, 1);
+                String at = height + " up, row " + k;
+                assertTrue(classify(s, d, true, TerrainLightMath.packWaterMark(under[2])).kind() < 0, "ice over marked water, " + at);
+                assertTrue(classify(s, d, true, 0).kind() < 0, "ice, nothing marked, " + at);
+                assertTrue(classify(s, d, true, TerrainLightMath.packAlbedo(0.4f, 0.5f, 0.6f, 0)).kind() < 0, "an albedo is no mark, " + at);
+                //Water at the same place, marked by its own fragment: water
+                float waterDy = iceDy - 1f / 9;
+                float[] w = screen(PROJ, alongRay(dir, waterDy)), wf = screen(PROJ, alongRay(dir, waterDy - 3));
+                LightingMath.Depths wd = new LightingMath.Depths(d24(w[2]), d24(wf[2]), d24(w[2]), 1, 1);
+                assertTrue(classify(w, wd, true, TerrainLightMath.packWaterMark(w[2])).kind() > 0, "marked water, " + at);
+                assertTrue(classify(w, wd, true, 0).kind() < 0, "unmarked (glass, slime): not water, " + at);
+            }
+        }
+        //Without marks this frame the depth tests decide as before: far ice is water
+        float iceDy = 63 - 259.5f;
+        Vector3f dir = new Vector3f(0.3f, -1, -1.2f);
+        float[] s = screen(PROJ, alongRay(dir, iceDy)), f = screen(PROJ, alongRay(dir, iceDy - 2));
+        assertTrue(classify(s, new LightingMath.Depths(d24(s[2]), d24(f[2]), d24(s[2]), 1, 1), false, 0).kind() > 0);
+        assertTrue(LightingMath.waterMarked(TerrainLightMath.packWaterMark(0.999f), 0.999f));
+        assertFalse(LightingMath.waterMarked(TerrainLightMath.packWaterMark(0.999f), 0.999f + 3 * LightingMath.DEPTH_STEP));
+        assertFalse(LightingMath.waterMarked(0, 0), "nothing written");
+        //The pass reads the mark at the pixel, only with depthParams.w, and lets it decide first
+        assertTrue(COMP.contains("vanillaMark = waterMarked(imageLoad(terrainAlbedo, p).r, after) ? 1 : 0;"));
+        assertTrue(COMP.contains("if (depthParams.w > 0.5) {"));
+        assertTrue(COMP.contains("return waterMark > 0 ? len : -len;"));
+        assertTrue(COMP.contains("layout(binding = 17, r32ui) uniform readonly restrict uimage2D terrainAlbedo;"));
+    }
+
+    private static LightingMath.Surface classify(float[] s, LightingMath.Depths d, boolean marks, int albedo) {
+        return LightingMath.classify(s[0], s[1], d, INV_PROJ, INV_LOD_PROJ, false, true, CAMERA_Y_FRAC, UP, UP, PIXEL_BLOCKS, marks, albedo);
+    }
+
+    @Test
     void farWaterStaysWaterThoughTheDepthIsCoarse() {
         //Water-surface dashes (CTE2 2026-10-22): a lake ~300 blocks away, the camera 197 blocks above its top (62 + 8/9). One D24 step
         // there moves the rebuilt height by about a tenth of a block, so a row whose rounding lands near the whole block above was

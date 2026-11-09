@@ -231,13 +231,15 @@ class WaterTest {
                 for (float access : new float[]{0, 0.5f, 1, Float.NaN}) {
                     for (float vis : new float[]{0, 1, Float.NaN}) {
                         for (float dist : new float[]{0, 30, 5000, Float.NaN, Float.POSITIVE_INFINITY}) {
-                            float[] c = WaterMath.missedRay(a, dir(0.2, -0.5, 1), dist, 1, r, 0.6f, vis, own, access);
-                            assertTrue(finite(c), "finite and non-negative");
+                            for (float open : new float[]{0, 0.5f, 1, Float.NaN}) {
+                                float[] c = WaterMath.missedRay(a, dir(0.2, -0.5, 1), dist, 1, r, 0.6f, vis, open, own, access);
+                                assertTrue(finite(c), "finite and non-negative");
+                            }
                         }
                     }
                 }
                 //No sky access (a cave, no sky light): the reflection is the water's own colour
-                assertArrayEquals(own, WaterMath.missedRay(a, dir(0.2, -0.5, 1), 30, 1, r, 0.6f, 1, own, 0), 1e-7f);
+                assertArrayEquals(own, WaterMath.missedRay(a, dir(0.2, -0.5, 1), 30, 1, r, 0.6f, 1, 1, own, 0), 1e-7f);
             }
         }
     }
@@ -293,7 +295,7 @@ class WaterTest {
         assertEquals(lum(WaterMath.discGlint(a, WaterMath.scale(alongAxis, 1 / WaterMath.length(alongAxis)), 1, 1)),
                 lum(WaterMath.discGlint(a, WaterMath.scale(diagonal, 1 / WaterMath.length(diagonal)), 1, 1)), 0.05f);
         //The sun visibility at the water (an island's shadow) takes the glint
-        float[] shadowed = WaterMath.reflectedSky(a, sun, 1, 0);
+        float[] shadowed = WaterMath.reflectedSky(a, sun, 1, 0, 1);
         float[] plain = WaterMath.add(AtmosphereMath.skyColour(a, sun), AtmosphereMath.sunGlow(a, sun));
         assertArrayEquals(plain, shadowed, 1e-5f);
     }
@@ -358,10 +360,42 @@ class WaterTest {
     }
 
     @Test
+    void groundBeyondTheWaterHidesTheSunsGlowAndGlintInTheReflection() {
+        //2026-11-09 (the user: at sunrise the sun's reflection showed through icebergs and hills)
+        Atmosphere a = atmosphere(SUNSET, 0, true);
+        float[] sun = a.sun();
+        float[] open = WaterMath.reflectedSky(a, sun, 1, 1, 1), shut = WaterMath.reflectedSky(a, sun, 1, 1, 0);
+        float[] skyOnly = AtmosphereMath.skyColour(a, sun);
+        assertArrayEquals(skyOnly, shut, 1e-5f, "blocked: the sky colour, no glow, no glint");
+        assertTrue(lum(open) > lum(shut) + 5, "open: the glint");
+        float[] half = WaterMath.reflectedSky(a, sun, 1, 1, 0.5f);
+        assertEquals(lum(skyOnly) + 0.5f * (lum(open) - lum(skyOnly)), lum(half), 1e-3f, "linear in the open share");
+        //The march's verdict is geometry: it takes the moon's glint too (the sun's shadow maps do not)
+        Atmosphere night = atmosphere(MIDNIGHT, 0, true);
+        float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
+        assertArrayEquals(AtmosphereMath.skyColour(night, moon), WaterMath.reflectedSky(night, moon, 1, 1, 0), 1e-6f);
+        assertTrue(lum(WaterMath.reflectedSky(night, moon, 1, 0, 1)) > lum(AtmosphereMath.skyColour(night, moon)) + 0.1f);
+        //A step blocks only behind ground beyond the reflecting point (view z: more negative is farther), above its plane, not water/ice
+        float dist = 50;
+        float clear = WaterMath.reflectHitClearance(dist);
+        assertTrue(WaterMath.reflectBlocksSky(0, 2, dist, -110, -100, -50), "behind a hill 100 blocks out, 2 blocks up");
+        assertTrue(WaterMath.reflectBlocksSky(-1.5f, 2, dist, -110, -100, -50), "a polished block's mark is ground");
+        assertFalse(WaterMath.reflectBlocksSky(0, 2, dist, -90, -100, -50), "in front of the hill");
+        assertFalse(WaterMath.reflectBlocksSky(0, 2, dist, -110, -40, -50), "a surface nearer than the water is no blocker");
+        assertFalse(WaterMath.reflectBlocksSky(0, clear * 0.5f, dist, -110, -100, -50), "not below the clearance");
+        assertFalse(WaterMath.reflectBlocksSky(WaterMath.WATER_REFLECTION, 2, dist, -110, -100, -50), "far water");
+        assertFalse(WaterMath.reflectBlocksSky(-WaterMath.GLASS_REFLECTION, 2, dist, -110, -100, -50), "ice");
+        //The pass marches before it builds the missed ray's sky, and gives the sky the open share
+        assertTrue(COMP.contains("reflectBlocksSky(texelFetch(sceneLit, q, 0).a, dot(toWorld*(scene - v0), nGeom), dist, rayZ, scene.z, v0.z)"));
+        assertTrue(COMP.contains("reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w))"));
+        assertTrue(COMP.indexOf("w = marchReflection(view, toView*r") < COMP.indexOf("reflectedSky(a, r, ripple"), "the march first");
+    }
+
+    @Test
     void theMoonsGlintDoesNotTakeTheSunsShadow() {
         Atmosphere night = atmosphere(MIDNIGHT, 0, true);
         float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
-        float[] shadowed = WaterMath.reflectedSky(night, moon, 1, 0), lit = WaterMath.reflectedSky(night, moon, 1, 1);
+        float[] shadowed = WaterMath.reflectedSky(night, moon, 1, 0, 1), lit = WaterMath.reflectedSky(night, moon, 1, 1, 1);
         assertArrayEquals(lit, shadowed, 1e-6f);
         assertTrue(lum(shadowed) > lum(WaterMath.add(AtmosphereMath.skyColour(night, moon), AtmosphereMath.sunGlow(night, moon))) + 0.1f);
         //The sun visibility is upsampled as W5's lightingAt does, with distances from the depth (no lightTex in this pass)
