@@ -68,7 +68,8 @@
 // It takes what vanilla drew above its own sky and fog colours, keeps only its white part (stars are white; vanilla's red-orange
 // sunrise/sunset fan is not), drops it on the sun's side while vanilla's fan is drawn, and weighs it by the star weight (none by
 // day, so vanilla's sun texture never comes back over W6's disc). So the fan never doubles the sunset sky. At night it also keeps
-// vanilla's moon (white): if W6 draws its own moon disc, the composite skips this residue inside that disc.
+// vanilla's moon (white): if W6 draws its own moon disc (session 5's round moon), the composite drops this residue around it
+// (water.glsl vanillaMoonKept).
 
 #import <vulkanmod:visuals/post/postmath.glsl>
 

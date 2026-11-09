@@ -112,6 +112,9 @@ public final class VisualsRenderer {
     private final RippleClock rippleClock = new RippleClock();
     //2026-10-29: the flow clock's seconds at the last atmosphere capture (the raindrops' rings keep time with the ripples)
     private double flowSeconds;
+    /** 2026-11-09 (session 5): the aurora's climate share at the camera (CelestialUniforms.follow) and when it was last followed. */
+    private float climate = Float.NaN;
+    private long climateNanos;
     private final FlowClock flowClock = new FlowClock();
     private VkUploadStream upload;
     private VkDownloadStream download;
@@ -492,6 +495,31 @@ public final class VisualsRenderer {
         }
     }
 
+    /**
+     * 2026-11-09 (session 5): the discs' shape and the aurora (CelestialUniforms) for this frame: the dimension's sky, the sun's height,
+     * the weather and the camera's biome climate (followed over CelestialUniforms.CLIMATE_SECONDS), the moon phase and the flow clock.
+     * A failure (a modded dimension's effects) draws square discs and no aurora.
+     */
+    private CelestialUniforms.Values sky(PostProcessSettings settings, ClientLevel level, Vec3 camera, long serial) {
+        AtmosphereFrame frame = this.atmosphere;
+        if (frame == null || frame.serial() != serial) return CelestialUniforms.off();
+        try {
+            CelestialUniforms.Sky sky = level.effects().skyType() == DimensionSpecialEffects.SkyType.END ? CelestialUniforms.Sky.END
+                    : level.dimensionType().hasSkyLight() && level.effects().skyType() == DimensionSpecialEffects.SkyType.NORMAL
+                    ? CelestialUniforms.Sky.SUN : CelestialUniforms.Sky.NONE;
+            long now = System.nanoTime();
+            float dt = this.climateNanos == 0 ? Float.NaN : (now - this.climateNanos) / 1e9f;
+            this.climateNanos = now;
+            float target = CelestialUniforms.climate(level.getBiome(BlockPos.containing(camera)).value().getBaseTemperature());
+            this.climate = Float.isFinite(dt) ? CelestialUniforms.follow(this.climate, target, Math.min(dt, 1)) : target;
+            boolean taa = settings.taa() && this.post.taaAvailable();
+            return CelestialUniforms.compute(settings, sky, SunMath.sunDirection(frame.timeOfDay()).y, frame.rain(), frame.thunder(), this.climate,
+                    level.getMoonPhase(), this.flowSeconds, this.frameId, taa);
+        } catch (RuntimeException e) {
+            return CelestialUniforms.off();
+        }
+    }
+
     /** P7e-2: vanilla's sky colour at the camera, the reflections' fallback zenith; null when it cannot be read. */
     private static float[] skyColour(ClientLevel level, float partialTick) {
         try {
@@ -701,6 +729,7 @@ public final class VisualsRenderer {
                 skyAccess = level.getBrightness(LightLayer.SKY, BlockPos.containing(camera)) / 15f;
             }
             this.post.prepareUnderwater(UnderwaterUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, surfaceUp, skyAccess, copies));
+            this.post.prepareSky(sky(settings, level, camera, serial));
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
                     atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight);
             //P7j design 3.3, P7f-2: the last valid cascades, rebased to this frame's sun views (which exist only when this frame

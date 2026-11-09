@@ -41,6 +41,11 @@ public final class WaterMath {
     public static final float DISC_RAIN_HIDE = 1.25f;
     public static final float MOON_DISC_LUMINANCE = 0.6f, MOON_RED = 0.92f, MOON_GREEN = 0.98f, MOON_BLUE = 1.12f;
     public static final float GLINT_POWER = 800.0f, GLINT_PEAK = 0.5f;
+    /** 2026-11-09 (session 5): the round discs (water.glsl's shape section; CelestialUniforms writes the slot). */
+    public static final float CELESTIAL_ROUND = 1.0f, SUN_ROUND_RADIUS = 0.084f, MOON_ROUND_RADIUS = 0.046f, SUN_LIMB_DARKENING = 0.6f;
+    public static final float MOON_TERMINATOR = 0.06f, MOON_EARTHSHINE = 0.02f, MOON_MARIA = 0.35f, MOON_MARIA_CELLS = 2.5f;
+    public static final int MOON_MARIA_SEED = 9;
+    public static final float VANILLA_MOON_MASK = 0.056f;
     public static final float REFLECT_MIN_UP = 0.02f;
     public static final float HIT_CLEARANCE = 0.1f, HIT_CLEARANCE_SHARE = 0.002f;
     public static final float COVER_LOW = 0.3f, COVER_HIGH = 0.9f;
@@ -99,16 +104,93 @@ public final class WaterMath {
 
     // ---- discs ----
 
-    public static float discCover(float[] dir, float[] centre, float h) {
+    /** water.glsl discPlane: dir in the gnomonic plane facing centre (along the rotation axis, along the path), or null behind. */
+    public static float[] discPlane(float[] dir, float[] centre) {
         float c = dot(dir, centre);
-        if (!(c > 0)) return 0;
+        if (!(c > 0)) return null;
         float[] axis = {-centre[0] * centre[2], -centre[1] * centre[2], 1 - centre[2] * centre[2]};
         float al = length(axis);
         axis = al > 0.0001f ? scale(axis, 1 / al) : new float[]{1, 0, 0};
         float[] side = cross(axis, centre);
-        float u = dot(dir, axis) / c, v = dot(dir, side) / c;
-        float m = Math.max(Math.abs(u), Math.abs(v));
+        return new float[]{dot(dir, axis) / c, dot(dir, side) / c};
+    }
+
+    public static float discCover(float[] dir, float[] centre, float h) {
+        float[] uv = discPlane(dir, centre);
+        if (uv == null) return 0;
+        float m = Math.max(Math.abs(uv[0]), Math.abs(uv[1]));
         return 1 - smoothstep(h - DISC_EDGE, h + DISC_EDGE, m);
+    }
+
+    // ---- 2026-11-09 (session 5): the discs' shape (celestial: CelestialUniforms' slot, x the shape, y the moon phase) ----
+
+    public static boolean celestialRound(float[] celestial) {
+        return celestial != null && celestial[0] > CELESTIAL_ROUND * 0.5f;
+    }
+
+    static float roundCover(float[] uv, float r) {
+        return 1 - smoothstep(r - DISC_EDGE, r + DISC_EDGE, (float) Math.hypot(uv[0], uv[1]));
+    }
+
+    public static float sunShape(float[] dir, float[] centre, float[] celestial) {
+        if (!celestialRound(celestial)) return discCover(dir, centre, SUN_HALF_SIZE);
+        float[] uv = discPlane(dir, centre);
+        if (uv == null) return 0;
+        float r = SUN_ROUND_RADIUS;
+        float e = Math.min((float) Math.hypot(uv[0], uv[1]) / r, 1);
+        float mu = (float) Math.sqrt(Math.max(1 - e * e, 0));
+        return roundCover(uv, r) * (1 - SUN_LIMB_DARKENING * (1 - mu)) / (1 - SUN_LIMB_DARKENING / 3);
+    }
+
+    public static float moonLit(float[] celestial) {
+        if (!celestialRound(celestial)) return 1;
+        return 0.5f + 0.5f * (float) Math.cos(Math.max(0, Math.min(celestial[1], 8)) * 0.7853982f);
+    }
+
+    static float moonCorner(float cx, float cy) {
+        int x = (int) cx, y = (int) cy;
+        int h = (x * 73856093) ^ (y * 19349663) ^ (MOON_MARIA_SEED * 83492791);
+        h ^= h >>> 16;
+        h *= 0x7feb352d;
+        h ^= h >>> 15;
+        h *= 0x846ca68b;
+        h ^= h >>> 16;
+        return (h & 0xFFFFFF) / 16777215f;
+    }
+
+    public static float moonNoise(float x, float y) {
+        float ix = (float) Math.floor(x), iy = (float) Math.floor(y);
+        float fx = x - ix, fy = y - iy;
+        float ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+        float a = moonCorner(ix, iy), b = moonCorner(ix + 1, iy), c = moonCorner(ix, iy + 1), d = moonCorner(ix + 1, iy + 1);
+        float ab = a + (b - a) * ux, cd = c + (d - c) * ux;
+        return ab + (cd - ab) * uy;
+    }
+
+    public static float moonShape(float[] dir, float[] centre, float[] celestial) {
+        if (!celestialRound(celestial)) return discCover(dir, centre, MOON_HALF_SIZE);
+        float[] uv = discPlane(dir, centre);
+        if (uv == null) return 0;
+        float r = MOON_ROUND_RADIUS;
+        float cover = roundCover(uv, r);
+        if (!(cover > 0)) return 0;
+        float ex = uv[0] / r, ey = uv[1] / r;
+        float l = (float) Math.hypot(ex, ey);
+        if (l > 1) {
+            ex /= l;
+            ey /= l;
+        }
+        float z = (float) Math.sqrt(Math.max(1 - ex * ex - ey * ey, 0));
+        float phase = Math.max(0, Math.min(celestial[1], 8));
+        float phi = phase * 0.7853982f;
+        float lit = smoothstep(-MOON_TERMINATOR, MOON_TERMINATOR, ex * (float) Math.sin(phi) + z * (float) Math.cos(phi));
+        float maria = 1 - MOON_MARIA * smoothstep(0.45f, 0.75f, moonNoise(ex * MOON_MARIA_CELLS + 3.7f, ey * MOON_MARIA_CELLS + 1.9f));
+        return cover * (MOON_EARTHSHINE + (1 - MOON_EARTHSHINE) * lit) * maria;
+    }
+
+    public static float vanillaMoonKept(Atmosphere a, float[] dir, float[] celestial) {
+        if (!celestialRound(celestial)) return 1;
+        return 1 - discCover(dir, moonCentre(a), VANILLA_MOON_MASK);
     }
 
     public static float[] sunRadiance(Atmosphere a) {
@@ -129,35 +211,42 @@ public final class WaterMath {
                 * smoothstep(-MOON_HALF_SIZE, MOON_HALF_SIZE, -a.sun()[1]));
     }
 
-    public static float[] sunDisc(Atmosphere a, float[] dir) {
-        return scale(sunRadiance(a), discCover(dir, a.sun(), SUN_HALF_SIZE));
+    public static float[] sunDisc(Atmosphere a, float[] dir, float[] celestial) {
+        return scale(sunRadiance(a), sunShape(dir, a.sun(), celestial));
     }
 
-    public static float[] glintOf(float[] radiance, float[] r, float[] centre, float h, float ripple) {
-        float[] sharp = scale(radiance, discCover(r, centre, h));
+    public static float[] moonDisc(Atmosphere a, float[] dir, float[] celestial) {
+        if (!celestialRound(celestial)) return new float[3];
+        return scale(moonRadiance(a), moonShape(dir, moonCentre(a), celestial));
+    }
+
+    public static float[] glintOf(float[] radiance, float[] r, float[] centre, float sharp, float lit, float ripple) {
+        float[] mirrored = scale(radiance, sharp);
         float k = ripple > 0 ? Math.min(ripple, 1) : 0;
-        if (k <= 0) return sharp;
-        float[] lobe = scale(radiance, (float) Math.pow(Math.max(dot(r, centre), 0), GLINT_POWER) * GLINT_PEAK);
-        return new float[]{sharp[0] + (lobe[0] - sharp[0]) * k, sharp[1] + (lobe[1] - sharp[1]) * k, sharp[2] + (lobe[2] - sharp[2]) * k};
+        if (k <= 0) return mirrored;
+        float[] lobe = scale(radiance, (float) Math.pow(Math.max(dot(r, centre), 0), GLINT_POWER) * GLINT_PEAK * lit);
+        return new float[]{mirrored[0] + (lobe[0] - mirrored[0]) * k, mirrored[1] + (lobe[1] - mirrored[1]) * k, mirrored[2] + (lobe[2] - mirrored[2]) * k};
     }
 
     private static float[] moonCentre(Atmosphere a) {
         return new float[]{-a.sun()[0], -a.sun()[1], -a.sun()[2]};
     }
 
-    /** The sun's disc/glint times the sun visibility; the moon's unshadowed (the shadow maps are the sun's). */
-    public static float[] discGlint(Atmosphere a, float[] r, float ripple, float sunVisibility) {
+    /** The sun's disc/glint times the sun visibility; the moon's unshadowed (the shadow maps are the sun's). celestial: the shape slot. */
+    public static float[] discGlint(Atmosphere a, float[] r, float ripple, float sunVisibility, float[] celestial) {
         float v = sunVisibility > 0 ? Math.min(sunVisibility, 1) : 0;
-        return add(scale(glintOf(sunRadiance(a), r, a.sun(), SUN_HALF_SIZE, ripple), v), glintOf(moonRadiance(a), r, moonCentre(a), MOON_HALF_SIZE, ripple));
+        float[] moon = moonCentre(a);
+        return add(scale(glintOf(sunRadiance(a), r, a.sun(), sunShape(r, a.sun(), celestial), 1, ripple), v),
+                glintOf(moonRadiance(a), r, moon, moonShape(r, moon, celestial), moonLit(celestial), ripple));
     }
 
     /**
      * The reflected sky: sky colour, the glow and the discs' glints. 2026-11-09: sunOpen 0..1 (reflection.comp: 0 where the march saw
      * the ray pass behind ground beyond the water, else 1 - the hit's weight) takes the glow and both glints; the sky colour stays.
      */
-    public static float[] reflectedSky(Atmosphere a, float[] r, float ripple, float sunVisibility, float sunOpen) {
+    public static float[] reflectedSky(Atmosphere a, float[] r, float ripple, float sunVisibility, float sunOpen, float[] celestial) {
         float open = sunOpen > 0 ? Math.min(sunOpen, 1) : 0;
-        return add(AtmosphereMath.skyColour(a, r), scale(add(AtmosphereMath.sunGlow(a, r), discGlint(a, r, ripple, sunVisibility)), open));
+        return add(AtmosphereMath.skyColour(a, r), scale(add(AtmosphereMath.sunGlow(a, r), discGlint(a, r, ripple, sunVisibility, celestial)), open));
     }
 
     public static float[] reflectFallback(float[] sky, float[] own, float skyAccess) {
@@ -171,7 +260,16 @@ public final class WaterMath {
      */
     public static float[] missedRay(Atmosphere a, float[] view, float dist, float amount, float[] r, float ripple, float sunVisibility, float sunOpen,
                                     float[] own, float skyAccess) {
-        return reflectFallback(AtmosphereMath.applyHaze(a, reflectedSky(a, r, ripple, sunVisibility, sunOpen), view, dist, amount), own, skyAccess);
+        return missedRay(a, view, dist, amount, r, ripple, sunVisibility, sunOpen, own, skyAccess, SQUARE);
+    }
+
+    /** The square discs' shape slot (vanilla's squares, no aurora): what the composite and the reflection had before session 5. */
+    public static final float[] SQUARE = new float[4];
+
+    /** missedRay with the discs' shape slot and no aurora. */
+    public static float[] missedRay(Atmosphere a, float[] view, float dist, float amount, float[] r, float ripple, float sunVisibility, float sunOpen,
+                                    float[] own, float skyAccess, float[] celestial) {
+        return reflectFallback(AtmosphereMath.applyHaze(a, reflectedSky(a, r, ripple, sunVisibility, sunOpen, celestial), view, dist, amount), own, skyAccess);
     }
 
     // ---- ripples ----

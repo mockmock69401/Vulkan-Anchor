@@ -107,6 +107,8 @@ public final class VkPostProcess {
     private final VkAmbientOcclusion ao;//W10
     private final LooseUniformWriter copyUniforms, prefilterUniforms, downUniforms, upUniforms, shaftMaskUniforms, shaftBlurUniforms, finalUniforms;
     private final LooseUniformWriter lightingUniforms, reflectionUniforms;
+    /** 2026-11-09 (session 5): this frame's sky slots (prepareSky), written into the reflection's after its own. */
+    private CelestialUniforms.Values sky = CelestialUniforms.off();
     private final VkGpuBuffer copyUniformBuffer, lightingUniformBuffer, reflectionUniformBuffer;
     private final long nearest, linear;
     //P7h design 3.3: clouds.png as 256x256 RGBA8 (1 on cloud cells), uploaded once; a dropped upload frame is uploaded again
@@ -348,6 +350,12 @@ public final class VkPostProcess {
         this.colourAfterView = view;
     }
 
+    /** 2026-11-09 (session 5): before prepare(), the discs' shape and the aurora (CelestialUniforms) for the composite and the reflection. */
+    public void prepareSky(CelestialUniforms.Values sky) {
+        this.sky = sky;
+        sky.write(this.copyUniforms);
+    }
+
     /** 2026-11-09 (session 2b): before prepare(), the composite's underwater slots (UnderwaterUniforms). */
     public void prepareUnderwater(UnderwaterUniforms.Values underwater) {
         underwater.write(this.copyUniforms);
@@ -389,6 +397,7 @@ public final class VkPostProcess {
         shadow.writeClose(this.lightingUniforms);
         if (this.lightingUniformBuffer != null) upload.upload(this.lightingUniformBuffer, 0, this.lightingUniforms.buffer());
         reflection.write(this.reflectionUniforms);
+        this.sky.writeReflection(this.reflectionUniforms);
         light.write(this.reflectionUniforms, LightVolumeUniforms.REFLECTION_FIRST);
         if (this.reflectionUniformBuffer != null) upload.upload(this.reflectionUniformBuffer, 0, this.reflectionUniforms.buffer());
         this.lightingOn = lighting.on();

@@ -1,9 +1,10 @@
 #version 450
 //W7: the scene composite (boundary 3.2), one invocation per full-resolution pixel. It turns vanilla's frame into the lit scene in W2's
 // scene units (postmath.glsl) and assembles the other packages' exports; it redesigns none of them:
-//   sky pixel (nothing wrote the depth): W4's skyColour + sunGlow, W6's sunDisc, W4's vanillaStars (vanilla's stars and moon), then
-//     the far clouds over it (clouds.glsl cloudMarch, W4 cloudOver). Without an atmosphere (W4's NONE) and without sky light (NO_SKY:
-//     the End keeps its sky box, B17) the game's pixel, converted; under an environmental fog W4's fog colour.
+//   sky pixel (nothing wrote the depth): W4's skyColour + sunGlow, W6's sunDisc and (round, session 5) moonDisc, W4's vanillaStars
+//     (vanilla's stars and square moon), the aurora (aurora.glsl, session 5), then the far clouds over it (clouds.glsl cloudMarch, W4
+//     cloudOver). Without an atmosphere (W4's NONE) and without sky light (NO_SKY: the End keeps its sky box, B17) the game's pixel,
+//     converted, plus the aurora; under an environmental fog W4's fog colour.
 //   geometry pixel (vanilla or LOD, viewpos.glsl):
 //     1. vanillaToScene (W2) of the main colour
 //     2. its light: sky and block levels from the light volume or the LOD light (lightvolume.glsl pixelLight), the sky light lifted
@@ -124,6 +125,10 @@ layout(location = 42) uniform vec4 airDepth;
 layout(location = 43) uniform vec4 airAmbient;
 layout(location = 44) uniform vec4 airGlow;
 layout(location = 45) uniform vec4 airFog;
+//2026-11-09 (session 5), CelestialUniforms: the discs' shape (water.glsl: x the shape, y the moon phase) and the aurora's parameters
+// (aurora.glsl: x strength, y time, z 1 in the End, w the frame's jitter phase)
+layout(location = 46) uniform vec4 celestial;
+layout(location = 47) uniform vec4 auroraParams;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -131,9 +136,19 @@ layout(location = 45) uniform vec4 airFog;
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
+
+//2026-11-09 (session 5): the aurora along a sky direction dir at pixel p (aurora.glsl, AURORA_STEPS samples from a per-pixel jitter
+// that turns by the frame's phase with TAA); nothing evaluated without one (auroraParams.x 0: day, rain, off, the Nether)
+vec3 auroraSky(vec3 dir, ivec2 p) {
+    if (!(auroraParams.x > 0.0)) {
+        return vec3(0.0);
+    }
+    return aurora(dir, auroraParams, AURORA_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+}
 
 //Vanilla's directional face shade in a dimension with sky light (ClientLevel.getShade: display values the terrain colour was multiplied
 // with). W5's sun facing replaces it on the sky-lit light: it is divided out there, FACE_UNSHADE of it at full sun weight
@@ -536,7 +551,8 @@ vec3 underwaterView(ivec2 p, ivec2 size, vec3 dir, float dist, bool sky, vec3 sh
     if (dot(r, r) > 0.5) {
         //The air's sky along the refracted view, or (no sky light) vanilla's own pixel; the land above where the screen has it
         Atmosphere air = Atmosphere(airSun, airSunLight, airMoonLight, airDepth, airAmbient, airGlow, airFog);
-        above = atmosphereSky(air) ? skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r) : vanillaToScene(texelFetch(mainColour, p, 0).rgb);
+        above = atmosphereSky(air) ? skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r, celestial) : vanillaToScene(texelFetch(mainColour, p, 0).rgb);
+        above += auroraSky(r, p);
         float w = underwaterLookup(from, r, true, size, found, path);
         above = mix(above, found, w);
     }
@@ -774,12 +790,15 @@ void main() {
             imageStore(sceneOut, p, vec4(underwaterView(p, size, skyDir, UNDERWATER_LONGEST, true, vec3(0.0)), 0.0));
             return;
         }
+        vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
         if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5) {
-            imageStore(sceneOut, p, vec4(scene*underwaterExposure(), 0.0));
+            imageStore(sceneOut, p, vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0));
             return;
         }
-        vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
-        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir) + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate);
+        //Session 5: the round discs (the round moon replaces vanilla's square one, which vanillaMoonKept drops) and the aurora, under
+        // the far clouds
+        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial)
+                + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial) + auroraSky(dir, p);
         imageStore(sceneOut, p, vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0));
         return;
     }

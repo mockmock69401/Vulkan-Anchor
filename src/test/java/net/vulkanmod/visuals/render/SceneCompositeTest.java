@@ -949,8 +949,10 @@ class SceneCompositeTest {
         float[] dark = SceneCompositeMath.composite(skyPixel(new float[]{0, 0, 0.02f, 1}, zenith), night, LIGHTMAP);
         float[] star = SceneCompositeMath.composite(skyPixel(new float[]{0.9f, 0.9f, 0.9f, 1}, zenith), night, LIGHTMAP);
         assertTrue(star[0] > dark[0] + 0.3f);
-        assertTrue(COMP.contains("skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir) + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)"));
-        assertFalse(COMP.contains("moonDisc("), "vanilla's moon is kept through vanillaStars");
+        //2026-11-09 (session 5): the round discs and the aurora join the sky under the far clouds; with the square shape moonDisc is 0 and
+        // vanillaMoonKept 1 (vanilla's moon is kept through vanillaStars)
+        assertTrue(COMP.contains("vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial)\n"
+                + "                + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial) + auroraSky(dir, p);"));
         assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)"));
     }
 
@@ -1526,7 +1528,7 @@ class SceneCompositeTest {
         //Straight up: the sky behind the surface, and the water's own face there (vanilla draws it), both show the window
         float[] skyUp = rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, UP), s, LIGHTMAP));
         float[] r = UnderwaterMath.underwaterRefract(UP, n);
-        float[] above = add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r));
+        float[] above = add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r, WaterMath.SQUARE));
         float[] deepUp = UnderwaterMath.underwaterMirrored(UP, n, new float[3], 0, 0, light, vis);
         float[] want = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, above, deepUp), surfaceUp, 1, surfaceUp, light, vis);
         assertArrayEquals(want, skyUp, 1e-4f);
@@ -1576,7 +1578,7 @@ class SceneCompositeTest {
 
     // ---- the mirror ----
 
-    private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "UNDERWATER_PARAMS", "UNDERWATER_RIPPLE_A", "UNDERWATER_RIPPLE_B", "UNDERWATER_LIGHT", "AIR_FIRST", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
+    private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "CELESTIAL", "AURORA", "UNDERWATER_PARAMS", "UNDERWATER_RIPPLE_A", "UNDERWATER_RIPPLE_B", "UNDERWATER_LIGHT", "AIR_FIRST", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
             "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "HELD_EYE", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW");
 
     @Test

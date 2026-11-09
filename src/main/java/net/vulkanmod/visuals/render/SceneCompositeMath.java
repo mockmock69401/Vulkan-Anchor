@@ -79,7 +79,9 @@ public final class SceneCompositeMath {
     public static final float DEBUG_UNKNOWN_RED = 0.25f, DEBUG_UNKNOWN_GREEN = 0.0f, DEBUG_UNKNOWN_BLUE = 0.25f;
 
     // ---- the composite's slots (boundary 3.2) ----
-    public static final int SLOTS = 46;
+    public static final int SLOTS = 48;
+    /** 2026-11-09 (session 5): CelestialUniforms' discs' shape (46) and aurora (47). */
+    public static final int CELESTIAL = CelestialUniforms.COPY_CELESTIAL, AURORA = CelestialUniforms.COPY_AURORA;
     /** 2026-11-09 (session 2b): UnderwaterUniforms' slots 35..38 and the air's struct Atmosphere at 39..45. */
     public static final int UNDERWATER_PARAMS = UnderwaterUniforms.PARAMS, UNDERWATER_RIPPLE_A = UnderwaterUniforms.RIPPLE_A,
             UNDERWATER_RIPPLE_B = UnderwaterUniforms.RIPPLE_B, UNDERWATER_LIGHT = UnderwaterUniforms.LIGHT, AIR_FIRST = UnderwaterUniforms.AIR_FIRST;
@@ -372,8 +374,9 @@ public final class SceneCompositeMath {
         if (UnderwaterMath.dot(r, r) > 0.5f) {
             Atmosphere air = new Atmosphere(slots[AIR_FIRST], slots[AIR_FIRST + 1], slots[AIR_FIRST + 2], slots[AIR_FIRST + 3], slots[AIR_FIRST + 4],
                     slots[AIR_FIRST + 5], slots[AIR_FIRST + 6]);
-            above = AtmosphereMath.atmosphereSky(air) ? add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r))
+            above = AtmosphereMath.atmosphereSky(air) ? add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r, slots[CELESTIAL]))
                     : displayLinear(px.colour);
+            above = add(above, auroraSky(slots, r));
             if (px.surface.landWeight() > 0) above = mix(above, displayLinear(px.surface.landColour()), px.surface.landWeight());
         }
         float[] seen = px.surface.mirrorWeight() > 0 ? scale(displayLinear(px.surface.mirrorColour()), underwaterExposure(slots[LOOK])) : new float[3];
@@ -417,15 +420,30 @@ public final class SceneCompositeMath {
         return new float[]{colour[0] * (1 - r[3]) + r[0], colour[1] * (1 - r[3]) + r[1], colour[2] * (1 - r[3]) + r[2]};
     }
 
+    /**
+     * 2026-11-09 (session 5): the composite's auroraSky along a sky direction: aurora.glsl's aurora with AURORA_STEPS samples (the mirror
+     * takes the per-pixel jitter as 0: only the frame's phase, slot 47 .w), nothing without a strength.
+     */
+    public static float[] auroraSky(float[][] slots, float[] dir) {
+        float[] params = slots[AURORA];
+        if (!(params[0] > 0)) return new float[3];
+        float j = params[3] - (float) Math.floor(params[3]);
+        return AuroraMath.aurora(dir, params, AuroraMath.AURORA_STEPS, j);
+    }
+
     /** The shader's main for one pixel: rgba written to sceneOut. slots: SLOTS vec4 (the matrix slots unused here). */
     public static float[] composite(Pixel px, float[][] slots, Lightmap lm) {
         float[] scene = {PostMath.displayToLinear(px.colour[0]), PostMath.displayToLinear(px.colour[1]), PostMath.displayToLinear(px.colour[2])};
         Atmosphere a = atmosphere(slots);
         if (px.sky) {
             if (cameraUnderwater(slots)) return rgba(underwaterView(px, slots, new float[3]), 0);
-            if (!AtmosphereMath.atmosphereOn(a) || a.mode() == AtmosphereMath.ATMOSPHERE_NO_SKY) return rgba(scale(scene, underwaterExposure(slots[LOOK])), 0);
-            float[] sky = add(add(AtmosphereMath.skyColour(a, px.dir), AtmosphereMath.sunGlow(a, px.dir)),
-                    add(WaterMath.sunDisc(a, px.dir), AtmosphereMath.vanillaStars(a, px.dir, scene, slots[VANILLA_SKY], slots[VANILLA_FOG], slots[STAR_GATE])));
+            if (!AtmosphereMath.atmosphereOn(a) || a.mode() == AtmosphereMath.ATMOSPHERE_NO_SKY)
+                return rgba(scale(add(scene, auroraSky(slots, px.dir)), underwaterExposure(slots[LOOK])), 0);
+            float[] celestial = slots[CELESTIAL];
+            float[] stars = scale(AtmosphereMath.vanillaStars(a, px.dir, scene, slots[VANILLA_SKY], slots[VANILLA_FOG], slots[STAR_GATE]),
+                    WaterMath.vanillaMoonKept(a, px.dir, celestial));
+            float[] sky = add(add(add(AtmosphereMath.skyColour(a, px.dir), AtmosphereMath.sunGlow(a, px.dir)),
+                    add(WaterMath.sunDisc(a, px.dir, celestial), WaterMath.moonDisc(a, px.dir, celestial))), add(stars, auroraSky(slots, px.dir)));
             return rgba(scale(farCloudsOver(a, slots, sky, px.dir, px.cloudMarch), underwaterExposure(slots[LOOK])), 0);
         }
         float[] lighting = slots[LIGHTING], water = slots[WATER], lightFrac = slots[LIGHT_FRAC], lightMode = slots[LIGHT_MODE], look = slots[LOOK];

@@ -21,12 +21,14 @@
 //     hazed colour: do NOT darken it by the reflectivity; reflection.comp mixes the reflection in with reflectivity(mark, cos).
 //     The magnitude is a weight 0..1 the reflection pass multiplies the reflectivity with: the composite may write a smaller one
 //     (never below REFLECT_MARK_MIN) to weaken a pixel's reflection, but never change the sign.
-//   sky pixels: sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir) + W4's vanillaStars, THEN the far clouds over it
-//     (sky*(1 - r.a) + r.rgb), so clouds cover the disc. The disc is not hazed (a sky pixel is at infinity; skyColour already is the
-//     air's colour along dir). The disc is W6's (boundary 6):
-//     a square like vanilla's sun, SUN_DISC_LUMINANCE (24) times a luminance-1 tint inside, so the clean screen-space shafts
-//     (SHAFT_THRESHOLD 1.5) see it wherever no cloud covers it. Keep vanilla's moon (vanillaStars keeps it, with its phase): the moon's
-//     disc (moonRadiance) is drawn only in reflections (discGlint), where vanilla's moon is not where a reflected ray points.
+//   sky pixels: sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + W4's
+//     vanillaStars x vanillaMoonKept(a, dir, celestial) (+ aurora.glsl's light), THEN the far clouds over it (sky*(1 - r.a) + r.rgb), so
+//     clouds cover the disc. The disc is not hazed (a sky pixel is at infinity; skyColour already is the air's colour along dir). The disc
+//     is W6's (boundary 6): a square like vanilla's sun (or, session 5, round: the celestial slot, CelestialUniforms), SUN_DISC_LUMINANCE
+//     (24) times a luminance-1 tint inside, so the clean screen-space shafts (SHAFT_THRESHOLD 1.5) see it wherever no cloud covers it.
+//     With the square shape keep vanilla's moon (vanillaStars keeps it, with its phase; moonDisc is 0): the moon's disc (moonRadiance) is
+//     then drawn only in reflections (discGlint), where vanilla's moon is not where a reflected ray points. With the round shape W6 draws
+//     the moon itself with vanilla's phase (moonDisc) and vanillaMoonKept drops vanilla's square moon.
 //   reflectivity(mark, cosTheta) is there for a composite that wants the share the reflection pass will mirror (cosTheta the
 //     cosine between the surface normal and the direction toward the camera); the composite does not need it for the above.
 
@@ -115,20 +117,143 @@ const float MOON_BLUE = 1.12;
 const float GLINT_POWER = 800.0;
 const float GLINT_PEAK = 0.5;
 
-//How much of direction dir lies inside the square disc of half size h facing centre (0..1, soft edge). The square's edges are
-// vanilla's: one pair along the sun's rotation axis (world z), the other along its path
-float discCover(vec3 dir, vec3 centre, float h) {
+//2026-11-09 (session 5): the discs' plane. dir in the gnomonic plane facing centre: x along the sun's rotation axis (world z), y along
+// its path (uv; vanilla's square has its edges along these). False behind the disc's hemisphere
+bool discPlane(vec3 dir, vec3 centre, out vec2 uv) {
+    uv = vec2(0.0);
     float c = dot(dir, centre);
     if (!(c > 0.0)) {
-        return 0.0;
+        return false;
     }
     vec3 axis = vec3(0.0, 0.0, 1.0) - centre*centre.z;
     float al = length(axis);
     axis = al > 0.0001 ? axis/al : vec3(1.0, 0.0, 0.0);
     vec3 side = cross(axis, centre);
-    vec2 uv = vec2(dot(dir, axis), dot(dir, side))/c;
+    uv = vec2(dot(dir, axis), dot(dir, side))/c;
+    return true;
+}
+
+//How much of direction dir lies inside the square disc of half size h facing centre (0..1, soft edge). The square's edges are
+// vanilla's: one pair along the sun's rotation axis (world z), the other along its path
+float discCover(vec3 dir, vec3 centre, float h) {
+    vec2 uv;
+    if (!discPlane(dir, centre, uv)) {
+        return 0.0;
+    }
     float m = max(abs(uv.x), abs(uv.y));
     return 1.0 - smoothstep(h - DISC_EDGE, h + DISC_EDGE, m);
+}
+
+// ---- 2026-11-09 (session 5, the user: "an option to make the sun and moon round"): the discs' shape ----
+//The composite's slot 46 and the reflection's slot 27 (CelestialUniforms): x the shape (0 vanilla's squares, as before; CELESTIAL_ROUND
+// round), y vanilla's moon phase 0..7 (Level.getMoonPhase: 0 full, 4 new), zw 0. The round sun's radius is the square's half size (the
+// circle inside vanilla's square); the round moon's is vanilla's moon art (measured in session 5: about 0.045 at the zenith, FOV 30,
+// smaller than MOON_HALF_SIZE, the reflection's square)
+const float CELESTIAL_ROUND = 1.0;
+const float SUN_ROUND_RADIUS = 0.084;
+const float MOON_ROUND_RADIUS = 0.046;
+//The round sun's limb darkening, the linear law I(mu) = 1 - u (1 - mu) with u about 0.6 in the visible (Milne 1921; values in Neckel
+// and Labs 1994, "Solar limb darkening 1986-1990", Solar Physics 153), normalised to a mean of 1 over the disc (the mean of 1 - u + u mu
+// over a disc is 1 - u/3)
+const float SUN_LIMB_DARKENING = 0.6;
+//The round moon: the terminator's softness (in the cosine between the surface and the sun), the dark side's earthshine (share of the
+// lit side's brightness), and the maria: darker patches of value noise MOON_MARIA_CELLS cells across the disc, darkening by up to MOON_MARIA
+const float MOON_TERMINATOR = 0.06;
+const float MOON_EARTHSHINE = 0.02;
+const float MOON_MARIA = 0.35;
+const float MOON_MARIA_CELLS = 2.5;
+const int MOON_MARIA_SEED = 9;
+//The round moon hides vanilla's square moon in the composite: vanilla's moon residue (vanillaStars) is dropped inside the square of half
+// size VANILLA_MOON_MASK around the moon (vanilla's moon art fills about 0.045; a little more for its soft edge)
+const float VANILLA_MOON_MASK = 0.056;
+
+bool celestialRound(vec4 celestial) {
+    return celestial.x > CELESTIAL_ROUND*0.5;
+}
+
+//The round disc of radius r in the plane (soft edge)
+float roundCover(vec2 uv, float r) {
+    return 1.0 - smoothstep(r - DISC_EDGE, r + DISC_EDGE, length(uv));
+}
+
+//The sun's shape along dir (0..): the square of half size SUN_HALF_SIZE (1 inside), or the round disc with limb darkening (mean 1)
+float sunShape(vec3 dir, vec3 centre, vec4 celestial) {
+    if (!celestialRound(celestial)) {
+        return discCover(dir, centre, SUN_HALF_SIZE);
+    }
+    vec2 uv;
+    if (!discPlane(dir, centre, uv)) {
+        return 0.0;
+    }
+    float r = SUN_ROUND_RADIUS;
+    float e = min(length(uv)/r, 1.0);
+    float mu = sqrt(max(1.0 - e*e, 0.0));
+    return roundCover(uv, r)*(1.0 - SUN_LIMB_DARKENING*(1.0 - mu))/(1.0 - SUN_LIMB_DARKENING/3.0);
+}
+
+//The share of the moon's face that is lit at phase 0..7 (1 full, 0 new): (1 + cos phi)/2 with phi = phase x 45 degrees; 1 for the square
+float moonLit(vec4 celestial) {
+    if (!celestialRound(celestial)) {
+        return 1.0;
+    }
+    return 0.5 + 0.5*cos(clamp(celestial.y, 0.0, 8.0)*0.7853982);
+}
+
+//The moon's value noise 0..1 at x (the ripples' hash and primes, below, with seed MOON_MARIA_SEED; written out here as GLSL needs it first)
+float moonCorner(vec2 c) {
+    ivec2 i = ivec2(c);
+    uint h = (uint(i.x)*73856093u) ^ (uint(i.y)*19349663u) ^ (uint(MOON_MARIA_SEED)*83492791u);
+    h ^= h >> 16u;
+    h *= 0x7feb352du;
+    h ^= h >> 15u;
+    h *= 0x846ca68bu;
+    h ^= h >> 16u;
+    return float(h & 0xFFFFFFu)/16777215.0;
+}
+
+float moonNoise(vec2 x) {
+    vec2 i = floor(x);
+    vec2 f = x - i;
+    vec2 u = f*f*(3.0 - 2.0*f);
+    return mix(mix(moonCorner(i), moonCorner(i + vec2(1.0, 0.0)), u.x), mix(moonCorner(i + vec2(0.0, 1.0)), moonCorner(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+//The moon's shape along dir (0..1): the square of half size MOON_HALF_SIZE (1 inside, no phase: vanilla's moon keeps its own), or the
+// round disc lit by phase: a sphere seen from the front, lit from phi = phase x 45 degrees off the view (0 full, 180 new) toward the
+// sun's rotation axis (world +z while waning, phases 1..3: sin phi > 0; -z while waxing, 5..7), as vanilla's phase art grows and shrinks; the dark side keeps MOON_EARTHSHINE; the maria darken it
+float moonShape(vec3 dir, vec3 centre, vec4 celestial) {
+    if (!celestialRound(celestial)) {
+        return discCover(dir, centre, MOON_HALF_SIZE);
+    }
+    vec2 uv;
+    if (!discPlane(dir, centre, uv)) {
+        return 0.0;
+    }
+    float r = MOON_ROUND_RADIUS;
+    float cover = roundCover(uv, r);
+    if (!(cover > 0.0)) {
+        return 0.0;
+    }
+    vec2 e = uv/r;
+    float l = length(e);
+    if (l > 1.0) {
+        e /= l;
+    }
+    float z = sqrt(max(1.0 - dot(e, e), 0.0));
+    float phase = clamp(celestial.y, 0.0, 8.0);
+    float phi = phase*0.7853982;
+    float lit = smoothstep(-MOON_TERMINATOR, MOON_TERMINATOR, e.x*sin(phi) + z*cos(phi));
+    float maria = 1.0 - MOON_MARIA*smoothstep(0.45, 0.75, moonNoise(e*MOON_MARIA_CELLS + vec2(3.7, 1.9)));
+    return cover*mix(MOON_EARTHSHINE, 1.0, lit)*maria;
+}
+
+//vanillaStars' residue kept along dir: all of it with the square moon; with the round moon none inside vanilla's square moon (W6 draws the
+// moon itself, moonDisc). 0..1
+float vanillaMoonKept(Atmosphere a, vec3 dir, vec4 celestial) {
+    if (!celestialRound(celestial)) {
+        return 1.0;
+    }
+    return 1.0 - discCover(dir, -a.sun.xyz, VANILLA_MOON_MASK);
 }
 
 //The sun disc's brightness (scene units): SUN_DISC_LUMINANCE times the sky's sunlight tint at luminance 1, gone in rain (the overcast
@@ -155,28 +280,41 @@ vec3 moonRadiance(Atmosphere a) {
     return tint/luminance(tint)*MOON_DISC_LUMINANCE*night*(1.0 - overcastShare)*smoothstep(-MOON_HALF_SIZE, MOON_HALF_SIZE, -a.sun.y);
 }
 
-//The sun disc seen along dir (sky pixels and reflected sky): sunRadiance inside the square, 0 outside
-vec3 sunDisc(Atmosphere a, vec3 dir) {
-    return sunRadiance(a)*discCover(dir, a.sun.xyz, SUN_HALF_SIZE);
+//The sun disc seen along dir (sky pixels and reflected sky): sunRadiance times its shape (celestial: the shape slot), 0 outside
+vec3 sunDisc(Atmosphere a, vec3 dir, vec4 celestial) {
+    return sunRadiance(a)*sunShape(dir, a.sun.xyz, celestial);
 }
 
-//One disc of brightness radiance facing centre (half size h) in a reflected direction r: the mirrored square on calm water, a round
-// lobe cos^GLINT_POWER at GLINT_PEAK of its brightness where the water ripples (ripple 0..1, rippleAmount), mixed by ripple
-vec3 glintOf(vec3 radiance, vec3 r, vec3 centre, float h, float ripple) {
-    vec3 sharp = radiance*discCover(r, centre, h);
+//The round moon on sky pixels (the composite): moonRadiance times its phase-lit shape; 0 with the square moon (vanilla's moon, with its
+// phase, stays in the sky through vanillaStars)
+vec3 moonDisc(Atmosphere a, vec3 dir, vec4 celestial) {
+    if (!celestialRound(celestial)) {
+        return vec3(0.0);
+    }
+    return moonRadiance(a)*moonShape(dir, -a.sun.xyz, celestial);
+}
+
+//One disc of brightness radiance facing centre in a reflected direction r: the mirrored disc (sharp: its shape along r) on calm water, a
+// round lobe cos^GLINT_POWER at GLINT_PEAK of its brightness (times lit, the share of the disc that shines) where the water ripples
+// (ripple 0..1, rippleAmount), mixed by ripple
+vec3 glintOf(vec3 radiance, vec3 r, vec3 centre, float sharp, float lit, float ripple) {
+    vec3 mirrored = radiance*sharp;
     float k = ripple > 0.0 ? min(ripple, 1.0) : 0.0;
     if (k <= 0.0) {
-        return sharp;
+        return mirrored;
     }
-    return mix(sharp, radiance*(pow(max(dot(r, centre), 0.0), GLINT_POWER)*GLINT_PEAK), k);
+    return mix(mirrored, radiance*(pow(max(dot(r, centre), 0.0), GLINT_POWER)*GLINT_PEAK*lit), k);
 }
 
-//The sun and moon in a reflected direction r: the mirrored square discs on calm water, round glints where the water ripples
-// (ripple 0..1, rippleAmount). The sun's is multiplied by the sun visibility at the water (0..1: an island's shadow takes the glint);
-// the moon's is not: the shadow maps are cast from the sun's direction and say nothing about the moon (at night its glint is unshadowed)
-vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility) {
+//The sun and moon in a reflected direction r: the mirrored discs (in the shape celestial chooses; the round moon with its phase) on calm
+// water, round glints where the water ripples (ripple 0..1, rippleAmount). The sun's is multiplied by the sun visibility at the water (0..1:
+// an island's shadow takes the glint); the moon's is not: the shadow maps are cast from the sun's direction and say nothing about the moon
+// (at night its glint is unshadowed)
+vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility, vec4 celestial) {
     float v = sunVisibility > 0.0 ? min(sunVisibility, 1.0) : 0.0;
-    return glintOf(sunRadiance(a), r, a.sun.xyz, SUN_HALF_SIZE, ripple)*v + glintOf(moonRadiance(a), r, -a.sun.xyz, MOON_HALF_SIZE, ripple);
+    vec3 moon = -a.sun.xyz;
+    return glintOf(sunRadiance(a), r, a.sun.xyz, sunShape(r, a.sun.xyz, celestial), 1.0, ripple)*v
+            + glintOf(moonRadiance(a), r, moon, moonShape(r, moon, celestial), moonLit(celestial), ripple);
 }
 
 //The sky seen in a reflected direction r without the clouds (B8): the sky colour for the direction, its glow and the discs (or
@@ -184,10 +322,10 @@ vec3 discGlint(Atmosphere a, vec3 r, float ripple, float sunVisibility) {
 // reflection showed through icebergs and hills): sunOpen 0..1 is how much of the reflected ray the scene leaves open toward the sky
 // (reflection.comp: 0 where the march saw the ray pass behind terrain beyond the water, 1 - the hit's weight where it hit). It takes
 // the glow around the sun (or the moon) and both glints: the march sees terrain at any distance on screen, while the shadow maps
-// (sunVisibility, the sun's glint only) know it only near the camera. The sky colour itself stays (B8)
-vec3 reflectedSky(Atmosphere a, vec3 r, float ripple, float sunVisibility, float sunOpen) {
+// (sunVisibility, the sun's glint only) know it only near the camera. The sky colour itself stays (B8). celestial: the discs' shape slot
+vec3 reflectedSky(Atmosphere a, vec3 r, float ripple, float sunVisibility, float sunOpen, vec4 celestial) {
     float open = sunOpen > 0.0 ? min(sunOpen, 1.0) : 0.0;
-    return skyColour(a, r) + (sunGlow(a, r) + discGlint(a, r, ripple, sunVisibility))*open;
+    return skyColour(a, r) + (sunGlow(a, r) + discGlint(a, r, ripple, sunVisibility, celestial))*open;
 }
 
 //What a ray that finds nothing on screen reflects: the (hazed, clouded) sky where the water sees it (skyAccess 1), the water's own
