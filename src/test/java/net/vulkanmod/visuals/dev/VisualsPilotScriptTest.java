@@ -33,7 +33,7 @@ class VisualsPilotScriptTest {
     @Test
     void everyKeptCommandNameIsKnownAndLodCommandsAreNot() {
         for (String c : new String[]{"world", "wait", "cmd", "ccmd", "rd", "fov", "zoom", "key", "hold", "set", "gui", "shot", "fps",
-                "log", "vm", "spin", "burst", "glide", "gpu", "screen", "quit", "size", "f3", "chunks", "leave", "frames", "fgburst", "fsr", "window"}) {
+                "log", "vm", "spin", "burst", "glide", "gpu", "screen", "quit", "size", "f3", "chunks", "leave", "frames", "fgburst", "fsr", "window", "preset"}) {
             assertTrue(PilotScript.isKnown(c), c);
         }
         for (String c : new String[]{"blockhash", "densitydump", "frobnicate"}) {

@@ -61,8 +61,12 @@ public final class VisualsOptionLayout {
         return new Item(key, Kind.SWITCH, 0, 1, impact, requires);
     }
 
+    /** 2026-11-10 (session 4): the performance preset (VisualsPresets), first on the first page, above the reset. */
+    public static final String PRESET = "preset";
+
     public static final List<Page> PAGES = List.of(
             new Page("image", List.of(
+                    new Block(GENERAL, List.of(new Item(PRESET, Kind.CHOICE, VisualsPresets.POTATO, VisualsPresets.CUSTOM, Impact.NONE, null))),
                     new Block("post", List.of(toggle(ENABLED, Impact.MEDIUM, null))),
                     new Block("tone", List.of(
                             percent("exposure", EXPOSURE_MIN, EXPOSURE_MAX, Impact.NONE),
@@ -143,6 +147,16 @@ public final class VisualsOptionLayout {
     private VisualsOptionLayout() {
     }
 
+    /** The item behind key (IllegalArgumentException when there is none). */
+    public static Item item(String key) {
+        for (Page page : PAGES) {
+            for (Block block : page.blocks()) {
+                for (Item item : block.items()) if (item.key().equals(key)) return item;
+            }
+        }
+        throw new IllegalArgumentException(key);
+    }
+
     /** The value a fresh VisualsConfig has (the reset). */
     public static int defaultValue(Item item) {
         return get(new VisualsConfig(), item);
@@ -151,6 +165,7 @@ public final class VisualsOptionLayout {
     /** The setting's value in the screen's units (percent, blocks, a choice's index, a switch as 1 or 0), kept in its range. */
     public static int get(VisualsConfig c, Item item) {
         int v = switch (item.key()) {
+            case PRESET -> c.preset;
             case ENABLED -> c.enabled ? 1 : 0;
             case "exposure" -> c.exposure;
             case "tone_strength" -> c.toneStrength;
@@ -213,10 +228,11 @@ public final class VisualsOptionLayout {
         return Math.max(item.min(), Math.min(item.max(), v));
     }
 
-    /** Writes the setting from the screen's units (a switch: anything but 0 is on). */
+    /** Writes the setting from the screen's units (a switch: anything but 0 is on). A preset level also sets its settings (VisualsPresets.apply). */
     public static void set(VisualsConfig c, Item item, int value) {
         int v = Math.max(item.min(), Math.min(item.max(), value));
         switch (item.key()) {
+            case PRESET -> VisualsPresets.apply(c, v);
             case ENABLED -> c.enabled = v != 0;
             case "exposure" -> c.exposure = v;
             case "tone_strength" -> c.toneStrength = v;

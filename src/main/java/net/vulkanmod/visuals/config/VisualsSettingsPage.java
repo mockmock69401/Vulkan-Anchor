@@ -66,24 +66,23 @@ public final class VisualsSettingsPage {
         Map<String, Option<?>> byKey = new HashMap<>();
         Map<Option<?>, Item> items = new HashMap<>();
         List<OptionPage> pages = new ArrayList<>();
-        //A reset to the defaults (which shows them, for Apply or Undo), above the first page's blocks, as a button (2026-10-31, the
-        // user: it was a switch that turned itself back off)
+        //A reset to the defaults (which shows them, for Apply or Undo), in the first page's general block under the preset, as a button
+        // (2026-10-31, the user: it was a switch that turned itself back off)
         ButtonOption reset = new ButtonOption(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET));
         reset.setTooltip(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET + ".tooltip"));
-        boolean first = true;
         for (VisualsOptionLayout.Page page : VisualsOptionLayout.PAGES) {
             List<OptionBlock> blocks = new ArrayList<>();
-            if (first) {
-                blocks.add(new OptionBlock(Component.translatable(KEY_PREFIX + "block." + VisualsOptionLayout.GENERAL).getString(), new Option<?>[]{reset}));
-                first = false;
-            }
             for (VisualsOptionLayout.Block block : shownBlocks(page, dh)) {
-                Option<?>[] options = block.items().stream().map(item -> {
+                List<Option<?>> list = new ArrayList<>();
+                for (Item item : block.items()) {
                     Option<?> o = option(item);
                     byKey.put(item.key(), o);
                     items.put(o, item);
-                    return o;
-                }).toArray(Option<?>[]::new);
+                    list.add(o);
+                }
+                //2026-11-10 (session 4): the first page's general block is the preset, then the reset
+                if (block.key().equals(VisualsOptionLayout.GENERAL)) list.add(reset);
+                Option<?>[] options = list.toArray(Option<?>[]::new);
                 String noteKey = KEY_PREFIX + "block." + block.key() + ".note";
                 String note = net.minecraft.locale.Language.getInstance().has(noteKey) ? Component.translatable(noteKey).getString() : null;
                 blocks.add(new OptionBlock(Component.translatable(KEY_PREFIX + "block." + block.key()).getString(), options, note));
@@ -115,6 +114,7 @@ public final class VisualsSettingsPage {
         for (Option<?> o : byKey.values()) {
             if (o instanceof SwitchOption || o instanceof CyclingOption) o.setOnChange(refresh);
         }
+        linkPreset(byKey, refresh);
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
         excludeEachOther(byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), byKey.get(VisualsOptionLayout.FRAME_GENERATION), refresh);
@@ -125,14 +125,69 @@ public final class VisualsSettingsPage {
         return pages;
     }
 
+    /**
+     * 2026-11-10 (session 4): choosing a preset level shows its values on every preset setting the page has (Apply writes them, and
+     * the preset's own apply sets the hidden ones, VisualsPresets.apply); changing any preset setting shows the level they now all
+     * match, or Custom (VisualsPresets.detect; a setting the page hides is not compared).
+     */
     @SuppressWarnings("unchecked")
-    private static void showDefault(Option<?> o, Item item) {
-        int v = VisualsOptionLayout.defaultValue(item);
+    private static void linkPreset(Map<String, Option<?>> byKey, Runnable refresh) {
+        Option<Integer> preset = (Option<Integer>) byKey.get(VisualsOptionLayout.PRESET);
+        if (preset == null) return;
+        boolean[] linking = {false};
+        preset.setOnChange(() -> {
+            int level = preset.getNewValue();
+            if (!linking[0] && VisualsPresets.isLevel(level)) {
+                linking[0] = true;
+                try {
+                    for (String key : VisualsPresets.VALUES.keySet()) {
+                        Option<?> o = byKey.get(key);
+                        if (o != null) show(o, VisualsOptionLayout.item(key), VisualsPresets.value(key, level));
+                    }
+                } finally {
+                    linking[0] = false;
+                }
+            }
+            refresh.run();
+        });
+        Runnable follow = () -> {
+            if (linking[0]) return;
+            int shown = VisualsPresets.detect(key -> byKey.containsKey(key) ? intValue(byKey.get(key)) : Integer.MIN_VALUE);
+            if (preset.getNewValue() == shown) return;
+            linking[0] = true;
+            try {
+                preset.setNewValue(shown);
+            } finally {
+                linking[0] = false;
+            }
+        };
+        for (String key : VisualsPresets.VALUES.keySet()) {
+            Option<?> o = byKey.get(key);
+            if (o == null) continue;
+            boolean refreshes = o instanceof SwitchOption || o instanceof CyclingOption;
+            o.setOnChange(() -> {
+                follow.run();
+                if (refreshes) refresh.run();
+            });
+        }
+    }
+
+    private static int intValue(Option<?> o) {
+        Object v = o.getNewValue();
+        return v instanceof Boolean b ? (b ? 1 : 0) : (Integer) v;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void show(Option<?> o, Item item, int v) {
         if (item.kind() == VisualsOptionLayout.Kind.SWITCH) {
             ((Option<Boolean>) o).setNewValue(v != 0);
         } else {
             ((Option<Integer>) o).setNewValue(v);
         }
+    }
+
+    private static void showDefault(Option<?> o, Item item) {
+        show(o, item, VisualsOptionLayout.defaultValue(item));
     }
 
     @SuppressWarnings("unchecked")
