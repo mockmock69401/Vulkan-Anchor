@@ -61,7 +61,7 @@ class SceneCompositeTest {
                 .orElseThrow(() -> new AssertionError("no location " + location));
     }
 
-    /** Every slot 3..34 as a vec4, after the writers (zeros where none writes). */
+    /** Every slot 3..45 as a vec4, after the writers (zeros where none writes). */
     private static float[][] slots(Consumer<LooseUniformWriter> write) {
         LooseUniformWriter w = new LooseUniformWriter(META);
         write.accept(w);
@@ -109,6 +109,11 @@ class SceneCompositeTest {
 
     /** The composite's slots for a frame: atmosphere, lighting (with sky exposure), no shadows, the light volume on or off, held off. */
     private static float[][] scene(PostProcessSettings s, AtmosphereFrame f, boolean hasSky, boolean volume, float skyExposure) {
+        return scene(s, f, hasSky, volume, skyExposure, 0);
+    }
+
+    /** The same with the water's open surface surfaceUp blocks above the camera (2026-11-09, session 2b; 0: none). */
+    private static float[][] scene(PostProcessSettings s, AtmosphereFrame f, boolean hasSky, boolean volume, float skyExposure, float surfaceUp) {
         AtmosphereUniforms.Values atmosphere = AtmosphereUniforms.compute(s, f, SERIAL, hasSky, false);
         LightingChoice choice = f == null ? LightingChoice.NONE : LightingChoice.of(SERIAL, s, true, true, f.fogCoversAllRendering(), hasSky);
         LightingUniforms.Values lighting = LightingUniforms.compute(s, choice, f, SERIAL, false, skyExposure, true, hasSky);
@@ -123,7 +128,14 @@ class SceneCompositeTest {
             light.write(w, LightVolumeUniforms.COPY_FIRST);
             clouds.write(w, CloudUniforms.COPY_FIRST);
             w.putVec4(HeldLightSystem.COPY_HELD, 0, 0, 0, 0);
+            UnderwaterUniforms.compute(s, f, SERIAL, hasSky, surfaceUp, 1, false).write(w);
         });
+    }
+
+    /** 2026-11-09 (session 2b): a pixel showing `shown` (scene units) d blocks away along dir, from inside water with no open surface above. */
+    private static float[] throughWater(float[] shown, float d, float[] dir, float[][] s) {
+        float[] l = s[SceneCompositeMath.UNDERWATER_LIGHT];
+        return UnderwaterMath.underwaterMedium(shown, d, Math.min(dir[1], 0), 0, new float[]{l[0], l[1], l[2]}, s[SceneCompositeMath.UNDERWATER_PARAMS][1]);
     }
 
     /** A vanilla-like lightmap in scene units: sky brightness (white) plus block brightness (warm) over a dark floor, clamped, decoded. */
@@ -205,6 +217,7 @@ class SceneCompositeTest {
         expected.put("COPY_TERRAIN_LIGHT", VulkanShaderMeta.Kind.IMAGE);
         expected.put("COPY_TERRAIN_ALBEDO", VulkanShaderMeta.Kind.IMAGE);
         expected.put("COPY_COLOUR_AFTER", VulkanShaderMeta.Kind.SAMPLER);//2026-10-29
+        expected.put("COPY_BEFORE_TRANSLUCENT", VulkanShaderMeta.Kind.SAMPLER);//2026-11-09 (session 2b)
         Set<String> want = new TreeSet<>();
         for (Map.Entry<String, VulkanShaderMeta.Kind> e : expected.entrySet()) {
             Integer binding = fields.get(e.getKey());
@@ -218,7 +231,7 @@ class SceneCompositeTest {
             have.add(b.binding() + ":" + b.kind());
         }
         assertEquals(want, have);
-        assertEquals(17, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16");
+        assertEquals(18, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17");
         //Every slot 0..34 with the type its writer uses: the three matrices, then vec4
         for (int loc = 0; loc <= 34; loc++) assertEquals(loc <= 2 ? "mat4" : "vec4", member(loc).type(), "location " + loc);
         //The clean writers and W4 fill every slot but the held light's (HeldLightSystem needs a device buffer: its slot is checked by value)
@@ -309,28 +322,34 @@ class SceneCompositeTest {
         AtmosphereMath.Atmosphere a = SceneCompositeMath.atmosphere(s);
         assertEquals(AtmosphereMath.ATMOSPHERE_FOG, a.mode());
         assertEquals(0f, s[SceneCompositeMath.LIGHTING][2], "no lighting under the environmental fog (LightingChoice)");
-        float[] waterFog = {PostMath.displayToLinear(WATER_FOG[0]), PostMath.displayToLinear(WATER_FOG[1]), PostMath.displayToLinear(WATER_FOG[2])};
-        //Tuning round 2 (refs/S5): the whole view under water is seen at UNDERWATER_EXPOSURE
+        //Tuning round 2 (refs/S5): what the view shows under water is seen at UNDERWATER_EXPOSURE. 2026-11-09 (session 2b; the user: far too
+        // clear): then through the water between (underwater.glsl); vanilla's own fog is pushed out of the way (UnderwaterFog)
         float e = SceneCompositeMath.UNDERWATER_EXPOSURE;
         assertEquals(e, SceneCompositeMath.underwaterExposure(s[SceneCompositeMath.LOOK]), 1e-6f);
+        float[] water = throughWater(new float[3], 5000, dir(0.3f, -0.4f, -1), s);
+        assertTrue(water[2] > water[1] && water[1] > water[0] && water[2] > 0.05f, "the water's own blue by day");
         for (float[] c : COLOURS) {
             for (float dist : new float[]{1, 30, 400, 5000}) {
-                //Vanilla pixels already carry vanilla's fog: W4's amount 0
+                //W4's amount 0 for vanilla pixels (its environmental fog); the water's own colour over the distance
                 SceneCompositeMath.Pixel vanilla = surface(c, UP, NAN4, -1, new float[]{15, 0, 1}, 0, false, dist);
                 float[] out = SceneCompositeMath.composite(vanilla, s, LIGHTMAP);
                 assertEquals(0f, AtmosphereMath.hazeAmount(a, 1, false));
-                assertArrayEquals(scale(glowed(c, s), e), rgb(out), 1e-5f);
-                //LOD pixels get W4's weak uniform fog in vanilla's fog colour
+                assertArrayEquals(throughWater(scale(glowed(c, s), e), dist, vanilla.dir(), s), rgb(out), 1e-5f);
+                if (dist >= 400) assertArrayEquals(water, rgb(out), 1e-4f, "far away only the water is seen");
+                //LOD pixels get W4's weak uniform fog in vanilla's fog colour, then the water
                 SceneCompositeMath.Pixel lod = surface(c, UP, NAN4, -1, new float[]{15, 0, 1}, 0, true, dist);
                 float[] lit = SceneCompositeMath.composite(lod, s, LIGHTMAP);
                 float[] expect = AtmosphereMath.applyHaze(a, linear(c), lod.dir(), dist, AtmosphereMath.hazeAmount(a, 1, true));
-                assertArrayEquals(scale(expect, e), rgb(lit), 1e-5f);
-                if (dist >= 400) assertNotEquals(linear(c)[2] * e, lit[2], 1e-4f, "the LOD is fogged");
+                assertArrayEquals(throughWater(scale(expect, e), dist, lod.dir(), s), rgb(lit), 1e-5f);
             }
         }
-        //The sky is vanilla's fog colour, no sun disc, glow or stars
+        //Sixty blocks away the colour is nearly gone (with vanilla's fog pushed out to twice its end it was all there)
+        float[] grass = SceneCompositeMath.composite(surface(COLOURS[0], UP, NAN4, -1, new float[]{15, 0, 1}, 0, false, 60), s, LIGHTMAP);
+        float[] hidden = throughWater(new float[3], 60, dir(0.3f, -0.4f, -1), s);
+        assertTrue(Math.abs(grass[1] - hidden[1]) < 0.1f * linear(COLOURS[0])[1] * e, "sixty blocks of water hide nearly all of it");
+        //The sky (nothing in front, no open surface above) is the water's own colour, no sun disc, glow or stars
         for (float[] d : new float[][]{UP, dir(1, 0.1f, 0), dir(0, 0.01f, 1)}) {
-            assertArrayEquals(scale(waterFog, e), rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, d), s, LIGHTMAP)), 1e-6f);
+            assertArrayEquals(throughWater(new float[3], UnderwaterMath.UNDERWATER_LONGEST, d, s), rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, d), s, LIGHTMAP)), 1e-6f);
         }
         //Lava, blindness and powder snow are not water: no exposure (final fix R2: the camera's fluid says so, not the fog colour)
         Object[][] others = {{new float[]{0.6f, 0.1f, 0f}, AtmosphereFrame.CameraFluid.LAVA}, {new float[]{0, 0, 0}, AtmosphereFrame.CameraFluid.NONE},
@@ -345,7 +364,7 @@ class SceneCompositeTest {
         }
         //Not in the open air
         assertEquals(1f, SceneCompositeMath.underwaterExposure(scene(DEFAULT, frame(NOON), true, true, 1)[SceneCompositeMath.LOOK]));
-        assertTrue(COMP.contains("vec4(lit*underwaterExposure()"));
+        assertTrue(COMP.contains("vec3 shown = lit*underwaterExposure();"));
         assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE)*underwaterExposure()"));
         //The shader takes the haze from W4 only (no fog of its own)
         assertTrue(COMP.contains("float amount = hazeAmount(a, known && !cloud ? hazeSky : 1.0, fromLod);"));
@@ -1413,10 +1432,10 @@ class SceneCompositeTest {
         //Under water by day the lighting pass does not run: torch light still takes the day's block exposure, the view the underwater one
         float[][] water = scene(settings(c -> c.blockLightColour = 0), underWater(NOON, WATER_FOG), true, true, 1);
         assertEquals(0f, water[SceneCompositeMath.LIGHTING][2]);
-        float[] torchLit = SceneCompositeMath.composite(surface(stone, UP, NAN4, -1, torch, 0, false, 10), water, LIGHTMAP);
-        for (int i = 0; i < 3; i++) {
-            assertEquals(linear(stone)[i] * SceneCompositeMath.DAY_BLOCK_EXPOSURE * SceneCompositeMath.UNDERWATER_EXPOSURE, torchLit[i], 1e-5f);
-        }
+        SceneCompositeMath.Pixel torchPixel = surface(stone, UP, NAN4, -1, torch, 0, false, 10);
+        float[] torchLit = SceneCompositeMath.composite(torchPixel, water, LIGHTMAP);
+        assertArrayEquals(throughWater(scale(linear(stone), SceneCompositeMath.DAY_BLOCK_EXPOSURE * SceneCompositeMath.UNDERWATER_EXPOSURE), 10,
+                torchPixel.dir(), water), rgb(torchLit), 1e-5f);
         //At night the known sky-lit light takes the night exposure; unknown light (a section not loaded yet, the volume off) none
         float[][] night = scene(settings(SceneCompositeTest::plainColours), frame(MIDNIGHT), true, true, 1);
         float[] known = SceneCompositeMath.composite(surface(stone, UP, new float[]{1, 0, 0, 0}, -1, open, 0, false, 10), night, LIGHTMAP);
@@ -1468,9 +1487,10 @@ class SceneCompositeTest {
         float[][] blueFog = scene(DEFAULT, frame(NOON, 0, true, modBlue, new Matrix4f(), PLAINS_SKY, AtmosphereFrame.CameraFluid.NONE), true, true, 1);
         assertEquals(0f, blueFog[SceneCompositeMath.LOOK][1]);
         assertEquals(1f, SceneCompositeMath.underwaterExposure(blueFog[SceneCompositeMath.LOOK]), 0f);
-        //Sky pixels too (vanilla's fog colour under W4's FOG mode)
+        //Sky pixels too: 2026-11-09 (session 2b) the water's own colour, whatever vanilla's fog colour
         float[] sky = SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, UP), inSwamp, LIGHTMAP);
-        assertEquals(PostMath.displayToLinear(swamp[0]) * SceneCompositeMath.UNDERWATER_EXPOSURE, sky[0], 1e-6f);
+        assertArrayEquals(throughWater(new float[3], UnderwaterMath.UNDERWATER_LONGEST, UP, inSwamp), rgb(sky), 1e-6f);
+        assertNotEquals(PostMath.displayToLinear(swamp[0]) * SceneCompositeMath.UNDERWATER_EXPOSURE, sky[0], 1e-3f);
         assertEquals(PostMath.displayToLinear(modBlue[0]),
                 SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, UP), blueFog, LIGHTMAP)[0], 1e-6f);
         //The frame carries the fluid through its other copies
@@ -1482,9 +1502,62 @@ class SceneCompositeTest {
         assertFalse(COMP.contains("WATER_FOG_BLUE"), "no fog-colour test any more");
     }
 
+    /**
+     * 2026-11-09 (session 2b; the user: looking up through the surface the land above did not ripple): from inside water, where the view
+     * rises to the open surface above, the composite shows Snell's window: the air's sky (W4's SKY mode as if in the open air) along the
+     * refracted view, far brighter than the water mirrored outside it; anything in front of the surface (kelp) is seen through the water
+     * as before; land behind the surface is vanilla's colour there (from the pixel the shader moves it to by the ripples).
+     */
+    @Test
+    void fromInsideWaterTheSurfaceAboveIsSnellsWindow() {
+        float surfaceUp = 6;
+        float[][] s = scene(DEFAULT, underWater(NOON, WATER_FOG), true, true, 1, surfaceUp);
+        assertEquals(surfaceUp, s[SceneCompositeMath.UNDERWATER_PARAMS][0], 0f);
+        int air0 = SceneCompositeMath.AIR_FIRST;
+        AtmosphereMath.Atmosphere air = new AtmosphereMath.Atmosphere(s[air0], s[air0 + 1], s[air0 + 2], s[air0 + 3], s[air0 + 4], s[air0 + 5], s[air0 + 6]);
+        assertEquals(AtmosphereMath.ATMOSPHERE_SKY, air.mode(), 0f);
+        float[] l = s[SceneCompositeMath.UNDERWATER_LIGHT];
+        float[] light = {l[0], l[1], l[2]};
+        float vis = s[SceneCompositeMath.UNDERWATER_PARAMS][1];
+        float[] a = s[SceneCompositeMath.UNDERWATER_RIPPLE_A], b = s[SceneCompositeMath.UNDERWATER_RIPPLE_B];
+        float[] n = WaterMath.rippleNormal(0, 0, new float[]{a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3]},
+                s[SceneCompositeMath.UNDERWATER_PARAMS][2], s[SceneCompositeMath.UNDERWATER_PARAMS][3], 0);
+        //Straight up: the sky behind the surface, and the water's own face there (vanilla draws it), both show the window
+        float[] skyUp = rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, UP), s, LIGHTMAP));
+        float[] r = UnderwaterMath.underwaterRefract(UP, n);
+        float[] above = add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r));
+        float[] want = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, above, light, vis), surfaceUp, 1, surfaceUp, light, vis);
+        assertArrayEquals(want, skyUp, 1e-4f);
+        SceneCompositeMath.Pixel face = new SceneCompositeMath.Pixel(new float[]{0.2f, 0.3f, 0.8f, OPAQUE}, false, UP, surfaceUp, false, new float[]{0, -1, 0},
+                NAN4, -1, new float[]{15, 0, 1}, 0, 0, false, new float[3]);
+        assertArrayEquals(skyUp, rgb(SceneCompositeMath.composite(face, s, LIGHTMAP)), 1e-5f, "the water's face is not shown: the window is");
+        //The noon sun overhead: the window is far brighter than the water mirrored beyond the critical angle (60 degrees from straight up)
+        float[] side = dir(1, (float) Math.tan(Math.toRadians(30)), 0);
+        float[] mirrored = rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, side), s, LIGHTMAP));
+        assertTrue(PostMath.luminance(skyUp[0], skyUp[1], skyUp[2]) > 4 * PostMath.luminance(mirrored[0], mirrored[1], mirrored[2]));
+        //Kelp in front of the surface is seen through the water, as anywhere under water
+        SceneCompositeMath.Pixel kelp = new SceneCompositeMath.Pixel(new float[]{0.2f, 0.5f, 0.1f, OPAQUE}, false, UP, surfaceUp * 0.5f, false, new float[]{0, -1, 0},
+                NAN4, -1, new float[]{12, 0, 1}, 0, 0, false, new float[3]);
+        float[] kelpShown = scale(linear(kelp.colour()), SceneCompositeMath.UNDERWATER_EXPOSURE);
+        assertArrayEquals(UnderwaterMath.underwaterMedium(kelpShown, surfaceUp * 0.5f, 1, surfaceUp, light, vis), rgb(SceneCompositeMath.composite(kelp, s, LIGHTMAP)), 1e-5f);
+        //Land behind the surface: vanilla's colour (at the pixel the shader moves it to) through the window
+        float[] tree = {0.25f, 0.4f, 0.15f};
+        SceneCompositeMath.Pixel land = new SceneCompositeMath.Pixel(new float[]{0.2f, 0.3f, 0.8f, OPAQUE}, false, UP, surfaceUp, false, new float[]{0, -1, 0},
+                NAN4, -1, new float[]{15, 0, 1}, 0, 0, false, new float[3], 1, null, new SceneCompositeMath.Surface(0, 20, tree));
+        float[] landWant = UnderwaterMath.underwaterMedium(UnderwaterMath.underwaterWindow(UP, n, linear(tree), light, vis), surfaceUp, 1, surfaceUp, light, vis);
+        assertArrayEquals(landWant, rgb(SceneCompositeMath.composite(land, s, LIGHTMAP)), 1e-5f);
+        //Without an open surface above (a capped column) there is no window: the water all the way
+        float[][] capped = scene(DEFAULT, underWater(NOON, WATER_FOG), true, true, 1, 0);
+        assertArrayEquals(throughWater(new float[3], UnderwaterMath.UNDERWATER_LONGEST, UP, capped), rgb(SceneCompositeMath.composite(skyPixel(new float[]{1, 1, 1, 1}, UP), capped, LIGHTMAP)), 1e-6f);
+    }
+
+    private static float[] add(float[] a, float[] b) {
+        return new float[]{a[0] + b[0], a[1] + b[1], a[2] + b[2]};
+    }
+
     // ---- the mirror ----
 
-    private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
+    private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "UNDERWATER_PARAMS", "UNDERWATER_RIPPLE_A", "UNDERWATER_RIPPLE_B", "UNDERWATER_LIGHT", "AIR_FIRST", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
             "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "HELD_EYE", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW");
 
     @Test

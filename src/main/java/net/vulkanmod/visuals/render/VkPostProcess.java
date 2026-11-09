@@ -70,7 +70,9 @@ public final class VkPostProcess {
     //and the copy the albedo at 15
     COPY_TERRAIN_ALBEDO = 15,
     //2026-10-29: the copy reads the main colour right after the translucent terrain at 16 (VkDepthCapture.captureColour)
-    COPY_COLOUR_AFTER = 16;
+    COPY_COLOUR_AFTER = 16,
+    //2026-11-09 (session 2b): and the depth before the translucent terrain at 17 (what lies behind the water's surface seen from below)
+    COPY_BEFORE_TRANSLUCENT = 17;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     /**
@@ -330,6 +332,11 @@ public final class VkPostProcess {
         this.colourAfterView = view;
     }
 
+    /** 2026-11-09 (session 2b): before prepare(), the composite's underwater slots (UnderwaterUniforms). */
+    public void prepareUnderwater(UnderwaterUniforms.Values underwater) {
+        underwater.write(this.copyUniforms);
+    }
+
     /** 2026-10-29: before prepare(), this frame's entity shadow map (view 0 and entity off: none). */
     public void prepareEntityShadows(EntityShadowUniforms.Values entity, long view) {
         entity.write(this.lightingUniforms);
@@ -412,7 +419,8 @@ public final class VkPostProcess {
                 .sampled(COPY_SUN, this.sunImage, this.nearest).sampledView(COPY_LOD_LIGHT, lodLight, this.nearest).storage(COPY_HELD_LIGHT, held)
                 .sampled(COPY_PLANT_SUN, this.plantSunImage, this.nearest).sampled(COPY_AO, this.ao.output(), this.nearest)
                 .storageImage(COPY_TERRAIN_LIGHT, light.terrainLight()).storageImage(COPY_TERRAIN_ALBEDO, light.terrainAlbedo())
-                .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest);
+                .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest)
+                .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         this.copy.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);

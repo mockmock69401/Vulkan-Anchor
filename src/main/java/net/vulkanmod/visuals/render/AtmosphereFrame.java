@@ -48,6 +48,16 @@ public record AtmosphereFrame(long serial, Matrix4f invVanillaProjection, Matrix
     }
 
     /**
+     * 2026-11-09 (session 2b): the same frame as if the camera were in the open air (no environmental fog, no fluid): the sky above the
+     * water that Snell's window shows from below (UnderwaterUniforms).
+     */
+    public AtmosphereFrame inOpenAir() {
+        return new AtmosphereFrame(this.serial, this.invVanillaProjection, this.invLodProjection, this.invModelView, this.viewProjection,
+                this.cameraY, this.seaLevel, this.fogRed, this.fogGreen, this.fogBlue, false, this.lodDrawn, this.timeOfDay,
+                this.rain, this.thunder, this.sunrise, this.skyColour, this.skyFogEnd, this.rippleOffset, this.clouds, CameraFluid.NONE);
+    }
+
+    /**
      * vanillaProjection is vanilla's GL projection (depth -1..1); its depth is decoded through Reforged's 0..1 remap
      * (ReforgedProjection). "Fog covers everything" is the LOD composite's rule (CompositeUniforms).
      */
