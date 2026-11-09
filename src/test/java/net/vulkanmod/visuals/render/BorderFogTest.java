@@ -45,7 +45,7 @@ class BorderFogTest {
         }
         assertTrue(comp.contains("layout(location = 30) uniform vec4 borderFog;"));
         int border = comp.indexOf("lit = mix(lit, skyColour(a, dir) + sunGlow(a, dir), border);");
-        int clouds = comp.indexOf("lit = farCloudsOver(a, lit, dir, dist);");
+        int clouds = comp.indexOf("lit = farCloudsOver(a, lit, dir, dist, p);");
         assertTrue(border > 0 && clouds > border);
         assertTrue(comp.contains("return smoothstep(borderFog.x, borderFog.y, length(world.xz));"));
     }

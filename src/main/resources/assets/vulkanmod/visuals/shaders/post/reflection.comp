@@ -272,11 +272,15 @@ int reflectCloudSamples(float len) {
 
 //The far clouds along a reflected ray from origin (camera relative): clouds.glsl's layer, 4..12 samples from a screen-fixed jitter
 // (0..1), fixed self-shading.
-// Returns cloudMarch's (light-weighted coverage, coverage, mean distance)
-vec3 reflectedCloudMarch(vec3 origin, vec3 dir, float jitter) {
+// Returns farCloudMarch's (sunlit weight, sky-lit weight, coverage, mean distance). Session 3: the realistic style marches
+// REAL_REFLECT_SAMPLES with one erosion octave and without a light march (its shading from the height in the layer), the cirrus included
+vec4 reflectedCloudMarch(vec3 origin, vec3 dir, float jitter) {
+    if (cloudRealistic()) {
+        return realMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, 0, 1);
+    }
     vec2 span = cloudInterval(origin, dir, HAZE_MAX_DISTANCE);
     if (cloudShape.w < 0.5 || span.y <= span.x) {
-        return vec3(0.0);
+        return vec4(0.0);
     }
     float len = span.y - span.x;
     int n = reflectCloudSamples(len);
@@ -305,7 +309,7 @@ vec3 reflectedCloudMarch(vec3 origin, vec3 dir, float jitter) {
         wsum += w;
         trans *= 1.0 - a;
     }
-    return vec3(light, 1.0 - trans, wsum > 0.0 ? dsum/wsum : 0.0);
+    return vec4(light, 1.0 - trans, 1.0 - trans, wsum > 0.0 ? dsum/wsum : 0.0);
 }
 
 //The sun visibility at full-resolution pixel p (W5's sunOut.r), upsampled as W5's lightingAt does: texel q stands for full pixel 2q,

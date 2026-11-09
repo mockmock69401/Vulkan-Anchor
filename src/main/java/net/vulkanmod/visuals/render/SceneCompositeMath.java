@@ -314,8 +314,8 @@ public final class SceneCompositeMath {
      * direction (unit); dist: the view distance; fromLod: viewpos.glsl's fromLod; normal: the pixel's world normal (0 for plants, light
      * sources and clouds); lt: lightingAt's result (read only when the pass ran); plantSun: plantSunTex (-1 elsewhere); light: pixelLight's
      * (sky, block, known); sideSky: lightvolume.glsl's sideSky at the surface; held: heldLevelAt's level (heldLevel of heldPath; 0 off); cloud: vanillaCloud;
-     * cloudMarch: clouds.glsl's cloudMarch along dir from farCloudNear to dist (sky: to HAZE_MAX_DISTANCE), its z counted from the camera,
-     * (0, 0, 0) for none; ao: W10's aoAt(aoTex, p, dist) (read only when the pass ran and slot 10 .x > 0; 1 = no occlusion); albedo:
+     * cloudMarch: clouds.glsl's farCloudMarch along dir from farCloudNear to dist (sky: to HAZE_MAX_DISTANCE), its distance counted from the
+     * camera, (0, 0, 0) for none (three values: a vanilla-shape cloudMarch, see CloudMath.four); ao: W10's aoAt(aoTex, p, dist) (read only when the pass ran and slot 10 .x > 0; 1 = no occlusion); albedo:
      * terrainAlbedoAt's colour before the lightmap (display rgb) where it holds, else null (read only with the terrain light's source 2).
      */
     public record Pixel(float[] colour, boolean sky, float[] dir, float dist, boolean fromLod, float[] normal, float[] lt, float plantSun,
@@ -412,7 +412,7 @@ public final class SceneCompositeMath {
     }
 
     private static float[] farCloudsOver(Atmosphere a, float[][] slots, float[] colour, float[] dir, float[] march) {
-        if (slots[CLOUD_SHAPE][3] < 0.5f || !AtmosphereMath.atmosphereSky(a) || !(march[1] > 0)) return colour;
+        if (slots[CLOUD_SHAPE][3] < 0.5f || !AtmosphereMath.atmosphereSky(a) || !(CloudMath.four(march)[2] > 0)) return colour;
         float[] r = AtmosphereMath.cloudOver(a, new CloudLight(slots[CLOUD_LIT], slots[CLOUD_AMBIENT], slots[CLOUD_LIGHT_DIR]), march, dir, 1);
         return new float[]{colour[0] * (1 - r[3]) + r[0], colour[1] * (1 - r[3]) + r[1], colour[2] * (1 - r[3]) + r[2]};
     }

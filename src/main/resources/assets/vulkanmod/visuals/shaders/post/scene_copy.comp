@@ -633,8 +633,9 @@ bool vanillaCloud(vec3 world, vec3 dir, float dist) {
     return (behind & 15) >= VANILLA_CLOUD_SKY;
 }
 
-//The far cloud layer in front of maxDist along dir (W4's cloudOver of clouds.glsl's march, premultiplied and hazed), over colour
-vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist) {
+//The far cloud layer in front of maxDist along dir (W4's cloudOver of clouds.glsl's march, premultiplied and hazed), over colour;
+// p the pixel (session 3: the realistic style's per-pixel jitter)
+vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) {
     if (cloudShape.w < 0.5 || !atmosphereSky(a)) {
         return colour;
     }
@@ -642,11 +643,11 @@ vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist) {
     if (!(maxDist > near)) {
         return colour;
     }
-    vec3 m = cloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz);
-    if (!(m.y > 0.0)) {
+    vec4 m = farCloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));
+    if (!(m.z > 0.0)) {
         return colour;//no cloud in front: no haze to evaluate
     }
-    m.z += near;//the march's distances are from its start
+    m.w += near;//the march's distances are from its start
     vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0);
     return colour*(1.0 - r.a) + r.rgb;
 }
@@ -779,7 +780,7 @@ void main() {
         }
         vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
         vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir) + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate);
-        imageStore(sceneOut, p, vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE)*underwaterExposure(), 0.0));
+        imageStore(sceneOut, p, vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0));
         return;
     }
     float dist = length(view);
@@ -1017,7 +1018,7 @@ void main() {
         float k = borderFog.w*min(dist, HAZE_MAX_DISTANCE);
         lit = mix(rainFog, lit, exp(-k*k*amount));
     }
-    lit = farCloudsOver(a, lit, dir, dist);
+    lit = farCloudsOver(a, lit, dir, dist, p);
     //2026-10-29 (the user: raindrops took the water's reflection): a pixel drawn over after the translucent terrain (rain and snow
     // particles, splashes, ripples) keeps no mark, so it stays as drawn instead of being mirrored over
     bool overdrawn = overdrawnAfterTranslucent(texelFetch(colourAfterTranslucent, p, 0).rgb, colour.rgb);

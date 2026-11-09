@@ -1,6 +1,7 @@
 package net.vulkanmod.visuals.config;
 
 import net.vulkanmod.visuals.fsr.FsrSettings;
+import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShadowMath;
 
 import java.util.List;
@@ -87,7 +88,11 @@ public final class VisualsOptionLayout {
                             percent("sunset_light", STRENGTH_MAX),
                             percent("light_shafts", 0, STRENGTH_MAX, Impact.MEDIUM),
                             percent("moonlight", STRENGTH_MAX),
-                            toggle("far_clouds", Impact.MEDIUM, null))))),
+                            toggle("far_clouds", Impact.MEDIUM, null),
+                            //2026-11-09 (session 3): the realistic clouds and their settings (greyed out with the vanilla shape)
+                            new Item("cloud_style", Kind.CHOICE, 0, CloudMath.STYLE_MAX, Impact.HIGH, "far_clouds"),
+                            new Item("cloud_coverage", Kind.PERCENT, 0, CLOUD_COVERAGE_MAX, Impact.NONE, "cloud_style"),
+                            new Item("cloud_quality", Kind.CHOICE, 0, CloudMath.QUALITY_MAX, Impact.HIGH, "cloud_style"))))),
             new Page("lighting", List.of(
                     new Block("shading", List.of(
                             percent("sun_shading", STRENGTH_MAX),
@@ -155,6 +160,9 @@ public final class VisualsOptionLayout {
             case "light_shafts" -> c.lightShafts;
             case "moonlight" -> c.moonlight;
             case "far_clouds" -> c.farClouds ? 1 : 0;
+            case "cloud_style" -> c.cloudStyle;
+            case "cloud_coverage" -> c.cloudCoverage;
+            case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
             case "light_colour" -> c.lightColour;
@@ -210,6 +218,9 @@ public final class VisualsOptionLayout {
             case "light_shafts" -> c.lightShafts = v;
             case "moonlight" -> c.moonlight = v;
             case "far_clouds" -> c.farClouds = v != 0;
+            case "cloud_style" -> c.cloudStyle = v;
+            case "cloud_coverage" -> c.cloudCoverage = v;
+            case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;
             case "light_colour" -> c.lightColour = v;

@@ -365,7 +365,7 @@ class SceneCompositeTest {
         //Not in the open air
         assertEquals(1f, SceneCompositeMath.underwaterExposure(scene(DEFAULT, frame(NOON), true, true, 1)[SceneCompositeMath.LOOK]));
         assertTrue(COMP.contains("vec3 shown = lit*underwaterExposure();"));
-        assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE)*underwaterExposure()"));
+        assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure()"));
         //The shader takes the haze from W4 only (no fog of its own)
         assertTrue(COMP.contains("float amount = hazeAmount(a, known && !cloud ? hazeSky : 1.0, fromLod);"));
         assertTrue(COMP.contains("applyHaze(a, lit, dir, dist, amount)"));
@@ -951,7 +951,7 @@ class SceneCompositeTest {
         assertTrue(star[0] > dark[0] + 0.3f);
         assertTrue(COMP.contains("skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir) + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)"));
         assertFalse(COMP.contains("moonDisc("), "vanilla's moon is kept through vanillaStars");
-        assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE)"));
+        assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)"));
     }
 
     /** Vanilla's baked face shade comes out of the sky-lit light under the sun weight (W5's facing replaces it); weight 0 keeps it. */
@@ -1145,7 +1145,7 @@ class SceneCompositeTest {
         assertTrue(COMP.contains("float hazeSky = water ? skyShare(sky) : clamp(skyT/15.0, 0.0, 1.0);"));
         assertTrue(COMP.contains("heldLevelAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world)"));
         assertTrue(COMP.contains("lightAll*perLight*ao*waterParams.y"));
-        assertTrue(COMP.contains("if (!(m.y > 0.0)) {\n        return colour;"));
+        assertTrue(COMP.contains("if (!(m.z > 0.0)) {\n        return colour;"));
         //Water: the AO darkens the body's light too (W6: what a white texel receives). W10: only the sky light's ambient part of it
         float[][] lit = noonLit();
         lit[SceneCompositeMath.LIGHTING][0] = 1;
@@ -1256,8 +1256,8 @@ class SceneCompositeTest {
         assertEquals(0f, SceneCompositeMath.farCloudNear(new float[]{2.3f, 4, 512, 1}), "below the layer: nothing in front looking down anyway");
         assertEquals(0f, SceneCompositeMath.farCloudNear(new float[]{-10, 4, 512, 1}), "above: the clouds just below stay");
         assertEquals(0f, SceneCompositeMath.farCloudNear(new float[]{60, 4, 512, 1}), "far below");
-        assertTrue(COMP.contains("vec3 m = cloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz);"));
-        assertTrue(COMP.contains("m.z += near;"));
+        assertTrue(COMP.contains("vec4 m = farCloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));"));
+        assertTrue(COMP.contains("m.w += near;"));
     }
 
     // ---- final fix R1, R2: the look weight, the camera's fluid, every setting at 0 ----
@@ -1597,7 +1597,7 @@ class SceneCompositeTest {
         //It assembles the other packages' exports and reimplements none of them
         for (String call : new String[]{"vanillaToScene(", "lightingAt(", "sunShadingAt(", "shadeLevel(lighting.w)", "sunLevel(lighting.w)", "sunShare(", "isPlant(", "isEmissive(", "snapNormal(depthNormal(",
                 "lodFaceNormal(", "waterColour(", "reflectionMark(", "sunDisc(", "skyColour(", "sunGlow(", "vanillaStars(", "hazeAmount(", "applyHaze(",
-                "cloudOver(", "cloudMarch(", "pixelLight(", "relightGain(", "relightCapped(", "liftedSky(", "waterSky(", "sideSky(", "scenePositionFrom("}) {
+                "cloudOver(", "farCloudMarch(", "pixelLight(", "relightGain(", "relightCapped(", "liftedSky(", "waterSky(", "sideSky(", "scenePositionFrom("}) {
             assertTrue(COMP.contains(call), call);
         }
         for (String own : new String[]{"vec3 skyColour(", "vec3 sunGlow(", "void haze(", "float sunShading(", "float sunShadingAt(", "vec3 waterColour(", "vec3 sunDisc(",

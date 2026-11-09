@@ -44,7 +44,7 @@
 // WHAT TO CALL (all return finite, non-negative colours):
 //   sky pixel (no geometry):     skyColour(a, dir) + sunGlow(a, dir), then the sun/moon disc and the stars (below)
 //   a surface:                   applyHaze(a, colour, dir, dist, hazeAmount(a, skyLight, isLod)), or haze(...) for the two factors
-//   the far clouds over the sky: r = cloudOver(a, c, cloudMarch(...), dir, 1.0), then sky*(1 - r.a) + r.rgb
+//   the far clouds over the sky: r = cloudOver(a, c, farCloudMarch(...), dir, 1.0), then sky*(1 - r.a) + r.rgb
 //   environmental fog / no sky:  nothing extra: every function above switches on the mode (hazeAmount too)
 //   reflected sky (B8, W6):      skyColour(a, r) + sunGlow(a, r) for the reflected direction r, plus W6's disc/glint
 // dist is the VIEW DISTANCE in blocks from the camera to the surface the eye meets first (W5's lightTex.b, or the length of the
@@ -436,19 +436,21 @@ vec3 vanillaStars(Atmosphere a, vec3 dir, vec3 pixel, vec4 vanillaSky, vec4 vani
     return vec3(white*keep*min(gate.x, 1.0));
 }
 
-//The far clouds' premultiplied colour and coverage from clouds.glsl's cloudMarch result m (x light-weighted coverage, y coverage):
-// rgb = m.x lit + m.y ambient, a = m.y. Composite over the sky with sky * (1 - a) + rgb.
-vec4 cloudColour(CloudLight c, vec3 m) {
+//The far clouds' premultiplied colour and coverage from clouds.glsl's farCloudMarch result m (x sunlit weight, y sky-lit weight,
+// z coverage; session 3: the vanilla shape's y is its coverage): rgb = m.x lit + m.y ambient, a = m.z. Composite over the sky with
+// sky * (1 - a) + rgb.
+vec4 cloudColour(CloudLight c, vec4 m) {
     float x = m.x > 0.0 ? m.x : 0.0;
-    float y = m.y > 0.0 ? min(m.y, 1.0) : 0.0;
-    return vec4(x*c.lit.rgb + y*c.ambient.rgb, y);
+    float y = m.y > 0.0 ? m.y : 0.0;
+    float z = m.z > 0.0 ? min(m.z, 1.0) : 0.0;
+    return vec4(x*c.lit.rgb + y*c.ambient.rgb, z);
 }
 
-//cloudColour hazed over the march's mean distance m.z along dir (the in-scatter weighted by the coverage)
-vec4 cloudOver(Atmosphere a, CloudLight c, vec3 m, vec3 dir, float amount) {
+//cloudColour hazed over the march's mean distance m.w along dir (the in-scatter weighted by the coverage)
+vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount) {
     vec4 cloud = cloudColour(c, m);
     vec3 t;
     vec3 i;
-    haze(a, dir, m.z, amount, t, i);
+    haze(a, dir, m.w, amount, t, i);
     return vec4(cloud.rgb*t + i*cloud.a, cloud.a);
 }
