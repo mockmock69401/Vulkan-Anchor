@@ -15,6 +15,12 @@ public final class PrecipitationMap {
     public static final int NO_HEIGHT = Integer.MIN_VALUE;
     /** Climate lookups per frame (each a biome and up to about 13 temperature lookups); the whole map takes SIZE^2 / BUDGET frames. */
     public static final int BUDGET = 512;
+    /**
+     * 2026-11-10 (session 7): the map is updated at most this often (nanoseconds, 90 a second). Each update reads every column's height
+     * and up to BUDGET climates, half a millisecond of the render thread; at 270 fps in the rain it ran 270 times a second for blocks
+     * and biomes that change far more slowly. Up to 90 fps every frame still updates (60 and 75 Hz with their frame jitter too).
+     */
+    public static final long UPDATE_NANOS = 1_000_000_000L / 90;
     /** hasRain and hasSnow look this far around the camera: the far layer's end and one of its cells. */
     public static final int REACH = (int) WeatherMath.WEATHER_LAYER_END_2 + (1 << (WeatherMath.WEATHER_LAYERS - 1)) + 1;
 
@@ -68,6 +74,11 @@ public final class PrecipitationMap {
         java.util.Arrays.fill(this.climateX, Integer.MIN_VALUE);
         java.util.Arrays.fill(this.climates, null);
         java.util.Arrays.fill(this.water, false);
+    }
+
+    /** Whether an update is due at nowNanos after the last one at lastNanos (Long.MIN_VALUE: none yet); a clock going back counts as due. */
+    public static boolean due(long lastNanos, long nowNanos) {
+        return lastNanos == Long.MIN_VALUE || nowNanos - lastNanos >= UPDATE_NANOS || nowNanos < lastNanos;
     }
 
     /** The map around the camera's block (cx, cy, cz); true when a texel changed (the map must be uploaded again). */

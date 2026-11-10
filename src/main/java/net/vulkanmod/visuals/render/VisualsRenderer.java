@@ -123,6 +123,8 @@ public final class VisualsRenderer {
     private final PrecipitationMap precipitation = new PrecipitationMap();
     private LevelPrecipitation precipitationLevel;
     private ClientLevel precipitationOf;
+    /** 2026-11-10 (session 7): System.nanoTime of the map's last update (PrecipitationMap.due). */
+    private long precipitationNanos = Long.MIN_VALUE;
     private float[] weatherVelocity = new float[3];
     private double weatherLastX = Double.NaN, weatherLastY, weatherLastZ, weatherLastSeconds;
     private VkUploadStream upload;
@@ -554,10 +556,17 @@ public final class VisualsRenderer {
                     this.precipitationOf = level;
                     this.precipitationLevel = new LevelPrecipitation(level);
                     this.precipitation.clear();
+                    this.precipitationNanos = Long.MIN_VALUE;
                 }
-                this.precipitationLevel.newFrame();
-                boolean changed = this.precipitation.update(this.precipitationLevel, (int) Math.floor(camera.x), (int) Math.floor(camera.y),
-                        (int) Math.floor(camera.z), PrecipitationMap.BUDGET);
+                //Session 7: at most PrecipitationMap.UPDATE_NANOS apart; between updates the map and its rain / snow flags stay
+                long nanos = System.nanoTime();
+                boolean changed = false;
+                if (PrecipitationMap.due(this.precipitationNanos, nanos)) {
+                    this.precipitationNanos = nanos;
+                    this.precipitationLevel.newFrame();
+                    changed = this.precipitation.update(this.precipitationLevel, (int) Math.floor(camera.x), (int) Math.floor(camera.y),
+                            (int) Math.floor(camera.z), PrecipitationMap.BUDGET);
+                }
                 if (changed || this.post.precipitationMapStale()) map = this.precipitation.texels();
                 values = WeatherUniforms.compute(settings, frame.rain(), frame.thunder(), frame.cameraFluid() != AtmosphereFrame.CameraFluid.NONE,
                         WeatherUniforms.unjitteredInverse(atmosphere.invVanillaProjection(), TaaJitter.appliedNdc()), atmosphere.invLodProjection(),
