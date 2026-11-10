@@ -85,4 +85,14 @@ class VkContextTest {
         assertEquals(-1L, VkContext.guardedQuery(() -> { throw new IllegalStateException("no entry point"); }));
         assertEquals(42L, VkContext.guardedQuery(() -> 42L));
     }
+
+    /** Session 7: compiled SPIR-V is reused for the same stage kind, name and source; any change in one of them compiles again. */
+    @Test
+    void theSpirvCacheKeyTakesTheKindTheNameAndTheWholeSource() {
+        String src = "#version 450\n#define REFLECT_LEAN\nvoid main() {}\n";
+        assertEquals(VkContext.spirvKey("postReflection.LEAN.comp", src, "COMPUTE_SHADER"), VkContext.spirvKey("postReflection.LEAN.comp", new String(src), "COMPUTE_SHADER"));
+        assertFalse(VkContext.spirvKey("a.comp", src, "COMPUTE_SHADER").equals(VkContext.spirvKey("a.comp", src.replace("REFLECT_LEAN", "OTHER"), "COMPUTE_SHADER")));
+        assertFalse(VkContext.spirvKey("a.comp", src, "COMPUTE_SHADER").equals(VkContext.spirvKey("b.comp", src, "COMPUTE_SHADER")));
+        assertFalse(VkContext.spirvKey("a", src, "VERTEX_SHADER").equals(VkContext.spirvKey("a", src, "FRAGMENT_SHADER")));
+    }
 }

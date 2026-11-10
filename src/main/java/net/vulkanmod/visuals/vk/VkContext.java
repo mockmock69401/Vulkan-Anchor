@@ -132,9 +132,36 @@ public final class VkContext {
         Renderer.getInstance().clearBoundPipeline();
     }
 
+    /**
+     * 2026-11-10 (session 7): SPIR-V by spirvKey, compiled once a game run. The visuals renderer is rebuilt with the world renderer
+     * (render distance, graphics settings, F3+A) and compiled every program again each time, inside that frame: with the shader
+     * sessions' larger composite, clouds, aurora and weather, a render distance change stalled about 0.8 s longer than before them.
+     * The same source gives the same bytes, so a rebuild now reuses them. Each entry is a copy that is never freed (a few MB at most:
+     * one per program and stage).
+     */
+    private static final java.util.Map<String, ByteBuffer> SPIRV = new java.util.HashMap<>();
+
     /** SPIR-V bytes; the returned buffer stays valid for the game run (shader modules are created right after). */
-    public static ByteBuffer spirv(String name, String source, SPIRVUtils.ShaderKind kind) {
-        return SPIRVUtils.compileShader(name, source, kind).bytecode();
+    public static synchronized ByteBuffer spirv(String name, String source, SPIRVUtils.ShaderKind kind) {
+        String key = spirvKey(name, source, kind.name());
+        ByteBuffer cached = SPIRV.get(key);
+        if (cached == null) {
+            ByteBuffer code = SPIRVUtils.compileShader(name, source, kind).bytecode();
+            cached = org.lwjgl.system.MemoryUtil.memAlloc(code.remaining());
+            cached.put(code.duplicate()).flip();
+            SPIRV.put(key, cached);
+        }
+        return cached.duplicate();
+    }
+
+    /** Session 7: the SPIR-V cache's key: the stage kind, the name and a SHA-256 of the whole source (defines included). */
+    static String spirvKey(String name, String source, String kind) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(source.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return kind + ' ' + name + ' ' + java.util.HexFormat.of().formatHex(hash) + ' ' + source.length();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /** Reforged's main framebuffer as the visuals uses it; callers pass it back here and never see Reforged types. */
