@@ -1,6 +1,7 @@
 package net.vulkanmod.visuals.dev;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Set;
 
 /** The pilot's script format without the game: line parsing, the known command names and config-key assignment. */
@@ -11,7 +12,7 @@ final class PilotScript {
     /** The commands VisualsPilot runs; a script line with another name is logged and skipped. */
     private static final Set<String> COMMANDS = Set.of("world", "wait", "cmd", "ccmd", "rd", "fov", "zoom", "key", "hold", "set", "gui",
             "shot", "fps", "log", "vm", "spin", "burst", "glide", "gpu", "screen", "quit", "size", "f3", "chunks", "leave", "frames", "fgburst",
-            "fsr", "window", "preset");
+            "fsr", "window", "preset", "colourpreset");
 
     record Line(String command, String arg) {
     }
@@ -97,7 +98,13 @@ final class PilotScript {
         }
         Field f = target.getClass().getField(parts[parts.length - 1]);
         Class<?> t = f.getType();
-        if (t == int.class) f.setInt(target, Integer.parseInt(value));
+        //2026-11-10 (session 8): "default" is the field's value in a fresh object of the target's class (a colour's default, say)
+        if (value.equals("default") && !Modifier.isStatic(f.getModifiers())) {
+            f.set(target, f.get(target.getClass().getConstructor().newInstance()));
+            return;
+        }
+        //2026-11-10 (session 8): an int may be given as #RRGGBB (the shader colours)
+        if (t == int.class) f.setInt(target, value.startsWith("#") ? Integer.parseInt(value.substring(1), 16) : Integer.parseInt(value));
         else if (t == float.class) f.setFloat(target, Float.parseFloat(value));
         else if (t == boolean.class) f.setBoolean(target, Boolean.parseBoolean(value));
         else if (t == double.class) f.setDouble(target, Double.parseDouble(value));

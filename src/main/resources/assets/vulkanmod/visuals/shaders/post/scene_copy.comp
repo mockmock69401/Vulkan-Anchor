@@ -129,6 +129,21 @@ layout(location = 45) uniform vec4 airFog;
 // (aurora.glsl: x strength, y time, z 1 in the End, w the frame's jitter phase)
 layout(location = 46) uniform vec4 celestial;
 layout(location = 47) uniform vec4 auroraParams;
+//2026-11-10 (session 8, the colour pickers: ShaderColours): the struct Atmosphere's colour tints (AtmosphereUniforms.COPY_SLOTS' last three),
+// the air's (UnderwaterUniforms.AIR_SLOTS' last three), the aurora's three colour tints and deep water's body colour tint
+// (CelestialUniforms). rgb the picked colour over its default (linear), exactly 1 at the default; w 0. Read only by postSceneCopy.TINTED
+// (ATMOSPHERE_TINTS, VisualsPrograms), which VkPostProcess runs while such a colour is picked: the tint arithmetic (the haze's per pixel)
+// cost about 0.2 ms at 1440p even at the defaults
+layout(location = 48) uniform vec4 atmosphereFogTint;
+layout(location = 49) uniform vec4 atmosphereOvercastTint;
+layout(location = 50) uniform vec4 atmosphereMoonTint;
+layout(location = 51) uniform vec4 airFogTint;
+layout(location = 52) uniform vec4 airOvercastTint;
+layout(location = 53) uniform vec4 airMoonTint;
+layout(location = 54) uniform vec4 auroraTintLow;
+layout(location = 55) uniform vec4 auroraTintMid;
+layout(location = 56) uniform vec4 auroraTintTop;
+layout(location = 57) uniform vec4 waterTint;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -148,7 +163,12 @@ vec3 auroraSky(vec3 dir, ivec2 p) {
     if (!(auroraParams.x > 0.0)) {
         return vec3(0.0);
     }
-    return aurora(dir, auroraParams, AURORA_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+#ifdef ATMOSPHERE_TINTS
+    return aurora(dir, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, AURORA_STEPS,
+            fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+#else
+    return aurora(dir, auroraParams, vec3(1.0), vec3(1.0), vec3(1.0), AURORA_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+#endif
 }
 
 //Vanilla's directional face shade in a dimension with sky light (ClientLevel.getShade: display values the terrain colour was multiplied
@@ -551,7 +571,7 @@ vec3 underwaterView(ivec2 p, ivec2 size, vec3 dir, float dist, bool sky, vec3 sh
     vec3 above = vec3(0.0);
     if (dot(r, r) > 0.5) {
         //The air's sky along the refracted view, or (no sky light) vanilla's own pixel; the land above where the screen has it
-        Atmosphere air = Atmosphere(airSun, airSunLight, airMoonLight, airDepth, airAmbient, airGlow, airFog);
+        Atmosphere air = Atmosphere(airSun, airSunLight, airMoonLight, airDepth, airAmbient, airGlow, airFog, airFogTint, airOvercastTint, airMoonTint);
         above = atmosphereSky(air) ? skyColour(air, r) + sunGlow(air, r) + sunDisc(air, r, celestial) : vanillaToScene(texelFetch(mainColour, p, 0).rgb);
         above += auroraSky(r, p);
         float w = underwaterLookup(from, r, true, size, found, path);
@@ -778,7 +798,8 @@ void main() {
     }
     vec4 colour = texelFetch(mainColour, p, 0);
     vec3 scene = vanillaToScene(colour.rgb);
-    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog);
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
     mat3 toWorld = mat3(invView);
     vec3 view;
     bool fromLod;
@@ -972,8 +993,13 @@ void main() {
             lit = max(lit, lightAll*perLight*LIGHT_WATER_ALBEDO);
         }
         if (water) {
-            //W6: the water's colour over its depth, lit by what a white texel here receives (before the haze)
+            //W6: the water's colour over its depth, lit by what a white texel here receives (before the haze); 2026-11-10 (session 8): the
+            // light times the picked water colour's tint is the body colour times it (waterColour uses light only there)
+#ifdef ATMOSPHERE_TINTS
+            lit = waterColour(lit, kind*waterParams.x, lightAll*perLight*ao*waterParams.y*waterTint.rgb);
+#else
             lit = waterColour(lit, kind*waterParams.x, lightAll*perLight*ao*waterParams.y);
+#endif
         }
     }
     //2026-10-28: light sources glow (2026-11-08: their share that is light); an ore's specks add their own light (its albedo, or vanilla's

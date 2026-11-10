@@ -38,6 +38,34 @@ class LeanReflectionTest {
         assertFalse(converted("postReflection").contains("#define REFLECT_LEAN"));
     }
 
+    /** Session 8: the tinted builds apply the picked colours; the plain ones (the defaults) leave the tint arithmetic out, the composite's too. */
+    @Test
+    void theTintedBuildsTakeTheSameUniformsAndOnlyTheyAndTheCompositeApplyTheTints() {
+        assertEquals(meta("postReflection"), meta("postReflection.TINTED"));
+        assertEquals(meta("postReflection"), meta("postReflection.LEAN.TINTED"));
+        assertTrue(converted("postReflection.TINTED").contains("#define ATMOSPHERE_TINTS"));
+        assertTrue(converted("postReflection.LEAN.TINTED").contains("#define ATMOSPHERE_TINTS") && converted("postReflection.LEAN.TINTED").contains("#define REFLECT_LEAN"));
+        assertEquals(meta("postSceneCopy"), meta("postSceneCopy.TINTED"));
+        assertTrue(converted("postSceneCopy.TINTED").contains("#define ATMOSPHERE_TINTS"));
+        assertFalse(converted("postSceneCopy").contains("#define ATMOSPHERE_TINTS"));
+        assertFalse(converted("postReflection").contains("#define ATMOSPHERE_TINTS"));
+        assertFalse(converted("postReflection.LEAN").contains("#define ATMOSPHERE_TINTS"));
+        //which frames need them: a tint in the reflection's block, or an aurora tint
+        PostProcessSettings def = PostProcessSettings.from(new net.vulkanmod.visuals.config.VisualsConfig());
+        net.vulkanmod.visuals.config.VisualsConfig fog = new net.vulkanmod.visuals.config.VisualsConfig();
+        fog.setColour(ShaderColours.Colour.FOG, 0xFF0000);
+        float[] plain = AtmosphereUniforms.block(def, null, true);
+        assertFalse(new ReflectionUniforms.Values(true, null, null, null, false, null, plain, new float[8], 1, 1, 1, false, 0, 0, 0, 0, 1).tinted());
+        assertTrue(CelestialUniforms.off().tints().length == 16 && !CelestialUniforms.off().auroraTinted());
+        ShaderColours aurora = ShaderColours.of(new int[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x00FF00});
+        assertTrue(new CelestialUniforms.Values(new float[4], new float[4], CelestialUniforms.tints(aurora, false)).auroraTinted());
+        assertFalse(new CelestialUniforms.Values(new float[4], new float[4], CelestialUniforms.tints(ShaderColours.DEFAULT, true)).auroraTinted());
+        float[] tinted = plain.clone();
+        tinted[AtmosphereUniforms.TINTS] = 0.5f;
+        assertTrue(new ReflectionUniforms.Values(true, null, null, null, false, null, tinted, new float[8], 1, 1, 1, false, 0, 0, 0, 0, 1).tinted());
+        assertFalse(new ReflectionUniforms.Values(false, null, null, null, false, null, tinted, new float[8], 1, 1, 1, false, 0, 0, 0, 0, 1).tinted());
+    }
+
     @Test
     void theCloudBlockTellsTheRealisticStyle() {
         float[] slots = new float[4 * CloudUniforms.SLOTS];

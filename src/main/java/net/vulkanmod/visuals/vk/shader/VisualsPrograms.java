@@ -33,9 +33,15 @@ final class VisualsPrograms {
         add(c, "postAo", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/ao.comp"));
         add(c, "postAoBlur", defs(), c.compute("post/ao_blur.comp"));
         add(c, "postSceneCopy", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/scene_copy.comp"));
+        //Session 8: with the picked colours' tints (ATMOSPHERE_TINTS), run only while one the shader applies is picked (VkPostProcess)
+        add(c, "postSceneCopy.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", ""), c.compute("post/scene_copy.comp"));
         add(c, "postReflection", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/reflection.comp"));
         //Session 7: the reflection without the aurora and the realistic clouds, for the frames that draw neither (VkPostProcess)
         add(c, "postReflection.LEAN", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", ""), c.compute("post/reflection.comp"));
+        //Session 8: both with the picked colours' tints (ATMOSPHERE_TINTS), run only while one the shader applies is picked (VkPostProcess):
+        // the tint arithmetic cost the composite and the reflection about 0.2 ms at 1440p together, even at the defaults
+        add(c, "postReflection.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", ""), c.compute("post/reflection.comp"));
+        add(c, "postReflection.LEAN.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", "", "ATMOSPHERE_TINTS", ""), c.compute("post/reflection.comp"));
         add(c, "bloom.PREFILTER", defs("USE_ZERO_ONE_DEPTH", "", "PREFILTER", ""), c.compute("post/bloom.comp"));
         add(c, "bloom.DOWN", defs("DOWN", ""), c.compute("post/bloom.comp"));
         add(c, "bloom.UP", defs("UP", ""), c.compute("post/bloom.comp"));

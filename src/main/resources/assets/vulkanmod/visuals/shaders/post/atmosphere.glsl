@@ -6,9 +6,9 @@
 // a clear noon sky is about 0.2 (zenith) to 0.65 (horizon). Directions are WORLD space unit vectors, y up, from the camera.
 // Distances are blocks. Heights are blocks above the dimension's sea level.
 //
-// INPUTS. The per-frame state is the struct Atmosphere (seven vec4, AtmosphereUniforms writes them):
-//   composite (scene_copy.comp): Atmosphere(slot3, slot4, slot5, slot6, slot7, slot9, slot25)
-//   reflection: the same seven vec4 in the slots W6 chooses, written with
+// INPUTS. The per-frame state is the struct Atmosphere (ten vec4, AtmosphereUniforms writes them):
+//   composite (scene_copy.comp): Atmosphere(slot3, slot4, slot5, slot6, slot7, slot9, slot25, slot48, slot49, slot50)
+//   reflection: the same ten vec4 in the slots W6 chooses, written with
 //               AtmosphereUniforms.writeBlock(w, AtmosphereUniforms.block(settings, frame, frame.skyColour() != null), slots...)
 // Composite slots 26, 27 and 28 (not part of the struct), for keeping vanilla's stars (below): 26 rgb vanilla's sky colour and
 // 27 rgb vanilla's fog colour at the camera in scene units (w 1 when known); 28 x the star weight (night() x (1 - rain): vanilla
@@ -37,6 +37,14 @@
 //              level (clamped at 0), w the sun's reddening air mass (SKY: sunLight is the light through SKY_REDDENING of the
 //              extinction along it, which airlight lifts for light scattered high in the air and the low haze band deepens; 0 in NO_SKY
 //              and FOG)
+//   2026-11-10 (session 8, the colour pickers: ShaderColours): three tints, rgb per channel the picked colour over its default (linear),
+//   exactly 1 at the default (then every product below is unchanged); w 0. SKY only (the other modes do not read them). The functions
+//   use them only in a program built with ATMOSPHERE_TINTS defined (the composite always; the reflection's .TINTED builds, which run only
+//   while a colour the shader applies is picked: in session 8 the tint arithmetic alone cost the reflection pass 0.15 to 0.5 ms at 1440p,
+//   even with the tints at 1):
+//   fogTint      the ground fog's colour (fogColour) and, fading out toward the sky's air mass, the aerial haze over surfaces (hazeTint)
+//   overcastTint rain's grey (overcast)
+//   moonTint     the round moon disc and its glints (water.glsl moonRadiance)
 // CloudLight fields: lit rgb the colour of a fully sunlit cloud (scene units, CLOUD_ALBEDO and vanilla's cloud colour already
 // applied: do not multiply again; vanilla's cloud colour carries the day/night and weather brightness, so night clouds are dark), ambient rgb the sky light every cloud sample gets, light xyz the direction the clouds are lit
 // from (the sun, the moon at night: pass it as clouds.glsl's cloudMarch lightDir); w components 0.
@@ -182,6 +190,9 @@ struct Atmosphere {
     vec4 ambient;
     vec4 glow;
     vec4 fog;
+    vec4 fogTint;
+    vec4 overcastTint;
+    vec4 moonTint;
 };
 
 struct CloudLight {
@@ -233,9 +244,13 @@ float hgPhase(float c, float g) {
     return (1.0 - g*g)/(d*sqrt(d));
 }
 
-//Rain's overcast: the colour moves toward its luminance in the overcast tint by the frame's share
+//Rain's overcast: the colour moves toward its luminance in the overcast tint (2026-11-10: times the picked overcastTint) by the frame's share
 vec3 overcast(Atmosphere a, vec3 c) {
+#ifdef ATMOSPHERE_TINTS
+    return mix(c, vec3(OVERCAST_RED, OVERCAST_GREEN, OVERCAST_BLUE)*a.overcastTint.rgb*luminance(c), a.sunLight.w);
+#else
     return mix(c, vec3(OVERCAST_RED, OVERCAST_GREEN, OVERCAST_BLUE)*luminance(c), a.sunLight.w);
+#endif
 }
 
 //The low haze band's optical depth along a path of m air masses toward a sky of skyMass air masses (see LOW_DEPTH): by the sun's
@@ -291,7 +306,8 @@ vec3 airlight(Atmosphere a, vec3 dir, float mass) {
 }
 
 //The colour the ground fog scatters toward the camera looking along dir: the horizon sky in dir's azimuth (so fogged terrain meets
-// the horizon without a seam). NO_SKY and FOG: the fog colour. NONE: black.
+// the horizon without a seam). NO_SKY and FOG: the fog colour. NONE: black. 2026-11-10 (session 8): SKY times the picked fogTint (the sky's
+// own fog band at the horizon is this colour too, so fogged terrain still meets it without a seam)
 vec3 fogColour(Atmosphere a, vec3 dir) {
     if (!atmosphereSky(a)) {
         return max(a.sunLight.rgb, vec3(0.0));
@@ -299,8 +315,22 @@ vec3 fogColour(Atmosphere a, vec3 dir) {
     vec2 h = dir.xz;
     float l = length(h);
     vec3 horizon = l > 0.0001 ? vec3(h.x/l, 0.0, h.y/l) : vec3(0.0, 0.0, 1.0);
+#ifdef ATMOSPHERE_TINTS
+    return overcast(a, airlight(a, horizon, skyAirMass(0.0)))*a.fogTint.rgb;
+#else
     return overcast(a, airlight(a, horizon, skyAirMass(0.0)));
+#endif
 }
+
+//2026-11-10 (session 8): the picked fog tint on the aerial haze's air over `mass` of the view's skyMass air masses: all of it near the camera,
+// none once the path holds the whole sky's air (far terrain fades into the untinted sky above the horizon without a seam). 1 + (t - 1) s
+// is exactly 1 at the default tint (mix() need not be)
+#ifdef ATMOSPHERE_TINTS
+vec3 hazeTint(Atmosphere a, float mass, float skyMass) {
+    float share = skyMass > 0.0 ? clamp(1.0 - mass/skyMass, 0.0, 1.0) : 0.0;
+    return vec3(1.0) + (a.fogTint.rgb - vec3(1.0))*share;
+}
+#endif
 
 //The mean of exp(-height / H) along a straight path of d blocks from a camera camHeight blocks above sea level with world dir.y = dirY,
 // invH = 1 / H (heights clamped at sea level, so at most 1): (e^-h0 - e^-h1) / (h1 - h0) in units of H, its series when they are close.
@@ -414,7 +444,11 @@ void hazeOpen(Atmosphere a, vec3 dir, float dist, float amount, float sunOpen, o
     vec3 ta = exp(-tau*mass)*exp(-lowBand(a, mass, skyMass));
     transmittance = ta*tf;
     vec3 lobe = glowLobeOpen(a, dir, sunOpen);
+#ifdef ATMOSPHERE_TINTS
+    inscatter = (overcast(a, airlight(a, dir, mass))*hazeTint(a, mass, skyMass) + lobe*glowGain(mass))*tf;
+#else
     inscatter = (overcast(a, airlight(a, dir, mass)) + lobe*glowGain(mass))*tf;
+#endif
     if (tf < 1.0) {
         //The ground fog's share: its colour (the horizon sky in dir's azimuth) and the whole sky path's glow (sunGlow)
         inscatter += (fogColour(a, dir) + lobe*glowGain(skyMass))*(1.0 - tf);

@@ -81,6 +81,11 @@ public final class AuroraMath {
     }
 
     public static float[] auroraColour(float h, float border, boolean end) {
+        return auroraColour(h, border, end, new float[]{1, 1, 1}, new float[]{1, 1, 1}, new float[]{1, 1, 1});
+    }
+
+    /** 2026-11-10 (session 8): each colour times its tint (CelestialUniforms' AURORA_TINTS: lower fringe, main body, top). */
+    public static float[] auroraColour(float h, float border, boolean end, float[] tintLow, float[] tintMid, float[] tintTop) {
         float above = h - border;
         float bottom = smoothstep(-AURORA_BORDER_EDGE, AURORA_BORDER_EDGE, above);
         float a = Math.max(above, 0);
@@ -91,12 +96,17 @@ public final class AuroraMath {
         float[] mid = end ? new float[]{AURORA_END_MID_R, AURORA_END_MID_G, AURORA_END_MID_B} : new float[]{AURORA_GREEN_R, AURORA_GREEN_G, AURORA_GREEN_B};
         float[] top = end ? new float[]{AURORA_END_TOP_R, AURORA_END_TOP_G, AURORA_END_TOP_B} : new float[]{AURORA_RED_R, AURORA_RED_G, AURORA_RED_B};
         float[] out = new float[3];
-        for (int i = 0; i < 3; i++) out[i] = (mid[i] * green + top[i] * red + low[i] * fringe) * bottom;
+        for (int i = 0; i < 3; i++) out[i] = (mid[i] * tintMid[i] * green + top[i] * tintTop[i] * red + low[i] * tintLow[i] * fringe) * bottom;
         return out;
     }
 
     /** aurora.glsl's aurora: the light along dir (unit, world), params the aurora slot, steps samples, jitter 0..1. */
     public static float[] aurora(float[] dir, float[] params, int steps, float jitter) {
+        return aurora(dir, params, new float[]{1, 1, 1}, new float[]{1, 1, 1}, new float[]{1, 1, 1}, steps, jitter);
+    }
+
+    /** 2026-11-10 (session 8): with the colour tints (lower, main, upper; see auroraColour). */
+    public static float[] aurora(float[] dir, float[] params, float[] tintLow, float[] tintMid, float[] tintTop, int steps, float jitter) {
         if (!(params[0] > 0) || !(dir[1] > AURORA_HORIZON_LOW) || steps < 1) return new float[3];
         float fade = smoothstep(AURORA_HORIZON_LOW, AURORA_HORIZON_HIGH, dir[1]);
         float t = params[1];
@@ -116,7 +126,7 @@ public final class AuroraMath {
             float rays = 1 - AURORA_RAY_DEPTH * auroraNoise1(f[3] * AURORA_RAY_CELLS + t * AURORA_RAY_DRIFT, 4);
             float bright = AURORA_PATCH_MIN + (1 - AURORA_PATCH_MIN) * smoothstep(0.25f, 0.75f, f[1]);
             float border = 1 + AURORA_BORDER_LIFT * f[2];
-            float[] c = auroraColour(y, border, end);
+            float[] c = auroraColour(y, border, end, tintLow, tintMid, tintTop);
             float w = f[0] * rays * bright * (float) Math.exp(-s * horizontal / AURORA_EXTINCTION);
             for (int k = 0; k < 3; k++) sum[k] += c[k] * w;
         }

@@ -50,6 +50,9 @@ public class VOptionScreen extends Screen {
     private final List<VButtonWidget> pageButtons = Lists.newArrayList();
     private final List<VButtonWidget> buttons = Lists.newArrayList();
 
+    /** 2026-11-10 (session 8): the colour picker over the screen (ColourOptionWidget), null when none; modal while open. */
+    private ColourPickerPopup popup;
+
 
     public VOptionScreen(Component title, Screen parent) {
         super(title);
@@ -61,6 +64,8 @@ public class VOptionScreen extends Screen {
 
     @Override
     protected void init() {
+        //a resize rebuilds the options: a picker open on the old ones is dropped
+        this.popup = null;
         this.initOptionsPages();
 
         if (this.optionPages.isEmpty()) {
@@ -319,8 +324,29 @@ public class VOptionScreen extends Screen {
         }
     }
 
+    /** 2026-11-10 (session 8): shows the colour picker over the screen; it takes every click and key until it closes. */
+    public void openPopup(ColourPickerPopup popup) {
+        this.popup = popup;
+    }
+
+    /** The open colour picker, or null. */
+    public ColourPickerPopup popup() {
+        return this.popup;
+    }
+
+    //After the picker handled an event: drop it once closed, and show whether anything changed (Apply, Undo)
+    private boolean afterPopup() {
+        if (this.popup != null && this.popup.closed()) this.popup = null;
+        this.updateState();
+        return true;
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (this.popup != null) {
+            if (!this.popup.mouseClicked(mouseX, mouseY, button)) this.popup.close(true);
+            return this.afterPopup();
+        }
         for (GuiEventListener element : this.children()) {
             if (element.mouseClicked(mouseX, mouseY, button)) {
                 this.setFocused(element);
@@ -337,7 +363,30 @@ public class VOptionScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
+        if (this.popup != null) {
+            this.popup.mouseDragged(mouseX, mouseY);
+            return this.afterPopup();
+        }
+        return super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    }
+
+    @Override
+    public boolean charTyped(char c, int modifiers) {
+        if (this.popup != null) {
+            this.popup.charTyped(c);
+            return this.afterPopup();
+        }
+        return super.charTyped(c, modifiers);
+    }
+
+    @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (this.popup != null) {
+            this.popup.mouseReleased();
+            this.setDragging(false);
+            return this.afterPopup();
+        }
         this.setDragging(false);
         this.updateState();
         return this.getChildAt(mouseX, mouseY)
@@ -404,6 +453,16 @@ public class VOptionScreen extends Screen {
 
         if (hoveredWidget == null) {
             hoveredWidget = currentList.getHoveredWidget(mouseX, mouseY);
+        }
+
+        if (this.popup != null) {
+            //the list's text is batched and drawn after the fills: draw it now, then the picker in front of it
+            guiGraphics.flush();
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(0, 0, 400);
+            this.popup.render(mouseX, mouseY, this.width, this.height);
+            guiGraphics.pose().popPose();
+            return;
         }
 
         if (hoveredWidget != null) {
@@ -520,6 +579,10 @@ public class VOptionScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (this.popup != null) {
+            this.popup.keyPressed(keyCode);
+            return this.afterPopup();
+        }
         if (Screen.hasControlDown() && keyCode == GLFW.GLFW_KEY_L) {
             this.setFocused(searchField);
             searchField.setFocused(true);

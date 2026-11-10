@@ -66,7 +66,7 @@ class AuroraTest {
             assertTrue(Pattern.compile("const\\s+(float|int)\\s+" + f.getName() + "\\b").matcher(GLSL).find(), f.getName() + " missing in the shader");
         }
         assertTrue(GLSL.contains("0x7feb352du") && GLSL.contains("0x846ca68bu"));
-        assertTrue(GLSL.contains("vec3 aurora(vec3 dir, vec4 params, int steps, float jitter)"));
+        assertTrue(GLSL.contains("vec3 aurora(vec3 dir, vec4 params, vec3 tintLow, vec3 tintMid, vec3 tintTop, int steps, float jitter)"));
         assertFalse(Pattern.compile("(?m)^\\s*(layout|uniform)\\b").matcher(GLSL).find(), "no uniforms: any shader imports it");
         //The literature the model follows is named where it is used
         assertTrue(GLSL.contains("Baranoski") && GLSL.contains("Lawlor and Genetti 2011"));
@@ -226,11 +226,12 @@ class AuroraTest {
         assertTrue(COPY.contains("imageStore(sceneOut, p, vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0));"), "the End's sky");
         assertTrue(COPY.contains("above += auroraSky(r, p);"), "Snell's window");
         assertTrue(COPY.contains("if (!(auroraParams.x > 0.0)) {\n        return vec3(0.0);"));
-        int refl = REFLECTION.indexOf("sky += aurora(r, auroraParams, AURORA_REFLECTION_STEPS"), reflClouds = REFLECTION.indexOf("reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p)))");
+        int refl = REFLECTION.indexOf("sky += aurora(r, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, AURORA_REFLECTION_STEPS"), reflClouds = REFLECTION.indexOf("reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p)))");
         assertTrue(refl > 0 && reflClouds > refl, "in the water, under the reflected clouds");
         //The composite's mirror adds it to the sky: a night sky with the aurora on is brighter than with it off
         float[][] slots = new float[SceneCompositeMath.SLOTS][4];
         slots[SceneCompositeMath.AURORA] = new float[]{1, 300, 0, 0};
+        for (int i = 0; i < 3; i++) slots[SceneCompositeMath.AURORA_TINTS + i] = new float[]{1, 1, 1, 0};
         float[] d = dir(0, 40);
         assertEquals(lum(AuroraMath.aurora(d, slots[SceneCompositeMath.AURORA], AuroraMath.AURORA_STEPS, 0)), lum(SceneCompositeMath.auroraSky(slots, d)), 1e-6f);
         slots[SceneCompositeMath.AURORA] = new float[4];

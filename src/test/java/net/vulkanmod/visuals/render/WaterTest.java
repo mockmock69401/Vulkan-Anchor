@@ -703,7 +703,7 @@ class WaterTest {
         List<Integer> owned = new ArrayList<>();
         for (int i = 0; i <= 13; i++) owned.add(i);
         for (int i = 23; i <= 26; i++) owned.add(i);
-        owned.add(29);//27, 28: CelestialUniforms (session 5)
+        owned.addAll(List.of(29, 30, 31));//27, 28: CelestialUniforms (session 5); 29..31 the struct's tints (session 8; 32..34 CelestialUniforms' aurora tints)
         ReflectionUniforms.Values v = on(SETTINGS, RippleMath.offsets(100.5, -20.25, new double[]{1, 2, 3, 4, 5, 6}));
         assertTrue(v.on());
         assertWrites(v::write, owned);
@@ -713,7 +713,7 @@ class WaterTest {
         assertWrites(w -> LightVolumeUniforms.off().write(w, LightVolumeUniforms.REFLECTION_FIRST), light);
         AtmosphereUniforms.Values atmosphere = AtmosphereUniforms.compute(SETTINGS, frame(SUNSET, 0, new float[]{0.47f, 0.65f, 1}, null), SERIAL, true, false);
         assertWrites(w -> CloudUniforms.compute(SETTINGS, null, atmosphere, SERIAL, true, true, 32).write(w, CloudUniforms.REFLECTION_FIRST), clouds);
-        assertWrites(CelestialUniforms.off()::writeReflection, List.of(CelestialUniforms.REFLECTION_CELESTIAL, CelestialUniforms.REFLECTION_AURORA));
+        assertWrites(CelestialUniforms.off()::writeReflection, List.of(CelestialUniforms.REFLECTION_CELESTIAL, CelestialUniforms.REFLECTION_AURORA, 32, 33, 34));
         //Values: the depth parameters' fixed meaning, the atmosphere block where the shader reads it, the ripple offsets
         LooseUniformWriter w = new LooseUniformWriter(meta());
         v.write(w);
@@ -738,7 +738,7 @@ class WaterTest {
         assertArrayEquals(AtmosphereUniforms.block(SETTINGS, frame(SUNSET, 0, new float[]{0.47f, 0.65f, 1}, null), true), v.block(), 0,
                 "W4's block, sky taken from the frame");
         //The shader's struct and blocks come from these slots
-        assertTrue(COMP.contains("Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog)"));
+        assertTrue(COMP.contains("Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,\n            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint)"));
         assertTrue(COMP.contains("CloudLight(cloudLit, cloudAmbient, cloudLightDir)"));
     }
 

@@ -26,7 +26,28 @@ public final class LightingUniforms {
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f projection, float[] sunView,
                          boolean lodValid, float aoStrength, float sunWeight, float[] upView, boolean vanillaCopies, float waterStrength,
                          float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView,
-                         float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections) {
+                         float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections, float[] blockLightTint,
+                         float[] moonLightTint) {
+        private static final float[] NO_TINT = {1, 1, 1};
+
+        /** Without the picked colours (session 8): the default tints. */
+        public Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f projection, float[] sunView,
+                      boolean lodValid, float aoStrength, float sunWeight, float[] upView, boolean vanillaCopies, float waterStrength,
+                      float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView,
+                      float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections) {
+            this(on, invVanillaProjection, invLodProjection, projection, sunView, lodValid, aoStrength, sunWeight, upView, vanillaCopies, waterStrength,
+                    waterAmbient, cameraYFrac, lightSun, sunHeightTerm, sunUp, blockDay, eastView, blockLightColour, moonLight, blockGlow, oreGlow,
+                    blockReflections, NO_TINT, NO_TINT);
+        }
+
+        /** 2026-11-10 (session 8): the same values with the picked block light and moon colours' tints (ShaderColours). */
+        public Values tinted(ShaderColours colours) {
+            return new Values(this.on, this.invVanillaProjection, this.invLodProjection, this.projection, this.sunView, this.lodValid, this.aoStrength,
+                    this.sunWeight, this.upView, this.vanillaCopies, this.waterStrength, this.waterAmbient, this.cameraYFrac, this.lightSun,
+                    this.sunHeightTerm, this.sunUp, this.blockDay, this.eastView, this.blockLightColour, this.moonLight, this.blockGlow, this.oreGlow,
+                    this.blockReflections, colours.tint(ShaderColours.Colour.BLOCK_LIGHT), colours.tint(ShaderColours.Colour.MOON));
+        }
+
         public void writeLighting(LooseUniformWriter w) {
             this.writeLighting(w, false);
         }
@@ -45,8 +66,10 @@ public final class LightingUniforms {
             w.putVec4(COPY_WATER, this.waterStrength, this.waterAmbient, this.sunUp, this.blockDay);
             w.putVec4(COPY_LIGHT_SUN, this.lightSun[0], this.lightSun[1], this.lightSun[2], this.lightSun[3]);
             w.putVec4(COPY_LIGHT_SHADE, this.lightSun[5], this.lightSun[6], this.lightSun[7], this.lightSun[4]);
-            w.putVec4(COPY_BLOCK_LIGHT, ColourMath.BLOCK_LIGHT[0], ColourMath.BLOCK_LIGHT[1], ColourMath.BLOCK_LIGHT[2], this.blockLightColour);
-            w.putVec4(COPY_MOON_LIGHT, ColourMath.MOON_LIGHT[0], ColourMath.MOON_LIGHT[1], ColourMath.MOON_LIGHT[2], this.moonLight);
+            //2026-11-10 (session 8): times the picked colours' tints (exactly 1 at the defaults)
+            float[] b = this.blockLightTint, m = this.moonLightTint;
+            w.putVec4(COPY_BLOCK_LIGHT, ColourMath.BLOCK_LIGHT[0] * b[0], ColourMath.BLOCK_LIGHT[1] * b[1], ColourMath.BLOCK_LIGHT[2] * b[2], this.blockLightColour);
+            w.putVec4(COPY_MOON_LIGHT, ColourMath.MOON_LIGHT[0] * m[0], ColourMath.MOON_LIGHT[1] * m[1], ColourMath.MOON_LIGHT[2] * m[2], this.moonLight);
             w.putVec4(COPY_GLOW, this.blockGlow, this.oreGlow, this.blockReflections, 0);
         }
     }

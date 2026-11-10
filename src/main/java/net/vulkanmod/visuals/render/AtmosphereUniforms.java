@@ -30,8 +30,8 @@ import org.joml.Vector4f;
 public final class AtmosphereUniforms {
     // ---- composite slots ----
     public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, INV_VIEW = 2, DEPTH_PARAMS = 8;
-    /** The struct Atmosphere's seven vec4 in the composite, in field order. */
-    public static final int[] COPY_SLOTS = {3, 4, 5, 6, 7, 9, 25};
+    /** The struct Atmosphere's ten vec4 in the composite, in field order (2026-11-10, session 8: 48..50 the colour tints). */
+    public static final int[] COPY_SLOTS = {3, 4, 5, 6, 7, 9, 25, 48, 49, 50};
     /** rgb vanilla's sky colour and vanilla's fog colour at the camera, scene units, w 1 when known (for keeping vanilla's stars). */
     public static final int VANILLA_SKY = 26, VANILLA_FOG = 27;
     /** x the star weight (night() x (1 - rain)), y the strength of vanilla's sunrise/sunset fan (its sunrise colour's alpha, 0 without), zw 0. */
@@ -199,6 +199,15 @@ public final class AtmosphereUniforms {
             return this.look.clone();
         }
 
+        /** 2026-11-10 (session 8): a picked colour's tint in the block is not 1 (VkPostProcess then runs postSceneCopy.TINTED). */
+        public boolean tinted() {
+            if (this.block[3] == AtmosphereMath.ATMOSPHERE_NONE) return false;
+            for (int v = 0; v < 3; v++) {
+                for (int i = 0; i < 3; i++) if (this.block[TINTS + v * 4 + i] != 1) return true;
+            }
+            return false;
+        }
+
         /** The mode (AtmosphereMath.ATMOSPHERE_*). */
         public float mode() {
             return this.block[3];
@@ -291,6 +300,7 @@ public final class AtmosphereUniforms {
         b[2] = drawn[2];
         b[3] = AtmosphereMath.ATMOSPHERE_NONE;
         b[11] = drawn[11];
+        noTints(b);
         return b;
     }
 
@@ -341,6 +351,7 @@ public final class AtmosphereUniforms {
      */
     public static float[] block(PostProcessSettings s, AtmosphereFrame f, boolean hasSky) {
         float[] b = new float[BLOCK_FLOATS];
+        noTints(b);
         if (s == null || f == null) return b;
         Vector3f sun = sunDirection(f);
         b[0] = sun.x;
@@ -361,7 +372,7 @@ public final class AtmosphereUniforms {
         b[3] = AtmosphereMath.ATMOSPHERE_SKY;
         float rain = clamp01(f.rain()), thunder = clamp01(f.thunder());
         //2026-11-09: 0 with the sun in the west (evening) .. 1 in the east (morning)
-        float morning = AtmosphereMath.smoothstep(-0.1f, 0.1f, sun.x);
+        float morning = morning(sun.x);
         float sunset = clamp01(s.sunsetLight()) * SUNSET_SATURATION * (1 + (MORNING_SATURATION - 1) * morning), moonlight = clamp01(s.moonlight()), glow = Math.max(0, finite(s.sunGlow()));
         float[] tauR = rayleighDepths();
         float tauM = HAZE_DEPTH * (1 + RAIN_HAZE * rain);
@@ -379,14 +390,26 @@ public final class AtmosphereUniforms {
         float diffuse = RAIN_DIFFUSE * rain;
         float twilight = TWILIGHT_SKY * (1 - AtmosphereMath.smoothstep(0, TWILIGHT_HEIGHT, sun.y));
         float[] blue = ambientBlue(tauR);
+        //2026-11-10 (session 8): the picked colours' tints (ShaderColours; exactly 1 at the defaults, so every product below is unchanged)
+        ShaderColours colours = s.colours();
+        float[] sunTint = sunTint(colours, sun.y, morning), lowTint = lowTint(colours, morning);
+        float[] nightTint = colours.tint(ShaderColours.Colour.NIGHT_SKY), glowTint = colours.tint(ShaderColours.Colour.SUN_GLOW);
         for (int i = 0; i < 3; i++) {
-            float sunLight = sunAmount * ts[i] * tint[i] * dim, moonLight = moonAmount * tm[i] * tint[i] * dim;
+            float sunLight = sunAmount * ts[i] * tint[i] * dim * sunTint[i], moonLight = moonAmount * tm[i] * tint[i] * dim * nightTint[i];
             b[4 + i] = sunLight * (1 - diffuse);
             b[8 + i] = moonLight * (1 - diffuse);
             b[12 + i] = tauR[i];
-            float dome = sunAmount * ta[i] * SKY_MULTI * blue[i] + twilightAmount * th[i] * twilight + moonAmount * tam[i] * SKY_MULTI * blue[i];
-            b[16 + i] = (dome * tint[i] + NIGHT_SKY[i]) * dim + (sunLight + moonLight) * diffuse;
-            b[20 + i] = sunAmount * GLOW_AMOUNT * glow * ts[i] * glowWeather;
+            float dome = sunAmount * ta[i] * SKY_MULTI * blue[i] * sunTint[i] + twilightAmount * th[i] * twilight * lowTint[i]
+                    + moonAmount * tam[i] * SKY_MULTI * blue[i] * nightTint[i];
+            b[16 + i] = (dome * tint[i] + NIGHT_SKY[i] * nightTint[i]) * dim + (sunLight + moonLight) * diffuse;
+            b[20 + i] = sunAmount * GLOW_AMOUNT * glow * ts[i] * glowWeather * sunTint[i] * glowTint[i];
+        }
+        float[] fogTint = colours.tint(ShaderColours.Colour.FOG), overcastTint = colours.tint(ShaderColours.Colour.OVERCAST);
+        float[] moonTint = colours.tint(ShaderColours.Colour.MOON);
+        for (int i = 0; i < 3; i++) {
+            b[TINTS + i] = fogTint[i];
+            b[TINTS + 4 + i] = overcastTint[i];
+            b[TINTS + 8 + i] = moonTint[i];
         }
         b[7] = clamp01(RAIN_GREY * Math.max(rain, thunder));
         b[11] = 1 - dayFade;
@@ -404,6 +427,36 @@ public final class AtmosphereUniforms {
         // ground's reddened light) and deepens it in its low haze band (LOW_REDDENING)
         b[27] = sunset * ms;
         return b;
+    }
+
+    /** 2026-11-10 (session 8): the first float of the tints in the block (the struct's fogTint, overcastTint, moonTint). */
+    public static final int TINTS = AtmosphereMath.Atmosphere.TINTS * 4;
+
+    /** The three tints at their default (1, 1, 1, 0): the modes without a sky, and no frame, never read them, but they stay defined. */
+    static void noTints(float[] b) {
+        for (int v = 0; v < 3; v++) {
+            for (int i = 0; i < 3; i++) b[TINTS + v * 4 + i] = 1;
+        }
+    }
+
+    /**
+     * 2026-11-10 (session 8): the picked sky colours' tint on the sky's sunlight at sun height sunHeight: the day sky's while the sun is high,
+     * the low sun's (lowTint) while it is low, over the low haze band's range (AtmosphereMath.LOW_SUN_LOW .. LOW_SUN_HIGH). Exactly 1 with
+     * both at their defaults. Also the far clouds' (vanilla shape) sunlit tint.
+     */
+    public static float[] sunTint(ShaderColours colours, float sunHeight, float morning) {
+        float low = 1 - AtmosphereMath.smoothstep(AtmosphereMath.LOW_SUN_LOW, AtmosphereMath.LOW_SUN_HIGH, sunHeight);
+        return ShaderColours.mix(colours.tint(ShaderColours.Colour.DAY_SKY), lowTint(colours, morning), low);
+    }
+
+    /** 2026-11-10 (session 8): the low sun's tint: the sunset's with the sun in the west, the sunrise's in the east (morning 0..1). */
+    public static float[] lowTint(ShaderColours colours, float morning) {
+        return ShaderColours.mix(colours.tint(ShaderColours.Colour.SUNSET), colours.tint(ShaderColours.Colour.SUNRISE), morning);
+    }
+
+    /** 0 with the sun in the west (evening) .. 1 in the east (morning), as block() takes it. */
+    public static float morning(float sunX) {
+        return AtmosphereMath.smoothstep(-0.1f, 0.1f, sunX);
     }
 
     /** The dome's blue: the Rayleigh depth raised to AMBIENT_BLUE, luminance 1. */

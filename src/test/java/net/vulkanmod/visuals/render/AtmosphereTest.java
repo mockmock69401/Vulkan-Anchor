@@ -491,11 +491,11 @@ class AtmosphereTest {
             assertTrue(Pattern.compile("const\\s+" + type + "\\s+" + f.getName() + "\\b").matcher(text).find(), f.getName() + " missing in atmosphere.glsl");
         }
         //The struct's field order is the block's (AtmosphereMath.Atmosphere, AtmosphereUniforms.COPY_SLOTS)
-        assertTrue(Pattern.compile("struct Atmosphere \\{\\s*vec4 sun;\\s*vec4 sunLight;\\s*vec4 moonLight;\\s*vec4 depth;\\s*vec4 ambient;\\s*vec4 glow;\\s*vec4 fog;\\s*};")
+        assertTrue(Pattern.compile("struct Atmosphere \\{\\s*vec4 sun;\\s*vec4 sunLight;\\s*vec4 moonLight;\\s*vec4 depth;\\s*vec4 ambient;\\s*vec4 glow;\\s*vec4 fog;\\s*vec4 fogTint;\\s*vec4 overcastTint;\\s*vec4 moonTint;\\s*};")
                 .matcher(text).find());
         assertTrue(Pattern.compile("struct CloudLight \\{\\s*vec4 lit;\\s*vec4 ambient;\\s*vec4 light;\\s*};").matcher(text).find());
         List<String> components = Arrays.stream(AtmosphereMath.Atmosphere.class.getRecordComponents()).map(java.lang.reflect.RecordComponent::getName).toList();
-        assertEquals(List.of("sun", "sunLight", "moonLight", "depth", "ambient", "glow", "fog"), components);
+        assertEquals(List.of("sun", "sunLight", "moonLight", "depth", "ambient", "glow", "fog", "fogTint", "overcastTint", "moonTint"), components);
         //The functions the composite and the reflection are written from
         for (String sig : List.of("vec3 skyColour(Atmosphere a, vec3 dir)", "vec3 sunGlow(Atmosphere a, vec3 dir)",
                 "void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittance, out vec3 inscatter)",
@@ -585,7 +585,7 @@ class AtmosphereTest {
         assertEquals(List.of(26, 27, 28, 29, 30, 34, 34), List.of(AtmosphereUniforms.VANILLA_SKY, AtmosphereUniforms.VANILLA_FOG, AtmosphereUniforms.STAR_GATE,
                 AtmosphereUniforms.LOOK, AtmosphereUniforms.BORDER, AtmosphereUniforms.RESERVED_FIRST, AtmosphereUniforms.RESERVED_LAST),
                 "25..34 are W4's: 25 the struct, 26..28 the stars' inputs, 29 the look slot (final fix R1, R2), 30 the border fog (2026-10-21), 31..33 LightingUniforms' (2026-10-28), 34 reserved");
-        assertEquals(List.of(3, 4, 5, 6, 7, 9, 25), Arrays.stream(AtmosphereUniforms.COPY_SLOTS).boxed().toList(), "boundary 3.2: 3..7, 9, 25..34");
+        assertEquals(List.of(3, 4, 5, 6, 7, 9, 25, 48, 49, 50), Arrays.stream(AtmosphereUniforms.COPY_SLOTS).boxed().toList(), "boundary 3.2: 3..7, 9, 25..34; session 8: the tints 48..50");
         assertWrites("postSceneCopy", v::write, owned);
         //The values: depthParams (fixed meaning) and the block
         LooseUniformWriter w = new LooseUniformWriter(meta("postSceneCopy"));

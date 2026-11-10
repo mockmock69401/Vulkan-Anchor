@@ -274,6 +274,12 @@ public final class VisualsPilot {
                     VisualsLog.info("Visuals pilot: " + a[0] + " = " + a[1]);
                     return 0;
                 }
+                case "colourpreset" -> {
+                    //colourpreset N: session 8's colour palette (ColourPresets.apply), as choosing it on the colours page and applying
+                    net.vulkanmod.visuals.config.ColourPresets.apply(VisualsConfig.get(), Integer.parseInt(arg.trim()));
+                    VisualsLog.info("Visuals pilot: colour preset " + arg);
+                    return 0;
+                }
                 case "preset" -> {
                     //preset N: session 4's performance preset (VisualsPresets.apply), as choosing it on the page and applying
                     net.vulkanmod.visuals.config.VisualsPresets.apply(VisualsConfig.get(), Integer.parseInt(arg.trim()));

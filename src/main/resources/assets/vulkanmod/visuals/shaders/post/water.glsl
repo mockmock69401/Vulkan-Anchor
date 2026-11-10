@@ -277,7 +277,13 @@ vec3 moonRadiance(Atmosphere a) {
     vec3 tint = vec3(MOON_RED, MOON_GREEN, MOON_BLUE);
     float night = a.moonLight.w > 0.0 ? min(a.moonLight.w, 1.0) : 0.0;
     float overcastShare = a.sunLight.w > 0.0 ? min(a.sunLight.w*DISC_RAIN_HIDE, 1.0) : 0.0;
+#ifdef ATMOSPHERE_TINTS
+    //2026-11-10 (session 8): times the picked moon colour's tint (Atmosphere.moonTint, exactly 1 at its default), its brightness kept relative
+    // to the default moon's
+    return tint*a.moonTint.rgb/luminance(tint)*MOON_DISC_LUMINANCE*night*(1.0 - overcastShare)*smoothstep(-MOON_HALF_SIZE, MOON_HALF_SIZE, -a.sun.y);
+#else
     return tint/luminance(tint)*MOON_DISC_LUMINANCE*night*(1.0 - overcastShare)*smoothstep(-MOON_HALF_SIZE, MOON_HALF_SIZE, -a.sun.y);
+#endif
 }
 
 //The sun disc seen along dir (sky pixels and reflected sky): sunRadiance times its shape (celestial: the shape slot), 0 outside

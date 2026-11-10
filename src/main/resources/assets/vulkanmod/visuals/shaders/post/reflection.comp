@@ -59,7 +59,15 @@ layout(location = 26) uniform vec4 rippleParams;
 //2026-11-09 (session 5), CelestialUniforms: the discs' shape (water.glsl) and the aurora's parameters (aurora.glsl)
 layout(location = 27) uniform vec4 celestial;
 layout(location = 28) uniform vec4 auroraParams;
-layout(location = 29) uniform vec4 reserved29;
+//2026-11-10 (session 8, the colour pickers: ShaderColours; 29 was reserved): the struct Atmosphere's colour tints
+// (ReflectionUniforms.ATMOSPHERE_SLOTS' last three) and the aurora's three colour tints (CelestialUniforms); exactly 1 at the defaults.
+// Read only by the .TINTED builds (ATMOSPHERE_TINTS, VisualsPrograms), which VkPostProcess runs while such a colour is picked
+layout(location = 29) uniform vec4 atmosphereFogTint;
+layout(location = 30) uniform vec4 atmosphereOvercastTint;
+layout(location = 31) uniform vec4 atmosphereMoonTint;
+layout(location = 32) uniform vec4 auroraTintLow;
+layout(location = 33) uniform vec4 auroraTintMid;
+layout(location = 34) uniform vec4 auroraTintTop;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -369,7 +377,8 @@ vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
         return own;
     }
     int cls = blockReflectClass(mark);
-    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog);
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
     mat3 toWorld = mat3(invView);
     mat3 toView = transpose(toWorld);
     vec3 world = toWorld*view;
@@ -444,7 +453,8 @@ void main() {
         imageStore(sceneOut, p, vec4(lit.rgb, 1.0));
         return;
     }
-    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog);
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
     mat3 toWorld = mat3(invView);
     mat3 toView = transpose(toWorld);
     vec3 world = toWorld*view;
@@ -531,7 +541,12 @@ void main() {
         //Session 5: the aurora in the water (AURORA_REFLECTION_STEPS samples), under the reflected clouds
 #ifndef REFLECT_LEAN
         if (auroraParams.x > 0.0) {
-            sky += aurora(r, auroraParams, AURORA_REFLECTION_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+#ifdef ATMOSPHERE_TINTS
+            sky += aurora(r, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, AURORA_REFLECTION_STEPS,
+                    fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+#else
+            sky += aurora(r, auroraParams, vec3(1.0), vec3(1.0), vec3(1.0), AURORA_REFLECTION_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+#endif
         }
 #endif
         if (cloudShape.w > 0.5 && atmosphereSky(a)) {

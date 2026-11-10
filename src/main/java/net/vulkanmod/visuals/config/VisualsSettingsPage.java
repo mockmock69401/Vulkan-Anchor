@@ -5,6 +5,7 @@ import net.vulkanmod.visuals.dh.DhPresence;
 import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.fsr.FsrSupport;
 import net.vulkanmod.visuals.render.PostProcessSettings;
+import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShadingSettings;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -12,6 +13,7 @@ import net.vulkanmod.config.gui.ModSettingsEntry;
 import net.vulkanmod.config.gui.ModSettingsRegistry;
 import net.vulkanmod.config.gui.OptionBlock;
 import net.vulkanmod.config.option.ButtonOption;
+import net.vulkanmod.config.option.ColourOption;
 import net.vulkanmod.config.option.CyclingOption;
 import net.vulkanmod.config.option.Option;
 import net.vulkanmod.config.option.OptionPage;
@@ -70,6 +72,9 @@ public final class VisualsSettingsPage {
         // (2026-10-31, the user: it was a switch that turned itself back off)
         ButtonOption reset = new ButtonOption(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET));
         reset.setTooltip(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET + ".tooltip"));
+        //2026-11-10 (session 8): the colours page's own reset, first on it (every colour to its default: the look before the pickers)
+        ButtonOption resetColours = new ButtonOption(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET_COLOURS));
+        resetColours.setTooltip(Component.translatable(KEY_PREFIX + VisualsOptionLayout.RESET_COLOURS + ".tooltip"));
         for (VisualsOptionLayout.Page page : VisualsOptionLayout.PAGES) {
             List<OptionBlock> blocks = new ArrayList<>();
             for (VisualsOptionLayout.Block block : shownBlocks(page, dh)) {
@@ -82,6 +87,7 @@ public final class VisualsSettingsPage {
                 }
                 //2026-11-10 (session 4): the first page's general block is the preset, then the reset
                 if (block.key().equals(VisualsOptionLayout.GENERAL)) list.add(reset);
+                if (block.key().equals(VisualsOptionLayout.COLOURS_FIRST)) list.add(Math.min(1, list.size()), resetColours);
                 Option<?>[] options = list.toArray(Option<?>[]::new);
                 String noteKey = KEY_PREFIX + "block." + block.key() + ".note";
                 String note = net.minecraft.locale.Language.getInstance().has(noteKey) ? Component.translatable(noteKey).getString() : null;
@@ -115,11 +121,18 @@ public final class VisualsSettingsPage {
             if (o instanceof SwitchOption || o instanceof CyclingOption) o.setOnChange(refresh);
         }
         linkPreset(byKey, refresh);
+        linkColourPreset(byKey);
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
         excludeEachOther(byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), byKey.get(VisualsOptionLayout.FRAME_GENERATION), refresh);
         reset.setOnPress(() -> {
             items.forEach(VisualsSettingsPage::showDefault);
+            refresh.run();
+        });
+        resetColours.setOnPress(() -> {
+            items.forEach((o, item) -> {
+                if (item.kind() == VisualsOptionLayout.Kind.COLOUR) showDefault(o, item);
+            });
             refresh.run();
         });
         return pages;
@@ -172,6 +185,43 @@ public final class VisualsSettingsPage {
         }
     }
 
+    /**
+     * 2026-11-10 (session 8): choosing a colour palette shows its colours on every colour option (Apply writes them); changing any colour
+     * shows the palette they are all on now, or Custom (ColourPresets.detect). As linkPreset, for the colours.
+     */
+    @SuppressWarnings("unchecked")
+    private static void linkColourPreset(Map<String, Option<?>> byKey) {
+        Option<Integer> preset = (Option<Integer>) byKey.get(VisualsOptionLayout.COLOUR_PRESET);
+        if (preset == null) return;
+        boolean[] linking = {false};
+        preset.setOnChange(() -> {
+            int level = preset.getNewValue();
+            if (linking[0] || !ColourPresets.isLevel(level)) return;
+            linking[0] = true;
+            try {
+                for (ShaderColours.Colour c : ShaderColours.Colour.values()) {
+                    if (byKey.get(c.key()) instanceof ColourOption o) o.setNewValue(ColourPresets.value(c, level));
+                }
+            } finally {
+                linking[0] = false;
+            }
+        });
+        Runnable follow = () -> {
+            if (linking[0]) return;
+            int shown = ColourPresets.detect(c -> byKey.get(c.key()) instanceof ColourOption o ? o.getNewValue() : c.defaultRgb());
+            if (preset.getNewValue() == shown) return;
+            linking[0] = true;
+            try {
+                preset.setNewValue(shown);
+            } finally {
+                linking[0] = false;
+            }
+        };
+        for (ShaderColours.Colour c : ShaderColours.Colour.values()) {
+            if (byKey.get(c.key()) instanceof ColourOption o) o.setOnChange(follow);
+        }
+    }
+
     private static int intValue(Option<?> o) {
         Object v = o.getNewValue();
         return v instanceof Boolean b ? (b ? 1 : 0) : (Integer) v;
@@ -219,6 +269,9 @@ public final class VisualsSettingsPage {
             case CHOICE -> new CyclingOption<>(name, IntStream.rangeClosed(item.min(), item.max()).boxed().toArray(Integer[]::new),
                     v -> VisualsOptionLayout.set(config(), item, v), () -> VisualsOptionLayout.get(config(), item))
                     .setTranslator(v -> Component.translatable(KEY_PREFIX + item.key() + "." + v));
+            //2026-11-10 (session 8): a shader colour, its swatch and hex; the picker (ColourPickerPopup) with a reset to its default
+            case COLOUR -> new ColourOption(name, VisualsOptionLayout.defaultValue(item), v -> VisualsOptionLayout.set(config(), item, v),
+                    () -> VisualsOptionLayout.get(config(), item));
         };
         o.setTooltip(Component.translatable(KEY_PREFIX + item.key() + ".tooltip"));
         PerformanceImpact impact = switch (item.impact()) {
