@@ -385,6 +385,10 @@ public class WorldRenderer {
         renderer.bindGraphicsPipeline(pipeline);
 
         VTextureSelector.bindShaderTextures(pipeline);
+        //2026-11-10 (shader roadmap session 9): the PBR build samples the LabPBR atlases (Sampler3..5)
+        if (pipeline == PipelineManager.getTerrainPbrShader()) {
+            net.vulkanmod.visuals.render.PbrAtlas.bind();
+        }
 
         IndexBuffer indexBuffer = Renderer.getDrawer().getQuadsIndexBuffer().getIndexBuffer();
         Renderer.getDrawer().bindIndexBuffer(Renderer.getCommandBuffer(), indexBuffer);

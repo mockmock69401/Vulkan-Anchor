@@ -431,8 +431,9 @@ class AmbientOcclusionTest {
         assertTrue(Bytecode.inOrder(post, List.of("VkPostProcess.computeLighting", "VkGpuTimer.mark", "VkAmbientOcclusion.compute", "VkGpuTimer.mark")), post.toString());
         assertTrue(Bytecode.calls("net/vulkanmod/visuals/render/VkPostProcess", "prepare").contains("VkAmbientOcclusion.prepare"));
         //The composite reads the image only when it ran and leaves the light as it was otherwise (ao = 1)
-        assertTrue(COMPOSITE.contains("vec3 ao = vec3(1.0);\n        if (passRan && lighting.x > 0.0) {"));
-        assertEquals(1, count(COMPOSITE, "aoAt(aoTex"));
+        //Session 9: the PBR build also takes the material AO (pbrAo); every other build as before
+        assertTrue(COMPOSITE.contains("vec3 ao = vec3(1.0);\n#ifdef PBR\n") && COMPOSITE.contains("#else\n        if (passRan && lighting.x > 0.0) {"));
+        assertEquals(2, count(COMPOSITE, "aoAt(aoTex"));//session 9: once in the PBR build, once in every other
         assertTrue(COMPOSITE.contains("lit = relit*perLight*ao;"));//2026-10-23: relit = scene*gain, or the albedo at the new light
         assertFalse(COMPOSITE.contains("lt.x"), "W5's AO channel is no longer read");
     }

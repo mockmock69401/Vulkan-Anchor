@@ -129,6 +129,7 @@
     "texture.MSpriteContents",
     "texture.SpriteContentsActivityM",
     "texture.TextureAtlasSpriteActivityM",
+    "texture.TextureAtlasPbrM",
     "texture.MTextureManager",
     "texture.MTextureUtil",
 

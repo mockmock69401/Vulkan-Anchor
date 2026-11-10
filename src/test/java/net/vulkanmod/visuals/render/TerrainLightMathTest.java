@@ -188,7 +188,8 @@ class TerrainLightMathTest {
             //Both read the fragment block as terrain.json lays it out (terrain_z's skipped AlphaCutout keeps LightOut's offset)
             assertTrue(f.replace("\r\n", "\n").contains("float FogEnd;\n    float AlphaCutout;\n    float LightOut;\n"));
             //2026-10-28: water's opacity scale after LightOut, as terrain.json lays it out
-            assertTrue(f.replace("\r\n", "\n").contains("    float WaterAlpha;\n};"));
+            //2026-11-10 (session 9): terrain.fsh's PBR build adds its PbrParams after it (terrain_pbr.json)
+            assertTrue(f.replace("\r\n", "\n").contains("    float WaterAlpha;\n};") || f.replace("\r\n", "\n").contains("    float WaterAlpha;\n#ifdef TERRAIN_PBR\n"));
             assertTrue(f.replace("\r\n", "\n").contains("#define SCENE_LIGHT_BINDING 4\n#include \"terrain_light.glsl\""));
         }
         assertTrue(json.indexOf("\"AlphaCutout\"") < json.indexOf("\"LightOut\""));

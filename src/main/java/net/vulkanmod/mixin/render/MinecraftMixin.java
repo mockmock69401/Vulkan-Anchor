@@ -67,6 +67,8 @@ public class MinecraftMixin {
         MinecraftBenchmarkController.onClientTick((Minecraft) (Object) this);
         clampUnsupportedGraphicsMode();
         Renderer.getInstance().preInitFrame();
+        //2026-11-10 (shader roadmap session 9): the LabPBR atlases built, rebuilt or freed outside the frame's recording
+        net.vulkanmod.visuals.render.PbrAtlas.update();
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))

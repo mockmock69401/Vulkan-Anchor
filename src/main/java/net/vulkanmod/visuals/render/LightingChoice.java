@@ -17,7 +17,8 @@ public record LightingChoice(long serial, boolean ao, boolean sun, boolean water
 
     /** Whether the reflection pass has work: water reflections, or 2026-10-29 the block reflections at their second level. */
     public static boolean reflectionPass(PostProcessSettings s) {
-        return s.waterReflections() > 0 || s.blockReflections() >= BlockReflectionMath.REFLECTIONS;
+        //2026-11-10 (session 9): also for the PBR reflections, while they may draw (PbrUniforms.reflections: PBR on with a map)
+        return s.waterReflections() > 0 || s.blockReflections() >= BlockReflectionMath.REFLECTIONS || (s.enabled() && PbrUniforms.reflections());
     }
 
     public boolean any() {

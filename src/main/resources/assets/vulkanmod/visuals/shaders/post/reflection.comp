@@ -23,6 +23,9 @@ layout(binding = 7) uniform sampler2D sunTex;
 layout(binding = 8) uniform usampler2D lodLight;
 //2026-10-23: the terrain light (TerrainLightTarget), read by lightvolume.glsl's pixelLight while lightCamera.w is 2
 layout(binding = 9, r32ui) uniform readonly restrict uimage2D terrainLight;
+//2026-11-10 (session 9, PBR): the terrain's material normals (TerrainLightTarget, pbr.glsl), read only by the .PBR builds for the pixels
+// the composite marked (bound always: the terrain light stands in)
+layout(binding = 10, r32ui) uniform readonly restrict uimage2D terrainNormal;
 
 //0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
@@ -79,6 +82,7 @@ layout(location = 34) uniform vec4 auroraTintTop;
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
+#import <vulkanmod:visuals/post/pbr.glsl>
 
 //2026-11-10 (session 7): built twice (VisualsPrograms): postReflection.LEAN defines REFLECT_LEAN and leaves out the aurora and the
 // realistic clouds' march, for frames that draw neither (VkPostProcess picks it). The branches it drops are skipped on such frames
@@ -424,6 +428,77 @@ vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
     return own*(vec3(1.0) - f) + reflection*f;
 }
 
+#ifdef PBR
+//2026-11-10 (session 9): a PBR pixel the composite marked (pbr.glsl's mark: its smoothness, wet or not, and its reflectance): as
+// blockReflection, on its normal-mapped normal (the material image, where it is still this pixel's fragment's; else the snapped depth
+// normal; under a film of rain water the face's own) tilted by its GGX roughness, mixed in by its Fresnel term faded in over the smoothness
+vec3 pbrReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
+    vec3 view;
+    bool fromLod;
+    if (!scenePositionFrom(p, size, view, fromLod) || fromLod) {
+        return own;
+    }
+    float smoothness;
+    int code;
+    bool film;
+    pbrUnmark(mark, smoothness, code, film);
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
+    mat3 toWorld = mat3(invView);
+    mat3 toView = transpose(toWorld);
+    vec3 world = toWorld*view;
+    float dist = length(view);
+    vec3 d = world/max(dist, 0.000001);
+    vec3 nGeom = normalize(toWorld*snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), toView*vec3(1.0, 0.0, 0.0), toView*vec3(0.0, 1.0, 0.0)));
+    if (!(-dot(d, nGeom) > 0.0)) {
+        return own;
+    }
+    vec3 nMat = nGeom;
+    uint packedNormal = imageLoad(terrainNormal, p).r;
+    uint light = imageLoad(terrainLight, p).r;
+    if (!film && (packedNormal & PBR_NORMAL_WRITTEN) != 0u && pbrTagged(packedNormal, light)) {
+        nMat = pbrOctDecode(vec2(float(packedNormal & 2047u), float((packedNormal >> 11) & 2047u))/PBR_NORMAL_STEPS*2.0 - 1.0);
+    }
+    float frame = blockParams.y;
+    vec2 xi = vec2(interleavedGradientNoise(vec2(p) + 5.588238*frame), interleavedGradientNoise(vec2(p.yx) + 3.7*frame + 17.0));
+    vec3 n = roughNormal(nMat, pbrAlpha(smoothness)*PBR_RAY_SPREAD, xi);
+    if (!(-dot(d, n) > 0.0)) {
+        n = nMat;
+    }
+    if (!(-dot(d, n) > 0.0)) {
+        n = nGeom;
+    }
+    vec3 f = pbrReflectivity(smoothness, pbrCodeF0(code, metalTint(own)), -dot(d, n));
+    vec3 r = reflect(d, n);
+    float rise = dot(r, nGeom);
+    if (rise < REFLECT_MIN_UP) {
+        r = normalize(r + nGeom*(REFLECT_MIN_UP - rise));
+    }
+    vec3 pl = pixelLight(p, size, world, nGeom);
+    bool known = pl.z > 0.5;
+    float skyAccess = known ? skyVisibility(pl.x) : clamp(reflectParams.z, 0.0, 1.0);
+    float amount = hazeAmount(a, known ? skyShare(pl.x) : 1.0, false);
+    vec3 sky = skyColour(a, r) + sunGlow(a, r);
+    if (cloudShape.w > 0.5 && atmosphereSky(a)) {
+        vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, xi.x), r, 1.0);
+        sky = sky*(1.0 - cloud.a) + cloud.rgb;
+    }
+    vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+    if (max(f.r, max(f.g, f.b)) >= PBR_REFLECT_MIN_MARCH) {
+        vec3 hitColour;
+        float pathLength;
+        float blocked;
+        float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
+        if (w > 0.0) {
+            vec3 hitWorld = world + r*pathLength;
+            float extra = max(dist + pathLength - length(hitWorld), 0.0);
+            reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
+        }
+    }
+    return own*(vec3(1.0) - f) + reflection*f;
+}
+#endif
+
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(sceneOut);
@@ -437,6 +512,16 @@ void main() {
         imageStore(sceneOut, p, vec4(lit.rgb, 1.0));
         return;
     }
+#ifdef PBR
+    if (reflectParams.w > 0.5 && isPbrMark(mark)) {
+        imageStore(sceneOut, p, vec4(DEBUG_PBR_RED, DEBUG_PBR_GREEN, DEBUG_PBR_BLUE, 1.0));
+        return;
+    }
+    if (isPbrMark(mark)) {
+        imageStore(sceneOut, p, vec4(pbrReflection(p, size, lit.rgb, mark), 1.0));
+        return;
+    }
+#endif
     if (reflectParams.w > 0.5) {
         vec3 debug = blockReflectClass(mark) > 0 ? vec3(DEBUG_SMOOTH_RED, DEBUG_SMOOTH_GREEN, DEBUG_SMOOTH_BLUE)
                 : (mark > 0.0 ? vec3(DEBUG_WATER_RED, DEBUG_WATER_GREEN, DEBUG_WATER_BLUE) : vec3(DEBUG_GLASS_RED, DEBUG_GLASS_GREEN, DEBUG_GLASS_BLUE));

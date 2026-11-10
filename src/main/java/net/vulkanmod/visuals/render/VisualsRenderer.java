@@ -841,6 +841,9 @@ public final class VisualsRenderer {
             light = light.withTerrain(terrainFilled);
             //P7k design 3: the held light, with the per-pixel light it lifts
             this.heldLight.update(this.upload, settings.heldLight() && light.on());
+            //2026-11-10 (session 9): PBR's wetness, and whether this frame's terrain wrote its materials (the composite's PBR build then)
+            PbrUniforms.update(level, net.minecraft.core.BlockPos.containing(camera), partialTick);
+            this.post.preparePbr(terrainFilled && this.terrainLight.materialFilled(main.width(), main.height()));
             this.post.prepare(this.upload, atmosphere, lighting, reflection, clouds, shadow, light, this.heldLight,
                     BloomFog.compute(settings, this.atmosphere, serial, hasSkyLight, this.skyExposure.value()), volumetric);
             //2026-11-09 (session 6): the shader weather (its precipitation map uploaded when it changed)
@@ -879,13 +882,14 @@ public final class VisualsRenderer {
                 this.post.compute(cmd, VkContext.mainColourView(main), depths,
                         new VkPostProcess.LightInputs(lightVolume == null ? null : lightVolume.data(), lightVolume == null ? null : lightVolume.ready(), lightmap,
                                 lod != null ? lod.lightView() : 0, this.heldLight.on() ? this.heldLight.buffer() : null, this.terrainLight.view(),
-                                this.terrainLight.albedoView()));
+                                this.terrainLight.albedoView(), this.terrainLight.normalView(), this.terrainLight.specularView()));
                 //P7i: SMAA on the final colour, before the main pass resumes (its result is blitted by post.draw)
                 this.post.antiAlias(cmd, values, settings.antiAliasing());//marks its own intervals
                 //2026-10-30 (audit): the next frame is jittered only when TAA resolved this one (set before it ran, a failed TAA left a frame shaking)
                 TaaJitter.setActive(taa && this.post.taaDrawn());
                 //Read: cleared for the next frame's terrain (which writes only after this clear)
-                this.terrainLight.prepareNext(cmd, terrainOn, main.width(), main.height(), main.identity());
+                //Session 9: with the material images while the terrain may draw its PBR build (PbrAtlas built with a map)
+                this.terrainLight.prepareNext(cmd, terrainOn, terrainOn && PbrAtlas.wanted() && PbrAtlas.active(), main.width(), main.height(), main.identity());
             } finally {
                 VkBarriers.mainColourAfterCompute(cmd);
                 VkContext.mainColourToAttachment(cmd, main);

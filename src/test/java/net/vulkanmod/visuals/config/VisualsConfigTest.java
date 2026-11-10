@@ -26,7 +26,8 @@ class VisualsConfigTest {
              "lightShafts": 50, "moonlight": 50, "aoStrength": 100, "sunShading": 100, "waterDepth": 100, "waterReflections": 100,
              "waterRipples": 100, "waterRippleSpeed": 100, "farClouds": true, "sunShadows": true, "vanillaShadows": true,
              "skyLightAmbient": 100, "perPixelLight": true, "lightColour": 70, "heldLight": true, "antiAliasing": 3, "edgeCover": true,
-             "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "revision": 7}
+             "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "pbr": false, "pbrNormalStrength": 150,
+             "pbrReflections": true, "pbrParallax": true, "revision": 8}
             """;
 
     private static List<Field> settingFields() {
@@ -63,8 +64,9 @@ class VisualsConfigTest {
                 if (TUNED_DEFAULTS.containsKey(item.key())) tuned.add(item.key());
                 checked++;
             } else if (item.kind() == VisualsOptionLayout.Kind.SWITCH) {
-                //FG design 7 / FSR design 7: the two frame generation switches are the ones that start off
-                assertEquals(item.key().equals("frame_generation") || item.key().equals("fsr_frame_generation") ? 0 : 1, VisualsOptionLayout.get(c, item), item.key());
+                //FG design 7 / FSR design 7: the two frame generation switches are the ones that start off; session 9: and the parallax
+                assertEquals(item.key().equals("frame_generation") || item.key().equals("fsr_frame_generation") || item.key().equals("pbr_parallax") ? 0 : 1,
+                        VisualsOptionLayout.get(c, item), item.key());
                 checked++;
             }
         }
@@ -168,7 +170,7 @@ class VisualsConfigTest {
         assertEquals(VisualsPresets.CUSTOM, c.preset, "session 4: a file before the preset is Custom");
         Files.writeString(old, "{\"exposure\": 130, \"revision\": 0}");
         assertEquals(VisualsConfig.currentRevision(), VisualsConfig.read(old).revision);
-        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": 7", "\"revision\": 99"));
+        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": 8", "\"revision\": 99"));
         assertEquals(99, VisualsConfig.read(old).revision, "a newer file is left alone");
     }
 

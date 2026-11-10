@@ -23,6 +23,12 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class TerrainLightTarget {
     /** The writers' storage images (terrain.json, the core entity, block model and particle JSONs): the light and the albedo. */
     public static final String NAME = "TerrainLight", ALBEDO_NAME = "TerrainAlbedo";
+    /**
+     * 2026-11-10 (shader roadmap session 9, PBR): the terrain's PBR build (terrain_pbr.json) also writes each pixel's material, its
+     * normal-mapped normal and its specular texel (pbr_terrain.glsl), into two more images of the same size: made, cleared and read only
+     * while PBR draws (prepareNext's material), freed when it stops.
+     */
+    public static final String NORMAL_NAME = "TerrainNormal", SPECULAR_NAME = "TerrainSpecular";
     public static final int FORMAT = VK_FORMAT_R32_UINT;
     private static final int FRAGMENT_AND_COMPUTE = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
@@ -31,10 +37,15 @@ public final class TerrainLightTarget {
     static {
         StorageImages.register(NAME, () -> current != null && current.image != null ? current.image.view() : 0);
         StorageImages.register(ALBEDO_NAME, () -> current != null && current.albedo != null ? current.albedo.view() : 0);
+        StorageImages.register(NORMAL_NAME, () -> current != null && current.normal != null ? current.normal.view() : 0);
+        StorageImages.register(SPECULAR_NAME, () -> current != null && current.specular != null ? current.specular.view() : 0);
     }
 
     private final DeferredFree deferred;
     private VkImage2D image, albedo;
+    //Session 9: the material images (null while PBR does not draw) and the frame they were last cleared for the terrain
+    private VkImage2D normal, specular;
+    private long materialSerial = Long.MIN_VALUE;
     private long clearedSerial = Long.MIN_VALUE;
     private int clearedWidth, clearedHeight;
     //2026-10-30 (audit): the main target's depth image the image was cleared for; only draws into that target write the light
@@ -55,6 +66,33 @@ public final class TerrainLightTarget {
         return t != null && t.clearedSerial == VkFrames.serial() - 1 && !VkFrames.isDropped(t.clearedSerial) && t.mainBound() ? 1 : 0;
     }
 
+    /**
+     * Session 9: 1 while this frame's terrain may draw its PBR build: it may write the light (lightOut) and the last frame also cleared
+     * the material images for it (PbrUniforms.terrainActive).
+     */
+    public static float materialOut() {
+        TerrainLightTarget t = current;
+        return t != null && t.normal != null && t.materialSerial == t.clearedSerial && lightOut() > 0 ? 1 : 0;
+    }
+
+    /** Session 9: at the post-process, whether this frame's terrain wrote the material images as well (filled, with materialOut). */
+    public boolean materialFilled(int width, int height) {
+        return this.filled(width, height) && this.normal != null && this.materialSerial == this.clearedSerial;
+    }
+
+    /** Session 9: the material images' views the compute binds (the albedo's stands in while there are none: not read then). */
+    public long normalView() {
+        return this.normal != null ? this.normal.view() : this.albedoView();
+    }
+
+    public long specularView() {
+        return this.specular != null ? this.specular.view() : this.albedoView();
+    }
+
+    private VkImage2D[] written() {
+        return this.normal != null ? new VkImage2D[]{this.image, this.albedo, this.normal, this.specular} : new VkImage2D[]{this.image, this.albedo};
+    }
+
     private boolean mainBound() {
         net.vulkanmod.vulkan.framebuffer.Framebuffer f = net.vulkanmod.vulkan.Renderer.getInstance().getBoundFramebuffer();
         return f != null && f.getDepthAttachment() == this.clearedFor;
@@ -67,7 +105,7 @@ public final class TerrainLightTarget {
 
     /** Outside a render pass, before the compute reads a filled image: the terrain's fragment writes become visible to compute. */
     public void toCompute(VkCommandBuffer cmd) {
-        for (VkImage2D i : new VkImage2D[]{this.image, this.albedo}) {
+        for (VkImage2D i : this.written()) {
             i.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
         }
@@ -88,9 +126,27 @@ public final class TerrainLightTarget {
      * for the next frame's terrain, recreating it on a resize; without, the terrain stops writing (nothing is cleared).
      */
     public void prepareNext(VkCommandBuffer cmd, boolean on, int width, int height, Object mainDepth) {
+        this.prepareNext(cmd, on, false, width, height, mainDepth);
+    }
+
+    /** Session 9: as prepareNext, with material: the material images too (made, or remade on a resize, and cleared); without, freed. */
+    public void prepareNext(VkCommandBuffer cmd, boolean on, boolean material, int width, int height, Object mainDepth) {
         if (!on || width <= 0 || height <= 0) {
             this.clearedSerial = Long.MIN_VALUE;
+            this.freeMaterial();
             return;
+        }
+        if (!material) {
+            this.freeMaterial();
+        } else if (this.normal == null || this.normal.width != width || this.normal.height != height) {
+            this.freeMaterial();
+            this.normal = create(cmd, width, height);
+            this.specular = create(cmd, width, height);
+        } else {
+            for (VkImage2D i : new VkImage2D[]{this.normal, this.specular}) {
+                i.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, FRAGMENT_AND_COMPUTE, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+            }
         }
         if (this.image == null || this.image.width != width || this.image.height != height) {
             for (VkImage2D old : new VkImage2D[]{this.image, this.albedo}) {
@@ -108,11 +164,16 @@ public final class TerrainLightTarget {
         }
         clear(cmd, this.image, TerrainLightMath.NONE);
         clear(cmd, this.albedo, 0);
-        for (VkImage2D i : new VkImage2D[]{this.image, this.albedo}) {
+        if (this.normal != null) {
+            clear(cmd, this.normal, 0);
+            clear(cmd, this.specular, 0);
+        }
+        for (VkImage2D i : this.written()) {
             i.transition(cmd, VK_IMAGE_LAYOUT_GENERAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
         }
         this.clearedSerial = VkFrames.serial();
+        this.materialSerial = this.normal != null ? this.clearedSerial : Long.MIN_VALUE;
         this.clearedWidth = width;
         this.clearedHeight = height;
         this.clearedFor = mainDepth;
@@ -133,10 +194,21 @@ public final class TerrainLightTarget {
         }
     }
 
+    private void freeMaterial() {
+        for (VkImage2D old : new VkImage2D[]{this.normal, this.specular}) {
+            if (old != null) this.deferred.retire(old::free, VkFrames.serial());
+        }
+        this.normal = null;
+        this.specular = null;
+        this.materialSerial = Long.MIN_VALUE;
+    }
+
     /** Call when a frame starts recording (VkImage2D.tick). */
     public void tick() {
         if (this.image != null) this.image.tick();
         if (this.albedo != null) this.albedo.tick();
+        if (this.normal != null) this.normal.tick();
+        if (this.specular != null) this.specular.tick();
     }
 
     public void free() {
@@ -147,5 +219,6 @@ public final class TerrainLightTarget {
         this.image = null;
         this.albedo = null;
         this.clearedSerial = Long.MIN_VALUE;
+        this.freeMaterial();
     }
 }
