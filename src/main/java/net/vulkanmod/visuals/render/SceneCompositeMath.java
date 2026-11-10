@@ -433,6 +433,14 @@ public final class SceneCompositeMath {
 
     /** The shader's main for one pixel: rgba written to sceneOut. slots: SLOTS vec4 (the matrix slots unused here). */
     public static float[] composite(Pixel px, float[][] slots, Lightmap lm) {
+        return composite(px, slots, lm, 1);
+    }
+
+    /**
+     * 2026-11-10: with sunShare, the share of the sun's disc the screen shows open (sunopen.glsl's sunOpenShare, the same for every
+     * pixel of a frame): the sun's glow in the haze in front of a surface near the sun (WaterMath.sunOpenWeight) goes with it.
+     */
+    public static float[] composite(Pixel px, float[][] slots, Lightmap lm, float sunShare) {
         float[] scene = {PostMath.displayToLinear(px.colour[0]), PostMath.displayToLinear(px.colour[1]), PostMath.displayToLinear(px.colour[2])};
         Atmosphere a = atmosphere(slots);
         if (px.sky) {
@@ -591,10 +599,13 @@ public final class SceneCompositeMath {
         if (debug == DEBUG_SOURCE_VIEW) return rgba(sourceView(px.light[2], px.fromLod, hasAlbedo), 0);
         float hazeSky = isWater ? RelightMath.skyShare(sky) : clamp01(skyT / 15);
         float amount = AtmosphereMath.hazeAmount(a, known && !cloud ? hazeSky : 1, px.fromLod);
-        float[] hazed = AtmosphereMath.applyHaze(a, lit, px.dir, px.dist, amount);
+        float sunWeight = a.mode() == AtmosphereMath.ATMOSPHERE_SKY ? WaterMath.sunOpenWeight(AtmosphereMath.dot(px.dir, a.sun())) : 0;
+        float sunOpen = sunWeight > 0 ? WaterMath.sunOpenAt(sunShare, sunWeight) : 1;
+        float[] hazed = AtmosphereMath.applyHazeOpen(a, lit, px.dir, px.dist, amount, sunOpen);
         float border = a.mode() == AtmosphereMath.ATMOSPHERE_SKY ? borderAmount(slots[BORDER_FOG], px.dir, px.dist, px.fromLod) : 0;
         if (border > 0) {
-            float[] behind = add(AtmosphereMath.skyColour(a, px.dir), AtmosphereMath.sunGlow(a, px.dir));
+            float[] behind = add(AtmosphereMath.skyColour(a, px.dir), scale(AtmosphereMath.glowLobeOpen(a, px.dir, sunOpen),
+                    AtmosphereMath.glowGain(AtmosphereMath.skyAirMass(px.dir[1]))));
             for (int i = 0; i < 3; i++) hazed[i] += (behind[i] - hazed[i]) * border;
         }
         //2026-10-28: the weather fog (BORDER .w): surfaces under the sky fade by distance (Gaussian) into the horizon's fog in vanilla's fog hue

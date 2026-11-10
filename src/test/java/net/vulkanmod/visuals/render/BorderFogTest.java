@@ -44,7 +44,7 @@ class BorderFogTest {
             comp = new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
         assertTrue(comp.contains("layout(location = 30) uniform vec4 borderFog;"));
-        int border = comp.indexOf("lit = mix(lit, skyColour(a, dir) + sunGlow(a, dir), border);");
+        int border = comp.indexOf("lit = mix(lit, skyColour(a, dir) + glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y)), border);");
         int clouds = comp.indexOf("lit = farCloudsOver(a, lit, dir, dist, p);");
         assertTrue(border > 0 && clouds > border);
         assertTrue(comp.contains("return smoothstep(borderFog.x, borderFog.y, length(world.xz));"));

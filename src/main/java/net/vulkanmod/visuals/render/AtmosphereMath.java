@@ -246,6 +246,21 @@ public final class AtmosphereMath {
 
     /** The shader's haze; final fix R5: no amount returns at once, the sky's air mass and the glow's lobe are evaluated once. */
     public static Haze haze(Atmosphere a, float[] dir, float dist, float amount) {
+        return hazeOpen(a, dir, dist, amount, 1);
+    }
+
+    /** 2026-11-10: glowLobe with the sun's part times sunOpen (0..1, sunopen.glsl's share); the moon's part stays. */
+    public static float[] glowLobeOpen(Atmosphere a, float[] dir, float sunOpen) {
+        float cs = dot(dir, a.sun);
+        float open = sunOpen > 0 ? Math.min(sunOpen, 1) : 0;
+        float ps = hgPhase(cs, GLOW_G) * open, pm = hgPhase(-cs, GLOW_G);
+        float[] out = new float[3];
+        for (int i = 0; i < 3; i++) out[i] = a.glow[i] * ps + a.moonLight[i] * a.glow[3] * pm;
+        return out;
+    }
+
+    /** 2026-11-10: haze with the sun's glow (both media) at sunOpen. */
+    public static Haze hazeOpen(Atmosphere a, float[] dir, float dist, float amount, float sunOpen) {
         float k = amount > 0 ? Math.min(amount, 1) : 0;
         if (!atmosphereOn(a) || k <= 0) return new Haze(new float[]{1, 1, 1}, new float[3]);
         float d = hazeDistance(dist > 0 ? Math.min(dist, HAZE_MAX_DISTANCE) : 0);
@@ -260,7 +275,7 @@ public final class AtmosphereMath {
         float band = (float) Math.exp(-lowBand(a, mass, skyMass));
         for (int i = 0; i < 3; i++) t[i] = (float) Math.exp(-Math.max(a.depth[i] + a.depth[3], MIN_DEPTH) * mass) * tf * band;
         float[] air = overcast(a, airlight(a, dir, mass));
-        float[] lobe = glowLobe(a, dir);
+        float[] lobe = glowLobeOpen(a, dir, sunOpen);
         float along = glowGain(mass), sky = glowGain(skyMass);
         float[] in = new float[3];
         for (int i = 0; i < 3; i++) in[i] = (air[i] + lobe[i] * along) * tf;
@@ -272,7 +287,11 @@ public final class AtmosphereMath {
     }
 
     public static float[] applyHaze(Atmosphere a, float[] colour, float[] dir, float dist, float amount) {
-        Haze h = haze(a, dir, dist, amount);
+        return applyHazeOpen(a, colour, dir, dist, amount, 1);
+    }
+
+    public static float[] applyHazeOpen(Atmosphere a, float[] colour, float[] dir, float dist, float amount, float sunOpen) {
+        Haze h = hazeOpen(a, dir, dist, amount, sunOpen);
         return new float[]{colour[0] * h.transmittance[0] + h.inscatter[0], colour[1] * h.transmittance[1] + h.inscatter[1],
                 colour[2] * h.transmittance[2] + h.inscatter[2]};
     }

@@ -136,6 +136,7 @@ layout(location = 47) uniform vec4 auroraParams;
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
@@ -1019,10 +1020,17 @@ void main() {
     // reflection hazes the reflected colour; LOD pixels full
     float hazeSky = water ? skyShare(sky) : clamp(skyT/15.0, 0.0, 1.0);
     float amount = hazeAmount(a, known && !cloud ? hazeSky : 1.0, fromLod);
-    lit = applyHaze(a, lit, dir, dist, amount);
+    //2026-11-10 (the user: at sunrise and sunset the sun shone through ice spikes and hills): the sun's glow in front of a surface only
+    // as far as the sun's disc is open on screen (sunopen.glsl; near the sun only)
+    float sunOpen = 1.0;
+    float sunWeight = atmosphereSky(a) ? sunOpenWeight(dot(dir, a.sun.xyz)) : 0.0;
+    if (sunWeight > 0.0) {
+        sunOpen = sunOpenAt(sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size), sunWeight);
+    }
+    lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);
     float border = atmosphereSky(a) ? borderAmount(world, fromLod) : 0.0;
     if (border > 0.0) {
-        lit = mix(lit, skyColour(a, dir) + sunGlow(a, dir), border);
+        lit = mix(lit, skyColour(a, dir) + glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y)), border);
     }
     //2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined): in rain surfaces under the sky fade by distance
     // (borderFog.w, AtmosphereUniforms.weatherFog), whatever the camera's height, into the horizon's fog colour tinted with vanilla's

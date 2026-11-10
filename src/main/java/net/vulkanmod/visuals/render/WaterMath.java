@@ -272,6 +272,44 @@ public final class WaterMath {
         return reflectFallback(AtmosphereMath.applyHaze(a, reflectedSky(a, r, ripple, sunVisibility, sunOpen, celestial), view, dist, amount), own, skyAccess);
     }
 
+    // ---- the sun's open share (2026-11-10, sunopen.glsl) ----
+
+    public static final float SUN_OPEN_TAP = 0.66f, SUN_OPEN_COS_START = 0.7f, SUN_OPEN_COS_FULL = 0.85f;
+
+    public static float sunOpenWeight(float cosToSun) {
+        return smoothstep(SUN_OPEN_COS_START, SUN_OPEN_COS_FULL, cosToSun);
+    }
+
+    public static float sunOpenAt(float share, float weight) {
+        float s = share > 0 ? Math.min(share, 1) : 0;
+        float w = weight > 0 ? Math.min(weight, 1) : 0;
+        return 1 + (s - 1) * w;
+    }
+
+    /** sunopen.glsl's taps: the GL screen uv (0..1, y up) of each of the 3 x 3 taps over the sun's disc, null behind the camera. */
+    public static float[][] sunOpenTaps(org.joml.Matrix4fc viewToClip, float[] sunView) {
+        org.joml.Vector4f c = viewToClip.transform(new org.joml.Vector4f(sunView[0], sunView[1], sunView[2], 0), new org.joml.Vector4f());
+        if (!(c.w > 0.000001f)) return null;
+        float u = c.x / c.w * 0.5f + 0.5f, v = c.y / c.w * 0.5f + 0.5f;
+        float hx = SUN_HALF_SIZE * 0.5f * Math.abs(viewToClip.m00()), hy = SUN_HALF_SIZE * 0.5f * Math.abs(viewToClip.m11());
+        float[][] taps = new float[9][];
+        int n = 0;
+        for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) taps[n++] = new float[]{u + i * SUN_OPEN_TAP * hx, v + j * SUN_OPEN_TAP * hy};
+        return taps;
+    }
+
+    /** sunOpenShare: the share of taps open (open.test(uv): the sky there, for one on the screen; off the screen counts open); 1 behind the camera. */
+    public static float sunOpenShare(org.joml.Matrix4fc viewToClip, float[] sunView, java.util.function.Predicate<float[]> open) {
+        float[][] taps = sunOpenTaps(viewToClip, sunView);
+        if (taps == null) return 1;
+        int n = 0;
+        for (float[] t : taps) {
+            boolean off = t[0] < 0 || t[1] < 0 || t[0] >= 1 || t[1] >= 1;
+            if (off || open.test(t)) n++;
+        }
+        return n / 9f;
+    }
+
     // ---- ripples ----
 
     public static int rippleHash(int x, int z, int seed) {

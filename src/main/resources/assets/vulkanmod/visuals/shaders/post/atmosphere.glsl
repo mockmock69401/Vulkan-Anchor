@@ -349,6 +349,15 @@ vec3 glowLobe(Atmosphere a, vec3 dir) {
     return a.glow.rgb*hgPhase(cs, GLOW_G) + a.moonLight.rgb*a.glow.w*hgPhase(-cs, GLOW_G);
 }
 
+//2026-11-10 (the user: at sunrise and sunset the sun shone through ice spikes and hills): glowLobe with the sun's part times sunOpen
+// (0..1), the share of the sun the air in front of a surface sees (sunopen.glsl: none where terrain hides the sun's disc on screen).
+// The moon's part stays
+vec3 glowLobeOpen(Atmosphere a, vec3 dir, float sunOpen) {
+    float cs = dot(dir, a.sun.xyz);
+    float open = sunOpen > 0.0 ? min(sunOpen, 1.0) : 0.0;
+    return a.glow.rgb*(hgPhase(cs, GLOW_G)*open) + a.moonLight.rgb*a.glow.w*hgPhase(-cs, GLOW_G);
+}
+
 //How the glow grows along a path of `mass` air masses: like a haze of GLOW_DEPTH per air mass (1 at one air mass)
 float glowGain(float mass) {
     return (1.0 - exp(-GLOW_DEPTH*max(mass, 0.0)))/(1.0 - exp(-GLOW_DEPTH));
@@ -381,7 +390,8 @@ float hazeDistance(float d) {
 // strength 0 (then inscatter is 0). As dist grows a black surface tends to exactly skyColour + sunGlow (far terrain fades into
 // the sky behind it; at and below the horizon the ground fog hides it entirely). amount (0..1) scales both optical depths (see
 // hazeAmount). NO_SKY and FOG: a uniform fog of density fog.x in the fog colour. NONE: transmittance 1, inscatter 0.
-void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittance, out vec3 inscatter) {
+// 2026-11-10: hazeOpen takes sunOpen (glowLobeOpen) for the sun's glow in both media; haze is hazeOpen with the sun open
+void hazeOpen(Atmosphere a, vec3 dir, float dist, float amount, float sunOpen, out vec3 transmittance, out vec3 inscatter) {
     //Comparisons, not clamp: a NaN distance or amount counts as 0 (clamp of NaN is undefined)
     float k = amount > 0.0 ? min(amount, 1.0) : 0.0;
     //Final fix R5: no amount (caves, vanilla pixels under an environmental fog) is no haze, exactly what the full evaluation gives
@@ -403,7 +413,7 @@ void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittan
     vec3 tau = max(a.depth.rgb + a.depth.w, vec3(MIN_DEPTH));
     vec3 ta = exp(-tau*mass)*exp(-lowBand(a, mass, skyMass));
     transmittance = ta*tf;
-    vec3 lobe = glowLobe(a, dir);
+    vec3 lobe = glowLobeOpen(a, dir, sunOpen);
     inscatter = (overcast(a, airlight(a, dir, mass)) + lobe*glowGain(mass))*tf;
     if (tf < 1.0) {
         //The ground fog's share: its colour (the horizon sky in dir's azimuth) and the whole sky path's glow (sunGlow)
@@ -411,11 +421,23 @@ void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittan
     }
 }
 
+void haze(Atmosphere a, vec3 dir, float dist, float amount, out vec3 transmittance, out vec3 inscatter) {
+    hazeOpen(a, dir, dist, amount, 1.0, transmittance, inscatter);
+}
+
 //colour seen through the haze (see haze)
 vec3 applyHaze(Atmosphere a, vec3 colour, vec3 dir, float dist, float amount) {
     vec3 t;
     vec3 i;
     haze(a, dir, dist, amount, t, i);
+    return colour*t + i;
+}
+
+//2026-11-10: colour seen through the haze with the sun's glow at sunOpen (see hazeOpen)
+vec3 applyHazeOpen(Atmosphere a, vec3 colour, vec3 dir, float dist, float amount, float sunOpen) {
+    vec3 t;
+    vec3 i;
+    hazeOpen(a, dir, dist, amount, sunOpen, t, i);
     return colour*t + i;
 }
 
