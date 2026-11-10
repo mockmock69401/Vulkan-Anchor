@@ -104,6 +104,12 @@ public final class VkPostProcess {
     private Depths lastDepths;
     private final VkComputeProgram copy, prefilter, down, up, shaftMask, shaftBlur;
     private final VkComputeProgram lighting, lightingBlur, reflection;
+    /**
+     * 2026-11-10 (session 7): postReflection.LEAN (no aurora, no realistic clouds; null when it could not be built or its uniforms differ)
+     * and whether this frame may use it (prepare: neither drawn this frame). A lean composite was tried too and measured no faster
+     */
+    private final VkComputeProgram reflectionLean;
+    private boolean leanOn;
     //Volumetric light pass (2026-10-15): light shafts through the sun's cascades, into the shaft image
     private final VkComputeProgram volumetric, volumetricBlur;
     private final LooseUniformWriter volumetricUniforms;
@@ -226,6 +232,7 @@ public final class VkPostProcess {
         this.lightingUniformBuffer = lightingUniformBuffer;
         this.reflection = reflection;
         this.reflectionUniformBuffer = reflectionUniformBuffer;
+        this.reflectionLean = lean("postReflection", reflection);
         this.volumetric = volumetric;
         this.volumetricBlur = volumetricBlur;
         this.volumetricUniformBuffer = volumetricUniformBuffer;
@@ -489,6 +496,7 @@ public final class VkPostProcess {
         this.lightingOn = lighting.on();
         this.ao.prepare(upload, lighting);
         this.reflectionOn = reflection.on();
+        this.leanOn = !this.sky.auroraOn() && !clouds.realistic();
         atmosphere.writeShafts(this.shaftMaskUniforms);
         atmosphere.writeShafts(this.shaftBlurUniforms);
         bloomFog.write(this.prefilterUniforms);
@@ -633,6 +641,24 @@ public final class VkPostProcess {
     }
 
     /** P7e-2 design 3.3: the lit scene with the water reflections mixed in, written to the scene the bloom and the final draw read. */
+    /** Session 7: NAME.LEAN, or null when it cannot be built or takes other uniforms or bindings than the full program NAME. */
+    private static VkComputeProgram lean(String name, VkComputeProgram full) {
+        VkComputeProgram lean = null;
+        try {
+            lean = VkComputeProgram.of(name + ".LEAN");
+            if (!lean.meta().equals(full.meta())) {
+                VisualsLog.warn("Visuals " + name + ".LEAN differs in its uniforms, the full pass is used");
+                lean.free();
+                return null;
+            }
+            return lean;
+        } catch (RuntimeException | LinkageError e) {
+            if (lean != null) lean.free();
+            VisualsLog.warn("Visuals " + name + ".LEAN not created, the full pass is used: " + e);
+            return null;
+        }
+    }
+
     private void computeReflection(VkCommandBuffer cmd, Depths depths, VkGpuBuffer data, VkGpuBuffer ready, long lodLight, long terrainLight) {
         if (!this.reflectionOn) return;
         this.scene.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
@@ -643,7 +669,8 @@ public final class VkPostProcess {
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
-        this.reflection.dispatchWithPush(cmd, bindings, this.reflectionUniformBuffer == null ? this.reflectionUniforms.buffer() : null,
+        VkComputeProgram program = this.leanOn && this.reflectionLean != null ? this.reflectionLean : this.reflection;
+        program.dispatchWithPush(cmd, bindings, this.reflectionUniformBuffer == null ? this.reflectionUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
         toRead(cmd, this.scene);
     }
@@ -802,6 +829,7 @@ public final class VkPostProcess {
         this.lighting.free();
         this.lightingBlur.free();
         this.reflection.free();
+        if (this.reflectionLean != null) this.reflectionLean.free();
         this.finalDraw.free();
         this.ao.free();
         if (this.copyUniformBuffer != null) this.copyUniformBuffer.free();

@@ -34,6 +34,8 @@ final class VisualsPrograms {
         add(c, "postAoBlur", defs(), c.compute("post/ao_blur.comp"));
         add(c, "postSceneCopy", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/scene_copy.comp"));
         add(c, "postReflection", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/reflection.comp"));
+        //Session 7: the reflection without the aurora and the realistic clouds, for the frames that draw neither (VkPostProcess)
+        add(c, "postReflection.LEAN", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", ""), c.compute("post/reflection.comp"));
         add(c, "bloom.PREFILTER", defs("USE_ZERO_ONE_DEPTH", "", "PREFILTER", ""), c.compute("post/bloom.comp"));
         add(c, "bloom.DOWN", defs("DOWN", ""), c.compute("post/bloom.comp"));
         add(c, "bloom.UP", defs("UP", ""), c.compute("post/bloom.comp"));
