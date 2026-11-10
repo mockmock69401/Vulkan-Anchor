@@ -368,7 +368,7 @@ class SceneCompositeTest {
         assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure()"));
         //The shader takes the haze from W4 only (no fog of its own)
         assertTrue(COMP.contains("float amount = hazeAmount(a, known && !cloud ? hazeSky : 1.0, fromLod);"));
-        assertTrue(COMP.contains("applyHaze(a, lit, dir, dist, amount)"));
+        assertTrue(COMP.contains("applyHazeOpen(a, lit, dir, dist, amount, sunOpen)"));
         assertEquals(0, count(COMP, "ATMOSPHERE_FOG"), "the mode is W4's business: the camera's fluid (slot 29 .y) says under water");
     }
 
@@ -1598,7 +1598,7 @@ class SceneCompositeTest {
         }
         //It assembles the other packages' exports and reimplements none of them
         for (String call : new String[]{"vanillaToScene(", "lightingAt(", "sunShadingAt(", "shadeLevel(lighting.w)", "sunLevel(lighting.w)", "sunShare(", "isPlant(", "isEmissive(", "snapNormal(depthNormal(",
-                "lodFaceNormal(", "waterColour(", "reflectionMark(", "sunDisc(", "skyColour(", "sunGlow(", "vanillaStars(", "hazeAmount(", "applyHaze(",
+                "lodFaceNormal(", "waterColour(", "reflectionMark(", "sunDisc(", "skyColour(", "sunGlow(", "vanillaStars(", "hazeAmount(", "applyHazeOpen(", "glowLobeOpen(", "sunOpenShare(",
                 "cloudOver(", "farCloudMarch(", "pixelLight(", "relightGain(", "relightCapped(", "liftedSky(", "waterSky(", "sideSky(", "scenePositionFrom("}) {
             assertTrue(COMP.contains(call), call);
         }

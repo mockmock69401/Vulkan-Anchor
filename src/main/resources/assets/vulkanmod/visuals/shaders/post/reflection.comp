@@ -67,6 +67,7 @@ layout(location = 29) uniform vec4 reserved29;
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
 #import <vulkanmod:visuals/post/water.glsl>
+#import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
@@ -537,14 +538,20 @@ void main() {
             vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
             sky = sky*(1.0 - cloud.a) + cloud.rgb;
         }
-        reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+        //2026-11-10: the view's haze over the water carries the sun's glow only as far as the sun is open on screen (sunopen.glsl)
+        float sunWeight = atmosphereSky(a) ? sunOpenWeight(dot(d, a.sun.xyz)) : 0.0;
+        float sunOpen = sunWeight > 0.0 ? sunOpenAt(sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size), sunWeight) : 1.0;
+        reflection = reflectFallback(applyHazeOpen(a, sky, d, dist, amount, sunOpen), own, skyAccess);
     }
     //2026-11-10 (session 7): a whole hit (w 1) is all the mix below keeps, so the sky, its clouds and aurora are not evaluated for it
     if (w > 0.0) {
         //The hit's pixel is already hazed over its own distance from the camera: add the haze of the rest of the longer path
         vec3 hitWorld = world + r*pathLength;
         float extra = max(dist + pathLength - length(hitWorld), 0.0);
-        reflection = w < 1.0 ? mix(reflection, applyHaze(a, hitColour, r, extra, amount), w) : applyHaze(a, hitColour, r, extra, amount);
+        //2026-11-10: the air between the water and the hit lies in the hit's shadow wherever the ray runs toward the sun (the only
+        // place the sun's glow lobe counts): no sun glow on that stretch
+        vec3 hazedHit = applyHazeOpen(a, hitColour, r, extra, amount, 0.0);
+        reflection = w < 1.0 ? mix(reflection, hazedHit, w) : hazedHit;
     }
     //2026-10-29: the rings' crests catch a share of the mirrored light
     imageStore(sceneOut, p, vec4(mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine, 1.0));

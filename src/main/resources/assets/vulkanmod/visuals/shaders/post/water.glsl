@@ -335,6 +335,32 @@ vec3 reflectFallback(vec3 sky, vec3 own, float skyAccess) {
     return mix(own, sky, s);
 }
 
+// ---- the sun's open share (2026-11-10, sunopen.glsl) ----
+//
+// The user: at sunrise and sunset the sun shone through ice spikes and hills. The haze's sun-side glow (atmosphere.glsl's glowLobe) was
+// added in front of every surface as if the air there saw the sun, so a hill standing in front of the low sun wore the sun's halo.
+// The air in front of a surface sees the sun about as much as the camera does: the composite and the reflection pass look at the
+// sun's disc on screen through a 3 x 3 grid of taps at SUN_OPEN_TAP of its half size and count the taps that show the sky (any surface
+// hides it: terrain, packed ice, and the sea or an ice sheet at the horizon for a sun half below it). Taps off the screen
+// and a sun behind the camera count as open (nothing known: the glow as before). The glow lobe is so narrow (GLOW_G) that the share
+// only matters near the sun: it is blended in from SUN_OPEN_COS_START to SUN_OPEN_COS_FULL of the cosine to the sun (the lobe is
+// 0.1% of its peak at the start), and nothing is sampled farther out
+const float SUN_OPEN_TAP = 0.66;
+const float SUN_OPEN_COS_START = 0.7;
+const float SUN_OPEN_COS_FULL = 0.85;
+
+//How much of the open share a pixel cosToSun from the sun takes (0: the glow as before)
+float sunOpenWeight(float cosToSun) {
+    return smoothstep(SUN_OPEN_COS_START, SUN_OPEN_COS_FULL, cosToSun);
+}
+
+//The sun's open share applied at weight (sunOpenWeight) to a pixel: 1 at weight 0, share at weight 1
+float sunOpenAt(float share, float weight) {
+    float s = share > 0.0 ? min(share, 1.0) : 0.0;
+    float w = weight > 0.0 ? min(weight, 1.0) : 0.0;
+    return mix(1.0, s, w);
+}
+
 // ---- ripples: four octaves of value noise with analytic derivatives (Perlin 2002, "Improving noise": the quintic fade) ----
 //
 // 2026-11-09 (session 2a; the user: the ripples' wavelength was so long the water looked like plastic): each octave is a train of

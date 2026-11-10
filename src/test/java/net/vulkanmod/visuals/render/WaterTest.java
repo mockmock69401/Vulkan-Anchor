@@ -478,6 +478,60 @@ class WaterTest {
     }
 
     @Test
+    void terrainHidingTheSunTakesTheSunsGlowFromTheHazeInFrontOfIt() {
+        //2026-11-10 (the user: at sunrise and sunset the sun shone through ice spikes and hills): the haze in front of a surface carries the
+        // sun's glow only as far as the sun's disc is open on screen
+        Atmosphere a = atmosphere(SUNSET, 0, true);
+        float[] sun = a.sun();
+        float[] grey = {0.1f, 0.1f, 0.1f};
+        for (float dist : new float[]{20, 100, 300}) {
+            float[] open = AtmosphereMath.applyHazeOpen(a, grey, sun, dist, 1, 1), shut = AtmosphereMath.applyHazeOpen(a, grey, sun, dist, 1, 0);
+            assertArrayEquals(AtmosphereMath.applyHaze(a, grey, sun, dist, 1), open, 1e-6f, "open: as before");
+            assertTrue(lum(open) > lum(shut) + 0.05f, "toward the sun the glow is what shone through, at " + dist);
+            assertArrayEquals(AtmosphereMath.haze(a, sun, dist, 1).transmittance(), AtmosphereMath.hazeOpen(a, sun, dist, 1, 0).transmittance(), 0,
+                    "only the glow goes, not the haze");
+        }
+        //The moon's glow stays
+        Atmosphere night = atmosphere(MIDNIGHT, 0, true);
+        float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
+        assertArrayEquals(AtmosphereMath.glowLobe(night, moon), AtmosphereMath.glowLobeOpen(night, moon, 1), 1e-6f);
+        float[] moonOnly = AtmosphereMath.glowLobeOpen(night, moon, 0);
+        assertTrue(lum(moonOnly) > 0 && lum(moonOnly) >= lum(AtmosphereMath.glowLobe(night, moon)) - 1e-4f, "the moon's lobe is not the sun's");
+        //Near the sun only: none at SUN_OPEN_COS_START (the lobe there is under 0.1% of its peak), all of it from SUN_OPEN_COS_FULL
+        assertEquals(0, WaterMath.sunOpenWeight(WaterMath.SUN_OPEN_COS_START), 0);
+        assertEquals(1, WaterMath.sunOpenWeight(WaterMath.SUN_OPEN_COS_FULL), 0);
+        assertTrue(AtmosphereMath.hgPhase(WaterMath.SUN_OPEN_COS_START, AtmosphereMath.GLOW_G) < 0.001f * AtmosphereMath.hgPhase(1, AtmosphereMath.GLOW_G));
+        assertEquals(1, WaterMath.sunOpenAt(0, 0), 0);
+        assertEquals(0.25f, WaterMath.sunOpenAt(0.25f, 1), 1e-6f);
+        assertEquals(1, WaterMath.sunOpenAt(Float.NaN, Float.NaN), 0, "NaN: as before");
+        //The taps lie on the sun's disc on screen: straight ahead at the centre, behind the camera none (open)
+        Matrix4f proj = new Matrix4f().perspective((float) Math.toRadians(70), 16f / 9, 0.05f, 1000);
+        float[][] ahead = WaterMath.sunOpenTaps(proj, new float[]{0, 0, -1});
+        assertEquals(0.5f, ahead[4][0], 1e-6f);
+        assertEquals(0.5f, ahead[4][1], 1e-6f);
+        float discU = WaterMath.SUN_HALF_SIZE * 0.5f * proj.m00();
+        assertEquals(0.5f + WaterMath.SUN_OPEN_TAP * discU, ahead[5][0], 1e-6f, "within the disc");
+        assertTrue(WaterMath.SUN_OPEN_TAP < 1);
+        assertEquals(1, WaterMath.sunOpenShare(proj, new float[]{0, 0, 1}, t -> false), 0, "behind the camera");
+        assertEquals(0, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, t -> false), 0, "hidden");
+        assertEquals(1, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, t -> true), 0, "open");
+        assertEquals(4 / 9f, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, t -> t[1] > 0.5f + 1e-4f || t[0] > 0.5f + 1e-4f && t[1] > 0.5f - 1e-4f), 1e-6f,
+                "a ridge over the disc's lower part");
+        float[] edge = {(float) Math.tan(Math.toRadians(35)) * 16 / 9 * 1.0f, 0, -1};
+        assertTrue(WaterMath.sunOpenShare(proj, edge, t -> false) >= 3 / 9f, "taps off the screen count as open");
+        //Where the shaders take it
+        String copy = ShaderFiles.read("post/scene_copy.comp"), open = ShaderFiles.read("post/sunopen.glsl");
+        assertTrue(copy.contains("sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size)"));
+        assertTrue(copy.contains("lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);"));
+        assertTrue(copy.contains("glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y))"), "the border's fade too");
+        assertTrue(COMP.contains("sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size)"));
+        assertTrue(COMP.contains("applyHazeOpen(a, hitColour, r, extra, amount, 0.0)"));
+        assertTrue(open.contains("return depth == FAR || (clampedToLod(depth) && texelFetch(lodDepth, lodTexel(q, size), 0).r == FAR);"),
+                "only the sky is open: the sea at the horizon hides a sun half below it");
+        assertTrue(open.contains("vec2 h = SUN_HALF_SIZE*0.5*vec2(abs(viewToClip[0][0]), abs(viewToClip[1][1]));"));
+    }
+
+    @Test
     void theMoonsGlintDoesNotTakeTheSunsShadow() {
         Atmosphere night = atmosphere(MIDNIGHT, 0, true);
         float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
