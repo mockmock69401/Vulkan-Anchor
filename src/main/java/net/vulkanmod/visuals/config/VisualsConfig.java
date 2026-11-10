@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import org.apache.logging.log4j.LogManager;
@@ -32,8 +33,12 @@ public class VisualsConfig {
      * other file the defaults. 9 (2026-11-10, session 8 follow-up): the sunlight and shade light colours (colourSunlight, colourShadeLight;
      * an older file has neither: their defaults, the picture it had), and the palettes also set bloom, saturation and fog strength: an older
      * file keeps its values, and shows its palette only while they are the palette's too (else Custom; ColourPresets.validated).
+     * 10 (2026-11-10, session 11): the anime cloud style (cloudStyle 2), which the Anime palette now includes: an older file saved on the
+     * Anime palette (its colours and looks still Anime's) takes the anime clouds and stays on it; any other file keeps its style.
      */
-    private static final int REVISION = 9;
+    private static final int REVISION = 10;
+    /** Session 11: the first revision whose Anime palette includes the anime clouds. */
+    static final int ANIME_CLOUDS_REVISION = 10;
     /** The first revision with the PBR settings. */
     static final int PBR_REVISION = 8;
     /** Session 9: the PBR settings the presets set (VisualsPresets.VALUES). */
@@ -103,6 +108,12 @@ public class VisualsConfig {
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
         // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
+        //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
+        if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
+                && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_ANIME
+                : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
+            c.cloudStyle = CloudMath.STYLE_ANIME;
+        }
         c.colourPreset = ColourPresets.validated(c);
         if (c.revision < REVISION) c.revision = REVISION;
         return c;
@@ -232,7 +243,7 @@ public class VisualsConfig {
     /** 2026-10-21: how far plants and leaves sway in the wind (FoliageWind). */
     public int foliageWind = 100;
     public boolean farClouds = true;
-    /** 2026-11-09 (session 3): the far clouds' style (CloudMath.STYLE_VANILLA: vanilla's cell shape, STYLE_REALISTIC: cumulus and cirrus), the realistic clouds' coverage (percent, 100 = default) and quality (0..2 low, medium, high). */
+    /** 2026-11-09 (session 3): the far clouds' style (CloudMath.STYLE_VANILLA: vanilla's cell shape, STYLE_REALISTIC: cumulus and cirrus; session 11: STYLE_ANIME, cel-shaded pillows), the realistic clouds' coverage (percent, 100 = default) and quality (0..2 low, medium, high). */
     public int cloudStyle = 0;
     public int cloudCoverage = 100;
     public int cloudQuality = 1;

@@ -145,7 +145,7 @@ class VisualsPresetsTest {
             for (String key : VALUES.keySet()) {
                 VisualsOptionLayout.Item item = VisualsOptionLayout.item(key);
                 for (int v = item.min(); v <= item.max(); v++) {
-                    if (v == value(key, level)) continue;
+                    if (v == value(key, level) || keepsLook(key, v)) continue;//session 11: the anime clouds are a look
                     VisualsConfig c = new VisualsConfig();
                     apply(c, level);
                     VisualsOptionLayout.set(c, item, v);
@@ -240,5 +240,24 @@ class VisualsPresetsTest {
         assertEquals(CUSTOM, readJson(dir, "{\"preset\": -1, \"revision\": 6}").preset);
         assertEquals(HIGH, readJson(dir, "{\"preset\": 3, \"exposure\": 140, \"revision\": 6}").preset, "a look-only value keeps the level");
         assertEquals(HIGH, VisualsConfig.read(dir.resolve("missing.json")).preset, "a new player starts at High");
+    }
+
+    /** Session 11: the anime cloud style is a look: every level keeps it when applied and still matches with it; the quality follows the level. */
+    @Test
+    void theAnimeCloudsAreALookThePresetsKeep() {
+        for (int level = POTATO; level < LEVELS; level++) {
+            VisualsConfig c = new VisualsConfig();
+            c.cloudStyle = net.vulkanmod.visuals.render.CloudMath.STYLE_ANIME;
+            apply(c, level);
+            assertEquals(net.vulkanmod.visuals.render.CloudMath.STYLE_ANIME, c.cloudStyle, "level " + level);
+            assertEquals(value("cloud_quality", level), c.cloudQuality);
+            assertTrue(matches(c, level));
+            assertEquals(level, detect(c));
+        }
+        //The realistic style is a cost level: a level that does not pick it is Custom with it
+        VisualsConfig c = new VisualsConfig();
+        apply(c, HIGH);
+        c.cloudStyle = net.vulkanmod.visuals.render.CloudMath.STYLE_REALISTIC;
+        assertEquals(CUSTOM, detect(c));
     }
 }

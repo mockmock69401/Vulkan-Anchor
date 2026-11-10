@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.config;
 
+import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 
@@ -88,23 +89,40 @@ public final class ColourPresets {
         throw new IllegalArgumentException(key);
     }
 
+    /**
+     * Session 11 (2026-11-10, the user: "anime-style clouds too, after Fantasy, linked with the Anime palette"): the cloud style is the one
+     * performance setting a palette touches. ANIME picks the anime clouds (and shows only while they are on: changing the cloud style by
+     * hand shows Custom); every other palette leaves the style alone, except that it takes the anime clouds back to the performance
+     * preset's cloud style (the vanilla shape under Custom), so going Anime and back to another palette restores the sky it had. The
+     * performance presets never fight this: they keep the anime clouds (VisualsPresets.keepsLook).
+     */
+    public static final String CLOUD_KEY = "cloud_style";
+
+    /** The cloud style choosing palette level leaves, from the current style and performance preset. */
+    public static int cloudStyle(int level, int style, int preset) {
+        if (level == ANIME) return CloudMath.STYLE_ANIME;
+        if (isLevel(level) && style == CloudMath.STYLE_ANIME) return VisualsPresets.isLevel(preset) ? VisualsPresets.value(CLOUD_KEY, preset) : CloudMath.STYLE_VANILLA;
+        return style;
+    }
+
     public static boolean isLookKey(String key) {
         for (String k : LOOK_KEYS) if (k.equals(key)) return true;
         return false;
     }
 
-    /** Sets every colour and look setting to the palette's; CUSTOM (or anything else) changes nothing. Records the choice. */
+    /** Sets every colour and look setting to the palette's, and the cloud style (cloudStyle); CUSTOM (or anything else) changes nothing. Records the choice. */
     public static void apply(VisualsConfig c, int level) {
         if (isLevel(level)) {
             for (Colour colour : Colour.values()) c.setColour(colour, value(colour, level));
             for (String key : LOOK_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), look(key, level));
+            c.cloudStyle = cloudStyle(level, c.cloudStyle, c.preset);
         }
         c.colourPreset = isLevel(level) ? level : CUSTOM;
     }
 
     /**
      * The palette the colours and look settings are all on (the first, so DEFAULT before the others), or CUSTOM. looks gives a look
-     * setting's value by key.
+     * setting's value by key, and the cloud style's (CLOUD_KEY): ANIME also needs the anime clouds.
      */
     public static int detect(ToIntFunction<Colour> colours, ToIntFunction<String> looks) {
         for (int level = 0; level < LEVELS; level++) {
@@ -116,6 +134,7 @@ public final class ColourPresets {
                 }
             }
             for (int i = 0; all && i < LOOK_KEYS.length; i++) all = looks.applyAsInt(LOOK_KEYS[i]) == LOOK[level][i];
+            if (all && level == ANIME) all = looks.applyAsInt(CLOUD_KEY) == CloudMath.STYLE_ANIME;
             if (all) return level;
         }
         return CUSTOM;

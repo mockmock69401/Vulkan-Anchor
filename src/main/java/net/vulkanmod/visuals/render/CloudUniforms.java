@@ -30,6 +30,8 @@ public final class CloudUniforms {
      * straight up (AtmosphereMath.skyColour: blue by day, violet at dusk, grey in rain, dark at night).
      */
     public static final float REAL_LIGHT = 0.6f, REAL_AMBIENT = 0.85f;
+    /** Session 11: the anime style's light, as REAL_LIGHT and REAL_AMBIENT (the cel bands give the sunlit weight 0.2 in shadow to 1.3 at the top). */
+    public static final float ANIME_LIGHT = 0.8f, ANIME_AMBIENT = 1.0f, ANIME_BOOST_LUMA = 0.8f, ANIME_BOOST_MAX = 3;
     /** Session 3: rain and thunder raise the cumulus' share of the sky by these fractions of itself (a rainy sky is overcast). */
     public static final float REAL_RAIN = 0.8f, REAL_THUNDER = 0.3f;
     /** Session 3: the jitter phase advances by the golden ratio's fraction a frame (TAA spreads the samples); kept under REAL_PHASE_MAX so the quality's whole part stays. */
@@ -42,7 +44,7 @@ public final class CloudUniforms {
             return this.slots.clone();
         }
 
-        /** Session 7: the realistic style (cloudOffset.z at least 1, clouds.glsl's cloudRealistic). */
+        /** Session 7: the realistic style (cloudOffset.z at least 1, clouds.glsl's cloudRealistic); session 11: also the anime style (cloudAnime), which the lean reflection build leaves out as well. */
         public boolean realistic() {
             return this.slots.length > 6 && this.slots[6] >= 1;
         }
@@ -84,6 +86,9 @@ public final class CloudUniforms {
         }
         if (atmosphere == null || atmosphere.mode() != AtmosphereMath.ATMOSPHERE_SKY) return new Values(false, v);
         boolean realistic = layer && settings.cloudStyle() == CloudMath.STYLE_REALISTIC && settings.farClouds();
+        //Session 11: the anime style takes the realistic style's light (the sky's sunlight, the sky's colour above) and its layer's coverage
+        boolean anime = layer && settings.cloudStyle() == CloudMath.STYLE_ANIME && settings.farClouds();
+        boolean styled = realistic || anime;
         float[] base = {1, 1, 1};
         if (clouds != null && clouds.colour() != null && clouds.colour().length >= 3) {
             for (int i = 0; i < 3; i++) base[i] = AtmosphereUniforms.vanillaToScene(clouds.colour()[i]);
@@ -91,17 +96,18 @@ public final class CloudUniforms {
         Vector3f sun = AtmosphereUniforms.sunDirection(frame);
         boolean day = sun.y >= 0;
         float[] tint = day ? AtmosphereUniforms.sunTint(sun.y, settings.sunsetLight()) : new float[]{1, 1, 1};
-        AtmosphereMath.Atmosphere a = realistic ? atmosphere.atmosphere() : null;
-        float[] zenith = realistic ? AtmosphereMath.skyColour(a, new float[]{0, 1, 0}) : null;
-        float[] sunlight = realistic ? (day ? a.sunLight() : a.moonLight()) : null;
+        AtmosphereMath.Atmosphere a = styled ? atmosphere.atmosphere() : null;
+        float[] zenith = styled ? AtmosphereMath.skyColour(a, new float[]{0, 1, 0}) : null;
+        float[] sunlight = styled ? (day ? a.sunLight() : a.moonLight()) : null;
+        float litGain = anime ? ANIME_LIGHT * animeBoost(sunlight, frame.rain()) : REAL_LIGHT, ambientGain = anime ? ANIME_AMBIENT : REAL_AMBIENT;
         //2026-11-10 (session 8): the picked colours (exactly 1 at the defaults): the cloud colour on both styles' light; the vanilla shape's
         // sunlit tint also takes the sky's (day, sunset, sunrise; the night sky's by night), which the realistic style's sunlight has already
         ShaderColours colours = settings.colours();
         float[] cloud = colours.tint(ShaderColours.Colour.CLOUDS);
         float[] sky = day ? AtmosphereUniforms.sunTint(colours, sun.y, AtmosphereUniforms.morning(sun.x)) : colours.tint(ShaderColours.Colour.NIGHT_SKY);
         for (int i = 0; i < 3; i++) {
-            v[8 + i] = (realistic ? REAL_LIGHT * Math.max(sunlight[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_LIGHT * tint[i] * sky[i]) * cloud[i];
-            v[12 + i] = (realistic ? REAL_AMBIENT * Math.max(zenith[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_AMBIENT * ColourMath.SKY_SHADE[i]) * cloud[i];
+            v[8 + i] = (styled ? litGain * Math.max(sunlight[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_LIGHT * tint[i] * sky[i]) * cloud[i];
+            v[12 + i] = (styled ? ambientGain * Math.max(zenith[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_AMBIENT * ColourMath.SKY_SHADE[i]) * cloud[i];
         }
         v[16] = day ? sun.x : -sun.x;
         v[17] = day ? sun.y : -sun.y;
@@ -121,9 +127,33 @@ public final class CloudUniforms {
                 float phase = settings.taa() ? (float) ((serial * (double) REAL_PHASE_STEP) % 1.0) : 0;
                 v[6] = 1 + Math.max(0, Math.min(2, settings.cloudQuality())) + Math.max(0, Math.min(REAL_PHASE_MAX, phase));
                 v[7] = realCover(settings.cloudCoverage(), frame.rain(), frame.thunder());
+            } else if (anime) {
+                //Session 11: the anime layer, its quality after CloudMath.ANIME_Z, the same jitter phase and coverage
+                v[0] += CloudMath.ANIME_LIFT;
+                v[1] = CloudMath.animeThickness(settings.cloudSize());
+                float phase = settings.taa() ? (float) ((serial * (double) REAL_PHASE_STEP) % 1.0) : 0;
+                v[6] = CloudMath.ANIME_Z + Math.max(0, Math.min(2, settings.cloudQuality())) + Math.max(0, Math.min(REAL_PHASE_MAX, phase));
+                v[7] = realCover(settings.cloudCoverage(), frame.rain(), frame.thunder());
             }
         }
         return new Values(on, v);
+    }
+
+    /**
+     * Session 11: the anime style keeps a low sun's light bright (Fantasy's sunset clouds are lit peach, not dimmed as a real low sun's):
+     * its light is raised toward ANIME_BOOST_LUMA of luminance, at most ANIME_BOOST_MAX times, keeping its hue (the moon's stays dark).
+     * Rain (0..1) takes the boost away (boost^(1 - rain)): the light rain dims stays dim, so rain clouds are grey.
+     */
+    public static float animeBoost(float[] light, float rain) {
+        float r = Float.isFinite(rain) ? Math.max(0, Math.min(1, rain)) : 0;
+        return (float) Math.pow(animeBoost(light), 1 - r);
+    }
+
+    /** animeBoost in clear weather. */
+    public static float animeBoost(float[] light) {
+        float luma = 0.2126f * Math.max(light[0], 0) + 0.7152f * Math.max(light[1], 0) + 0.0722f * Math.max(light[2], 0);
+        if (!(luma > 0)) return 1;
+        return Math.max(1, Math.min(ANIME_BOOST_MAX, ANIME_BOOST_LUMA / luma));
     }
 
     /** Session 3: the cumulus' share of the sky (cloudOffset.w): REAL_COVER x the coverage setting (1 = 100%), raised by rain and thunder (0..1 each). */
