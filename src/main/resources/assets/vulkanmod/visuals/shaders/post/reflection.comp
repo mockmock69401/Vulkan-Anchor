@@ -472,16 +472,6 @@ void main() {
     }
     float ripple = mark > 0.0 ? rippleAmount(strength, rippleParams.x, footprint) : 0.0;
     float f = reflectivity(mark, -dot(d, n))*clamp(reflectParams.y, 0.0, 1.0);
-    vec3 r = reflect(d, n);
-    float rise = dot(r, nGeom);
-    if (rise < REFLECT_MIN_UP) {
-        r = normalize(r + nGeom*(REFLECT_MIN_UP - rise));
-    }
-    //The light at the surface: its sky light where known (the light volume or the LOD pass), else the camera's sky exposure
-    vec3 pl = pixelLight(p, size, world, nGeom);
-    bool known = pl.z > 0.5;
-    float skyAccess = known ? skyVisibility(pl.x) : clamp(reflectParams.z, 0.0, 1.0);
-    float amount = hazeAmount(a, known ? skyShare(pl.x) : 1.0, fromLod);
     //The water's own colour, refracted by the ripples, only from the same water (B9)
     vec3 own = lit.rgb;
     if (ripple > 0.0) {
@@ -500,6 +490,22 @@ void main() {
             }
         }
     }
+    //2026-11-10 (session 7): nothing mirrored (water reflections at 0, no rings' shine): the pixel is its refracted colour, which the
+    // mix below gives at f 0; the sky, the clouds, the aurora and the march it would weigh by 0 are skipped (0.8 ms over the sea at 1440)
+    if (!(f > 0.0) && !(rainShine > 0.0)) {
+        imageStore(sceneOut, p, vec4(own, 1.0));
+        return;
+    }
+    vec3 r = reflect(d, n);
+    float rise = dot(r, nGeom);
+    if (rise < REFLECT_MIN_UP) {
+        r = normalize(r + nGeom*(REFLECT_MIN_UP - rise));
+    }
+    //The light at the surface: its sky light where known (the light volume or the LOD pass), else the camera's sky exposure
+    vec3 pl = pixelLight(p, size, world, nGeom);
+    bool known = pl.z > 0.5;
+    float skyAccess = known ? skyVisibility(pl.x) : clamp(reflectParams.z, 0.0, 1.0);
+    float amount = hazeAmount(a, known ? skyShare(pl.x) : 1.0, fromLod);
     //The march first (2026-11-09): what it finds says how much of the sky along the ray is open to the sun's glow and glint
     float w = 0.0;
     float blocked = 0.0;
