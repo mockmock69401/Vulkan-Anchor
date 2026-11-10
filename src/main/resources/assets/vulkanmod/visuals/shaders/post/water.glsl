@@ -444,11 +444,16 @@ vec2 rippleOctave(vec2 p, vec2 dir, float cell, float stretch, float steep, floa
     float m = length(dir);
     //Cells per period across and along the crests (in the turned frame a period is RIPPLE_PERIOD times m blocks long)
     vec2 n = vec2(rippleCells(cell*m/density), rippleCells(cell*stretch*m/density));
-    vec2 q = vec2(dir.x*p.x + dir.y*p.y, dir.x*p.y - dir.y*p.x)*n/RIPPLE_PERIOD;
-    vec2 g = rippleGradient(q, n, seed);
     //The height is steep times the cell across (RIPPLE_PERIOD/(n.x m) blocks): the slope across is steep times g.x, along it
     // scaled down by the longer cell
     float w = steep*rippleFade(RIPPLE_PERIOD/(n.x*m), footprint);
+    //2026-11-10 (session 7): an octave faded out (under RIPPLE_FADE_NONE pixels a cell: the finer ones on far water) adds nothing;
+    // its gradient's four hashes are skipped
+    if (!(w > 0.0)) {
+        return vec2(0.0);
+    }
+    vec2 q = vec2(dir.x*p.x + dir.y*p.y, dir.x*p.y - dir.y*p.x)*n/RIPPLE_PERIOD;
+    vec2 g = rippleGradient(q, n, seed);
     g.y *= n.y/n.x;
     return vec2(g.x*dir.x - g.y*dir.y, g.x*dir.y + g.y*dir.x)*(w/m);
 }

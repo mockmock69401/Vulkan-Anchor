@@ -324,9 +324,11 @@ public final class WaterMath {
         float m = (float) Math.sqrt(u * u + v * v);
         float cell = RippleMath.CELLS[k];
         float nx = rippleCells(cell * m / density), ny = rippleCells(cell * RippleMath.STRETCHES[k] * m / density);
+        float w = RippleMath.STEEPS[k] * rippleFade(RippleMath.RIPPLE_PERIOD / (nx * m), footprint);
+        //Session 7: a faded-out octave adds nothing (its gradient is skipped)
+        if (!(w > 0)) return new float[]{0, 0};
         float qx = (u * px + v * pz) * nx / RippleMath.RIPPLE_PERIOD, qz = (u * pz - v * px) * ny / RippleMath.RIPPLE_PERIOD;
         float[] g = rippleGradient(qx, qz, nx, ny, k + 1);
-        float w = RippleMath.STEEPS[k] * rippleFade(RippleMath.RIPPLE_PERIOD / (nx * m), footprint);
         float gy = g[1] * (ny / nx);
         return new float[]{(g[0] * u - gy * v) * (w / m), (g[0] * v + gy * u) * (w / m)};
     }
