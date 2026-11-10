@@ -517,22 +517,26 @@ void main() {
     //What a missed ray reflects: the sky for its direction with the far clouds, the discs (glints), hazed like the water (B8, B10).
     // The sun's glow and glint only where the ray is open: not behind ground beyond the water, and not under a hit's share (with the
     // mix below the glint keeps (1 - w)^2 at a broken cover's edge)
-    float sunVisibility = sunVisibilityAt(p, size, dist, toView*nGeom);
-    vec3 sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w), celestial);
-    //Session 5: the aurora in the water (AURORA_REFLECTION_STEPS samples), under the reflected clouds
-    if (auroraParams.x > 0.0) {
-        sky += aurora(r, auroraParams, AURORA_REFLECTION_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+    vec3 reflection = vec3(0.0);
+    if (w < 1.0) {
+        float sunVisibility = sunVisibilityAt(p, size, dist, toView*nGeom);
+        vec3 sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w), celestial);
+        //Session 5: the aurora in the water (AURORA_REFLECTION_STEPS samples), under the reflected clouds
+        if (auroraParams.x > 0.0) {
+            sky += aurora(r, auroraParams, AURORA_REFLECTION_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
+        }
+        if (cloudShape.w > 0.5 && atmosphereSky(a)) {
+            vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
+            sky = sky*(1.0 - cloud.a) + cloud.rgb;
+        }
+        reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
     }
-    if (cloudShape.w > 0.5 && atmosphereSky(a)) {
-        vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
-        sky = sky*(1.0 - cloud.a) + cloud.rgb;
-    }
-    vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+    //2026-11-10 (session 7): a whole hit (w 1) is all the mix below keeps, so the sky, its clouds and aurora are not evaluated for it
     if (w > 0.0) {
         //The hit's pixel is already hazed over its own distance from the camera: add the haze of the rest of the longer path
         vec3 hitWorld = world + r*pathLength;
         float extra = max(dist + pathLength - length(hitWorld), 0.0);
-        reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
+        reflection = w < 1.0 ? mix(reflection, applyHaze(a, hitColour, r, extra, amount), w) : applyHaze(a, hitColour, r, extra, amount);
     }
     //2026-10-29: the rings' crests catch a share of the mirrored light
     imageStore(sceneOut, p, vec4(mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine, 1.0));
