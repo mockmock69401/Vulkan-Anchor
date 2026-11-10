@@ -186,9 +186,17 @@ const int REAL_PRIME_X = 73856093;
 const int REAL_PRIME_Y = 19349663;
 const int REAL_PRIME_Z = 83492791;
 
+//Session 11: cloudOffset.z's whole part from ANIME_Z on is the anime style (ANIME_Z plus its quality 0..2)
+const int ANIME_Z = 4;
+
 //True in the realistic style
 bool cloudRealistic() {
-    return cloudOffset.z >= 1.0;
+    return cloudOffset.z >= 1.0 && cloudOffset.z < float(ANIME_Z);
+}
+
+//True in the anime style (session 11)
+bool cloudAnime() {
+    return cloudOffset.z >= float(ANIME_Z);
 }
 
 //cloudMap bilinearly at m (blocks on the cloud map), wrapped: the noise channels between texel centres
@@ -401,9 +409,205 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
     return vec4(sun, amb, 1.0 - trans, wsum > 0.0 ? dsum/wsum : 0.0);
 }
 
+//Session 11 (2026-11-10): the anime style (CloudMath's anime part mirrors this), after Fantasy's clouds as seen in game (refs/anchor
+// observations.md, session 11: smooth pillows with clean outlines, a white sunlit top and a sky-blue underside, peach at sunset, dark
+// silhouettes at night; seen only, no code read). The clumps are the realistic style's: the g channel over the coverage cloudOffset.w,
+// so the cloud size, count and coverage settings shape them alike; no erosion. Each clump is a pillow over the cloud map: its bottom and
+// top (above the layer's base, cloudShape.x; cloudShape.y thick) meet ANIME_RIM up at its outline and part as the weather s rises inward,
+// the top as sqrt(s / ANIME_EDGE) (a rounded side) toward ANIME_TOP_MIN..1 of the layer (with s, lowered by up to ANIME_TOWER where the
+// a channel is low), the bottom down to the base over ANIME_BASE_EDGE (a flat base with a rounded rim). Two octaves of billowed value
+// noise (ANIME_PUFF_CELL, ANIME_PUFF_CELL2 blocks; creases softened over ANIME_CREASE) raise the top in rounded puffs (ANIME_PUFF) and
+// scallop the outline (ANIME_SCALLOP off the weather). The march finds the first sample inside a pillow and halves toward its surface;
+// the colour is cel-shaded from the surface's normal: N.L wrapped by ANIME_WRAP, lit above ANIME_TERMINATOR (ANIME_SHADOW of the sun in
+// shadow), ANIME_HIGHLIGHT more above ANIME_HIGHLIGHT_AT, bands ANIME_BAND_SOFT wide, and a rim ANIME_RIM_GAIN bright where the surface
+// turns from the view (brighter toward the sun). Opaque inside the LOD fade. The light is the realistic style's (CloudUniforms: the
+// sky's sunlight, kept bright at sunset, and the sky's colour above, both times the cloud colour)
+const float ANIME_RIM = 0.15;
+const float ANIME_EDGE = 0.35;
+const float ANIME_BASE_EDGE = 0.12;
+const float ANIME_TOP_MIN = 0.4;
+const float ANIME_TOWER = 0.35;
+const float ANIME_PUFF_CELL = 24.0;
+const float ANIME_PUFF_CELL2 = 12.0;
+const float ANIME_PUFF_DETAIL = 0.2;
+const float ANIME_PUFF = 0.35;
+const float ANIME_SCALLOP = 0.3;
+const float ANIME_CREASE = 0.5;
+//Samples every ANIME_STEP blocks of the span, ANIME_SAMPLES_MIN up to the quality's count; ANIME_REFINE halvings toward the surface
+// (ANIME_REFLECT_REFINE in the reflection); the normal from the heights ANIME_NORMAL_STEP blocks either side (half a map texel: it
+// smooths the weather's texel creases out of the bands)
+const float ANIME_STEP = 3.0;
+const int ANIME_SAMPLES_LOW = 24;
+const int ANIME_SAMPLES_MEDIUM = 40;
+const int ANIME_SAMPLES_HIGH = 64;
+const int ANIME_SAMPLES_MIN = 12;
+const int ANIME_REFINE = 6;
+const int ANIME_REFLECT_REFINE = 2;
+const float ANIME_NORMAL_STEP = 6.0;
+const float ANIME_NORMAL_LOW = 0.2;
+const float ANIME_NORMAL_HIGH = 0.8;
+const float ANIME_WRAP = 0.35;
+const float ANIME_TERMINATOR = 0.2;
+const float ANIME_HIGHLIGHT_AT = 0.8;
+const float ANIME_BAND_SOFT = 0.04;
+const float ANIME_SHADOW = 0.1;
+const float ANIME_HIGHLIGHT = 0.3;
+//While the light is at the horizon (the sun and moon swap) the bands give way to ANIME_FLAT
+const float ANIME_FLAT = 0.6;
+const float ANIME_RIM_AT = 0.8;
+const float ANIME_RIM_SOFT = 0.06;
+const float ANIME_RIM_GAIN = 0.5;
+const float ANIME_RIM_BACK = 0.3;
+
+//2D value noise 0..1 at x (lattice units) on lattice layer y, repeating every n cells
+float animeNoise(vec2 x, float y, float n) {
+    vec2 i = floor(x);
+    vec2 f = x - i;
+    vec2 u = f*f*(3.0 - 2.0*f);
+    float a = realCorner(vec3(i.x, y, i.y), n);
+    float b = realCorner(vec3(i.x + 1.0, y, i.y), n);
+    float c = realCorner(vec3(i.x, y, i.y + 1.0), n);
+    float d = realCorner(vec3(i.x + 1.0, y, i.y + 1.0), n);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+//|2n - 1| softened over ANIME_CREASE, 0..1: rounded puffs, low along the creases between them
+float animeBillow(float n) {
+    float x = 2.0*n - 1.0;
+    return (sqrt(x*x + ANIME_CREASE*ANIME_CREASE) - ANIME_CREASE)/(sqrt(1.0 + ANIME_CREASE*ANIME_CREASE) - ANIME_CREASE);
+}
+
+//(bottom, top) above the layer's base in blocks at m (blocks on the cloud map); top below bottom where no cloud stands. For a sample h
+// blocks above the base (negative: none) it returns (0, -1) as soon as the weather alone proves h outside (above the highest top or
+// below the lowest bottom any puff could give), before the puffs' hashes: the same inside-or-not answer, cheaper
+vec2 animeShape(vec2 m, float h) {
+    float f = min(cloudOffset.w, 1.0);
+    if (!(f > 0.0)) {
+        return vec2(0.0, -1.0);
+    }
+    vec2 u = m/CLOUD_CELL - 0.5;
+    vec2 i = floor(u);
+    vec2 w = u - i;
+    vec4 a = texelFetch(cloudMap, ivec2(mod(i, CLOUD_MAP)), 0);
+    vec4 b = texelFetch(cloudMap, ivec2(mod(i + vec2(1.0, 0.0), CLOUD_MAP)), 0);
+    vec4 c = texelFetch(cloudMap, ivec2(mod(i + vec2(0.0, 1.0), CLOUD_MAP)), 0);
+    vec4 d = texelFetch(cloudMap, ivec2(mod(i + vec2(1.0), CLOUD_MAP)), 0);
+    //The weather with smoothstep weights (bilinear's creases along the texel edges showed in the bands), the towers bilinear
+    vec2 sw = w*w*(3.0 - 2.0*w);
+    float s = (mix(mix(a.g, b.g, sw.x), mix(c.g, d.g, sw.x), sw.y) - 1.0 + f)/f;
+    if (s <= 0.0) {
+        return vec2(0.0, -1.0);
+    }
+    float tower = mix(mix(a.a, b.a, w.x), mix(c.a, d.a, w.x), w.y);
+    float rim = ANIME_RIM*cloudShape.y;
+    float towerTop = cloudShape.y*mix(1.0 - ANIME_TOWER, 1.0, tower);
+    if (h >= 0.0) {
+        float most = rim + (towerTop*mix(ANIME_TOP_MIN, 1.0, min(s, 1.0)) - rim)*sqrt(min(s/ANIME_EDGE, 1.0));
+        float least = rim*(1.0 - sqrt(min(s/ANIME_BASE_EDGE, 1.0)));
+        if (h >= most || h <= least) {
+            return vec2(0.0, -1.0);
+        }
+    }
+    float p = mix(animeBillow(animeNoise(m/ANIME_PUFF_CELL, 0.0, CLOUD_MAP*CLOUD_CELL/ANIME_PUFF_CELL)),
+            animeBillow(animeNoise(m/ANIME_PUFF_CELL2, 1.0, CLOUD_MAP*CLOUD_CELL/ANIME_PUFF_CELL2)), ANIME_PUFF_DETAIL);
+    float sp = s - ANIME_SCALLOP*(1.0 - p);
+    if (sp <= 0.0) {
+        return vec2(0.0, -1.0);
+    }
+    float high = towerTop*mix(ANIME_TOP_MIN, 1.0, min(sp, 1.0));
+    float top = rim + (high - rim)*sqrt(min(sp/ANIME_EDGE, 1.0))*(1.0 - ANIME_PUFF + ANIME_PUFF*p);
+    float bottom = rim*(1.0 - sqrt(min(sp/ANIME_BASE_EDGE, 1.0)));
+    return vec2(bottom, top);
+}
+
+//True where camera-relative p is inside an anime cloud
+bool animeInside(vec3 p) {
+    float h = p.y - cloudShape.x;
+    if (!(h > 0.0 && h < cloudShape.y)) {
+        return false;
+    }
+    vec2 bt = animeShape(cloudOffset.xy + p.xz, h);
+    return h > bt.x && h < bt.y;
+}
+
+//The surface's unit normal at camera-relative p: the bottom's and the top's normals (from their heights ANIME_NORMAL_STEP blocks either
+// side) mixed by the height in the column, the bottom's below ANIME_NORMAL_LOW of it, the top's above ANIME_NORMAL_HIGH (a hard switch at
+// the middle drew a seam along the sides)
+vec3 animeNormal(vec3 p) {
+    vec2 m = cloudOffset.xy + p.xz;
+    vec2 e = vec2(ANIME_NORMAL_STEP, 0.0);
+    vec2 c = animeShape(m, -1.0);
+    vec2 px = animeShape(m + e, -1.0);
+    vec2 nx = animeShape(m - e, -1.0);
+    vec2 pz = animeShape(m + e.yx, -1.0);
+    vec2 nz = animeShape(m - e.yx, -1.0);
+    float w = smoothstep(ANIME_NORMAL_LOW, ANIME_NORMAL_HIGH, clamp((p.y - cloudShape.x - c.x)/max(c.y - c.x, 0.001), 0.0, 1.0));
+    vec3 top = normalize(vec3(-(px.y - nx.y), 2.0*ANIME_NORMAL_STEP, -(pz.y - nz.y)));
+    vec3 bottom = normalize(vec3(px.x - nx.x, -2.0*ANIME_NORMAL_STEP, pz.x - nz.x));
+    return normalize(mix(bottom, top, w));
+}
+
+//The sunlit weight of the cel bands and the rim at normal n seen along dir, lit from lightDir
+float animeLight(vec3 n, vec3 dir, vec3 lightDir) {
+    float level = smoothstep(0.0, CLOUD_SHADE_LEVEL, abs(lightDir.y));
+    float x = (dot(n, lightDir) + ANIME_WRAP)/(1.0 + ANIME_WRAP);
+    float lit = smoothstep(ANIME_TERMINATOR - ANIME_BAND_SOFT, ANIME_TERMINATOR + ANIME_BAND_SOFT, x);
+    float high = smoothstep(ANIME_HIGHLIGHT_AT - ANIME_BAND_SOFT, ANIME_HIGHLIGHT_AT + ANIME_BAND_SOFT, x);
+    float band = mix(ANIME_FLAT, mix(ANIME_SHADOW, 1.0, lit) + ANIME_HIGHLIGHT*high, level);
+    float edge = 1.0 - abs(dot(n, dir));
+    float rim = smoothstep(ANIME_RIM_AT - ANIME_RIM_SOFT, ANIME_RIM_AT + ANIME_RIM_SOFT, edge)*ANIME_RIM_GAIN
+            *mix(ANIME_RIM_BACK, 1.0, 0.5 + 0.5*dot(dir, lightDir));
+    return band + rim;
+}
+
+//The anime clouds along dir from origin up to maxDist: samples through the layer from jitter 0..1 along each step, refine halvings
+// toward the first surface, then its cel bands. Returns (sunlit weight, sky-lit weight, coverage, distance)
+vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter, int samples, int refine) {
+    vec2 span = cloudInterval(origin, dir, maxDist);
+    if (cloudShape.w < 0.5 || span.y <= span.x) {
+        return vec4(0.0);
+    }
+    float len = span.y - span.x;
+    int n = int(clamp(ceil(len/ANIME_STEP), float(ANIME_SAMPLES_MIN), float(max(samples, ANIME_SAMPLES_MIN))));
+    float dt = len/float(n);
+    float prev = span.x;
+    for (int i = 0; i < ANIME_SAMPLES_HIGH; i++) {
+        if (i >= n) {
+            break;
+        }
+        float t = span.x + (float(i) + jitter)*dt;
+        if (!animeInside(origin + dir*t)) {
+            prev = t;
+            continue;
+        }
+        float lo = prev;
+        float hi = t;
+        for (int j = 0; j < ANIME_REFINE; j++) {
+            if (j >= refine) {
+                break;
+            }
+            float mid = 0.5*(lo + hi);
+            if (animeInside(origin + dir*mid)) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        vec3 p = origin + dir*hi;
+        float a = 1.0 - smoothstep(CLOUD_FADE_START, 1.0, length(p.xz)/cloudShape.z);
+        return vec4(a*animeLight(animeNormal(p), dir, lightDir), a, a, hi);
+    }
+    return vec4(0.0);
+}
+
 //Session 3: the far clouds along dir from origin up to maxDist in the style cloudOffset.z picks, jitter 0..1 per pixel:
 // (sunlit weight, sky-lit weight, coverage, mean distance). The vanilla shape's sky-lit weight is its coverage
 vec4 farCloudMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter) {
+    if (cloudAnime()) {
+        int a = int(floor(cloudOffset.z)) - ANIME_Z;
+        int samples = a >= 2 ? ANIME_SAMPLES_HIGH : (a == 1 ? ANIME_SAMPLES_MEDIUM : ANIME_SAMPLES_LOW);
+        return animeMarch(origin, dir, maxDist, lightDir, fract(jitter + fract(cloudOffset.z)), samples, ANIME_REFINE);
+    }
     if (!cloudRealistic()) {
         vec3 m = cloudMarch(origin, dir, maxDist, lightDir);
         return vec4(m.x, m.y, m.y, m.z);

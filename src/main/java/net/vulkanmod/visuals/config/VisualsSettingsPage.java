@@ -125,8 +125,9 @@ public final class VisualsSettingsPage {
         for (Option<?> o : byKey.values()) {
             if (o instanceof SwitchOption || o instanceof CyclingOption) o.setOnChange(refresh);
         }
-        linkPreset(byKey, refresh);
-        linkColourPreset(byKey, allByKey);
+        //Session 11: the cloud style also moves the colour palette (Anime needs the anime clouds), so the preset's link runs the palette's too
+        Runnable paletteFollow = linkColourPreset(byKey, allByKey);
+        linkPreset(byKey, refresh, paletteFollow);
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
         excludeEachOther(byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), byKey.get(VisualsOptionLayout.FRAME_GENERATION), refresh);
@@ -150,7 +151,7 @@ public final class VisualsSettingsPage {
      * match, or Custom (VisualsPresets.detect; a setting the page hides is not compared).
      */
     @SuppressWarnings("unchecked")
-    private static void linkPreset(Map<String, Option<?>> byKey, Runnable refresh) {
+    private static void linkPreset(Map<String, Option<?>> byKey, Runnable refresh, Runnable paletteFollow) {
         Option<Integer> preset = (Option<Integer>) byKey.get(VisualsOptionLayout.PRESET);
         if (preset == null) return;
         boolean[] linking = {false};
@@ -161,7 +162,8 @@ public final class VisualsSettingsPage {
                 try {
                     for (String key : VisualsPresets.VALUES.keySet()) {
                         Option<?> o = byKey.get(key);
-                        if (o != null) show(o, VisualsOptionLayout.item(key), VisualsPresets.value(key, level));
+                        //Session 11: the anime clouds are a look the levels keep (VisualsPresets.keepsLook)
+                        if (o != null && !VisualsPresets.keepsLook(key, intValue(o))) show(o, VisualsOptionLayout.item(key), VisualsPresets.value(key, level));
                     }
                 } finally {
                     linking[0] = false;
@@ -184,8 +186,10 @@ public final class VisualsSettingsPage {
             Option<?> o = byKey.get(key);
             if (o == null) continue;
             boolean refreshes = o instanceof SwitchOption || o instanceof CyclingOption;
+            boolean palette = key.equals(ColourPresets.CLOUD_KEY);
             o.setOnChange(() -> {
                 follow.run();
+                if (palette) paletteFollow.run();
                 if (refreshes) refresh.run();
             });
         }
@@ -197,9 +201,10 @@ public final class VisualsSettingsPage {
      * for the palette's look settings (ColourPresets.LOOK_KEYS), whose two widgets (their page's and the colours page's) show one value.
      */
     @SuppressWarnings("unchecked")
-    private static void linkColourPreset(Map<String, Option<?>> byKey, Map<String, List<Option<?>>> allByKey) {
+    private static Runnable linkColourPreset(Map<String, Option<?>> byKey, Map<String, List<Option<?>>> allByKey) {
         Option<Integer> preset = (Option<Integer>) byKey.get(VisualsOptionLayout.COLOUR_PRESET);
-        if (preset == null) return;
+        if (preset == null) return () -> {
+        };
         boolean[] linking = {false};
         preset.setOnChange(() -> {
             int level = preset.getNewValue();
@@ -211,6 +216,13 @@ public final class VisualsSettingsPage {
                 }
                 for (String key : ColourPresets.LOOK_KEYS) {
                     for (Option<?> o : allByKey.getOrDefault(key, List.of())) show(o, VisualsOptionLayout.item(key), ColourPresets.look(key, level));
+                }
+                //Session 11: Anime shows the anime clouds; another palette takes them back to the performance preset's style
+                Option<?> clouds = byKey.get(ColourPresets.CLOUD_KEY);
+                Option<?> performance = byKey.get(VisualsOptionLayout.PRESET);
+                if (clouds != null) {
+                    int style = ColourPresets.cloudStyle(level, intValue(clouds), performance == null ? VisualsPresets.CUSTOM : intValue(performance));
+                    if (style != intValue(clouds)) show(clouds, VisualsOptionLayout.item(ColourPresets.CLOUD_KEY), style);
                 }
             } finally {
                 linking[0] = false;
@@ -243,6 +255,7 @@ public final class VisualsSettingsPage {
                 });
             }
         }
+        return follow;
     }
 
     private static int intValue(Option<?> o) {

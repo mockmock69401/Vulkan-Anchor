@@ -298,6 +298,10 @@ vec4 reflectedCloudMarch(vec3 origin, vec3 dir, float jitter) {
     if (cloudRealistic()) {
         return realMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, 0, 1);
     }
+    //Session 11: the anime clouds with the realistic style's reflection samples and fewer halvings (the ripples hide the outline)
+    if (cloudAnime()) {
+        return animeMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, ANIME_REFLECT_REFINE);
+    }
 #endif
     vec2 span = cloudInterval(origin, dir, HAZE_MAX_DISTANCE);
     if (cloudShape.w < 0.5 || span.y <= span.x) {

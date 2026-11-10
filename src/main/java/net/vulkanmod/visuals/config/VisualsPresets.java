@@ -1,5 +1,7 @@
 package net.vulkanmod.visuals.config;
 
+import net.vulkanmod.visuals.render.CloudMath;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -71,25 +73,37 @@ public final class VisualsPresets {
         return VALUES.get(key)[level];
     }
 
-    /** Sets every preset setting to level's value and the preset to level; Custom (or anything else) only records Custom. */
+    /**
+     * 2026-11-10 (session 11): the anime cloud style is a look (the Anime colour palette picks it), not a cost level: a preset keeps it
+     * when it is set and counts it as the level's own cloud style. The cloud quality, which the presets still set, sets its cost.
+     */
+    public static boolean keepsLook(String key, int value) {
+        return key.equals("cloud_style") && value == CloudMath.STYLE_ANIME;
+    }
+
+    /** Sets every preset setting to level's value (keepsLook: the anime clouds stay) and the preset to level; Custom (or anything else) only records Custom. */
     public static void apply(VisualsConfig c, int level) {
         if (!isLevel(level)) {
             c.preset = CUSTOM;
             return;
         }
-        for (Map.Entry<String, int[]> e : VALUES.entrySet()) VisualsOptionLayout.set(c, VisualsOptionLayout.item(e.getKey()), e.getValue()[level]);
+        for (Map.Entry<String, int[]> e : VALUES.entrySet()) {
+            VisualsOptionLayout.Item item = VisualsOptionLayout.item(e.getKey());
+            if (keepsLook(e.getKey(), VisualsOptionLayout.get(c, item))) continue;
+            VisualsOptionLayout.set(c, item, e.getValue()[level]);
+        }
         c.preset = level;
     }
 
     /**
      * Whether every preset setting has level's value. values gives a setting's value by key, or Integer.MIN_VALUE for one it does not
-     * know (the page's hidden Distant Horizons block): such a setting is not compared.
+     * know (the page's hidden Distant Horizons block): such a setting is not compared, nor the anime clouds (keepsLook).
      */
     public static boolean matches(int level, ToIntFunction<String> values) {
         if (!isLevel(level)) return false;
         for (Map.Entry<String, int[]> e : VALUES.entrySet()) {
             int have = values.applyAsInt(e.getKey());
-            if (have != Integer.MIN_VALUE && have != e.getValue()[level]) return false;
+            if (have != Integer.MIN_VALUE && have != e.getValue()[level] && !keepsLook(e.getKey(), have)) return false;
         }
         return true;
     }
