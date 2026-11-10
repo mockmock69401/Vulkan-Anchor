@@ -27,7 +27,7 @@ class VisualsConfigTest {
              "waterRipples": 100, "waterRippleSpeed": 100, "farClouds": true, "sunShadows": true, "vanillaShadows": true,
              "skyLightAmbient": 100, "perPixelLight": true, "lightColour": 70, "heldLight": true, "antiAliasing": 3, "edgeCover": true,
              "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "pbr": false, "pbrNormalStrength": 150,
-             "pbrReflections": true, "pbrParallax": true, "revision": 8}
+             "pbrReflections": true, "pbrParallax": true, "colourSunlight": 16744512, "colourShadeLight": 8438015, "revision": 9}
             """;
 
     private static List<Field> settingFields() {
@@ -38,10 +38,11 @@ class VisualsConfigTest {
         return out;
     }
 
+    /** Each item once (session 8 follow-up: the colours page's look block repeats bloom, saturation and fog from their own pages). */
     private static List<VisualsOptionLayout.Item> items() {
-        List<VisualsOptionLayout.Item> out = new ArrayList<>();
-        for (var page : VisualsOptionLayout.PAGES) for (var block : page.blocks()) out.addAll(block.items());
-        return out;
+        java.util.Map<String, VisualsOptionLayout.Item> out = new java.util.LinkedHashMap<>();
+        for (var page : VisualsOptionLayout.PAGES) for (var block : page.blocks()) for (var item : block.items()) out.putIfAbsent(item.key(), item);
+        return new ArrayList<>(out.values());
     }
 
     private static void assertSameValues(VisualsConfig a, VisualsConfig b) throws Exception {
@@ -170,7 +171,7 @@ class VisualsConfigTest {
         assertEquals(VisualsPresets.CUSTOM, c.preset, "session 4: a file before the preset is Custom");
         Files.writeString(old, "{\"exposure\": 130, \"revision\": 0}");
         assertEquals(VisualsConfig.currentRevision(), VisualsConfig.read(old).revision);
-        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": 8", "\"revision\": 99"));
+        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": 9", "\"revision\": 99"));
         assertEquals(99, VisualsConfig.read(old).revision, "a newer file is left alone");
     }
 

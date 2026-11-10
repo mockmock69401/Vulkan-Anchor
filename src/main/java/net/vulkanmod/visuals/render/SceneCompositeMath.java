@@ -79,11 +79,13 @@ public final class SceneCompositeMath {
     public static final float DEBUG_UNKNOWN_RED = 0.25f, DEBUG_UNKNOWN_GREEN = 0.0f, DEBUG_UNKNOWN_BLUE = 0.25f;
 
     // ---- the composite's slots (boundary 3.2) ----
-    public static final int SLOTS = 58;
+    public static final int SLOTS = 60;
     /** 2026-11-09 (session 5): CelestialUniforms' discs' shape (46) and aurora (47). */
     public static final int CELESTIAL = CelestialUniforms.COPY_CELESTIAL, AURORA = CelestialUniforms.COPY_AURORA;
     /** 2026-11-10 (session 8): the aurora's three colour tints (54..56) and the water's body colour tint (57). */
     public static final int AURORA_TINTS = CelestialUniforms.COPY_AURORA_TINTS, WATER_TINT = CelestialUniforms.COPY_WATER_TINT;
+    /** Session 8 follow-up: the light sources' glow tint (59; 58 is the PBR builds' pbrParams, PbrMath's). */
+    public static final int GLOW_TINT = CelestialUniforms.COPY_GLOW_TINT;
     /** 2026-11-09 (session 2b): UnderwaterUniforms' slots 35..38 and the air's struct Atmosphere at 39..45. */
     public static final int UNDERWATER_PARAMS = UnderwaterUniforms.PARAMS, UNDERWATER_RIPPLE_A = UnderwaterUniforms.RIPPLE_A,
             UNDERWATER_RIPPLE_B = UnderwaterUniforms.RIPPLE_B, UNDERWATER_LIGHT = UnderwaterUniforms.LIGHT, AIR_FIRST = UnderwaterUniforms.AIR_FIRST;
@@ -580,7 +582,7 @@ public final class SceneCompositeMath {
         //2026-10-28: light sources glow; an ore's specks add their own light (its albedo, or vanilla's colour over vanilla's lightmap)
         float[] glow = slots[GLOW];
         if (emission > 0) {
-            float[] glowing = scale(scene, lightGlow(px.colour, glow[0] * (emissiveFluid ? FLUID_GLOW_SCALE : 1)));
+            float[] glowing = mul(scale(scene, lightGlow(px.colour, glow[0] * (emissiveFluid ? FLUID_GLOW_SCALE : 1))), slots[GLOW_TINT]);
             float[] mixed = new float[3];
             for (int i = 0; i < 3; i++) mixed[i] = mix(lit[i], glowing[i], emission);
             lit = mixed;

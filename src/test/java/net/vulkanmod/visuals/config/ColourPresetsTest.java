@@ -27,8 +27,23 @@ class ColourPresetsTest {
             ColourPresets.apply(c, level);
             assertArrayEquals(p, c.colours());
             assertEquals(level, c.colourPreset);
-            assertEquals(level, ColourPresets.detect(c::colour));
+            assertEquals(level, ColourPresets.detect(c));
+            //session 8 follow-up: and its bloom, saturation and fog
+            int[] look = ColourPresets.looks(level);
+            for (int i = 0; i < ColourPresets.LOOK_KEYS.length; i++) {
+                VisualsOptionLayout.Item item = VisualsOptionLayout.item(ColourPresets.LOOK_KEYS[i]);
+                assertEquals(look[i], VisualsOptionLayout.get(c, item), level + " " + item.key());
+                assertTrue(look[i] >= item.min() && look[i] <= item.max(), level + " " + item.key());
+            }
         }
+        //Default's look is the config's defaults (a fresh config is the Default palette)
+        for (String key : ColourPresets.LOOK_KEYS) {
+            assertEquals(VisualsOptionLayout.defaultValue(VisualsOptionLayout.item(key)), ColourPresets.look(key, ColourPresets.DEFAULT), key);
+        }
+        assertEquals(ColourPresets.DEFAULT, ColourPresets.detect(new VisualsConfig()));
+        assertTrue(ColourPresets.look("saturation", ColourPresets.ANIME) > ColourPresets.look("saturation", ColourPresets.DEFAULT));
+        assertTrue(ColourPresets.look("fog_strength", ColourPresets.HORROR) > ColourPresets.look("fog_strength", ColourPresets.DEFAULT));
+        assertTrue(ColourPresets.look("saturation", ColourPresets.HORROR) < ColourPresets.look("saturation", ColourPresets.DEFAULT));
         //The horror palette is darker than the anime one (night, day sky), the anime sky bluer than the default
         assertTrue(lum(ColourPresets.value(Colour.NIGHT_SKY, ColourPresets.HORROR)) < lum(ColourPresets.value(Colour.NIGHT_SKY, ColourPresets.ANIME)));
         assertTrue(lum(ColourPresets.value(Colour.DAY_SKY, ColourPresets.HORROR)) < lum(ColourPresets.value(Colour.DAY_SKY, ColourPresets.ANIME)));
@@ -43,7 +58,7 @@ class ColourPresetsTest {
         VisualsConfig c = new VisualsConfig();
         ColourPresets.apply(c, ColourPresets.CINEMATIC);
         c.setColour(Colour.WATER, 0x123456);
-        assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c::colour));
+        assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c));
         int[] before = c.colours();
         ColourPresets.apply(c, ColourPresets.CUSTOM);
         assertArrayEquals(before, c.colours());
@@ -51,6 +66,35 @@ class ColourPresetsTest {
         //the performance presets leave the palette and the colours alone
         VisualsPresets.apply(c, VisualsPresets.POTATO);
         assertArrayEquals(before, c.colours());
+        //session 8 follow-up: changing a look setting is Custom too, and back on the palette's value the palette again
+        VisualsConfig look = new VisualsConfig();
+        ColourPresets.apply(look, ColourPresets.ANIME);
+        look.bloomStrength = 10;
+        assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(look));
+        look.bloomStrength = ColourPresets.look("bloom_strength", ColourPresets.ANIME);
+        assertEquals(ColourPresets.ANIME, ColourPresets.detect(look));
+    }
+
+    /**
+     * Session 8 follow-up: the palettes' look settings and the performance presets' settings are disjoint, so neither kind of preset ever
+     * sets what the other set: every level of one leaves the other's values (and shown preset) as they were.
+     */
+    @Test
+    void thePalettesAndThePerformancePresetsNeverSetTheSameSetting() {
+        for (String key : ColourPresets.LOOK_KEYS) {
+            assertFalse(VisualsPresets.VALUES.containsKey(key), key);
+            assertNotNull(VisualsOptionLayout.item(key));
+        }
+        for (int palette = 0; palette < ColourPresets.LEVELS; palette++) {
+            for (int level = VisualsPresets.POTATO; level <= VisualsPresets.ULTRA; level++) {
+                VisualsConfig c = new VisualsConfig();
+                ColourPresets.apply(c, palette);
+                VisualsPresets.apply(c, level);
+                assertEquals(palette, ColourPresets.detect(c), palette + " after performance " + level);
+                ColourPresets.apply(c, (palette + 1) % ColourPresets.LEVELS);
+                assertEquals(level, VisualsPresets.detect(c), "performance " + level + " after palette " + palette);
+            }
+        }
     }
 
     @Test
@@ -68,6 +112,49 @@ class ColourPresetsTest {
         Path old = dir.resolve("old.json");
         Files.writeString(old, "{\"enabled\": true, \"revision\": 6}");
         assertEquals(ColourPresets.DEFAULT, VisualsConfig.read(old).colourPreset);
+        //Session 8 follow-up: a revision 8 file keeps its look values (the picture it had), so a palette chosen before the palettes set them
+        // shows Custom unless they happen to be the palette's; its colours (without the new two: their defaults) are kept too
+        Path eight = dir.resolve("eight.json");
+        VisualsConfig before = new VisualsConfig();
+        ColourPresets.apply(before, ColourPresets.HORROR);
+        before.bloomStrength = 45;
+        before.saturation = 94;
+        before.fogStrength = 100;
+        before.write(eight);
+        Files.writeString(eight, Files.readString(eight).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 8")
+                .replaceAll("\\s*\"colourSunlight\": \\d+,", "").replaceAll("\\s*\"colourShadeLight\": \\d+,", ""));
+        VisualsConfig read8 = VisualsConfig.read(eight);
+        assertEquals(45, read8.bloomStrength);
+        assertEquals(94, read8.saturation);
+        assertEquals(100, read8.fogStrength);
+        assertEquals(Colour.SUNLIGHT.defaultRgb(), read8.colour(Colour.SUNLIGHT));
+        assertEquals(ColourPresets.value(Colour.MOON, ColourPresets.HORROR), read8.colour(Colour.MOON));
+        assertEquals(ColourPresets.CUSTOM, read8.colourPreset);
+        assertEquals(VisualsConfig.currentRevision(), read8.revision);
+        //an untouched revision 8 config stays the Default palette
+        Path plain8 = dir.resolve("plain8.json");
+        Files.writeString(plain8, "{\"enabled\": true, \"colourPreset\": 0, \"revision\": 8}");
+        assertEquals(ColourPresets.DEFAULT, VisualsConfig.read(plain8).colourPreset);
+    }
+
+    /** Session 8 follow-up: the look block on the colours page holds the same three settings as their own pages, with its label. */
+    @Test
+    void theColoursPageShowsThePalettesLookSettings() throws Exception {
+        VisualsOptionLayout.Page colours = VisualsOptionLayout.PAGES.stream().filter(p -> p.key().equals("colours")).findFirst().orElseThrow();
+        VisualsOptionLayout.Block look = colours.blocks().stream().filter(b -> b.key().equals(VisualsOptionLayout.COLOURS_LOOK)).findFirst().orElseThrow();
+        assertEquals(java.util.List.of(ColourPresets.LOOK_KEYS), look.items().stream().map(VisualsOptionLayout.Item::key).toList());
+        for (VisualsOptionLayout.Item item : look.items()) {
+            assertEquals(VisualsOptionLayout.item(item.key()), item, "the same item as on its own page");
+            int seen = 0;
+            for (VisualsOptionLayout.Page p : VisualsOptionLayout.PAGES) {
+                for (VisualsOptionLayout.Block b : p.blocks()) seen += (int) b.items().stream().filter(i -> i.key().equals(item.key())).count();
+            }
+            assertEquals(2, seen, item.key());
+        }
+        for (String lang : new String[]{"en_us", "ko_kr"}) {
+            String text = Files.readString(Path.of("src/main/resources/assets/vulkanmod/lang/" + lang + ".json"));
+            assertTrue(text.contains("\"vulkanmod.visuals.block." + VisualsOptionLayout.COLOURS_LOOK + "\""), lang);
+        }
     }
 
     @Test

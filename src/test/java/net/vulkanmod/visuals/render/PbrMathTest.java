@@ -305,6 +305,6 @@ class PbrMathTest {
         assertEquals(VisualsPresets.CUSTOM, read.preset);
         assertTrue(read.pbr);
         assertEquals(VisualsConfig.currentRevision(), read.revision);
-        assertEquals(8, VisualsConfig.currentRevision());
+        assertTrue(VisualsConfig.currentRevision() >= 8, "8 brought the PBR settings (9: the session 8 follow-up's colours)");
     }
 }

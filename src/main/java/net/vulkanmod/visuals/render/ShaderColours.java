@@ -25,8 +25,14 @@ import java.util.Arrays;
  * aerial haze over terrain, fading to none as its air mass reaches the sky's (far terrain still meets the sky without a seam).
  * OVERCAST: rain's grey (atmosphere.glsl overcast). CLOUDS: the far clouds' light (both styles). RAIN, SNOW: the shader weather's
  * drops.</li>
+ * <li>SUNLIGHT (session 8 follow-up, the user: "light source colours in the pickers too"): direct sunlight on terrain and the PBR
+ * highlights (LightingUniforms slot 22, ColourMath.sunLight; the light colour setting still says how much of it). SHADE_LIGHT: the sky's
+ * light on faces the sun does not reach (slot 23, ColourMath.skyShade). Both are computed by the sun's height; the swatch is the one at
+ * 37 degrees.</li>
  * <li>MOON: the round moon disc and its glints (water.glsl moonRadiance) and the moonlight on terrain (slot 32). BLOCK_LIGHT: torch light's
- * warm colour (slot 31; the block light colour setting still says how much of it).</li>
+ * warm colour (slot 31; the block light colour setting still says how much of it); since the session 8 follow-up also the glow of light
+ * sources' bright texels and of LabPBR emissive texels (CelestialUniforms' GLOW_TINT, the composite's .TINTED build), so a lamp glows in
+ * the colour of the light it casts.</li>
  * <li>AURORA_MAIN, AURORA_UPPER, AURORA_LOWER: the Overworld aurora's green body, red top and violet lower fringe; AURORA_END: all three
  * of the End's.</li>
  * <li>WATER: deep water's body colour seen from above (water.glsl waterColour). UNDERWATER: the water's colour around the camera under
@@ -47,6 +53,10 @@ public final class ShaderColours {
         CLOUDS("colour_clouds", 0xFFFFFF),
         RAIN("colour_rain", Swatch.of(WeatherUniforms.RAIN_COLOUR[0], WeatherUniforms.RAIN_COLOUR[1], WeatherUniforms.RAIN_COLOUR[2])),
         SNOW("colour_snow", Swatch.of(WeatherUniforms.SNOW_COLOUR[0], WeatherUniforms.SNOW_COLOUR[1], WeatherUniforms.SNOW_COLOUR[2])),
+        //Session 8 follow-up: ColourMath.sunLight and skyShade at the default sun warmth with the sun 37 degrees up (height 0.6), as swatches
+        // (hex here: ColourMath's statics reach AtmosphereUniforms, which reads ShaderColours; ShaderColoursTest checks them)
+        SUNLIGHT("colour_sunlight", 0xFFBF7D),
+        SHADE_LIGHT("colour_shade_light", 0xFFF8E9),
         MOON("colour_moon", Swatch.of(WaterMath.MOON_RED, WaterMath.MOON_GREEN, WaterMath.MOON_BLUE)),
         BLOCK_LIGHT("colour_block_light", Swatch.of(ColourMath.BLOCK_LIGHT[0], ColourMath.BLOCK_LIGHT[1], ColourMath.BLOCK_LIGHT[2])),
         AURORA_MAIN("colour_aurora_main", Swatch.of(AuroraMath.AURORA_GREEN_R, AuroraMath.AURORA_GREEN_G, AuroraMath.AURORA_GREEN_B)),

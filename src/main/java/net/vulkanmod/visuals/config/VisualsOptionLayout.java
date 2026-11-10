@@ -82,6 +82,15 @@ public final class VisualsOptionLayout {
         return new Item(c.key(), Kind.COLOUR, 0, 0xFFFFFF, Impact.NONE, requires);
     }
 
+    /**
+     * Session 8 follow-up: the look settings a colour palette sets (ColourPresets.LOOK_KEYS). Each is on its own page and again in the colours
+     * page's look block under the palette: the same setting, two widgets kept equal (VisualsSettingsPage.pages); item(key) finds the first.
+     */
+    public static final String COLOURS_LOOK = "colours_look";
+    private static final Item SATURATION = percent("saturation", SATURATION_MIN, SATURATION_MAX, Impact.NONE);
+    private static final Item BLOOM = percent("bloom_strength", 0, STRENGTH_MAX, Impact.LOW);
+    private static final Item FOG = percent("fog_strength", 0, FOG_STRENGTH_MAX, Impact.NONE);
+
     public static final List<Page> PAGES = List.of(
             new Page("image", List.of(
                     new Block(GENERAL, List.of(new Item(PRESET, Kind.CHOICE, VisualsPresets.POTATO, VisualsPresets.CUSTOM, Impact.NONE, null))),
@@ -90,10 +99,10 @@ public final class VisualsOptionLayout {
                             percent("exposure", EXPOSURE_MIN, EXPOSURE_MAX, Impact.NONE),
                             percent("tone_strength", STRENGTH_MAX),
                             percent("contrast", CONTRAST_MIN, CONTRAST_MAX, Impact.NONE),
-                            percent("saturation", SATURATION_MIN, SATURATION_MAX, Impact.NONE),
+                            SATURATION,
                             percent("grade_strength", STRENGTH_MAX))),
                     new Block("effects", List.of(
-                            percent("bloom_strength", 0, STRENGTH_MAX, Impact.LOW),
+                            BLOOM,
                             percent("vignette_strength", STRENGTH_MAX),
                             new Item("anti_aliasing", Kind.CHOICE, 0, ANTI_ALIASING_MAX, Impact.MEDIUM, null),
                             toggle("taa", Impact.LOW, null))),
@@ -103,7 +112,7 @@ public final class VisualsOptionLayout {
                             toggle(FSR_FRAME_GENERATION, Impact.LOW, null))))),
             new Page("atmosphere", List.of(
                     new Block("fog", List.of(
-                            percent("fog_strength", 0, FOG_STRENGTH_MAX, Impact.NONE),
+                            FOG,
                             new Item("fog_height", Kind.BLOCKS, FOG_HEIGHT_MIN, FOG_HEIGHT_MAX, Impact.NONE, null),
                             percent("weather_fog", 0, FOG_STRENGTH_MAX, Impact.NONE),
                             percent("distance_haze", 0, FOG_STRENGTH_MAX, Impact.NONE),
@@ -178,6 +187,8 @@ public final class VisualsOptionLayout {
                             colour(Colour.SUNRISE, null),
                             colour(Colour.SUN_GLOW, null),
                             colour(Colour.NIGHT_SKY, null))),
+                    //Session 8 follow-up: what a palette sets besides the colours (also on the image and atmosphere pages)
+                    new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG)),
                     new Block("colours_air", List.of(
                             colour(Colour.FOG, null),
                             colour(Colour.OVERCAST, null),
@@ -185,6 +196,8 @@ public final class VisualsOptionLayout {
                             colour(Colour.RAIN, "shader_weather"),
                             colour(Colour.SNOW, "shader_weather"))),
                     new Block("colours_light", List.of(
+                            colour(Colour.SUNLIGHT, null),
+                            colour(Colour.SHADE_LIGHT, null),
                             colour(Colour.MOON, null),
                             colour(Colour.BLOCK_LIGHT, null))),
                     new Block("colours_aurora", List.of(

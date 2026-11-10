@@ -122,6 +122,35 @@ class LightingUniformsTest {
         LightingUniforms.off().writeCopy(copy);
     }
 
+    /**
+     * Session 8 follow-up: the picked sunlight and shade light colours multiply the sun's and the shade's colours in slots 22 and 23; the
+     * defaults write exactly the bytes they wrote before.
+     */
+    @Test
+    void thePickedLightColoursTintTheSunAndTheShade() {
+        LightingUniforms.Values v = LightingUniforms.compute(FULL, BOTH, frame(SERIAL, NOON, lookingUp()), SERIAL, true, 1, true);
+        LooseUniformWriter plain = writer("postSceneCopy"), same = writer("postSceneCopy"), picked = writer("postSceneCopy");
+        v.writeCopy(plain);
+        v.tinted(ShaderColours.DEFAULT).writeCopy(same);
+        assertEquals(plain.buffer(), same.buffer(), "the defaults change no byte");
+        VisualsConfig c = new VisualsConfig();
+        c.setColour(ShaderColours.Colour.SUNLIGHT, 0xFF8040);
+        c.setColour(ShaderColours.Colour.SHADE_LIGHT, 0x80C0FF);
+        ShaderColours colours = ShaderColours.of(c.colours());
+        float[] t = colours.tint(ShaderColours.Colour.SUNLIGHT), d = colours.tint(ShaderColours.Colour.SHADE_LIGHT);
+        float[] l = v.lightSun();
+        v.tinted(colours).writeCopy(picked);
+        //the same slots written by hand with the products: the writer puts them where the shader reads them
+        LooseUniformWriter probe = writer("postSceneCopy");
+        v.writeCopy(probe);
+        probe.putVec4(LightingUniforms.COPY_LIGHT_SUN, l[0] * t[0], l[1] * t[1], l[2] * t[2], l[3]);
+        probe.putVec4(LightingUniforms.COPY_LIGHT_SHADE, l[5] * d[0], l[6] * d[1], l[7] * d[2], l[4]);
+        assertEquals(probe.buffer(), picked.buffer());
+        assertFalse(plain.buffer().equals(picked.buffer()));
+        assertTrue(t[0] == 1 && t[1] < 1 && t[2] < t[1], "an orange sun: red kept, green and more so blue taken");
+        assertTrue(d[2] > 1 && d[0] < 1, "a blue shade is bluer");
+    }
+
     /** Looking straight up, world up is straight ahead: (0, 0, -1) in view space, as the noon sun. */
     @Test
     void worldUpIsInViewSpace() {

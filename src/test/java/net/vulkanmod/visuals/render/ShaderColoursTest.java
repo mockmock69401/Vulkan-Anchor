@@ -102,7 +102,9 @@ class ShaderColoursTest {
             }
         }
         float[] t = CelestialUniforms.tints(DEFAULTS, false);
-        for (int v = 0; v < 4; v++) assertArrayEquals(new float[]{1, 1, 1, 0}, java.util.Arrays.copyOfRange(t, v * 4, v * 4 + 4), 0);
+        assertEquals(20, t.length);
+        assertFalse(CelestialUniforms.off().tinted());
+        for (int v = 0; v < 5; v++) assertArrayEquals(new float[]{1, 1, 1, 0}, java.util.Arrays.copyOfRange(t, v * 4, v * 4 + 4), 0);
     }
 
     @Test
@@ -169,6 +171,31 @@ class ShaderColoursTest {
         float[] g = UnderwaterUniforms.compute(settings(with(Colour.UNDERWATER, 0x30C060)), wet, 1, true, 3, 1, true).light();
         assertArrayEquals(l, UnderwaterUniforms.light(settings(new VisualsConfig()), wet, true), 0);
         assertTrue(g[1] / g[2] > l[1] / l[2] * 1.5f, "a green underwater");
+    }
+
+    /**
+     * Session 8 follow-up: the sunlight's and shade light's swatches are ColourMath's colours at the sun 37 degrees up (height 0.6) and the
+     * default warmth; their tints reach slots 22 and 23 (exactly as before at the defaults); the torch light colour's reaches the glow.
+     */
+    @Test
+    void theLightColoursReachTheLightAndTheGlow() {
+        float[] sun = ColourMath.sunLight(0.6f, 1), shade = ColourMath.skyShade(1, 0.6f);
+        assertEquals(ShaderColours.display(sun[0], sun[1], sun[2]), Colour.SUNLIGHT.defaultRgb(), ShaderColours.hex(ShaderColours.display(sun[0], sun[1], sun[2])));
+        assertEquals(ShaderColours.display(shade[0], shade[1], shade[2]), Colour.SHADE_LIGHT.defaultRgb());
+        VisualsConfig c = new VisualsConfig();
+        c.setColour(Colour.SUNLIGHT, 0xFF8040);
+        c.setColour(Colour.SHADE_LIGHT, 0x80C0FF);
+        ShaderColours picked = ShaderColours.of(c.colours());
+        LightingUniforms.Values v = LightingUniforms.off().tinted(picked);
+        assertArrayEquals(picked.tint(Colour.SUNLIGHT), v.sunLightTint(), 0);
+        assertArrayEquals(picked.tint(Colour.SHADE_LIGHT), v.shadeTint(), 0);
+        assertArrayEquals(new float[]{1, 1, 1}, LightingUniforms.off().tinted(DEFAULTS).sunLightTint(), 0);
+        assertArrayEquals(new float[]{1, 1, 1}, LightingUniforms.off().tinted(DEFAULTS).shadeTint(), 0);
+        //the torch light colour tints the glow (and so runs the composite's .TINTED build); the sunlight and shade need no build of their own
+        ShaderColours blue = ShaderColours.of(with(Colour.BLOCK_LIGHT, 0x60A0FF).colours());
+        assertArrayEquals(blue.tint(Colour.BLOCK_LIGHT), java.util.Arrays.copyOfRange(CelestialUniforms.tints(blue, false), 16, 19), 0);
+        assertTrue(new CelestialUniforms.Values(new float[4], new float[4], CelestialUniforms.tints(blue, false)).tinted());
+        assertFalse(new CelestialUniforms.Values(new float[4], new float[4], CelestialUniforms.tints(picked, false)).tinted());
     }
 
     @Test

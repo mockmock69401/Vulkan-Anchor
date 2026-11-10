@@ -29,9 +29,11 @@ public class VisualsConfig {
      * 6 (2026-11-10, session 4): the preset field; an older file has none and loads as Custom. 7 (2026-11-10, session 8): the shader
      * colours (colour* fields); an older file has none and keeps every colour's default (the picture it had). 8 (2026-11-10, session 9):
      * the LabPBR settings (pbr*); an older file has none: a saved preset level takes that level's PBR values (it stays the level), any
-     * other file the defaults.
+     * other file the defaults. 9 (2026-11-10, session 8 follow-up): the sunlight and shade light colours (colourSunlight, colourShadeLight;
+     * an older file has neither: their defaults, the picture it had), and the palettes also set bloom, saturation and fog strength: an older
+     * file keeps its values, and shows its palette only while they are the palette's too (else Custom; ColourPresets.validated).
      */
-    private static final int REVISION = 8;
+    private static final int REVISION = 9;
     /** The first revision with the PBR settings. */
     static final int PBR_REVISION = 8;
     /** Session 9: the PBR settings the presets set (VisualsPresets.VALUES). */
@@ -99,7 +101,8 @@ public class VisualsConfig {
             for (String key : PBR_PRESET_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), VisualsPresets.value(key, c.preset));
         }
         c.preset = VisualsPresets.validated(c);
-        //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT)
+        //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
+        // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
         c.colourPreset = ColourPresets.validated(c);
         if (c.revision < REVISION) c.revision = REVISION;
         return c;
@@ -122,6 +125,8 @@ public class VisualsConfig {
             case CLOUDS -> this.colourClouds;
             case RAIN -> this.colourRain;
             case SNOW -> this.colourSnow;
+            case SUNLIGHT -> this.colourSunlight;
+            case SHADE_LIGHT -> this.colourShadeLight;
             case MOON -> this.colourMoon;
             case BLOCK_LIGHT -> this.colourBlockLight;
             case AURORA_MAIN -> this.colourAuroraMain;
@@ -147,6 +152,8 @@ public class VisualsConfig {
             case CLOUDS -> this.colourClouds = v;
             case RAIN -> this.colourRain = v;
             case SNOW -> this.colourSnow = v;
+            case SUNLIGHT -> this.colourSunlight = v;
+            case SHADE_LIGHT -> this.colourShadeLight = v;
             case MOON -> this.colourMoon = v;
             case BLOCK_LIGHT -> this.colourBlockLight = v;
             case AURORA_MAIN -> this.colourAuroraMain = v;
@@ -301,6 +308,9 @@ public class VisualsConfig {
     public int colourClouds = Colour.CLOUDS.defaultRgb();
     public int colourRain = Colour.RAIN.defaultRgb();
     public int colourSnow = Colour.SNOW.defaultRgb();
+    /** Session 8 follow-up: direct sunlight and the shade's sky light on terrain. */
+    public int colourSunlight = Colour.SUNLIGHT.defaultRgb();
+    public int colourShadeLight = Colour.SHADE_LIGHT.defaultRgb();
     public int colourMoon = Colour.MOON.defaultRgb();
     public int colourBlockLight = Colour.BLOCK_LIGHT.defaultRgb();
     public int colourAuroraMain = Colour.AURORA_MAIN.defaultRgb();

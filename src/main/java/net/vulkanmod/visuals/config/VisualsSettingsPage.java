@@ -66,6 +66,8 @@ public final class VisualsSettingsPage {
     static List<OptionPage> pages() {
         DhPresence.State dh = DhPresence.current();
         Map<String, Option<?>> byKey = new HashMap<>();
+        //Session 8 follow-up: every widget of a key (a palette's look settings have two: their own page's and the colours page's)
+        Map<String, List<Option<?>>> allByKey = new HashMap<>();
         Map<Option<?>, Item> items = new HashMap<>();
         List<OptionPage> pages = new ArrayList<>();
         //A reset to the defaults (which shows them, for Apply or Undo), in the first page's general block under the preset, as a button
@@ -81,7 +83,8 @@ public final class VisualsSettingsPage {
                 List<Option<?>> list = new ArrayList<>();
                 for (Item item : block.items()) {
                     Option<?> o = option(item);
-                    byKey.put(item.key(), o);
+                    byKey.putIfAbsent(item.key(), o);
+                    allByKey.computeIfAbsent(item.key(), k -> new ArrayList<>()).add(o);
                     items.put(o, item);
                     list.add(o);
                 }
@@ -104,15 +107,17 @@ public final class VisualsSettingsPage {
                     if (item.key().equals(VisualsOptionLayout.ENABLED)) continue;
                     Option<?> requires = item.requires() == null ? null : byKey.get(item.requires());
                     boolean master = VisualsOptionLayout.followsMasterSwitch(item);
-                    Option<?> option = byKey.get(item.key());
-                    if (item.key().equals(VisualsOptionLayout.FSR_FRAME_GENERATION)) {
-                        //greyed out with the reason as its tooltip when FSR cannot run here (FAILED is picked up the next time the page opens)
-                        FsrSupport.Reason fsr = FsrSupport.current();
-                        if (fsr != FsrSupport.Reason.OK) option.setTooltip(Component.translatable(FsrSettings.unavailableKey(fsr)));
-                        option.setActivationFn(() -> fsr == FsrSupport.Reason.OK);
-                        continue;
+                    //Session 8 follow-up: each widget of the key (a palette look setting has two)
+                    for (Option<?> option : allByKey.get(item.key())) {
+                        if (item.key().equals(VisualsOptionLayout.FSR_FRAME_GENERATION)) {
+                            //greyed out with the reason as its tooltip when FSR cannot run here (FAILED is picked up the next time the page opens)
+                            FsrSupport.Reason fsr = FsrSupport.current();
+                            if (fsr != FsrSupport.Reason.OK) option.setTooltip(Component.translatable(FsrSettings.unavailableKey(fsr)));
+                            option.setActivationFn(() -> fsr == FsrSupport.Reason.OK);
+                            continue;
+                        }
+                        option.setActivationFn(() -> (!master || on(enabled)) && (requires == null || on(requires)));
                     }
-                    option.setActivationFn(() -> (!master || on(enabled)) && (requires == null || on(requires)));
                 }
             }
         }
@@ -121,7 +126,7 @@ public final class VisualsSettingsPage {
             if (o instanceof SwitchOption || o instanceof CyclingOption) o.setOnChange(refresh);
         }
         linkPreset(byKey, refresh);
-        linkColourPreset(byKey);
+        linkColourPreset(byKey, allByKey);
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
         excludeEachOther(byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), byKey.get(VisualsOptionLayout.FRAME_GENERATION), refresh);
@@ -129,9 +134,10 @@ public final class VisualsSettingsPage {
             items.forEach(VisualsSettingsPage::showDefault);
             refresh.run();
         });
+        //Session 8 follow-up: and the palette's look settings (the colours page shows them too), so it is the Default palette again
         resetColours.setOnPress(() -> {
             items.forEach((o, item) -> {
-                if (item.kind() == VisualsOptionLayout.Kind.COLOUR) showDefault(o, item);
+                if (item.kind() == VisualsOptionLayout.Kind.COLOUR || ColourPresets.isLookKey(item.key())) showDefault(o, item);
             });
             refresh.run();
         });
@@ -187,10 +193,11 @@ public final class VisualsSettingsPage {
 
     /**
      * 2026-11-10 (session 8): choosing a colour palette shows its colours on every colour option (Apply writes them); changing any colour
-     * shows the palette they are all on now, or Custom (ColourPresets.detect). As linkPreset, for the colours.
+     * shows the palette they are all on now, or Custom (ColourPresets.detect). As linkPreset, for the colours. Session 8 follow-up: the same
+     * for the palette's look settings (ColourPresets.LOOK_KEYS), whose two widgets (their page's and the colours page's) show one value.
      */
     @SuppressWarnings("unchecked")
-    private static void linkColourPreset(Map<String, Option<?>> byKey) {
+    private static void linkColourPreset(Map<String, Option<?>> byKey, Map<String, List<Option<?>>> allByKey) {
         Option<Integer> preset = (Option<Integer>) byKey.get(VisualsOptionLayout.COLOUR_PRESET);
         if (preset == null) return;
         boolean[] linking = {false};
@@ -202,13 +209,17 @@ public final class VisualsSettingsPage {
                 for (ShaderColours.Colour c : ShaderColours.Colour.values()) {
                     if (byKey.get(c.key()) instanceof ColourOption o) o.setNewValue(ColourPresets.value(c, level));
                 }
+                for (String key : ColourPresets.LOOK_KEYS) {
+                    for (Option<?> o : allByKey.getOrDefault(key, List.of())) show(o, VisualsOptionLayout.item(key), ColourPresets.look(key, level));
+                }
             } finally {
                 linking[0] = false;
             }
         });
         Runnable follow = () -> {
             if (linking[0]) return;
-            int shown = ColourPresets.detect(c -> byKey.get(c.key()) instanceof ColourOption o ? o.getNewValue() : c.defaultRgb());
+            int shown = ColourPresets.detect(c -> byKey.get(c.key()) instanceof ColourOption o ? o.getNewValue() : c.defaultRgb(),
+                    key -> byKey.containsKey(key) ? intValue(byKey.get(key)) : VisualsOptionLayout.defaultValue(VisualsOptionLayout.item(key)));
             if (preset.getNewValue() == shown) return;
             linking[0] = true;
             try {
@@ -219,6 +230,18 @@ public final class VisualsSettingsPage {
         };
         for (ShaderColours.Colour c : ShaderColours.Colour.values()) {
             if (byKey.get(c.key()) instanceof ColourOption o) o.setOnChange(follow);
+        }
+        for (String key : ColourPresets.LOOK_KEYS) {
+            List<Option<?>> widgets = allByKey.getOrDefault(key, List.of());
+            Item item = VisualsOptionLayout.item(key);
+            for (Option<?> o : widgets) {
+                o.setOnChange(() -> {
+                    //the other widget of this setting shows the same value (its own onChange then finds them equal and stops)
+                    int v = intValue(o);
+                    for (Option<?> other : widgets) if (other != o && intValue(other) != v) show(other, item, v);
+                    follow.run();
+                });
+            }
         }
     }
 
