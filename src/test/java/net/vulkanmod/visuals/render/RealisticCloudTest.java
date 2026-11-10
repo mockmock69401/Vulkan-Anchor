@@ -498,4 +498,55 @@ class RealisticCloudTest {
         return VisualsOptionLayout.PAGES.stream().flatMap(p -> p.blocks().stream()).flatMap(b -> b.items().stream()).filter(i -> i.key().equals(key))
                 .findFirst().orElseThrow();
     }
+
+    /** The cumulus density before the erosion (realDensity's d), 0 where it returns early. */
+    private static float uneroded(CloudMath.Realistic r, float x, float y, float z) {
+        float h = (y - r.base()) / r.thickness(), f = Math.min(r.cover(), 1);
+        if (!(h > 0 && h < 1) || !(f > 0)) return 0;
+        float mx = r.offsetX() + x, mz = r.offsetZ() + z;
+        float s = (CloudMath.noise(MAP, mx, mz, 1) - 1 + f) / f;
+        if (s <= 0) return 0;
+        float tower = CloudMath.noise(MAP, mx, mz, 3), lift = CloudMath.REAL_BASE_LIFT * (1 - tower);
+        float hp = (h - lift) / ((1 - lift) * CloudMath.mix(CloudMath.REAL_TOP_MIN, 1, s) * CloudMath.mix(1 - CloudMath.REAL_TOWER, 1, tower));
+        if (!(hp > 0 && hp < 1)) return 0;
+        return s * smooth(0, CloudMath.REAL_BOTTOM, hp) * (1 - smooth(CloudMath.REAL_ROUND, 1, hp));
+    }
+
+    private static float smooth(float e0, float e1, float x) {
+        float t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+        return t * t * (3 - 2 * t);
+    }
+
+    /**
+     * Session 7 (2026-11-10): realErosionFor skips the finer octaves where the coarser ones already prove the density 0. Over a grid through
+     * the layer at every quality the density is the full sum's exactly, and the shortcut fires on a good share of the cloudy samples
+     * (the fringes it saves the noise of).
+     */
+    @Test
+    void theErosionShortcutGivesTheFullSumsDensity() {
+        CloudMath.Realistic r = layer(CloudMath.REAL_COVER * 2);
+        for (int octaves = 0; octaves <= 3; octaves++) {
+            int cloudy = 0, skipped = 0;
+            for (int x = 0; x < 3072; x += 37) {
+                for (int z = 0; z < 3072; z += 41) {
+                    for (float y = 201; y < 200 + CloudMath.REAL_THICKNESS; y += 7.3f) {
+                        float d = uneroded(r, x, y, z);
+                        if (d <= 0) {
+                            assertEquals(0f, CloudMath.realDensity(MAP, r, x, y, z, octaves));
+                            continue;
+                        }
+                        //session 3b's sum of every octave
+                        float e = CloudMath.REAL_ERODE * CloudMath.erosion(r.offsetX() + x, y - r.base(), r.offsetZ() + z, octaves);
+                        float full = Math.max((d - e) / (1 - e), 0);
+                        assertEquals(full, CloudMath.realDensity(MAP, r, x, y, z, octaves), 0f, "at " + x + " " + y + " " + z + " octaves " + octaves);
+                        cloudy++;
+                        if (CloudMath.erosionFor(r.offsetX() + x, y - r.base(), r.offsetZ() + z, octaves, d) < 0) skipped++;
+                    }
+                }
+            }
+            System.out.println("erosion shortcut, octaves " + octaves + ": " + skipped + " of " + cloudy + " samples");
+            if (octaves >= 2) assertTrue(skipped > cloudy / 20, "octaves " + octaves + ": skipped " + skipped + " of " + cloudy);
+            if (octaves < 2) assertEquals(0, skipped);
+        }
+    }
 }
