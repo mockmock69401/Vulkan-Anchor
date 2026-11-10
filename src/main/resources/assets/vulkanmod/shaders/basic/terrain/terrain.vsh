@@ -23,6 +23,10 @@ layout (location = 2) out vec2 texCoord0;
 layout (location = 3) out vec2 lightLevels;
 //The colour before the lightmap (tint, face shade, AO; the alpha holds the wind marks, so only rgb), for the scene albedo
 layout (location = 4) out vec3 albedoTint;
+#ifdef TERRAIN_PBR
+//2026-11-10 (shader roadmap session 9, PBR): the fragment's camera-relative world position, for its tangent frame (terrain.fsh)
+layout (location = 5) out vec3 relPos;
+#endif
 
                    
 layout (location = 0) in ivec4 Position;
@@ -122,6 +126,9 @@ void main() {
     const uint packedLight = uint(Position.a);
     lightLevels = vec2(bitfieldExtract(packedLight, 12, 4), bitfieldExtract(packedLight, 4, 4));
     albedoTint = Color.rgb;
+#ifdef TERRAIN_PBR
+    relPos = pos.xyz;
+#endif
 }
 
                   

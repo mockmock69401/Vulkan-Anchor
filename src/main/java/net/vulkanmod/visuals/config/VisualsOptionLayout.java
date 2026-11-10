@@ -3,6 +3,7 @@ package net.vulkanmod.visuals.config;
 import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
+import net.vulkanmod.visuals.render.PbrMath;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import net.vulkanmod.visuals.render.ShadowMath;
 import net.vulkanmod.visuals.render.WeatherUniforms;
@@ -65,6 +66,8 @@ public final class VisualsOptionLayout {
 
     /** 2026-11-10 (session 4): the performance preset (VisualsPresets), first on the first page, above the reset. */
     public static final String PRESET = "preset";
+    /** 2026-11-10 (session 9): the lighting page's LabPBR block, with a note under it (block.materials.note: it needs a LabPBR resource pack). */
+    public static final String MATERIALS_BLOCK = "materials";
 
     /**
      * 2026-11-10 (session 8): the colours page's first block, and the button on it that puts every colour back (as the first page's reset
@@ -146,6 +149,13 @@ public final class VisualsOptionLayout {
                             toggle("per_pixel_light", Impact.LOW, null),
                             new Item("sky_light_ambient", Kind.PERCENT, 0, SKY_LIGHT_AMBIENT_MAX, Impact.NONE, "per_pixel_light"),
                             toggle("held_light", Impact.LOW, "per_pixel_light"))),
+                    //2026-11-10 (shader roadmap session 9): LabPBR materials from the resource packs (PbrAtlas): the switch, the normal maps'
+                    // strength, the reflections of smooth materials and the parallax (each greyed out with PBR off)
+                    new Block(MATERIALS_BLOCK, List.of(
+                            toggle("pbr", Impact.MEDIUM, "per_pixel_light"),
+                            new Item("pbr_normal_strength", Kind.PERCENT, 0, PbrMath.NORMAL_STRENGTH_MAX, Impact.NONE, "pbr"),
+                            toggle("pbr_reflections", Impact.MEDIUM, "pbr"),
+                            toggle("pbr_parallax", Impact.LOW, "pbr"))),
                     new Block("debug", List.of(new Item("light_debug", Kind.CHOICE, 0, LIGHT_DEBUG_MAX, Impact.NONE, null))))),
             new Page("water", List.of(
                     new Block("water", List.of(
@@ -255,6 +265,10 @@ public final class VisualsOptionLayout {
             case "per_pixel_light" -> c.perPixelLight ? 1 : 0;
             case "sky_light_ambient" -> c.skyLightAmbient;
             case "held_light" -> c.heldLight ? 1 : 0;
+            case "pbr" -> c.pbr ? 1 : 0;
+            case "pbr_normal_strength" -> c.pbrNormalStrength;
+            case "pbr_reflections" -> c.pbrReflections ? 1 : 0;
+            case "pbr_parallax" -> c.pbrParallax ? 1 : 0;
             case "dh_lods" -> c.dhLods ? 1 : 0;
             case "dh_shadows" -> c.dhShadows ? 1 : 0;
             case "light_debug" -> c.lightDebug;
@@ -326,6 +340,10 @@ public final class VisualsOptionLayout {
             case "per_pixel_light" -> c.perPixelLight = v != 0;
             case "sky_light_ambient" -> c.skyLightAmbient = v;
             case "held_light" -> c.heldLight = v != 0;
+            case "pbr" -> c.pbr = v != 0;
+            case "pbr_normal_strength" -> c.pbrNormalStrength = v;
+            case "pbr_reflections" -> c.pbrReflections = v != 0;
+            case "pbr_parallax" -> c.pbrParallax = v != 0;
             case "dh_lods" -> c.dhLods = v != 0;
             case "dh_shadows" -> c.dhShadows = v != 0;
             case "light_debug" -> c.lightDebug = v;

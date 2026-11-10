@@ -55,6 +55,8 @@ public class Uniforms {
         vec4f_uniformMap.put("WindPhase", FoliageWind::phase);
         vec4f_uniformMap.put("WindParams", FoliageWind::params);
         vec1f_uniformMap.put("LightOut", net.vulkanmod.visuals.render.TerrainLightTarget::lightOut);
+        //2026-11-10 (shader roadmap session 9): the terrain's PBR build (terrain_pbr.json): normal strength, parallax
+        vec4f_uniformMap.put("PbrParams", net.vulkanmod.visuals.render.PbrAtlas::params);
         //The visuals (2026-10-28): water's opacity in the terrain (WaterMath.surfaceAlpha)
         vec1f_uniformMap.put("WaterAlpha", () -> net.vulkanmod.visuals.render.WaterMath.surfaceAlpha(
                 net.vulkanmod.visuals.config.VisualsConfig.get().enabled, net.vulkanmod.visuals.config.VisualsConfig.get().waterDepth / 100f));

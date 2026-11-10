@@ -73,6 +73,8 @@ public final class VkPostProcess {
     COPY_COLOUR_AFTER = 16,
     //2026-11-09 (session 2b): and the depth before the translucent terrain at 17 (what lies behind the water's surface seen from below)
     COPY_BEFORE_TRANSLUCENT = 17,
+    //2026-11-10 (session 9, PBR): the copy reads the terrain's material images at 18, 19, the reflection the normals at 10 (TerrainLightTarget)
+    COPY_TERRAIN_NORMAL = 18, COPY_TERRAIN_SPECULAR = 19, REFLECTION_TERRAIN_NORMAL = 10,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -92,7 +94,8 @@ public final class VkPostProcess {
     }
 
     /** P7l design 3.3: the light volume's buffers (null: none), vanilla's lightmap view, the LOD light view (0: none); P7k: the held light (null: none). */
-    public record LightInputs(VkGpuBuffer data, VkGpuBuffer ready, long lightmap, long lodLight, VkGpuBuffer held, long terrainLight, long terrainAlbedo) {
+    public record LightInputs(VkGpuBuffer data, VkGpuBuffer ready, long lightmap, long lodLight, VkGpuBuffer held, long terrainLight, long terrainAlbedo,
+                              long terrainNormal, long terrainSpecular) {
     }
 
     private final DeferredFree deferred;
@@ -120,6 +123,13 @@ public final class VkPostProcess {
     /** Session 8: postSceneCopy.TINTED (null: not built) and whether this frame needs it (a fog, rainy sky, moon, aurora or water colour picked). */
     private final VkComputeProgram copyTinted;
     private boolean copyTintedOn;
+    /**
+     * 2026-11-10 (session 9): the PBR builds (PBR defined: the terrain's materials lit, pbr.glsl; null when not built) of the composite and
+     * the reflection, and whether this frame's terrain wrote its materials (preparePbr): only then do they run, so with PBR off the passes
+     * are the builds before it.
+     */
+    private final VkComputeProgram copyPbr, copyTintedPbr, reflectionPbr, reflectionLeanPbr, reflectionTintedPbr, reflectionLeanTintedPbr;
+    private boolean pbrOn;
     private String reflectionUsed = "";
     //Volumetric light pass (2026-10-15): light shafts through the sun's cascades, into the shaft image
     private final VkComputeProgram volumetric, volumetricBlur;
@@ -247,6 +257,12 @@ public final class VkPostProcess {
         this.reflectionTinted = variant("postReflection.TINTED", reflection);
         this.copyTinted = variant("postSceneCopy.TINTED", copy);
         this.reflectionLeanTinted = variant("postReflection.LEAN.TINTED", reflection);
+        this.copyPbr = variant("postSceneCopy.PBR", copy);
+        this.copyTintedPbr = variant("postSceneCopy.TINTED.PBR", copy);
+        this.reflectionPbr = variant("postReflection.PBR", reflection);
+        this.reflectionLeanPbr = variant("postReflection.LEAN.PBR", reflection);
+        this.reflectionTintedPbr = variant("postReflection.TINTED.PBR", reflection);
+        this.reflectionLeanTintedPbr = variant("postReflection.LEAN.TINTED.PBR", reflection);
         this.volumetric = volumetric;
         this.volumetricBlur = volumetricBlur;
         this.volumetricUniformBuffer = volumetricUniformBuffer;
@@ -463,6 +479,15 @@ public final class VkPostProcess {
         sky.write(this.copyUniforms);
     }
 
+    /**
+     * 2026-11-10 (session 9): before prepare(), whether this frame's terrain wrote its PBR materials (the PBR builds run) and the
+     * composite's PBR slot (PbrUniforms).
+     */
+    public void preparePbr(boolean on) {
+        this.pbrOn = on && this.copyPbr != null;
+        PbrUniforms.writeCopy(this.copyUniforms);
+    }
+
     /** 2026-11-09 (session 2b): before prepare(), the composite's underwater slots (UnderwaterUniforms). */
     public void prepareUnderwater(UnderwaterUniforms.Values underwater) {
         underwater.write(this.copyUniforms);
@@ -555,13 +580,18 @@ public final class VkPostProcess {
                 .sampled(COPY_PLANT_SUN, this.plantSunImage, this.nearest).sampled(COPY_AO, this.ao.output(), this.nearest)
                 .storageImage(COPY_TERRAIN_LIGHT, light.terrainLight()).storageImage(COPY_TERRAIN_ALBEDO, light.terrainAlbedo())
                 .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest)
-                .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest);
+                .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest)
+                .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular());
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
-        (this.copyTintedOn && this.copyTinted != null ? this.copyTinted : this.copy).dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
+        VkComputeProgram copyProgram = this.copyTintedOn && this.copyTinted != null ? this.copyTinted : this.copy;
+        if (this.pbrOn) {
+            copyProgram = this.copyTintedOn && this.copyTintedPbr != null ? this.copyTintedPbr : this.copyPbr;
+        }
+        copyProgram.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
         toRead(cmd, copyTarget);
         VkGpuTimer.mark(cmd, "post.reflection");
-        this.computeReflection(cmd, depths, data, ready, lodLight, light.terrainLight());
+        this.computeReflection(cmd, depths, data, ready, lodLight, light.terrainLight(), light.terrainNormal());
         VkGpuTimer.mark(cmd, "post.bloom");
         this.bloom[0].transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT);
@@ -680,7 +710,8 @@ public final class VkPostProcess {
         }
     }
 
-    private void computeReflection(VkCommandBuffer cmd, Depths depths, VkGpuBuffer data, VkGpuBuffer ready, long lodLight, long terrainLight) {
+    private void computeReflection(VkCommandBuffer cmd, Depths depths, VkGpuBuffer data, VkGpuBuffer ready, long lodLight, long terrainLight,
+                                   long terrainNormal) {
         if (!this.reflectionOn) return;
         this.scene.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT);
@@ -688,13 +719,22 @@ public final class VkPostProcess {
                 .sampledView(MAIN_DEPTH, depths.main(), this.nearest).sampledView(LOD_DEPTH, depths.lod(), this.nearest)
                 .sampled(REFLECTION_CLOUD_MAP, this.cloudMap, this.nearest)
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
-                .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight);
+                .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight)
+                .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
         VkComputeProgram program = this.tintedOn && this.reflectionTinted != null
                 ? (this.leanOn && this.reflectionLeanTinted != null ? this.reflectionLeanTinted : this.reflectionTinted)
                 : (this.leanOn && this.reflectionLean != null ? this.reflectionLean : this.reflection);
+        //Session 9: the PBR builds where this frame's materials were written, in the same choice
+        if (this.pbrOn && this.reflectionPbr != null) {
+            VkComputeProgram pbr = program == this.reflectionLeanTinted ? this.reflectionLeanTintedPbr : program == this.reflectionTinted ? this.reflectionTintedPbr
+                    : program == this.reflectionLean ? this.reflectionLeanPbr : this.reflectionPbr;
+            if (pbr != null) program = pbr;
+        }
         //Session 8: the build in use, logged when it changes (which colours and features a frame's reflection draws with)
-        String used = program == this.reflectionLeanTinted ? "LEAN.TINTED" : program == this.reflectionTinted ? "TINTED" : program == this.reflectionLean ? "LEAN" : "full";
+        String used = program == this.reflectionLeanTinted ? "LEAN.TINTED" : program == this.reflectionTinted ? "TINTED" : program == this.reflectionLean ? "LEAN"
+                : program == this.reflectionLeanTintedPbr ? "LEAN.TINTED.PBR" : program == this.reflectionTintedPbr ? "TINTED.PBR"
+                : program == this.reflectionLeanPbr ? "LEAN.PBR" : program == this.reflectionPbr ? "PBR" : "full";
         if (!used.equals(this.reflectionUsed)) {
             VisualsLog.info("Visuals reflection pass: postReflection " + used);
             this.reflectionUsed = used;
@@ -862,6 +902,10 @@ public final class VkPostProcess {
         if (this.reflectionLean != null) this.reflectionLean.free();
         if (this.reflectionTinted != null) this.reflectionTinted.free();
         if (this.reflectionLeanTinted != null) this.reflectionLeanTinted.free();
+        for (VkComputeProgram p : new VkComputeProgram[]{this.copyPbr, this.copyTintedPbr, this.reflectionPbr, this.reflectionLeanPbr, this.reflectionTintedPbr,
+                this.reflectionLeanTintedPbr}) {
+            if (p != null) p.free();
+        }
         this.finalDraw.free();
         this.ao.free();
         if (this.copyUniformBuffer != null) this.copyUniformBuffer.free();

@@ -22,6 +22,12 @@ public class MSpriteAtlasTexture {
 
                                                                                               
                                                                                             
+    //2026-11-10 (shader roadmap session 9, PBR): the block atlas' sprites, for the LabPBR atlases laid out as it (PbrAtlas)
+    @Inject(method = "m_247065_", at = @At("TAIL"), remap = false)
+    private void pbrSprites(SpriteLoader.Preparations data, CallbackInfo ci) {
+        net.vulkanmod.visuals.render.PbrAtlas.onUpload((TextureAtlas) (Object) this, data);
+    }
+
     @Inject(method = "m_247255_", at = @At("HEAD"), cancellable = true, remap = false)
     private void skipSetFilter(SpriteLoader.Preparations data, CallbackInfo ci) {
         ci.cancel();

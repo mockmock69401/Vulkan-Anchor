@@ -49,6 +49,11 @@ public final class VisualsPresets {
         v.put("vanilla_shadows", new int[]{0, 1, 1, 1, 1});
         v.put("shadow_distance", new int[]{2, 2, 3, 4, 8});
         v.put("entity_shadows", new int[]{0, 0, 0, 1, 1});
+        //lighting, session 9: LabPBR materials (with a LabPBR resource pack: the terrain's material writes and the composite's PBR build;
+        // nothing without one), their reflections (the reflection pass over smooth materials) and the parallax (the terrain's march)
+        v.put("pbr", new int[]{0, 0, 1, 1, 1});
+        v.put("pbr_reflections", new int[]{0, 0, 0, 1, 1});
+        v.put("pbr_parallax", new int[]{0, 0, 0, 0, 1});
         //water: reflections (0.65 ms over open water)
         v.put("water_reflections", new int[]{0, 100, 100, 100, 100});
         VALUES = Collections.unmodifiableMap(v);

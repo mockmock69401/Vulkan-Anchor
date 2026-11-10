@@ -27,9 +27,15 @@ public class VisualsConfig {
             .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.TRANSIENT, Modifier.STATIC).create();
     /**
      * 6 (2026-11-10, session 4): the preset field; an older file has none and loads as Custom. 7 (2026-11-10, session 8): the shader
-     * colours (colour* fields); an older file has none and keeps every colour's default (the picture it had).
+     * colours (colour* fields); an older file has none and keeps every colour's default (the picture it had). 8 (2026-11-10, session 9):
+     * the LabPBR settings (pbr*); an older file has none: a saved preset level takes that level's PBR values (it stays the level), any
+     * other file the defaults.
      */
-    private static final int REVISION = 7;
+    private static final int REVISION = 8;
+    /** The first revision with the PBR settings. */
+    static final int PBR_REVISION = 8;
+    /** Session 9: the PBR settings the presets set (VisualsPresets.VALUES). */
+    static final String[] PBR_PRESET_KEYS = {"pbr", "pbr_reflections", "pbr_parallax"};
     /** The first revision with the preset field. */
     static final int PRESET_REVISION = 6;
     private static final Logger LOGGER = LogManager.getLogger("VulkanMod Visuals");
@@ -88,6 +94,10 @@ public class VisualsConfig {
         }
         int fileRevision = json.has("revision") ? c.revision : 0;
         if (fileRevision < PRESET_REVISION || !json.has("preset")) c.preset = VisualsPresets.CUSTOM;
+        //Session 9: a level saved before the PBR settings existed keeps its level
+        if (fileRevision < PBR_REVISION && VisualsPresets.isLevel(c.preset)) {
+            for (String key : PBR_PRESET_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), VisualsPresets.value(key, c.preset));
+        }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT)
         c.colourPreset = ColourPresets.validated(c);
@@ -254,6 +264,15 @@ public class VisualsConfig {
     /** 2026-10-28: how much ores' specks glow (slot 33 .y); 2026-10-29 nether quartz ore only. 0 leaves it as any block. */
     public int oreGlow = 100;
     public boolean heldLight = true;
+    /**
+     * 2026-11-10 (shader roadmap session 9): LabPBR materials from the resource packs (PbrAtlas: their _n normal and _s specular maps;
+     * without such a pack nothing changes): the normal maps' strength (percent, 100 = as the pack made them), smooth materials'
+     * reflections, and the parallax (off: the textures stay flat).
+     */
+    public boolean pbr = true;
+    public int pbrNormalStrength = 100;
+    public boolean pbrReflections = true;
+    public boolean pbrParallax = false;
     /** 0 off, 1..4 increasing quality: 2 is affordable on a mid-range GPU. */
     public int antiAliasing = 2;
     public boolean edgeCover = true;

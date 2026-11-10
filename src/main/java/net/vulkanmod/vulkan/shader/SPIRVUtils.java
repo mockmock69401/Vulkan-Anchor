@@ -75,6 +75,16 @@ public class SPIRVUtils {
         includePaths.add(path);
     }
 
+    /** 2026-11-10 (shader roadmap session 9): a classpath shader's text (for a build with a define added: PipelineManager). */
+    public static String readShaderSource(String shaderFile) {
+        try (InputStream is = openResource(shaderFile)) {
+            if (is == null) throw new RuntimeException("Shader not found in classpath: " + shaderFile);
+            return new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException("Shader " + shaderFile + " cannot be read", e);
+        }
+    }
+
     public static SPIRV compileShaderAbsoluteFile(String shaderFile, ShaderKind shaderKind) {
         try (InputStream is = openResource(shaderFile)) {
             if (is == null) throw new RuntimeException("Shader not found in classpath: " + shaderFile);

@@ -42,6 +42,14 @@ final class VisualsPrograms {
         // the tint arithmetic cost the composite and the reflection about 0.2 ms at 1440p together, even at the defaults
         add(c, "postReflection.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", ""), c.compute("post/reflection.comp"));
         add(c, "postReflection.LEAN.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", "", "ATMOSPHERE_TINTS", ""), c.compute("post/reflection.comp"));
+        //Session 9 (PBR): the composite and the reflection lighting the terrain's LabPBR materials (PBR), run only while this frame's terrain
+        // wrote them (VkPostProcess.preparePbr): with PBR off the builds above run unchanged
+        add(c, "postSceneCopy.PBR", defs("USE_ZERO_ONE_DEPTH", "", "PBR", ""), c.compute("post/scene_copy.comp"));
+        add(c, "postSceneCopy.TINTED.PBR", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", "", "PBR", ""), c.compute("post/scene_copy.comp"));
+        add(c, "postReflection.PBR", defs("USE_ZERO_ONE_DEPTH", "", "PBR", ""), c.compute("post/reflection.comp"));
+        add(c, "postReflection.LEAN.PBR", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", "", "PBR", ""), c.compute("post/reflection.comp"));
+        add(c, "postReflection.TINTED.PBR", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", "", "PBR", ""), c.compute("post/reflection.comp"));
+        add(c, "postReflection.LEAN.TINTED.PBR", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", "", "ATMOSPHERE_TINTS", "", "PBR", ""), c.compute("post/reflection.comp"));
         add(c, "bloom.PREFILTER", defs("USE_ZERO_ONE_DEPTH", "", "PREFILTER", ""), c.compute("post/bloom.comp"));
         add(c, "bloom.DOWN", defs("DOWN", ""), c.compute("post/bloom.comp"));
         add(c, "bloom.UP", defs("UP", ""), c.compute("post/bloom.comp"));

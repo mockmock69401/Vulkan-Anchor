@@ -13,6 +13,39 @@ builds against the following third-party parts, each under its own licence.
 | Distant Horizons 3.3.3 | LGPL-3.0 | fetched by Gradle from Modrinth's Maven (`maven.modrinth:distanthorizons:3.3.3-1.20.1`) | compile-time only, not in this repository or the jar; the 3.3.0-3.3.4 support implements its internal render interfaces |
 | Distant Horizons LOD terrain shaders (Copyright (C) 2020 James Seibel) | LGPL-3.0 | `src/main/resources/assets/vulkanmod/visuals/shaders/dh/` | translated to Vulkan GLSL; notices kept in the files |
 | 32-bit hash finaliser multipliers `0x7feb352d`, `0x846ca68b` (Wellons 2018, "Prospecting for hash functions") | public domain | `post/water.glsl` | constants only, no code |
+| Glimmer shader pack v1.2 (Copyright (c) 2024 Josh Britain, jbritain) | MIT | adapted in `shaders/include/pbr_terrain.glsl` (the parallax march), `visuals/shaders/post/pbr.glsl` and `visuals/render/PbrMath.java` (LabPBR channel decoding, the metals' tint) | rewritten for this renderer, credited in the files; licence text below |
 
 Mods this build works alongside but contains no code from: Xaero's Minimap and Xaero's World Map (compatibility hooks only),
 Distant Horizons (through its public API), Forge and Minecraft.
+
+## Glimmer (MIT)
+
+The PBR materials (2026-11-10) adapt parts of the Glimmer shader pack v1.2 (https://jbritain.net), under this licence:
+
+```
+MIT License
+
+Copyright (c) 2024 Josh Britain (jbritain)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+The LabPBR material format (shaderLABS wiki, "LabPBR Material Standard") is followed as a file format; no text or code of it is
+included. The porosity and wetness (rain darkening porous materials, a water film glossing closed ones) are this renderer's own,
+after Lagarde 2013 and Jensen, Legakis and Dorsey 1999.
