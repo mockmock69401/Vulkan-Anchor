@@ -27,7 +27,7 @@ public final class LightingUniforms {
                          boolean lodValid, float aoStrength, float sunWeight, float[] upView, boolean vanillaCopies, float waterStrength,
                          float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView,
                          float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections, float[] blockLightTint,
-                         float[] moonLightTint) {
+                         float[] moonLightTint, float[] sunLightTint, float[] shadeTint) {
         private static final float[] NO_TINT = {1, 1, 1};
 
         /** Without the picked colours (session 8): the default tints. */
@@ -37,15 +37,19 @@ public final class LightingUniforms {
                       float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections) {
             this(on, invVanillaProjection, invLodProjection, projection, sunView, lodValid, aoStrength, sunWeight, upView, vanillaCopies, waterStrength,
                     waterAmbient, cameraYFrac, lightSun, sunHeightTerm, sunUp, blockDay, eastView, blockLightColour, moonLight, blockGlow, oreGlow,
-                    blockReflections, NO_TINT, NO_TINT);
+                    blockReflections, NO_TINT, NO_TINT, NO_TINT, NO_TINT);
         }
 
-        /** 2026-11-10 (session 8): the same values with the picked block light and moon colours' tints (ShaderColours). */
+        /**
+         * 2026-11-10 (session 8): the same values with the picked block light and moon colours' tints (ShaderColours); since the session 8
+         * follow-up also the sunlight's and the shade light's.
+         */
         public Values tinted(ShaderColours colours) {
             return new Values(this.on, this.invVanillaProjection, this.invLodProjection, this.projection, this.sunView, this.lodValid, this.aoStrength,
                     this.sunWeight, this.upView, this.vanillaCopies, this.waterStrength, this.waterAmbient, this.cameraYFrac, this.lightSun,
                     this.sunHeightTerm, this.sunUp, this.blockDay, this.eastView, this.blockLightColour, this.moonLight, this.blockGlow, this.oreGlow,
-                    this.blockReflections, colours.tint(ShaderColours.Colour.BLOCK_LIGHT), colours.tint(ShaderColours.Colour.MOON));
+                    this.blockReflections, colours.tint(ShaderColours.Colour.BLOCK_LIGHT), colours.tint(ShaderColours.Colour.MOON),
+                    colours.tint(ShaderColours.Colour.SUNLIGHT), colours.tint(ShaderColours.Colour.SHADE_LIGHT));
         }
 
         public void writeLighting(LooseUniformWriter w) {
@@ -64,8 +68,11 @@ public final class LightingUniforms {
         public void writeCopy(LooseUniformWriter w) {
             w.putVec4(COPY_LIGHTING, this.aoStrength, this.sunWeight, this.on ? 1 : 0, this.sunHeightTerm);
             w.putVec4(COPY_WATER, this.waterStrength, this.waterAmbient, this.sunUp, this.blockDay);
-            w.putVec4(COPY_LIGHT_SUN, this.lightSun[0], this.lightSun[1], this.lightSun[2], this.lightSun[3]);
-            w.putVec4(COPY_LIGHT_SHADE, this.lightSun[5], this.lightSun[6], this.lightSun[7], this.lightSun[4]);
+            //Session 8 follow-up: the sun's and the shade's colours times the picked sunlight's and shade light's tints (exactly 1 at the
+            // defaults); the composite mixes them in by the light colour setting as before, and the PBR highlights take the sun's
+            float[] t = this.sunLightTint, d = this.shadeTint;
+            w.putVec4(COPY_LIGHT_SUN, this.lightSun[0] * t[0], this.lightSun[1] * t[1], this.lightSun[2] * t[2], this.lightSun[3]);
+            w.putVec4(COPY_LIGHT_SHADE, this.lightSun[5] * d[0], this.lightSun[6] * d[1], this.lightSun[7] * d[2], this.lightSun[4]);
             //2026-11-10 (session 8): times the picked colours' tints (exactly 1 at the defaults)
             float[] b = this.blockLightTint, m = this.moonLightTint;
             w.putVec4(COPY_BLOCK_LIGHT, ColourMath.BLOCK_LIGHT[0] * b[0], ColourMath.BLOCK_LIGHT[1] * b[1], ColourMath.BLOCK_LIGHT[2] * b[2], this.blockLightColour);

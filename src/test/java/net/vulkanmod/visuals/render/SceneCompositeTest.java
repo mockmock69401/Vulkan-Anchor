@@ -61,7 +61,7 @@ class SceneCompositeTest {
                 .orElseThrow(() -> new AssertionError("no location " + location));
     }
 
-    /** Every slot 3..57 as a vec4, after the writers (zeros where none writes; session 8: CelestialUniforms.off()'s default tints first). */
+    /** Every slot 3..59 as a vec4, after the writers (zeros where none writes; session 8: CelestialUniforms.off()'s default tints first). */
     private static float[][] slots(Consumer<LooseUniformWriter> write) {
         LooseUniformWriter w = new LooseUniformWriter(META);
         CelestialUniforms.off().write(w);
@@ -746,8 +746,18 @@ class SceneCompositeTest {
         assertTrue(gf > g * 1.5f, gf + " vs " + g);
         for (int i = 0; i < 3; i++) assertEquals(linear(lava)[i] * gf, lake[i], 1e-4f);
         assertArrayEquals(linear(lava), rgb(SceneCompositeMath.composite(surface(fluid, UP, shaded, new float[]{0, 15, 1}), off, LIGHTMAP)), 1e-6f);
-        assertTrue(COMP.contains("lit = mix(lit, scene*lightGlow(colour.rgb, glowParams.x*(emissiveFluid ? FLUID_GLOW_SCALE : 1.0)), emission);"));
+        assertTrue(COMP.contains("lit = mix(lit, tintedGlow(scene*lightGlow(colour.rgb, glowParams.x*(emissiveFluid ? FLUID_GLOW_SCALE : 1.0))), emission);"));
         assertTrue(COMP.contains("layout(location = 33) uniform vec4 glowParams;"));
+        //Session 8 follow-up: the glow times the picked torch light colour's tint (slot 59, 1 at its default: the values above)
+        assertArrayEquals(new float[]{1, 1, 1, 0}, on[SceneCompositeMath.GLOW_TINT], 0);
+        float[][] tinted = glowScene(100, 100);
+        tinted[SceneCompositeMath.GLOW_TINT] = new float[]{1.5f, 0.8f, 0.4f, 0};
+        float[] red = SceneCompositeMath.composite(surface(lava, UP, shaded, new float[]{0, 15, 1}), tinted, LIGHTMAP);
+        for (int i = 0; i < 3; i++) assertEquals(bright[i] * tinted[SceneCompositeMath.GLOW_TINT][i], red[i], 1e-5f);
+        assertTrue(COMP.contains("layout(location = 59) uniform vec4 glowTint;"));
+        assertTrue(COMP.contains("lit = mix(lit, tintedGlow(vanillaToScene(albedo)*lightGlow(albedo, glowParams.x)*PBR_EMISSION_GAIN), mat.emission);"),
+                "LabPBR emission glows in the same colour");
+        assertEquals(CelestialUniforms.COPY_GLOW_TINT, member(SceneCompositeMath.GLOW_TINT).location());
     }
 
     /** 2026-11-08 (the user: a lit furnace's or a campfire's whole block shone): only a light source's bright texels are light. */
@@ -1583,7 +1593,7 @@ class SceneCompositeTest {
 
     private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "CELESTIAL", "AURORA", "UNDERWATER_PARAMS", "UNDERWATER_RIPPLE_A", "UNDERWATER_RIPPLE_B", "UNDERWATER_LIGHT", "AIR_FIRST", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
             "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "HELD_EYE", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW",
-            "AURORA_TINTS", "WATER_TINT");
+            "AURORA_TINTS", "WATER_TINT", "GLOW_TINT");
 
     @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {

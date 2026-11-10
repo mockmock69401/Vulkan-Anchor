@@ -142,11 +142,16 @@ final class VisualsOptionScreenPilot {
         }
     }
 
+    /** key@N: the Nth widget of the key, from 1 (session 8 follow-up: a palette's look settings are on their page and on the colours page). */
     private static Option<?> find(VOptionScreen screen, String key) throws ReflectiveOperationException {
+        int at = key.indexOf('@');
+        int skip = at < 0 ? 0 : Integer.parseInt(key.substring(at + 1)) - 1;
+        String name = at < 0 ? key : key.substring(0, at);
         for (OptionPage page : pages(screen)) {
             for (OptionBlock block : page.optionBlocks) {
                 for (Option<?> o : block.options()) {
-                    if (NAME.get(o) instanceof Component c && c.getContents() instanceof TranslatableContents t && t.getKey().equals(KEY_PREFIX + key)) return o;
+                    if (NAME.get(o) instanceof Component c && c.getContents() instanceof TranslatableContents t && t.getKey().equals(KEY_PREFIX + name)
+                            && skip-- == 0) return o;
                 }
             }
         }
