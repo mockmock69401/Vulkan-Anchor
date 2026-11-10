@@ -3,6 +3,7 @@ package net.vulkanmod.visuals.config;
 import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
+import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import net.vulkanmod.visuals.render.ShadowMath;
 import net.vulkanmod.visuals.render.WeatherUniforms;
 
@@ -17,7 +18,8 @@ import static net.vulkanmod.visuals.render.PostProcessSettings.*;
  * "block." + key. W10: the ambient occlusion's strength (aoStrength) is the item ao_strength in the lighting page's shading block.
  */
 public final class VisualsOptionLayout {
-    public enum Kind {SWITCH, PERCENT, BLOCKS, CHUNKS, CHOICE}
+    /** 2026-11-10 (session 8): COLOUR, a 0xRRGGBB shader colour (ShaderColours) picked with the colour picker. */
+    public enum Kind {SWITCH, PERCENT, BLOCKS, CHUNKS, CHOICE, COLOUR}
 
     public enum Impact {NONE, LOW, MEDIUM, HIGH}
 
@@ -63,6 +65,19 @@ public final class VisualsOptionLayout {
 
     /** 2026-11-10 (session 4): the performance preset (VisualsPresets), first on the first page, above the reset. */
     public static final String PRESET = "preset";
+
+    /**
+     * 2026-11-10 (session 8): the colours page's first block, and the button on it that puts every colour back (as the first page's reset
+     * does for everything).
+     */
+    public static final String COLOURS_FIRST = "colours_sky", RESET_COLOURS = "reset_colours";
+    /** 2026-11-10 (session 8): the colour palette (ColourPresets), first on the colours page, above its reset. */
+    public static final String COLOUR_PRESET = "colour_preset";
+
+    //A shader colour (ShaderColours.Colour): the picker over 0x000000..0xFFFFFF; requires as for the settings it colours
+    private static Item colour(Colour c, String requires) {
+        return new Item(c.key(), Kind.COLOUR, 0, 0xFFFFFF, Impact.NONE, requires);
+    }
 
     public static final List<Page> PAGES = List.of(
             new Page("image", List.of(
@@ -142,7 +157,34 @@ public final class VisualsOptionLayout {
                             percent("water_ripple_density", RIPPLE_DENSITY_MIN, RIPPLE_DENSITY_MAX, Impact.NONE),
                             percent("underwater_visibility", UNDERWATER_VISIBILITY_MIN, UNDERWATER_VISIBILITY_MAX, Impact.NONE))),
                     new Block("wind", List.of(
-                            percent("foliage_wind", STRENGTH_MAX))))));
+                            percent("foliage_wind", STRENGTH_MAX))))),
+            //2026-11-10 (session 8, the user: "the parts with set colours, such as the sunset and the sky's colour, as colour pickers"):
+            // ShaderColours' colours by what they colour; the defaults are the look before the pickers, and the presets leave them alone
+            new Page("colours", List.of(
+                    new Block(COLOURS_FIRST, List.of(
+                            new Item(COLOUR_PRESET, Kind.CHOICE, ColourPresets.DEFAULT, ColourPresets.CUSTOM, Impact.NONE, null),
+                            colour(Colour.DAY_SKY, null),
+                            colour(Colour.SUNSET, null),
+                            colour(Colour.SUNRISE, null),
+                            colour(Colour.SUN_GLOW, null),
+                            colour(Colour.NIGHT_SKY, null))),
+                    new Block("colours_air", List.of(
+                            colour(Colour.FOG, null),
+                            colour(Colour.OVERCAST, null),
+                            colour(Colour.CLOUDS, "far_clouds"),
+                            colour(Colour.RAIN, "shader_weather"),
+                            colour(Colour.SNOW, "shader_weather"))),
+                    new Block("colours_light", List.of(
+                            colour(Colour.MOON, null),
+                            colour(Colour.BLOCK_LIGHT, null))),
+                    new Block("colours_aurora", List.of(
+                            colour(Colour.AURORA_MAIN, "aurora"),
+                            colour(Colour.AURORA_UPPER, "aurora"),
+                            colour(Colour.AURORA_LOWER, "aurora"),
+                            colour(Colour.AURORA_END, "aurora"))),
+                    new Block("colours_water", List.of(
+                            colour(Colour.WATER, null),
+                            colour(Colour.UNDERWATER, null))))));
 
     private VisualsOptionLayout() {
     }
@@ -166,6 +208,7 @@ public final class VisualsOptionLayout {
     public static int get(VisualsConfig c, Item item) {
         int v = switch (item.key()) {
             case PRESET -> c.preset;
+            case COLOUR_PRESET -> c.colourPreset;
             case ENABLED -> c.enabled ? 1 : 0;
             case "exposure" -> c.exposure;
             case "tone_strength" -> c.toneStrength;
@@ -223,7 +266,11 @@ public final class VisualsOptionLayout {
             case "water_ripple_density" -> c.waterRippleDensity;
             case "underwater_visibility" -> c.underwaterVisibility;
             case "foliage_wind" -> c.foliageWind;
-            default -> throw new IllegalArgumentException(item.key());
+            default -> {
+                Colour colour = Colour.byKey(item.key());
+                if (colour == null) throw new IllegalArgumentException(item.key());
+                yield c.colour(colour);
+            }
         };
         return Math.max(item.min(), Math.min(item.max(), v));
     }
@@ -233,6 +280,7 @@ public final class VisualsOptionLayout {
         int v = Math.max(item.min(), Math.min(item.max(), value));
         switch (item.key()) {
             case PRESET -> VisualsPresets.apply(c, v);
+            case COLOUR_PRESET -> ColourPresets.apply(c, v);
             case ENABLED -> c.enabled = v != 0;
             case "exposure" -> c.exposure = v;
             case "tone_strength" -> c.toneStrength = v;
@@ -289,7 +337,11 @@ public final class VisualsOptionLayout {
             case "water_ripple_density" -> c.waterRippleDensity = v;
             case "underwater_visibility" -> c.underwaterVisibility = v;
             case "foliage_wind" -> c.foliageWind = v;
-            default -> throw new IllegalArgumentException(item.key());
+            default -> {
+                Colour colour = Colour.byKey(item.key());
+                if (colour == null) throw new IllegalArgumentException(item.key());
+                c.setColour(colour, v);
+            }
         }
     }
 }

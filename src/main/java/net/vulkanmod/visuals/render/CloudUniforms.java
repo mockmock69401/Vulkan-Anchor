@@ -94,9 +94,14 @@ public final class CloudUniforms {
         AtmosphereMath.Atmosphere a = realistic ? atmosphere.atmosphere() : null;
         float[] zenith = realistic ? AtmosphereMath.skyColour(a, new float[]{0, 1, 0}) : null;
         float[] sunlight = realistic ? (day ? a.sunLight() : a.moonLight()) : null;
+        //2026-11-10 (session 8): the picked colours (exactly 1 at the defaults): the cloud colour on both styles' light; the vanilla shape's
+        // sunlit tint also takes the sky's (day, sunset, sunrise; the night sky's by night), which the realistic style's sunlight has already
+        ShaderColours colours = settings.colours();
+        float[] cloud = colours.tint(ShaderColours.Colour.CLOUDS);
+        float[] sky = day ? AtmosphereUniforms.sunTint(colours, sun.y, AtmosphereUniforms.morning(sun.x)) : colours.tint(ShaderColours.Colour.NIGHT_SKY);
         for (int i = 0; i < 3; i++) {
-            v[8 + i] = realistic ? REAL_LIGHT * Math.max(sunlight[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_LIGHT * tint[i];
-            v[12 + i] = realistic ? REAL_AMBIENT * Math.max(zenith[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_AMBIENT * ColourMath.SKY_SHADE[i];
+            v[8 + i] = (realistic ? REAL_LIGHT * Math.max(sunlight[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_LIGHT * tint[i] * sky[i]) * cloud[i];
+            v[12 + i] = (realistic ? REAL_AMBIENT * Math.max(zenith[i], 0) : base[i] * CloudMath.CLOUD_ALBEDO * CLOUD_AMBIENT * ColourMath.SKY_SHADE[i]) * cloud[i];
         }
         v[16] = day ? sun.x : -sun.x;
         v[17] = day ? sun.y : -sun.y;

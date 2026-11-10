@@ -11,25 +11,34 @@ import org.joml.Matrix4f;
  * 13 x the ripple strength (setting), y the reflection strength (setting), z the camera's sky exposure, w 1 for the reflective debug view;
  * 24 (2026-10-29) x the block reflections setting, y the frame number (the rough rays' noise); 25 (2026-10-29) x seconds wrapped at
  * RainRippleMath.TIME_WRAP, y the rain on the water (rain level x ripple setting); 26 (2026-11-09) x the ripple density setting (ratio);
- * 29 reserved, written 0. The cloud block (14..18), the light volume (19..22) and (2026-11-09, session 5) CelestialUniforms' discs' shape and
- * aurora (27, 28) are written by their owners.
+ * 29, 30, 31 (2026-11-10, session 8; 29 was reserved) the struct's three colour tints. The cloud block (14..18), the light volume (19..22)
+ * and (2026-11-09, session 5) CelestialUniforms' discs' shape and aurora (27, 28; session 8: the aurora's colour tints 32..34) are written
+ * by their owners.
  */
 public final class ReflectionUniforms {
     /** Blocks; vanilla's sky fog end when it reports none. */
     public static final float DEFAULT_SKY_FOG_END = 256;
 
     public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, PROJ = 2, DEPTH = 3, INV_VIEW = 8, RIPPLE_A = 11, RIPPLE_B = 12, PARAMS = 13, BLOCK = 24, RAIN = 25, RIPPLE_PARAMS = 26;
-    /** Where the Atmosphere struct goes, in field order (sun, sunLight, moonLight, depth, ambient, glow, fog). */
-    public static final int[] ATMOSPHERE_SLOTS = {4, 5, 6, 7, 9, 10, 23};
-    public static final int RESERVED_FIRST = 29, RESERVED_LAST = 29;
+    /** Where the Atmosphere struct goes, in field order (sun, sunLight, moonLight, depth, ambient, glow, fog, fogTint, overcastTint, moonTint). */
+    public static final int[] ATMOSPHERE_SLOTS = {4, 5, 6, 7, 9, 10, 23, 29, 30, 31};
 
     /**
-     * on: the pass runs this frame. block: AtmosphereUniforms.block's 28 floats; offsets: RippleMath.offsets' 8 floats; ripples and
+     * on: the pass runs this frame. block: AtmosphereUniforms.block's 40 floats; offsets: RippleMath.offsets' 8 floats; ripples and
      * strength the settings (ratios), skyExposure 0..1, debug the reflective debug view; density the ripple density setting (ratio).
      */
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f projection, boolean lodValid,
                          Matrix4f invView, float[] block, float[] offsets, float ripples, float strength, float skyExposure, boolean debug,
                          int blockReflections, int frame, float rainTime, float rain, float density) {
+        /** 2026-11-10 (session 8): the pass runs and a picked colour's tint in the block is not 1 (VkPostProcess then runs the .TINTED build). */
+        public boolean tinted() {
+            if (!this.on || this.block.length < AtmosphereUniforms.BLOCK_FLOATS) return false;
+            for (int v = 0; v < 3; v++) {
+                for (int i = 0; i < 3; i++) if (this.block[AtmosphereUniforms.TINTS + v * 4 + i] != 1) return true;
+            }
+            return false;
+        }
+
         public void write(LooseUniformWriter w) {
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection).putMat4(INV_LOD_PROJ, this.invLodProjection).putMat4(PROJ, this.projection);
             w.putVec4(DEPTH, LodClamp.CLAMP_THRESHOLD, this.lodValid ? 1 : 0, 0, 0);
@@ -44,7 +53,6 @@ public final class ReflectionUniforms {
             w.putVec4(BLOCK, this.blockReflections, this.frame & 0xFFFF, 0, 0);
             w.putVec4(RAIN, this.rainTime, this.rain, 0, 0);
             w.putVec4(RIPPLE_PARAMS, this.density, 0, 0, 0);
-            for (int slot = RESERVED_FIRST; slot <= RESERVED_LAST; slot++) w.putVec4(slot, 0, 0, 0, 0);
         }
     }
 

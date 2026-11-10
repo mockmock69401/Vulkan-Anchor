@@ -20,10 +20,12 @@
 // The End (params.z 1) uses the same curtains in that dimension's colours: pink-violet below, violet above.
 //
 // WHAT TO CALL
-//   aurora(dir, params, steps, jitter): the light (rgb, scene units, >= 0) to add to a sky pixel along dir, BEFORE the far clouds go
+//   aurora(dir, params, tintLow, tintMid, tintTop, steps, jitter): the light (rgb, scene units, >= 0) to add to a sky pixel along dir, BEFORE the far clouds go
 //   over it (they hide it). params: x the strength (0: nothing, and nothing is evaluated), y the time in seconds (wrapped at
 //   AURORA_TIME_WRAP: every drift repeats then), z 1 in the End, w 0. steps: AURORA_STEPS for the sky, AURORA_REFLECTION_STEPS for
-//   reflections. jitter 0..1 per pixel (the march's start; any value is fine).
+//   reflections. jitter 0..1 per pixel (the march's start; any value is fine). 2026-11-10 (session 8, the colour pickers): tintLow,
+//   tintMid, tintTop multiply the lower fringe's, the main body's and the top's emission colours (CelestialUniforms' AURORA_TINTS slots:
+//   the picked colours over their defaults, exactly 1 at the defaults; in the End all three the End colour's).
 
 //The layer: its lower border at 1 and its top at AURORA_TOP (about 100 to 300 km)
 const float AURORA_TOP = 3.0;
@@ -149,22 +151,23 @@ vec4 auroraFootprint(vec2 q, float t) {
     return vec4(crest, w, warped.x);
 }
 
-//The emission colour at height h (layer heights, 1 = the lowest border) above a border at border, in the End's colours when end
-vec3 auroraColour(float h, float border, bool end) {
+//The emission colour at height h (layer heights, 1 = the lowest border) above a border at border, in the End's colours when end, each
+// times its tint (session 8)
+vec3 auroraColour(float h, float border, bool end, vec3 tintLow, vec3 tintMid, vec3 tintTop) {
     float above = h - border;
     float bottom = smoothstep(-AURORA_BORDER_EDGE, AURORA_BORDER_EDGE, above);
     float a = max(above, 0.0);
     float green = exp(-a/AURORA_GREEN_SCALE);
     float red = AURORA_RED_SHARE*smoothstep(AURORA_RED_LOW, AURORA_RED_HIGH, h)*exp(-max(h - AURORA_RED_HIGH, 0.0)/AURORA_RED_SCALE);
     float fringe = AURORA_FRINGE_SHARE*exp(-a/AURORA_FRINGE_SCALE);
-    vec3 low = end ? vec3(AURORA_END_LOW_R, AURORA_END_LOW_G, AURORA_END_LOW_B) : vec3(AURORA_FRINGE_R, AURORA_FRINGE_G, AURORA_FRINGE_B);
-    vec3 mid = end ? vec3(AURORA_END_MID_R, AURORA_END_MID_G, AURORA_END_MID_B) : vec3(AURORA_GREEN_R, AURORA_GREEN_G, AURORA_GREEN_B);
-    vec3 top = end ? vec3(AURORA_END_TOP_R, AURORA_END_TOP_G, AURORA_END_TOP_B) : vec3(AURORA_RED_R, AURORA_RED_G, AURORA_RED_B);
+    vec3 low = (end ? vec3(AURORA_END_LOW_R, AURORA_END_LOW_G, AURORA_END_LOW_B) : vec3(AURORA_FRINGE_R, AURORA_FRINGE_G, AURORA_FRINGE_B))*tintLow;
+    vec3 mid = (end ? vec3(AURORA_END_MID_R, AURORA_END_MID_G, AURORA_END_MID_B) : vec3(AURORA_GREEN_R, AURORA_GREEN_G, AURORA_GREEN_B))*tintMid;
+    vec3 top = (end ? vec3(AURORA_END_TOP_R, AURORA_END_TOP_G, AURORA_END_TOP_B) : vec3(AURORA_RED_R, AURORA_RED_G, AURORA_RED_B))*tintTop;
     return (mid*green + top*red + low*fringe)*bottom;
 }
 
 //The aurora's light along dir (see the header). 0 with params.x <= 0, at or below the horizon, and for steps < 1
-vec3 aurora(vec3 dir, vec4 params, int steps, float jitter) {
+vec3 aurora(vec3 dir, vec4 params, vec3 tintLow, vec3 tintMid, vec3 tintTop, int steps, float jitter) {
     if (!(params.x > 0.0) || !(dir.y > AURORA_HORIZON_LOW) || steps < 1) {
         return vec3(0.0);
     }
@@ -192,7 +195,7 @@ vec3 aurora(vec3 dir, vec4 params, int steps, float jitter) {
         float rays = 1.0 - AURORA_RAY_DEPTH*auroraNoise1(f.w*AURORA_RAY_CELLS + t*AURORA_RAY_DRIFT, 4u);
         float bright = mix(AURORA_PATCH_MIN, 1.0, smoothstep(0.25, 0.75, f.y));
         float border = 1.0 + AURORA_BORDER_LIFT*f.z;
-        sum += auroraColour(x.y, border, end)*(f.x*rays*bright*exp(-s*horizontal/AURORA_EXTINCTION));
+        sum += auroraColour(x.y, border, end, tintLow, tintMid, tintTop)*(f.x*rays*bright*exp(-s*horizontal/AURORA_EXTINCTION));
     }
     return sum*(dt*AURORA_BRIGHTNESS*params.x*fade);
 }

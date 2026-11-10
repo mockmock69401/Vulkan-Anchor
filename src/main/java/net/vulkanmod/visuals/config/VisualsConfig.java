@@ -6,6 +6,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import net.vulkanmod.visuals.render.ShaderColours;
+import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -23,8 +25,11 @@ public class VisualsConfig {
     private static volatile VisualsConfig instance = new VisualsConfig();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting()
             .excludeFieldsWithModifiers(Modifier.PRIVATE, Modifier.TRANSIENT, Modifier.STATIC).create();
-    /** 6 (2026-11-10, session 4): the preset field; an older file has none and loads as Custom. */
-    private static final int REVISION = 6;
+    /**
+     * 6 (2026-11-10, session 4): the preset field; an older file has none and loads as Custom. 7 (2026-11-10, session 8): the shader
+     * colours (colour* fields); an older file has none and keeps every colour's default (the picture it had).
+     */
+    private static final int REVISION = 7;
     /** The first revision with the preset field. */
     static final int PRESET_REVISION = 6;
     private static final Logger LOGGER = LogManager.getLogger("VulkanMod Visuals");
@@ -84,12 +89,70 @@ public class VisualsConfig {
         int fileRevision = json.has("revision") ? c.revision : 0;
         if (fileRevision < PRESET_REVISION || !json.has("preset")) c.preset = VisualsPresets.CUSTOM;
         c.preset = VisualsPresets.validated(c);
+        //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT)
+        c.colourPreset = ColourPresets.validated(c);
         if (c.revision < REVISION) c.revision = REVISION;
         return c;
     }
 
     public static int currentRevision() {
         return REVISION;
+    }
+
+    /** 2026-11-10 (session 8): the colour field behind c (0xRRGGBB). */
+    public int colour(Colour c) {
+        return switch (c) {
+            case DAY_SKY -> this.colourDaySky;
+            case SUNSET -> this.colourSunset;
+            case SUNRISE -> this.colourSunrise;
+            case SUN_GLOW -> this.colourSunGlow;
+            case NIGHT_SKY -> this.colourNightSky;
+            case FOG -> this.colourFog;
+            case OVERCAST -> this.colourOvercast;
+            case CLOUDS -> this.colourClouds;
+            case RAIN -> this.colourRain;
+            case SNOW -> this.colourSnow;
+            case MOON -> this.colourMoon;
+            case BLOCK_LIGHT -> this.colourBlockLight;
+            case AURORA_MAIN -> this.colourAuroraMain;
+            case AURORA_UPPER -> this.colourAuroraUpper;
+            case AURORA_LOWER -> this.colourAuroraLower;
+            case AURORA_END -> this.colourAuroraEnd;
+            case WATER -> this.colourWater;
+            case UNDERWATER -> this.colourUnderwater;
+        } & 0xFFFFFF;
+    }
+
+    /** 2026-11-10 (session 8): sets the colour field behind c (the low 24 bits of rgb). */
+    public void setColour(Colour c, int rgb) {
+        int v = rgb & 0xFFFFFF;
+        switch (c) {
+            case DAY_SKY -> this.colourDaySky = v;
+            case SUNSET -> this.colourSunset = v;
+            case SUNRISE -> this.colourSunrise = v;
+            case SUN_GLOW -> this.colourSunGlow = v;
+            case NIGHT_SKY -> this.colourNightSky = v;
+            case FOG -> this.colourFog = v;
+            case OVERCAST -> this.colourOvercast = v;
+            case CLOUDS -> this.colourClouds = v;
+            case RAIN -> this.colourRain = v;
+            case SNOW -> this.colourSnow = v;
+            case MOON -> this.colourMoon = v;
+            case BLOCK_LIGHT -> this.colourBlockLight = v;
+            case AURORA_MAIN -> this.colourAuroraMain = v;
+            case AURORA_UPPER -> this.colourAuroraUpper = v;
+            case AURORA_LOWER -> this.colourAuroraLower = v;
+            case AURORA_END -> this.colourAuroraEnd = v;
+            case WATER -> this.colourWater = v;
+            case UNDERWATER -> this.colourUnderwater = v;
+        }
+    }
+
+    /** 2026-11-10 (session 8): every colour in ShaderColours.Colour order. */
+    public int[] colours() {
+        int[] v = new int[ShaderColours.COUNT];
+        for (Colour c : Colour.values()) v[c.ordinal()] = this.colour(c);
+        return v;
     }
 
     public void save() {
@@ -203,6 +266,30 @@ public class VisualsConfig {
     public boolean fsrFrameGeneration = false;
     /** Presented frames per real frame; 2 in phases 1 and 2 (not on the page yet). */
     public int frameGenerationFactor = 2;
+    /**
+     * 2026-11-10 (session 8): the shader colours (ShaderColours.Colour, 0xRRGGBB display colours, saved as numbers); each default is the
+     * colour drawn before the pickers, so a file without them looks as it did. Not performance settings: the presets leave them alone.
+     */
+    /** 2026-11-10 (session 8): the colour palette the colours are on (ColourPresets.DEFAULT..HORROR) or ColourPresets.CUSTOM. */
+    public int colourPreset = ColourPresets.DEFAULT;
+    public int colourDaySky = Colour.DAY_SKY.defaultRgb();
+    public int colourSunset = Colour.SUNSET.defaultRgb();
+    public int colourSunrise = Colour.SUNRISE.defaultRgb();
+    public int colourSunGlow = Colour.SUN_GLOW.defaultRgb();
+    public int colourNightSky = Colour.NIGHT_SKY.defaultRgb();
+    public int colourFog = Colour.FOG.defaultRgb();
+    public int colourOvercast = Colour.OVERCAST.defaultRgb();
+    public int colourClouds = Colour.CLOUDS.defaultRgb();
+    public int colourRain = Colour.RAIN.defaultRgb();
+    public int colourSnow = Colour.SNOW.defaultRgb();
+    public int colourMoon = Colour.MOON.defaultRgb();
+    public int colourBlockLight = Colour.BLOCK_LIGHT.defaultRgb();
+    public int colourAuroraMain = Colour.AURORA_MAIN.defaultRgb();
+    public int colourAuroraUpper = Colour.AURORA_UPPER.defaultRgb();
+    public int colourAuroraLower = Colour.AURORA_LOWER.defaultRgb();
+    public int colourAuroraEnd = Colour.AURORA_END.defaultRgb();
+    public int colourWater = Colour.WATER.defaultRgb();
+    public int colourUnderwater = Colour.UNDERWATER.defaultRgb();
     public int revision = REVISION;
     public transient int lightDebug = 0;
     /** 2026-10-23 prototype (TerrainLightTarget): the terrain light for vanilla pixels; static, so it is neither saved nor an option (the pilot's set reaches it). */

@@ -204,10 +204,12 @@ public final class WaterMath {
 
     public static float[] moonRadiance(Atmosphere a) {
         if (!AtmosphereMath.atmosphereSky(a)) return new float[3];
-        float[] tint = {MOON_RED, MOON_GREEN, MOON_BLUE};
+        //2026-11-10 (session 8): times the picked moon colour's tint (Atmosphere.moonTint)
+        float[] base = {MOON_RED, MOON_GREEN, MOON_BLUE}, t = a.moonTint();
+        float[] tint = {base[0] * t[0], base[1] * t[1], base[2] * t[2]};
         float night = a.moonLight()[3] > 0 ? Math.min(a.moonLight()[3], 1) : 0;
         float overcast = a.sunLight()[3] > 0 ? Math.min(a.sunLight()[3] * DISC_RAIN_HIDE, 1) : 0;
-        return scale(tint, MOON_DISC_LUMINANCE / PostMath.luminance(tint[0], tint[1], tint[2]) * night * (1 - overcast)
+        return scale(tint, MOON_DISC_LUMINANCE / PostMath.luminance(base[0], base[1], base[2]) * night * (1 - overcast)
                 * smoothstep(-MOON_HALF_SIZE, MOON_HALF_SIZE, -a.sun()[1]));
     }
 

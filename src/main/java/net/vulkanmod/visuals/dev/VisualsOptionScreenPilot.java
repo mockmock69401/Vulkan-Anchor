@@ -3,9 +3,13 @@ package net.vulkanmod.visuals.dev;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
+import net.vulkanmod.config.gui.ColourPickerPopup;
 import net.vulkanmod.config.gui.OptionBlock;
 import net.vulkanmod.config.gui.VOptionScreen;
+import net.vulkanmod.config.gui.util.ColourPickerMath;
+import net.vulkanmod.config.gui.widget.ColourOptionWidget;
 import net.vulkanmod.config.option.ButtonOption;
+import net.vulkanmod.config.option.ColourOption;
 import net.vulkanmod.config.option.Option;
 import net.vulkanmod.config.option.OptionPage;
 import net.vulkanmod.visuals.VisualsLog;
@@ -27,7 +31,11 @@ import static net.vulkanmod.visuals.render.PostProcessSettings.KEY_PREFIX;
  * vm press KEY        press a shader button (reset_defaults)
  * vm apply             press Apply
  * vm close             close the screen
+ * vm picker KEY        open a colour option's picker (session 8), as a click on its swatch
+ * vm pick hex RRGGBB   type a hex into the open picker; pick hsv H S V (0..1) as the square and bar would; pick rgb C V (channel
+ *                      0..2, 0..255) as a slider; pick reset (its default), pick done, pick cancel; pick state logs it
  * </pre>
+ * A colour option's VALUE in vm opt may be #RRGGBB.
  */
 final class VisualsOptionScreenPilot {
     private VisualsOptionScreenPilot() {
@@ -77,6 +85,29 @@ final class VisualsOptionScreenPilot {
             }
             case "apply" -> call(screen(mc), "applyOptions", new Class<?>[0]);
             case "close" -> mc.setScreen(null);
+            case "picker" -> {
+                if (!(find(screen(mc), a[1]) instanceof ColourOption o)) throw new IllegalArgumentException("not a colour: " + a[1]);
+                ((ColourOptionWidget) o.getWidget()).openPicker();
+                VisualsLog.info("Visuals pilot: VulkanMod colour picker " + a[1] + " opened at " + ColourOption.hex(o.getNewValue()));
+            }
+            case "pick" -> {
+                ColourPickerPopup p = screen(mc).popup();
+                if (p == null) throw new IllegalStateException("no colour picker open");
+                switch (a[1]) {
+                    case "hex" -> p.type(a[2]);
+                    case "hsv" -> p.setHsv(Float.parseFloat(a[2]), Float.parseFloat(a[3]), Float.parseFloat(a[4]));
+                    case "rgb" -> p.setRgb(ColourPickerMath.withChannel(p.rgb(), Integer.parseInt(a[2]), Integer.parseInt(a[3])));
+                    case "reset" -> p.reset();
+                    case "done" -> p.close(true);
+                    case "cancel" -> p.close(false);
+                    case "state" -> {
+                    }
+                    default -> throw new IllegalArgumentException("vm pick " + a[1]);
+                }
+                VisualsLog.info("Visuals pilot: VulkanMod colour picker " + a[1] + ": " + ColourOption.hex(p.rgb()) + ", option "
+                        + ColourOption.hex(p.option().getNewValue()) + (p.closed() ? " (closed)" : ""));
+                if (p.closed()) screen(mc).openPopup(null);
+            }
             default -> throw new IllegalArgumentException("vm " + arg);
         }
     }
@@ -125,7 +156,8 @@ final class VisualsOptionScreenPilot {
     @SuppressWarnings("unchecked")
     private static void setNewValue(Option<?> o, String value) {
         Object current = o.getNewValue();
-        Object v = current instanceof Boolean ? (Object) Boolean.parseBoolean(value) : (Object) Integer.parseInt(value);
+        Object v = current instanceof Boolean ? (Object) Boolean.parseBoolean(value)
+                : value.startsWith("#") ? (Object) ColourPickerMath.parseHex(value) : (Object) Integer.parseInt(value);
         ((Option<Object>) o).setNewValue(v);
     }
 }

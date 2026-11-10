@@ -110,6 +110,17 @@ public final class VkPostProcess {
      */
     private final VkComputeProgram reflectionLean;
     private boolean leanOn;
+    /**
+     * 2026-11-10 (session 8): postReflection.TINTED and .LEAN.TINTED (the picked colours' tints applied; null when not built or their
+     * uniforms differ: the reflection then keeps the default colours) and whether this frame needs them (prepare: a fog, rainy sky, moon or
+     * aurora colour the reflection applies is picked).
+     */
+    private final VkComputeProgram reflectionTinted, reflectionLeanTinted;
+    private boolean tintedOn;
+    /** Session 8: postSceneCopy.TINTED (null: not built) and whether this frame needs it (a fog, rainy sky, moon, aurora or water colour picked). */
+    private final VkComputeProgram copyTinted;
+    private boolean copyTintedOn;
+    private String reflectionUsed = "";
     //Volumetric light pass (2026-10-15): light shafts through the sun's cascades, into the shaft image
     private final VkComputeProgram volumetric, volumetricBlur;
     private final LooseUniformWriter volumetricUniforms;
@@ -233,6 +244,9 @@ public final class VkPostProcess {
         this.reflection = reflection;
         this.reflectionUniformBuffer = reflectionUniformBuffer;
         this.reflectionLean = lean("postReflection", reflection);
+        this.reflectionTinted = variant("postReflection.TINTED", reflection);
+        this.copyTinted = variant("postSceneCopy.TINTED", copy);
+        this.reflectionLeanTinted = variant("postReflection.LEAN.TINTED", reflection);
         this.volumetric = volumetric;
         this.volumetricBlur = volumetricBlur;
         this.volumetricUniformBuffer = volumetricUniformBuffer;
@@ -497,6 +511,8 @@ public final class VkPostProcess {
         this.ao.prepare(upload, lighting);
         this.reflectionOn = reflection.on();
         this.leanOn = !this.sky.auroraOn() && !clouds.realistic();
+        this.tintedOn = reflection.tinted() || this.sky.auroraTinted();
+        this.copyTintedOn = atmosphere.tinted() || this.sky.tinted();
         atmosphere.writeShafts(this.shaftMaskUniforms);
         atmosphere.writeShafts(this.shaftBlurUniforms);
         bloomFog.write(this.prefilterUniforms);
@@ -541,7 +557,7 @@ public final class VkPostProcess {
                 .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest)
                 .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
-        this.copy.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
+        (this.copyTintedOn && this.copyTinted != null ? this.copyTinted : this.copy).dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
         toRead(cmd, copyTarget);
         VkGpuTimer.mark(cmd, "post.reflection");
@@ -643,18 +659,23 @@ public final class VkPostProcess {
     /** P7e-2 design 3.3: the lit scene with the water reflections mixed in, written to the scene the bloom and the final draw read. */
     /** Session 7: NAME.LEAN, or null when it cannot be built or takes other uniforms or bindings than the full program NAME. */
     private static VkComputeProgram lean(String name, VkComputeProgram full) {
-        VkComputeProgram lean = null;
+        return variant(name + ".LEAN", full);
+    }
+
+    /** Session 8: the program `variant`, or null when it cannot be built or takes other uniforms or bindings than `full`. */
+    private static VkComputeProgram variant(String variant, VkComputeProgram full) {
+        VkComputeProgram v = null;
         try {
-            lean = VkComputeProgram.of(name + ".LEAN");
-            if (!lean.meta().equals(full.meta())) {
-                VisualsLog.warn("Visuals " + name + ".LEAN differs in its uniforms, the full pass is used");
-                lean.free();
+            v = VkComputeProgram.of(variant);
+            if (!v.meta().equals(full.meta())) {
+                VisualsLog.warn("Visuals " + variant + " differs in its uniforms, the full pass is used");
+                v.free();
                 return null;
             }
-            return lean;
+            return v;
         } catch (RuntimeException | LinkageError e) {
-            if (lean != null) lean.free();
-            VisualsLog.warn("Visuals " + name + ".LEAN not created, the full pass is used: " + e);
+            if (v != null) v.free();
+            VisualsLog.warn("Visuals " + variant + " not created, the full pass is used: " + e);
             return null;
         }
     }
@@ -669,7 +690,15 @@ public final class VkPostProcess {
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
-        VkComputeProgram program = this.leanOn && this.reflectionLean != null ? this.reflectionLean : this.reflection;
+        VkComputeProgram program = this.tintedOn && this.reflectionTinted != null
+                ? (this.leanOn && this.reflectionLeanTinted != null ? this.reflectionLeanTinted : this.reflectionTinted)
+                : (this.leanOn && this.reflectionLean != null ? this.reflectionLean : this.reflection);
+        //Session 8: the build in use, logged when it changes (which colours and features a frame's reflection draws with)
+        String used = program == this.reflectionLeanTinted ? "LEAN.TINTED" : program == this.reflectionTinted ? "TINTED" : program == this.reflectionLean ? "LEAN" : "full";
+        if (!used.equals(this.reflectionUsed)) {
+            VisualsLog.info("Visuals reflection pass: postReflection " + used);
+            this.reflectionUsed = used;
+        }
         program.dispatchWithPush(cmd, bindings, this.reflectionUniformBuffer == null ? this.reflectionUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
         toRead(cmd, this.scene);
@@ -818,6 +847,7 @@ public final class VkPostProcess {
         if (this.smaa != null) this.smaa.free();
         if (this.taa != null) this.taa.free();
         this.copy.free();
+        if (this.copyTinted != null) this.copyTinted.free();
         this.prefilter.free();
         this.down.free();
         this.up.free();
@@ -830,6 +860,8 @@ public final class VkPostProcess {
         this.lightingBlur.free();
         this.reflection.free();
         if (this.reflectionLean != null) this.reflectionLean.free();
+        if (this.reflectionTinted != null) this.reflectionTinted.free();
+        if (this.reflectionLeanTinted != null) this.reflectionLeanTinted.free();
         this.finalDraw.free();
         this.ao.free();
         if (this.copyUniformBuffer != null) this.copyUniformBuffer.free();

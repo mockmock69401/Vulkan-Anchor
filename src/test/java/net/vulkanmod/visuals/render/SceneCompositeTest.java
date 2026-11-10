@@ -61,9 +61,10 @@ class SceneCompositeTest {
                 .orElseThrow(() -> new AssertionError("no location " + location));
     }
 
-    /** Every slot 3..45 as a vec4, after the writers (zeros where none writes). */
+    /** Every slot 3..57 as a vec4, after the writers (zeros where none writes; session 8: CelestialUniforms.off()'s default tints first). */
     private static float[][] slots(Consumer<LooseUniformWriter> write) {
         LooseUniformWriter w = new LooseUniformWriter(META);
+        CelestialUniforms.off().write(w);
         write.accept(w);
         ByteBuffer b = w.buffer();
         float[][] s = new float[SceneCompositeMath.SLOTS][4];
@@ -269,8 +270,8 @@ class SceneCompositeTest {
         assertEquals(SceneCompositeMath.LOOK, AtmosphereUniforms.LOOK);
         assertEquals(SceneCompositeMath.BORDER_FOG, AtmosphereUniforms.BORDER);
         assertEquals(29, AtmosphereUniforms.LOOK, "boundary 3.2: W4's slot 29");
-        assertArrayEquals(new int[]{3, 4, 5, 6, 7, 9, 25}, AtmosphereUniforms.COPY_SLOTS);
-        assertTrue(COMP.contains("Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog)"));
+        assertArrayEquals(new int[]{3, 4, 5, 6, 7, 9, 25, 48, 49, 50}, AtmosphereUniforms.COPY_SLOTS);
+        assertTrue(COMP.contains("Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,\n            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint)"));
         assertTrue(COMP.contains("CloudLight(cloudLit, cloudAmbient, cloudLightDir)"));
     }
 
@@ -889,7 +890,7 @@ class SceneCompositeTest {
         assertTrue(SceneCompositeMath.composite(sideways, s, LIGHTMAP)[2] > SceneCompositeMath.composite(covered, s, LIGHTMAP)[2] * 1.5f);
         //The composite never darkens water by its reflectivity itself (no Fresnel or reflectivity call)
         assertFalse(COMP.contains("reflectivity("));
-        assertTrue(COMP.contains("lit = waterColour(lit, kind*waterParams.x, lightAll*perLight*ao*waterParams.y);"));
+        assertTrue(COMP.contains("lit = waterColour(lit, kind*waterParams.x, lightAll*perLight*ao*waterParams.y*waterTint.rgb);"));
     }
 
     /** B3: vanilla's own clouds take no sun shading and no light colour. */
@@ -1579,7 +1580,8 @@ class SceneCompositeTest {
     // ---- the mirror ----
 
     private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "CELESTIAL", "AURORA", "UNDERWATER_PARAMS", "UNDERWATER_RIPPLE_A", "UNDERWATER_RIPPLE_B", "UNDERWATER_LIGHT", "AIR_FIRST", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
-            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "HELD_EYE", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW");
+            "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "HELD_EYE", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW",
+            "AURORA_TINTS", "WATER_TINT");
 
     @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {

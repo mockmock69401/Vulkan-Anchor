@@ -79,9 +79,11 @@ public final class SceneCompositeMath {
     public static final float DEBUG_UNKNOWN_RED = 0.25f, DEBUG_UNKNOWN_GREEN = 0.0f, DEBUG_UNKNOWN_BLUE = 0.25f;
 
     // ---- the composite's slots (boundary 3.2) ----
-    public static final int SLOTS = 48;
+    public static final int SLOTS = 58;
     /** 2026-11-09 (session 5): CelestialUniforms' discs' shape (46) and aurora (47). */
     public static final int CELESTIAL = CelestialUniforms.COPY_CELESTIAL, AURORA = CelestialUniforms.COPY_AURORA;
+    /** 2026-11-10 (session 8): the aurora's three colour tints (54..56) and the water's body colour tint (57). */
+    public static final int AURORA_TINTS = CelestialUniforms.COPY_AURORA_TINTS, WATER_TINT = CelestialUniforms.COPY_WATER_TINT;
     /** 2026-11-09 (session 2b): UnderwaterUniforms' slots 35..38 and the air's struct Atmosphere at 39..45. */
     public static final int UNDERWATER_PARAMS = UnderwaterUniforms.PARAMS, UNDERWATER_RIPPLE_A = UnderwaterUniforms.RIPPLE_A,
             UNDERWATER_RIPPLE_B = UnderwaterUniforms.RIPPLE_B, UNDERWATER_LIGHT = UnderwaterUniforms.LIGHT, AIR_FIRST = UnderwaterUniforms.AIR_FIRST;
@@ -372,8 +374,9 @@ public final class SceneCompositeMath {
         float[] r = UnderwaterMath.underwaterRefract(px.dir, n);
         float[] above = new float[3];
         if (UnderwaterMath.dot(r, r) > 0.5f) {
-            Atmosphere air = new Atmosphere(slots[AIR_FIRST], slots[AIR_FIRST + 1], slots[AIR_FIRST + 2], slots[AIR_FIRST + 3], slots[AIR_FIRST + 4],
-                    slots[AIR_FIRST + 5], slots[AIR_FIRST + 6]);
+            int[] as = UnderwaterUniforms.AIR_SLOTS;
+            Atmosphere air = new Atmosphere(slots[as[0]], slots[as[1]], slots[as[2]], slots[as[3]], slots[as[4]], slots[as[5]], slots[as[6]],
+                    slots[as[7]], slots[as[8]], slots[as[9]]);
             above = AtmosphereMath.atmosphereSky(air) ? add(add(AtmosphereMath.skyColour(air, r), AtmosphereMath.sunGlow(air, r)), WaterMath.sunDisc(air, r, slots[CELESTIAL]))
                     : displayLinear(px.colour);
             above = add(above, auroraSky(slots, r));
@@ -409,9 +412,9 @@ public final class SceneCompositeMath {
                 PostMath.linearToDisplay(l[2] / PostMath.SCENE_WHITE)};
     }
 
-    /** The struct Atmosphere from the composite's slots 3..7, 9, 25. */
+    /** The struct Atmosphere from the composite's slots 3..7, 9, 25 and (session 8) the tints 48..50. */
     public static Atmosphere atmosphere(float[][] slots) {
-        return new Atmosphere(slots[3], slots[4], slots[5], slots[6], slots[7], slots[9], slots[25]);
+        return new Atmosphere(slots[3], slots[4], slots[5], slots[6], slots[7], slots[9], slots[25], slots[48], slots[49], slots[50]);
     }
 
     private static float[] farCloudsOver(Atmosphere a, float[][] slots, float[] colour, float[] dir, float[] march) {
@@ -428,7 +431,7 @@ public final class SceneCompositeMath {
         float[] params = slots[AURORA];
         if (!(params[0] > 0)) return new float[3];
         float j = params[3] - (float) Math.floor(params[3]);
-        return AuroraMath.aurora(dir, params, AuroraMath.AURORA_STEPS, j);
+        return AuroraMath.aurora(dir, params, slots[AURORA_TINTS], slots[AURORA_TINTS + 1], slots[AURORA_TINTS + 2], AuroraMath.AURORA_STEPS, j);
     }
 
     /** The shader's main for one pixel: rgba written to sceneOut. slots: SLOTS vec4 (the matrix slots unused here). */
@@ -572,7 +575,7 @@ public final class SceneCompositeMath {
             if (isWater && capped) {
                 for (int i = 0; i < 3; i++) lit[i] = Math.max(lit[i], lightAll[i] * perLight[i] * RelightMath.WATER_ALBEDO);
             }
-            if (isWater) lit = WaterMath.waterColour(lit, kind * water[0], scale(mul(mul(lightAll, perLight), ao), water[1]));
+            if (isWater) lit = WaterMath.waterColour(lit, kind * water[0], mul(scale(mul(mul(lightAll, perLight), ao), water[1]), slots[WATER_TINT]));
         }
         //2026-10-28: light sources glow; an ore's specks add their own light (its albedo, or vanilla's colour over vanilla's lightmap)
         float[] glow = slots[GLOW];

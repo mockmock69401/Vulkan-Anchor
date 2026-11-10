@@ -60,15 +60,29 @@ public final class AtmosphereMath {
     /** Numerical guards (see atmosphere.glsl). */
     public static final float SKY_FOG_MIN_SLOPE = 0.001f, FOG_SERIES = 0.001f, HAZE_MAX_DISTANCE = 1000000.0f, MIN_DEPTH = 0.000001f;
 
-    /** The shader's struct Atmosphere: seven vec4 (each a float[4]); see atmosphere.glsl for the components. */
-    public record Atmosphere(float[] sun, float[] sunLight, float[] moonLight, float[] depth, float[] ambient, float[] glow, float[] fog) {
-        public static final int VEC4S = 7;
+    /**
+     * The shader's struct Atmosphere: ten vec4 (each a float[4]); see atmosphere.glsl for the components. 2026-11-10 (session 8): the last
+     * three are the picked colours' tints (fog, overcast, moon), (1, 1, 1, 0) at the defaults.
+     */
+    public record Atmosphere(float[] sun, float[] sunLight, float[] moonLight, float[] depth, float[] ambient, float[] glow, float[] fog,
+                             float[] fogTint, float[] overcastTint, float[] moonTint) {
+        public static final int VEC4S = 10;
+        /** The first vec4 of the tints (fogTint), and the tints' default. */
+        public static final int TINTS = 7;
+        static final float[] NO_TINT = {1, 1, 1, 0};
 
-        /** From the 28 floats of AtmosphereUniforms.block, in field order. */
+        /** The seven vec4 before session 8, with the default tints. */
+        public Atmosphere(float[] sun, float[] sunLight, float[] moonLight, float[] depth, float[] ambient, float[] glow, float[] fog) {
+            this(sun, sunLight, moonLight, depth, ambient, glow, fog, NO_TINT.clone(), NO_TINT.clone(), NO_TINT.clone());
+        }
+
+        /** From the 40 floats of AtmosphereUniforms.block, in field order; a shorter block (the 28 before session 8) gets the default tints. */
         public static Atmosphere of(float[] block) {
             float[][] v = new float[VEC4S][];
-            for (int i = 0; i < VEC4S; i++) v[i] = java.util.Arrays.copyOfRange(block, i * 4, i * 4 + 4);
-            return new Atmosphere(v[0], v[1], v[2], v[3], v[4], v[5], v[6]);
+            for (int i = 0; i < VEC4S; i++) {
+                v[i] = block.length >= i * 4 + 4 ? java.util.Arrays.copyOfRange(block, i * 4, i * 4 + 4) : i >= TINTS ? NO_TINT.clone() : new float[4];
+            }
+            return new Atmosphere(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9]);
         }
 
         public float mode() {
@@ -123,10 +137,12 @@ public final class AtmosphereMath {
         return (1 - g * g) / (d * (float) Math.sqrt(d));
     }
 
+    /** 2026-11-10 (session 8): the overcast tint times the picked overcastTint. */
     public static float[] overcast(Atmosphere a, float[] c) {
         float l = PostMath.luminance(c[0], c[1], c[2]);
         float s = a.sunLight[3];
-        return new float[]{mix(c[0], OVERCAST_RED * l, s), mix(c[1], OVERCAST_GREEN * l, s), mix(c[2], OVERCAST_BLUE * l, s)};
+        float[] t = a.overcastTint;
+        return new float[]{mix(c[0], OVERCAST_RED * t[0] * l, s), mix(c[1], OVERCAST_GREEN * t[1] * l, s), mix(c[2], OVERCAST_BLUE * t[2] * l, s)};
     }
 
     public static float[] airlight(Atmosphere a, float[] dir, float mass) {
@@ -183,7 +199,14 @@ public final class AtmosphereMath {
         if (!atmosphereSky(a)) return new float[]{Math.max(a.sunLight[0], 0), Math.max(a.sunLight[1], 0), Math.max(a.sunLight[2], 0)};
         float l = (float) Math.sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
         float[] horizon = l > 0.0001f ? new float[]{dir[0] / l, 0, dir[2] / l} : new float[]{0, 0, 1};
-        return overcast(a, airlight(a, horizon, skyAirMass(0)));
+        float[] c = overcast(a, airlight(a, horizon, skyAirMass(0)));
+        return new float[]{c[0] * a.fogTint[0], c[1] * a.fogTint[1], c[2] * a.fogTint[2]};
+    }
+
+    /** 2026-11-10 (session 8): atmosphere.glsl's hazeTint: 1 + (fogTint - 1) x the share of the sky's air the path does not hold. */
+    public static float[] hazeTint(Atmosphere a, float mass, float skyMass) {
+        float share = skyMass > 0 ? clamp01(1 - mass / skyMass) : 0;
+        return new float[]{1 + (a.fogTint[0] - 1) * share, 1 + (a.fogTint[1] - 1) * share, 1 + (a.fogTint[2] - 1) * share};
     }
 
     /** The mean of exp(-height / H) along d blocks from a camera camHeight above sea level with dir.y = dirY, invH = 1 / H (heights clamped at 0). */
@@ -275,10 +298,11 @@ public final class AtmosphereMath {
         float band = (float) Math.exp(-lowBand(a, mass, skyMass));
         for (int i = 0; i < 3; i++) t[i] = (float) Math.exp(-Math.max(a.depth[i] + a.depth[3], MIN_DEPTH) * mass) * tf * band;
         float[] air = overcast(a, airlight(a, dir, mass));
+        float[] tint = hazeTint(a, mass, skyMass);
         float[] lobe = glowLobeOpen(a, dir, sunOpen);
         float along = glowGain(mass), sky = glowGain(skyMass);
         float[] in = new float[3];
-        for (int i = 0; i < 3; i++) in[i] = (air[i] + lobe[i] * along) * tf;
+        for (int i = 0; i < 3; i++) in[i] = (air[i] * tint[i] + lobe[i] * along) * tf;
         if (tf < 1) {
             float[] fog = fogColour(a, dir);
             for (int i = 0; i < 3; i++) in[i] += (fog[i] + lobe[i] * sky) * (1 - tf);

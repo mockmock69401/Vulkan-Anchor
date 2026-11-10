@@ -799,8 +799,9 @@ public final class VisualsRenderer {
             }
             this.post.prepareUnderwater(UnderwaterUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, surfaceUp, skyAccess, copies));
             this.post.prepareSky(sky(settings, level, camera, serial));
+            //2026-11-10 (session 8): with the picked block light and moon colours (slots 31, 32)
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
-                    atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight);
+                    atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight).tinted(settings.colours());
             //P7j design 3.3, P7f-2: the last valid cascades, rebased to this frame's sun views (which exist only when this frame
             // prepared the maps); never after a shadow failure
             boolean shadowsOn = this.shadowsOn();

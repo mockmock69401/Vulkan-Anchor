@@ -41,7 +41,7 @@ public final class WeatherUniforms {
     public static final float VELOCITY_SECONDS = 0.1f, TELEPORT_BLOCKS = 8.0f;
 
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f invView, boolean lodValid, float[] camera,
-                         float[] frac, float[] params, float[] rain, float[] snow, float[] splash, float[] water) {
+                         float[] frac, float[] params, float[] rain, float[] snow, float[] splash, float[] water, float[] rainTint, float[] snowTint) {
         public void write(LooseUniformWriter w) {
             if (!this.on) return;
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection);
@@ -53,8 +53,9 @@ public final class WeatherUniforms {
             w.putVec4(PARAMS, this.params[0], this.params[1], this.params[2], this.params[3]);
             w.putVec4(RAIN, this.rain[0], this.rain[1], this.rain[2], this.rain[3]);
             w.putVec4(SNOW, this.snow[0], this.snow[1], this.snow[2], this.snow[3]);
-            w.putVec4(RAIN_TINT, RAIN_COLOUR[0], RAIN_COLOUR[1], RAIN_COLOUR[2], 0);
-            w.putVec4(SNOW_TINT, SNOW_COLOUR[0], SNOW_COLOUR[1], SNOW_COLOUR[2], 0);
+            //2026-11-10 (session 8): times the picked rain and snow colours' tints (exactly 1 at the defaults)
+            w.putVec4(RAIN_TINT, RAIN_COLOUR[0] * this.rainTint[0], RAIN_COLOUR[1] * this.rainTint[1], RAIN_COLOUR[2] * this.rainTint[2], 0);
+            w.putVec4(SNOW_TINT, SNOW_COLOUR[0] * this.snowTint[0], SNOW_COLOUR[1] * this.snowTint[1], SNOW_COLOUR[2] * this.snowTint[2], 0);
             w.putVec4(SPLASH, this.splash[0], 0, 0, 0);
             w.putVec4(WATER, this.water[0], this.water[1], this.water[2], this.water[3]);
         }
@@ -64,7 +65,7 @@ public final class WeatherUniforms {
     }
 
     public static Values off() {
-        return new Values(false, null, null, null, false, null, null, null, null, null, null, null);
+        return new Values(false, null, null, null, false, null, null, null, null, null, null, null, null, null);
     }
 
     /** Whether the shader draws the weather this frame instead of vanilla (the setting on, the post-process on, a frame to draw). */
@@ -97,7 +98,7 @@ public final class WeatherUniforms {
         return new Values(true, invVanillaProjection, invLodProjection != null ? invLodProjection : invVanillaProjection, invView, lodValid, camera, frac,
                 params, motion(RAIN_FALL, v, WeatherMath.RAIN_PERIOD, seconds, EXPOSURE), motion(SNOW_FALL, v, WeatherMath.SNOW_PERIOD, seconds, SNOW_EXPOSURE),
                 new float[]{(float) wrap(seconds, (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP), 0, 0, 0},
-                water != null && water.length == 4 ? water : new float[4]);
+                water != null && water.length == 4 ? water : new float[4], s.colours().tint(ShaderColours.Colour.RAIN), s.colours().tint(ShaderColours.Colour.SNOW));
     }
 
     /**
