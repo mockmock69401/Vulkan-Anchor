@@ -184,7 +184,7 @@ public final class VisualsRenderer {
                 this.cloudMask = loadCloudMask();
                 this.cloudMapSize = clouds.cloudSize();
                 this.cloudMapCount = clouds.cloudCount();
-                this.post.queueCloudMap(this.cloudMask != null ? CloudMath.withNoise(this.cloudMask, this.cloudMapSize, this.cloudMapCount) : null);
+                this.post.queueCloudMap(this.cloudMask != null ? CloudMapCache.withNoise(this.cloudMask, this.cloudMapSize, this.cloudMapCount) : null);
             }
             this.depthCapture = this.post == null ? null : createDepthCapture(this.deferred);
             VkFrames.addListener(this.frameListener);
@@ -617,7 +617,7 @@ public final class VisualsRenderer {
         this.cloudMapSize = size;
         this.cloudMapCount = count;
         byte[] mask = this.cloudMask;
-        this.cloudMapBuild = CompletableFuture.supplyAsync(() -> CloudMath.withNoise(mask, size, count)).exceptionally(e -> {
+        this.cloudMapBuild = CompletableFuture.supplyAsync(() -> CloudMapCache.withNoise(mask, size, count)).exceptionally(e -> {
             VisualsLog.warn("Visuals cloud map rebuild failed, the clouds keep their old size and count: " + e);
             return null;
         });

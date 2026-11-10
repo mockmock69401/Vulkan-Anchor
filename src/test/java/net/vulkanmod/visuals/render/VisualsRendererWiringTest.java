@@ -224,7 +224,7 @@ class VisualsRendererWiringTest {
     @Test
     void theRendererDrivesTheFarClouds() throws Exception {
         List<String> init = calls(SYSTEM, "<init>");
-        assertTrue(init.contains("VkPostProcess.queueCloudMap") && init.contains("VisualsRenderer.loadCloudMask") && init.contains("CloudMath.withNoise"), init.toString());
+        assertTrue(init.contains("VkPostProcess.queueCloudMap") && init.contains("VisualsRenderer.loadCloudMask") && init.contains("CloudMapCache.withNoise"), init.toString());
         List<String> load = calls(SYSTEM, "loadCloudMask");
         assertTrue(load.contains("NativeImage.read") && load.contains("NativeImage.getPixelRGBA") && load.contains("CloudMath.mask"), load.toString());
         List<String> frame = calls(SYSTEM, "cloudFrame");
