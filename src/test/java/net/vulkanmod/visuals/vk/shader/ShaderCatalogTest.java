@@ -36,7 +36,7 @@ class ShaderCatalogTest {
         Set<String> covered = new TreeSet<>();
         ShaderCatalog.visuals().all().forEach(p -> p.stages().forEach(s -> covered.add(s.id())));
         assertEquals(new TreeSet<>(USED_STAGES), covered);
-        assertEquals(38, ShaderCatalog.visuals().all().size());//2026-11-09 (session 6): the shader weather. 2026-11-07: the sub-level shadow caster. 2026-10-29: the entity shadow caster and the colour copy; FSR's inputs and HUD-less copy (2), frame generation (5), the post-process (W10's three AO passes included), SMAA, the shadow caster, the edge cover, the LOD composite, DH's terrain and DH's shadow casters
+        assertEquals(39, ShaderCatalog.visuals().all().size());//2026-11-10 (session 7): the reflection's LEAN build. 2026-11-09 (session 6): the shader weather. 2026-11-07: the sub-level shadow caster. 2026-10-29: the entity shadow caster and the colour copy; FSR's inputs and HUD-less copy (2), frame generation (5), the post-process (W10's three AO passes included), SMAA, the shadow caster, the edge cover, the LOD composite, DH's terrain and DH's shadow casters
     }
 
 

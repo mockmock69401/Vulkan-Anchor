@@ -71,6 +71,10 @@ layout(location = 29) uniform vec4 reserved29;
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
 
+//2026-11-10 (session 7): built twice (VisualsPrograms): postReflection.LEAN defines REFLECT_LEAN and leaves out the aurora and the
+// realistic clouds' march, for frames that draw neither (VkPostProcess picks it). The branches it drops are skipped on such frames
+// anyway; their code alone made the pass dearer (more registers per thread: over the sea at noon on Potato 0.80 against 0.34 ms
+// without it, 2560x1440)
 //The march: REFLECT_STEPS steps in screen space up to the screen's edge, denser near the start (t^REFLECT_STEP_POWER), then
 // REFLECT_REFINE halvings between the last step in front and the first behind
 const int REFLECT_STEPS = 24;
@@ -277,9 +281,11 @@ int reflectCloudSamples(float len) {
 // Returns farCloudMarch's (sunlit weight, sky-lit weight, coverage, mean distance). Session 3: the realistic style marches
 // REAL_REFLECT_SAMPLES with one erosion octave and without a light march (its shading from the height in the layer), the cirrus included
 vec4 reflectedCloudMarch(vec3 origin, vec3 dir, float jitter) {
+#ifndef REFLECT_LEAN
     if (cloudRealistic()) {
         return realMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, 0, 1);
     }
+#endif
     vec2 span = cloudInterval(origin, dir, HAZE_MAX_DISTANCE);
     if (cloudShape.w < 0.5 || span.y <= span.x) {
         return vec4(0.0);
@@ -522,9 +528,11 @@ void main() {
         float sunVisibility = sunVisibilityAt(p, size, dist, toView*nGeom);
         vec3 sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w), celestial);
         //Session 5: the aurora in the water (AURORA_REFLECTION_STEPS samples), under the reflected clouds
+#ifndef REFLECT_LEAN
         if (auroraParams.x > 0.0) {
             sky += aurora(r, auroraParams, AURORA_REFLECTION_STEPS, fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
         }
+#endif
         if (cloudShape.w > 0.5 && atmosphereSky(a)) {
             vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
             sky = sky*(1.0 - cloud.a) + cloud.rgb;

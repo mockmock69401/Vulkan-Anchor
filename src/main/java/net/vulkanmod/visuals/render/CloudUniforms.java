@@ -42,6 +42,11 @@ public final class CloudUniforms {
             return this.slots.clone();
         }
 
+        /** Session 7: the realistic style (cloudOffset.z at least 1, clouds.glsl's cloudRealistic). */
+        public boolean realistic() {
+            return this.slots.length > 6 && this.slots[6] >= 1;
+        }
+
         /** The shader's CloudLight, for the Java mirror. */
         public AtmosphereMath.CloudLight light() {
             return new AtmosphereMath.CloudLight(java.util.Arrays.copyOfRange(this.slots, 8, 12), java.util.Arrays.copyOfRange(this.slots, 12, 16),
