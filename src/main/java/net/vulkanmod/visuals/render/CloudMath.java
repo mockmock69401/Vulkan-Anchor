@@ -242,6 +242,29 @@ public final class CloudMath {
         return e;
     }
 
+    /** realErosionFor's REAL_KEEP_MARGIN: room for rounding in the octaves' lower bound. */
+    public static final float REAL_KEEP_MARGIN = 0.999f;
+
+    /**
+     * Session 7, realErosionFor: erosion for a cumulus density d, or -1 where the octaves evaluated so far prove the density 0 (each later
+     * octave keeps at least 1 - its detail of the erosion, so REAL_ERODE times that floor at or above d leaves nothing); the later
+     * octaves are then skipped.
+     */
+    public static float erosionFor(float x, float y, float z, int octaves, float d) {
+        if (octaves <= 0) return REAL_NOISE_MEAN;
+        float e = valueNoise(x / REAL_NOISE_CELL, y / REAL_NOISE_CELL, z / REAL_NOISE_CELL, MAP * CLOUD_CELL / REAL_NOISE_CELL);
+        if (octaves >= 2) {
+            float keep = (1 - REAL_NOISE_DETAIL) * (octaves >= 3 ? 1 - REAL_NOISE_DETAIL2 : 1) * REAL_KEEP_MARGIN;
+            if (REAL_ERODE * e * keep >= d) return -1;
+            e = mix(e, lumps(x / REAL_NOISE_CELL2, y / REAL_NOISE_CELL2, z / REAL_NOISE_CELL2, MAP * CLOUD_CELL / REAL_NOISE_CELL2), REAL_NOISE_DETAIL);
+        }
+        if (octaves >= 3) {
+            if (REAL_ERODE * e * (1 - REAL_NOISE_DETAIL2) * REAL_KEEP_MARGIN >= d) return -1;
+            e = mix(e, lumps(x / REAL_NOISE_CELL3, y / REAL_NOISE_CELL3, z / REAL_NOISE_CELL3, MAP * CLOUD_CELL / REAL_NOISE_CELL3), REAL_NOISE_DETAIL2);
+        }
+        return e;
+    }
+
     /** realLumps: 1 - |2n - 1| of the value noise: low inside rounded lumps, 1 along the creases between them. */
     static float lumps(float x, float y, float z, float n) {
         return 1 - Math.abs(2 * valueNoise(x, y, z, n) - 1);
@@ -258,7 +281,9 @@ public final class CloudMath {
         float hp = (h - lift) / ((1 - lift) * mix(REAL_TOP_MIN, 1, s) * mix(1 - REAL_TOWER, 1, tower));
         if (!(hp > 0 && hp < 1)) return 0;
         float d = s * smoothstep(0, REAL_BOTTOM, hp) * (1 - smoothstep(REAL_ROUND, 1, hp));
-        float e = REAL_ERODE * erosion(mx, y - r.base, mz, octaves);
+        float er = erosionFor(mx, y - r.base, mz, octaves, d);
+        if (er < 0) return 0;
+        float e = REAL_ERODE * er;
         return Math.max((d - e) / (1 - e), 0);
     }
 

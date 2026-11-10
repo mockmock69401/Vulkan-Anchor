@@ -248,6 +248,33 @@ float realErosion(vec3 q, int octaves) {
     return e;
 }
 
+//2026-11-10 (session 7): each octave after the first mixes the erosion toward a noise of 0..1, so it keeps at least (1 - its detail)
+// of what it was: where REAL_ERODE times what is left in the worst case already reaches the density d, the density is 0 whatever the
+// later octaves add, and they are skipped (the cloud's fringes; the same 0 as the full sum). REAL_KEEP_MARGIN leaves room for rounding
+const float REAL_KEEP_MARGIN = 0.999;
+
+//realErosion for a density d: -1 where the octaves evaluated so far prove the density 0, else the erosion
+float realErosionFor(vec3 q, int octaves, float d) {
+    if (octaves <= 0) {
+        return REAL_NOISE_MEAN;
+    }
+    float e = realValueNoise(q/REAL_NOISE_CELL, CLOUD_MAP*CLOUD_CELL/REAL_NOISE_CELL);
+    if (octaves >= 2) {
+        float keep = (1.0 - REAL_NOISE_DETAIL)*(octaves >= 3 ? 1.0 - REAL_NOISE_DETAIL2 : 1.0)*REAL_KEEP_MARGIN;
+        if (REAL_ERODE*e*keep >= d) {
+            return -1.0;
+        }
+        e = mix(e, realLumps(q/REAL_NOISE_CELL2, CLOUD_MAP*CLOUD_CELL/REAL_NOISE_CELL2), REAL_NOISE_DETAIL);
+    }
+    if (octaves >= 3) {
+        if (REAL_ERODE*e*(1.0 - REAL_NOISE_DETAIL2)*REAL_KEEP_MARGIN >= d) {
+            return -1.0;
+        }
+        e = mix(e, realLumps(q/REAL_NOISE_CELL3, CLOUD_MAP*CLOUD_CELL/REAL_NOISE_CELL3), REAL_NOISE_DETAIL2);
+    }
+    return e;
+}
+
 //The cumulus density 0..1 at camera-relative p: the weather over its coverage, the tower's height profile, eroded by the noise
 float realDensity(vec3 p, int octaves) {
     float h = (p.y - cloudShape.x)/cloudShape.y;
@@ -267,7 +294,11 @@ float realDensity(vec3 p, int octaves) {
         return 0.0;
     }
     float d = s*smoothstep(0.0, REAL_BOTTOM, hp)*(1.0 - smoothstep(REAL_ROUND, 1.0, hp));
-    float e = REAL_ERODE*realErosion(vec3(m.x, p.y - cloudShape.x, m.y), octaves);
+    float er = realErosionFor(vec3(m.x, p.y - cloudShape.x, m.y), octaves, d);
+    if (er < 0.0) {
+        return 0.0;
+    }
+    float e = REAL_ERODE*er;
     return max((d - e)/(1.0 - e), 0.0);
 }
 
