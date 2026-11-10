@@ -12,6 +12,10 @@
 // WaterMath mirrors the consts here and in water.glsl (WaterTest).
 layout(local_size_x = 8, local_size_y = 8) in;
 
+//2026-11-10 (session 10): the mirrored round moon keeps the plain face (water.glsl moonShape): the cratered one, compiled in, cost this
+// pass about 0.12 ms over the sea at any moon shape
+#define MOON_PLAIN_FACE
+
 layout(binding = 0, rgba16f) uniform writeonly restrict image2D sceneOut;
 layout(binding = 1) uniform sampler2D sceneLit;
 layout(binding = 2) uniform sampler2D mainDepth;

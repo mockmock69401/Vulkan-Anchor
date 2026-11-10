@@ -361,6 +361,106 @@ class WaterTest {
         }
     }
 
+    /**
+     * 2026-11-10 (session 10, the user: "when the round moon is selected, add craters to its surface"): the round moon has maria and
+     * craters. They belong to the face (the same disc-plane point is the same brightness wherever the moon is in the sky), crater relief
+     * shows near the terminator (the bowl's sunward wall in shade, its far wall lit) and nearly vanishes at the full moon, the maria are
+     * darker than the highlands, and the square moon stays a plain square (vanilla's art).
+     */
+    @Test
+    void theRoundMoonHasMariaAndCraters() {
+        //Fixed to the face: two places in the sky, the same offsets in the disc plane
+        Atmosphere late = atmosphere(MIDNIGHT + 0.1f, 0, true), early = atmosphere(MIDNIGHT - 0.15f, 0, true);
+        float[] m1 = {-late.sun()[0], -late.sun()[1], -late.sun()[2]}, m2 = {-early.sun()[0], -early.sun()[1], -early.sun()[2]};
+        float r = WaterMath.MOON_ROUND_RADIUS;
+        for (int phase : new int[]{0, 2, 6}) {
+            for (float u = -0.9f; u <= 0.9f; u += 0.3f) {
+                for (float v = -0.9f; v <= 0.9f; v += 0.3f) {
+                    assertEquals(WaterMath.moonShape(offDisc(m1, u * r, v * r), m1, round(phase)), WaterMath.moonShape(offDisc(m2, u * r, v * r), m2, round(phase)),
+                            0.02f, phase + " " + u + " " + v);
+                }
+            }
+        }
+        //Ptolemaeus sits on the first quarter's terminator (lit toward +e.x at phase 2): its far wall (-e.x side) catches the sun, its
+        // sunward wall is in shade; at the full moon both walls are about as bright
+        float[] c = WaterMath.MOON_CRATER[6];
+        float farX = c[0] - 0.75f * c[3], nearX = c[0] + 0.75f * c[3];
+        float far2 = WaterMath.moonFace(farX, c[1], 2), near2 = WaterMath.moonFace(nearX, c[1], 2);
+        assertTrue(far2 > 2 * near2, "relief at the terminator: " + far2 + " " + near2);
+        float far0 = WaterMath.moonFace(farX, c[1], 0), near0 = WaterMath.moonFace(nearX, c[1], 0);
+        assertEquals(1, far0 / near0, 0.15f, "flat at the full moon: " + far0 + " " + near0);
+        //Mare Imbrium's centre is darker than the highlands next to Clavius (full moon)
+        float[] imbrium = WaterMath.MOON_MARE[0], clavius = WaterMath.MOON_CRATER[5];
+        float mare = WaterMath.moonFace(imbrium[0], imbrium[1], 0);
+        float highland = WaterMath.moonFace(clavius[0], clavius[1] - 2.5f * clavius[3], 0);
+        assertTrue(mare < 0.8f * highland, "maria: " + mare + " " + highland);
+        //Tycho's rays brighten the full moon around it and are gone at a low sun (its rays need a high sun)
+        float[] tycho = WaterMath.MOON_CRATER[0];
+        assertTrue(WaterMath.moonFace(tycho[0], tycho[1] - 1.2f * tycho[3], 0) > highland, "Tycho's halo");
+        //The new moon stays dark everywhere: its limb and soft edge (once a thin bright ring) and the crater rims near the limb (once lit
+        // specks: relief catches the sun only near the terminator)
+        for (float u = -1.04f; u <= 1.04f; u += 0.01f) {
+            for (float v = -1.04f; v <= 1.04f; v += 0.04f) {
+                assertTrue(WaterMath.moonShape(offDisc(m1, u * r, v * r), m1, round(4)) <= WaterMath.MOON_EARTHSHINE * 1.5f, "new moon at " + u + " " + v);
+                assertTrue(WaterMath.moonShape(offDisc(m1, v * r, u * r), m1, round(4)) <= WaterMath.MOON_EARTHSHINE * 1.5f, "new moon at " + v + " " + u);
+            }
+        }
+        //Bounded and finite over the whole disc at every phase, and the square moon has no face
+        float[] moon = m1;
+        for (int phase = 0; phase < 8; phase++) {
+            for (float u = -1f; u <= 1f; u += 0.02f) {
+                for (float v = -1f; v <= 1f; v += 0.02f) {
+                    float s = WaterMath.moonShape(offDisc(moon, u * r, v * r), moon, round(phase));
+                    assertTrue(s >= 0 && s <= 1 && Float.isFinite(s), phase + " " + u + " " + v + ": " + s);
+                }
+            }
+            assertEquals(1, WaterMath.moonShape(offDisc(moon, 0.3f * r, -0.4f * r), moon, new float[]{0, phase, 0, 0}), 0, "the square: plain");
+        }
+    }
+
+    /** water.glsl's face tables (MOON_MARE, MOON_CRATER, MOON_CRATER_LOOK) equal the mirror's. */
+    @Test
+    void theMoonsFaceTablesEqualTheMirrors() {
+        String[][] tables = {{"MOON_MARE", "vec4"}, {"MOON_CRATER", "vec4"}, {"MOON_CRATER_LOOK", "vec2"}};
+        float[][][] mirror = {WaterMath.MOON_MARE, WaterMath.MOON_CRATER, WaterMath.MOON_CRATER_LOOK};
+        for (int t = 0; t < tables.length; t++) {
+            Matcher m = Pattern.compile("const\\s+" + tables[t][1] + "\\s+" + tables[t][0] + "\\[(\\d+)]\\s*=\\s*" + tables[t][1] + "\\[]\\((.*?)\\);", Pattern.DOTALL).matcher(GLSL);
+            assertTrue(m.find(), tables[t][0]);
+            int count = Integer.parseInt(m.group(1));
+            String body = m.group(2).replaceAll("//[^\\n]*", "");
+            Matcher v = Pattern.compile(tables[t][1] + "\\(([^)]*)\\)").matcher(body);
+            List<float[]> rows = new ArrayList<>();
+            while (v.find()) {
+                String[] parts = v.group(1).split(",");
+                float[] row = new float[parts.length];
+                for (int i = 0; i < parts.length; i++) row[i] = Float.parseFloat(parts[i].trim());
+                rows.add(row);
+            }
+            assertEquals(count, rows.size(), tables[t][0]);
+            assertEquals(count, mirror[t].length, tables[t][0]);
+            for (int i = 0; i < count; i++) assertArrayEquals(rows.get(i), mirror[t][i], 0, tables[t][0] + " " + i);
+        }
+        //The reflection pass mirrors the plain face (the cratered one cost it ~0.12 ms just by being compiled in); the sky keeps the craters
+        int define = COMP.indexOf("#define MOON_PLAIN_FACE"), imported = COMP.indexOf("#import <vulkanmod:visuals/post/water.glsl>");
+        assertTrue(define >= 0 && define < imported, "reflection.comp defines MOON_PLAIN_FACE before importing water.glsl");
+        assertFalse(ShaderFiles.read("post/scene_copy.comp").contains("MOON_PLAIN_FACE"), "the sky's moon has its craters");
+        assertTrue(GLSL.contains("#ifdef MOON_PLAIN_FACE"));
+        Atmosphere night = atmosphere(MIDNIGHT, 0, true);
+        float[] moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
+        float[] off = offDisc(moon, 0.3f * WaterMath.MOON_ROUND_RADIUS, 0.2f * WaterMath.MOON_ROUND_RADIUS);
+        assertArrayEquals(WaterMath.scale(WaterMath.moonRadiance(night), WaterMath.moonShape(off, moon, round(2), true)),
+                WaterMath.discGlint(night, off, 0, 1, round(2)), 1e-6f, "calm water mirrors the plain face");
+        assertEquals(WaterMath.MOON_MARE_COUNT, WaterMath.MOON_MARE.length);
+        assertEquals(WaterMath.MOON_CRATER_COUNT, WaterMath.MOON_CRATER.length);
+        //Every centre is on the unit sphere's visible half
+        for (float[][] table : new float[][][]{WaterMath.MOON_MARE, WaterMath.MOON_CRATER}) {
+            for (float[] c : table) {
+                assertEquals(1, Math.sqrt(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]), 0.001);
+                assertTrue(c[2] > 0);
+            }
+        }
+    }
+
     @Test
     void rippledWaterTurnsTheMirroredDiscIntoARoundGlint() {
         Atmosphere a = atmosphere(SUNSET, 0, true);
