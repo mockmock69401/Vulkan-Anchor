@@ -95,4 +95,19 @@ class PrecipitationMapTest {
         map.update(broken, 0, 70, 0, 10);
         assertEquals(WeatherMath.NONE, WeatherMath.kind(at(map, 0, 0), 70));
     }
+
+    /** Session 7: updates at most 90 a second; the first one, and a clock that went back, are always due. */
+    @Test
+    void updatesAreDueAtMostSixtyTimesASecond() {
+        long t = 5_000_000_000L;
+        assertTrue(PrecipitationMap.due(Long.MIN_VALUE, t));
+        assertFalse(PrecipitationMap.due(t, t));
+        assertFalse(PrecipitationMap.due(t, t + PrecipitationMap.UPDATE_NANOS - 1));
+        assertTrue(PrecipitationMap.due(t, t + PrecipitationMap.UPDATE_NANOS));
+        assertTrue(PrecipitationMap.due(t, t - 1));
+        //60 fps updates every frame, even a frame that came early (15 ms); 144 fps every other frame
+        assertTrue(PrecipitationMap.due(t, t + 15_000_000L));
+        assertFalse(PrecipitationMap.due(t, t + 1_000_000_000L / 144));
+        assertTrue(PrecipitationMap.due(t, t + 2 * (1_000_000_000L / 144)));
+    }
 }
