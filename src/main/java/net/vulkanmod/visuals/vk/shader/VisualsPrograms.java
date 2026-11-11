@@ -37,6 +37,8 @@ final class VisualsPrograms {
         add(c, "postSceneCopy", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/scene_copy.comp"));
         //Session 8: with the picked colours' tints (ATMOSPHERE_TINTS), run only while one the shader applies is picked (VkPostProcess)
         add(c, "postSceneCopy.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", ""), c.compute("post/scene_copy.comp"));
+        //Session 14: the frame's sun open share (SUN_OPEN_PASS: one invocation into the composite's buffer at 20), before the composite
+        add(c, "postSceneCopy.SUN_OPEN", defs("USE_ZERO_ONE_DEPTH", "", "SUN_OPEN_PASS", ""), c.compute("post/scene_copy.comp"));
         add(c, "postReflection", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/reflection.comp"));
         //Session 7: the reflection without the aurora and the realistic clouds, for the frames that draw neither (VkPostProcess)
         add(c, "postReflection.LEAN", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", ""), c.compute("post/reflection.comp"));

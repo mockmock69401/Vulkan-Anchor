@@ -75,6 +75,8 @@ public final class VkPostProcess {
     COPY_BEFORE_TRANSLUCENT = 17,
     //2026-11-10 (session 9, PBR): the copy reads the terrain's material images at 18, 19, the reflection the normals at 10 (TerrainLightTarget)
     COPY_TERRAIN_NORMAL = 18, COPY_TERRAIN_SPECULAR = 19, REFLECTION_TERRAIN_NORMAL = 10,
+    //2026-11-12 (session 14): the copy reads the frame's sun open share at 20 (postSceneCopy.SUN_OPEN writes it)
+    COPY_SUN_OPEN = 20,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -129,6 +131,13 @@ public final class VkPostProcess {
      * are the builds before it.
      */
     private final VkComputeProgram copyPbr, copyTintedPbr, reflectionPbr, reflectionLeanPbr, reflectionTintedPbr, reflectionLeanTintedPbr;
+    /**
+     * 2026-11-12 (shader roadmap session 14): postSceneCopy.SUN_OPEN works out the sun's open share (sunopen.glsl, one value a frame)
+     * into sunOpenBuffer before the composite, which reads it; every pixel near the sun used to work it out. Null when not built: the
+     * buffer is then filled with 1 (the sun open: the glow as before 8be40cc).
+     */
+    private final VkComputeProgram copySunOpen;
+    private final VkGpuBuffer sunOpenBuffer;
     private boolean pbrOn;
     private String reflectionUsed = "";
     //Volumetric light pass (2026-10-15): light shafts through the sun's cascades, into the shaft image
@@ -181,7 +190,7 @@ public final class VkPostProcess {
         VkComputeProgram lighting = null, lightingBlur = null, reflection = null, volumetric = null, volumetricBlur = null;
         VkGpuBuffer copyUniformBuffer = null, lightingUniformBuffer = null, reflectionUniformBuffer = null, volumetricUniformBuffer = null;
         VkImage2D cloudMap = null, lodLightStandIn = null;
-        VkGpuBuffer lightStandIn = null;
+        VkGpuBuffer lightStandIn = null, sunOpenBuffer = null;
         VkAmbientOcclusion ao = null;
         long nearest = 0, linear = 0;
         try {
@@ -196,6 +205,7 @@ public final class VkPostProcess {
             linear = VkSamplers.linearClamp();
             cloudMap = VkImage2D.create(VK_FORMAT_R8G8B8A8_UNORM, CloudMath.MAP, CloudMath.MAP, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             lightStandIn = VkGpuBuffer.device(16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+            sunOpenBuffer = VkGpuBuffer.device(16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
             lodLightStandIn = VkImage2D.create(LOD_LIGHT_FORMAT, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT);
             this.copyUniforms = new LooseUniformWriter(copy.meta());
             if (this.copyUniforms.inUniformBuffer()) {
@@ -239,6 +249,7 @@ public final class VkPostProcess {
             if (linear != 0) VkSamplers.free(linear);
             if (cloudMap != null) cloudMap.free();
             if (lightStandIn != null) lightStandIn.free();
+            if (sunOpenBuffer != null) sunOpenBuffer.free();
             if (lodLightStandIn != null) lodLightStandIn.free();
             if (ao != null) ao.free();
             throw e;
@@ -262,6 +273,8 @@ public final class VkPostProcess {
         this.reflectionLeanTinted = variant("postReflection.LEAN.TINTED", reflection);
         this.copyPbr = variant("postSceneCopy.PBR", copy);
         this.copyTintedPbr = variant("postSceneCopy.TINTED.PBR", copy);
+        this.copySunOpen = variant("postSceneCopy.SUN_OPEN", copy);
+        this.sunOpenBuffer = sunOpenBuffer;
         this.reflectionPbr = variant("postReflection.PBR", reflection);
         this.reflectionLeanPbr = variant("postReflection.LEAN.PBR", reflection);
         this.reflectionTintedPbr = variant("postReflection.TINTED.PBR", reflection);
@@ -586,8 +599,17 @@ public final class VkPostProcess {
                 .storageImage(COPY_TERRAIN_LIGHT, light.terrainLight()).storageImage(COPY_TERRAIN_ALBEDO, light.terrainAlbedo())
                 .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest)
                 .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest)
-                .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular());
+                .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular())
+                .storage(COPY_SUN_OPEN, this.sunOpenBuffer);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
+        //Session 14: the frame's sun open share first (one group), made visible to the composite's reads
+        if (this.copySunOpen != null) {
+            this.copySunOpen.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null, 1, 1, 1);
+            bufferBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
+        } else {
+            vkCmdFillBuffer(cmd, this.sunOpenBuffer.handle(), 0, 16, Float.floatToRawIntBits(1f));
+            bufferBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+        }
         VkComputeProgram copyProgram = this.copyTintedOn && this.copyTinted != null ? this.copyTinted : this.copy;
         if (this.pbrOn) {
             copyProgram = this.copyTintedOn && this.copyTintedPbr != null ? this.copyTintedPbr : this.copyPbr;
@@ -796,6 +818,15 @@ public final class VkPostProcess {
                 groups(dst.width), groups(dst.height), 1);
     }
 
+    /** Session 14: a write to a buffer (sunOpenBuffer) becomes readable by the next compute step. */
+    private static void bufferBarrier(VkCommandBuffer cmd, int srcStage, int srcAccess) {
+        try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            org.lwjgl.vulkan.VkMemoryBarrier.Buffer b = org.lwjgl.vulkan.VkMemoryBarrier.calloc(1, stack).sType$Default().srcAccessMask(srcAccess)
+                    .dstAccessMask(VK_ACCESS_SHADER_READ_BIT);
+            vkCmdPipelineBarrier(cmd, srcStage, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, b, null, null);
+        }
+    }
+
     /** A compute write becomes readable by the next step and by the final draw. */
     private static void toRead(VkCommandBuffer cmd, VkImage2D image) {
         image.transition(cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,
@@ -895,6 +926,8 @@ public final class VkPostProcess {
         if (this.taa != null) this.taa.free();
         this.copy.free();
         if (this.copyTinted != null) this.copyTinted.free();
+        if (this.copySunOpen != null) this.copySunOpen.free();
+        this.sunOpenBuffer.free();
         this.prefilter.free();
         this.down.free();
         this.up.free();

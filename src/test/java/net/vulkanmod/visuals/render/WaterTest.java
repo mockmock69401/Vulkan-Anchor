@@ -665,7 +665,12 @@ class WaterTest {
         assertTrue(WaterMath.sunOpenShare(proj, edge, WaterMath.SUN_HALF_SIZE, t -> false) >= 3 / 9f, "taps off the screen count as open");
         //Where the shaders take it
         String copy = ShaderFiles.read("post/scene_copy.comp"), open = ShaderFiles.read("post/sunopen.glsl");
-        assertTrue(copy.contains("sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size, sunExtent(celestial))"));
+        //2026-11-12 (session 14): once a frame (postSceneCopy.SUN_OPEN), with the same inputs the composite's pixels took (a.sun is
+        // atmosphereSun, size the output's), read by the pixels near the sun
+        assertTrue(copy.contains("sunOpenShareValue = sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), atmosphereSun.xyz, imageSize(sceneOut),\n"
+                + "            sunExtent(celestial));"));
+        assertTrue(copy.contains("sunOpen = sunOpenAt(sunOpenShareValue, sunWeight);"));
+        assertTrue(copy.contains("Atmosphere a = Atmosphere(atmosphereSun, "), "a.sun is atmosphereSun");
         assertTrue(copy.contains("lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);"));
         assertTrue(copy.contains("glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y))"), "the border's fade too");
         assertTrue(COMP.contains("sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size, sunExtent(celestial))"));

@@ -60,6 +60,10 @@ layout(binding = 17) uniform sampler2D beforeTranslucent;
 // postSceneCopy.PBR (and .TINTED.PBR), which VkPostProcess runs while this frame's terrain wrote them; bound always (the albedo stands in)
 layout(binding = 18, r32ui) uniform readonly restrict uimage2D terrainNormal;
 layout(binding = 19, r32ui) uniform readonly restrict uimage2D terrainSpecular;
+//2026-11-12 (shader roadmap session 14): the sun's open share (sunopen.glsl) is the same for every pixel of a frame: postSceneCopy.SUN_OPEN
+// (SUN_OPEN_PASS, one invocation) works it out once into this buffer right before the composite, which reads it. Every pixel near
+// the sun used to work it out itself (its taps and a 4x4 inverse): up to +0.3 ms at 2560x1440 looking toward a high sun
+layout(binding = 20, std430) restrict buffer SunOpenShare { float sunOpenShareValue; };
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -1140,7 +1144,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     float sunOpen = 1.0;
     float sunWeight = atmosphereSky(a) ? sunOpenWeight(dot(dir, a.sun.xyz)) : 0.0;
     if (sunWeight > 0.0) {
-        sunOpen = sunOpenAt(sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size, sunExtent(celestial)), sunWeight);
+        sunOpen = sunOpenAt(sunOpenShareValue, sunWeight);
     }
     lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);
     float border = atmosphereSky(a) ? borderAmount(world, fromLod) : 0.0;
@@ -1242,6 +1246,16 @@ vec3 particleBehindGuess(ivec2 p, ivec2 size, vec3 behind) {
 shared vec4 tileShown[COMPOSITE_TILE];
 shared vec3 tileBehind[COMPOSITE_TILE];
 
+#ifdef SUN_OPEN_PASS
+//Session 14: the frame's sun open share, by one invocation (dispatched as one group), as compositeAt used to work it out per pixel
+void main() {
+    if (gl_LocalInvocationIndex != 0u) {
+        return;
+    }
+    sunOpenShareValue = sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), atmosphereSun.xyz, imageSize(sceneOut),
+            sunExtent(celestial));
+}
+#else
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(sceneOut);
@@ -1286,3 +1300,4 @@ void main() {
     }
     imageStore(sceneOut, p, result);
 }
+#endif
