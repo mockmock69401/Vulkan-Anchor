@@ -24,6 +24,22 @@ public final class GlslForVulkan {
     public record Converted(String source, VulkanShaderMeta meta) {
     }
 
+    /**
+     * 2026-11-12 (shader roadmap session 14): each stage's conversion, kept for the game run by catalog, program (with its defines and
+     * platform) and stage. The renderer is rebuilt on a render distance or graphics change and made every program again: expanding the
+     * imports and converting the composite's and the reflection's large sources for each of their builds was most of that hitch
+     * (JFR: 64 of 75 samples; 80 ms at 2b3c115, 200-265 ms with the builds added since). The sources are the mod's classpath files, which
+     * do not change while the game runs; VkContext.spirv already keeps the compiled SPIR-V the same way.
+     */
+    private static final Map<String, Converted> CONVERTED = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** toVulkan of program p's stage (its classpath source and defines), once a game run per catalog, program and stage. */
+    public static Converted converted(net.vulkanmod.visuals.vk.shader.ShaderCatalog catalog, net.vulkanmod.visuals.vk.shader.ShaderCatalog.Program p,
+                                      net.vulkanmod.visuals.vk.shader.ShaderCatalog.Stage stage) {
+        String key = System.identityHashCode(catalog) + "|" + p.name() + "|" + stage.kind() + "|" + stage.id() + "|" + p.defines();
+        return CONVERTED.computeIfAbsent(key, k -> toVulkan(p.source(stage, net.vulkanmod.visuals.vk.shader.ShaderSource.classpath()), p.defines()));
+    }
+
     /** Full the visuals GLSL → Vulkan GLSL conversion, with the merged metadata. */
     public static Converted toVulkan(String source, Map<String, String> defines) {
         String prepared = varyingLocations(vulkanBuiltins(resolveConditionals(stripComments(source), VULKAN_PREDEFINED)));

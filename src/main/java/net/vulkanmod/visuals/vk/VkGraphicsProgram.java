@@ -170,19 +170,25 @@ public final class VkGraphicsProgram {
 
     public static VkGraphicsProgram of(ShaderCatalog catalog, String catalogName, State state, VertexLayout vertexLayout) {
         ShaderCatalog.Program p = catalog.get(catalogName).withPlatform(VkContext.shaderPlatform());
-        GlslForVulkan.Converted[] c = convert(p);
+        checkStages(p);
+        //Session 14: the conversions kept for the game run (GlslForVulkan.converted)
+        GlslForVulkan.Converted[] c = {GlslForVulkan.converted(catalog, p, p.stages().get(0)), GlslForVulkan.converted(catalog, p, p.stages().get(1))};
         VkGraphicsProgram program = new VkGraphicsProgram(catalogName, state, vertexLayout, c[0].meta(), c[1].meta());
         program.create(VkContext.spirv(catalogName + ".vert", c[0].source(), SPIRVUtils.ShaderKind.VERTEX_SHADER),
                 VkContext.spirv(catalogName + ".frag", c[1].source(), SPIRVUtils.ShaderKind.FRAGMENT_SHADER));
         return program;
     }
 
-    /** The vertex and fragment stages of p, converted (catalog order: vertex first). */
-    static GlslForVulkan.Converted[] convert(ShaderCatalog.Program p) {
+    private static void checkStages(ShaderCatalog.Program p) {
         if (p.stages().size() != 2 || p.stages().get(0).kind() != ShaderCatalog.StageKind.VERTEX
                 || p.stages().get(1).kind() != ShaderCatalog.StageKind.FRAGMENT) {
             throw new IllegalArgumentException(p.name() + " is not a vertex+fragment program");
         }
+    }
+
+    /** The vertex and fragment stages of p, converted (catalog order: vertex first). */
+    static GlslForVulkan.Converted[] convert(ShaderCatalog.Program p) {
+        checkStages(p);
         return new GlslForVulkan.Converted[]{
                 GlslForVulkan.toVulkan(p.source(p.stages().get(0), ShaderSource.classpath()), p.defines()),
                 GlslForVulkan.toVulkan(p.source(p.stages().get(1), ShaderSource.classpath()), p.defines())};

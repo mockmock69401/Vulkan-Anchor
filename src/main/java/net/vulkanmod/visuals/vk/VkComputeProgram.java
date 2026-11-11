@@ -33,7 +33,7 @@ public final class VkComputeProgram {
         ShaderCatalog.Program p = catalog.get(catalogName).withPlatform(VkContext.shaderPlatform());
         ShaderCatalog.Stage stage = p.stages().get(0);
         if (stage.kind() != ShaderCatalog.StageKind.COMPUTE) throw new IllegalArgumentException(catalogName + " is not a compute program");
-        GlslForVulkan.Converted c = GlslForVulkan.toVulkan(p.source(stage, ShaderSource.classpath()), p.defines());
+        GlslForVulkan.Converted c = GlslForVulkan.converted(catalog, p, stage);
         VkComputeProgram program = new VkComputeProgram(catalogName, c.meta());
         program.create(VkContext.spirv(catalogName + ".comp", c.source(), SPIRVUtils.ShaderKind.COMPUTE_SHADER));
         return program;
