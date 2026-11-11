@@ -211,6 +211,26 @@ class ColourPresetsTest {
         assertEquals(CloudMath.STYLE_REALISTIC, VisualsConfig.read(f).cloudStyle);
     }
 
+    /** 2026-11-11: a revision 10 file still exactly on a palette's old look values takes the new ones; a changed one keeps its own. */
+    @Test
+    void anOlderFileOnAPalettesOldLookTakesTheNewOne(@TempDir Path dir) throws Exception {
+        Path f = dir.resolve("ten.json");
+        VisualsConfig old = new VisualsConfig();
+        ColourPresets.apply(old, ColourPresets.REALISTIC);
+        old.fogStrength = 110;
+        old.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 10"));
+        VisualsConfig read = VisualsConfig.read(f);
+        assertEquals(40, read.fogStrength);
+        assertEquals(ColourPresets.REALISTIC, read.colourPreset);
+        old.fogStrength = 90;
+        old.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 10"));
+        VisualsConfig kept = VisualsConfig.read(f);
+        assertEquals(90, kept.fogStrength);
+        assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
+    }
+
     /** Session 8 follow-up: the look block on the colours page holds the same three settings as their own pages, with its label. */
     @Test
     void theColoursPageShowsThePalettesLookSettings() throws Exception {

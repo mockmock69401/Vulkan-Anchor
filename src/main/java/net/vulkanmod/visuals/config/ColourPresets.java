@@ -62,8 +62,19 @@ public final class ColourPresets {
      * never set the same setting. The distance haze, the rain's fog and the fog height stay the player's.
      */
     public static final String[] LOOK_KEYS = {"bloom_strength", "saturation", "fog_strength"};
-    /** Each palette's LOOK_KEYS values, one row per level (DEFAULT is VisualsConfig's defaults; tested). */
+    /**
+     * Each palette's LOOK_KEYS values, one row per level (DEFAULT is VisualsConfig's defaults; tested). 2026-11-11 (the user, after trying
+     * them): Realistic's fog 110 -> 40, Anime 70 / 120 / 70 -> 35 / 110 / 80, Horror's bloom 20 -> 15.
+     */
     private static final int[][] LOOK = {
+            {45, 94, 100},
+            {30, 94, 40},
+            {60, 85, 125},
+            {35, 110, 80},
+            {15, 60, 200},
+    };
+    /** The rows revisions 9 and 10 saved (VisualsConfig.read moves a file still exactly on one of them to LOOK's row). */
+    static final int[][] LOOK_BEFORE_11 = {
             {45, 94, 100},
             {30, 94, 110},
             {60, 85, 125},
@@ -153,6 +164,21 @@ public final class ColourPresets {
     /** Rows in Colour order, for the tests. */
     static int[] palette(int level) {
         return PALETTES[level].clone();
+    }
+
+    /**
+     * 2026-11-11: a file saved at revision 9 or 10 on a palette (its colours all the palette's) whose look values are still exactly that
+     * palette's old row takes the new row: the player chose the palette, not those numbers. Returns whether it did.
+     */
+    static boolean moveOldLook(VisualsConfig c) {
+        int level = c.colourPreset;
+        if (!isLevel(level)) return false;
+        for (Colour colour : Colour.values()) if (c.colour(colour) != value(colour, level)) return false;
+        for (int i = 0; i < LOOK_KEYS.length; i++) {
+            if (VisualsOptionLayout.get(c, VisualsOptionLayout.item(LOOK_KEYS[i])) != LOOK_BEFORE_11[level][i]) return false;
+        }
+        for (int i = 0; i < LOOK_KEYS.length; i++) VisualsOptionLayout.set(c, VisualsOptionLayout.item(LOOK_KEYS[i]), LOOK[level][i]);
+        return true;
     }
 
     /** The look row in LOOK_KEYS order, for the tests. */
