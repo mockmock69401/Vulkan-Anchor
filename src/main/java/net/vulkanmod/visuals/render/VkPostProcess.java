@@ -140,6 +140,9 @@ public final class VkPostProcess {
     //2026-11-09 (session 6): the shader weather: its program (null when it could not be built: vanilla's weather stays), uniforms, the
     // precipitation map (PrecipitationMap, R32_UINT) and whether this frame drew the overlay
     private final VkComputeProgram weather;
+    /** 2026-11-11: postWeather.ROUND (null: not built; the full pass then draws), dispatched while both kinds are round. */
+    private final VkComputeProgram weatherRound;
+    private boolean weatherRoundOnly;
     private final LooseUniformWriter weatherUniforms;
     private final VkGpuBuffer weatherUniformBuffer;
     private final VkImage2D precipitationMap;
@@ -311,6 +314,7 @@ public final class VkPostProcess {
             VisualsLog.warn("Visuals shader weather not created, vanilla's rain and snow stay: " + e);
         }
         this.weather = weather;
+        this.weatherRound = weather != null ? variant("postWeather.ROUND", weather) : null;
         this.weatherUniforms = weatherUniforms;
         this.weatherUniformBuffer = weatherUniformBuffer;
         this.precipitationMap = precipitationMap;
@@ -345,6 +349,7 @@ public final class VkPostProcess {
         light.write(this.weatherUniforms, WeatherUniforms.WEATHER_FIRST);
         if (this.weatherUniformBuffer != null) upload.upload(this.weatherUniformBuffer, 0, this.weatherUniforms.buffer());
         this.weatherOn = true;
+        this.weatherRoundOnly = values.roundOnly();
     }
 
     /** 2026-11-09 (session 6): whether the precipitation map must be sent again (none yet, or its upload's frame was dropped). */
@@ -637,7 +642,8 @@ public final class VkPostProcess {
                 .sampledView(WEATHER_LOD_DEPTH, depths.lod(), this.nearest).sampled(WEATHER_MAP, this.precipitationMap, this.nearest)
                 .storage(WEATHER_LIGHT_DATA, data).storage(WEATHER_LIGHT_READY, ready).sampledView(WEATHER_LIGHTMAP, lightmap, this.linear);
         if (this.weatherUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.weatherUniformBuffer);
-        this.weather.dispatchWithPush(cmd, bindings, this.weatherUniformBuffer == null ? this.weatherUniforms.buffer() : null,
+        VkComputeProgram program = this.weatherRoundOnly && this.weatherRound != null ? this.weatherRound : this.weather;
+        program.dispatchWithPush(cmd, bindings, this.weatherUniformBuffer == null ? this.weatherUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
         toRead(cmd, this.weatherImage);
         this.weatherDrawn = true;
@@ -916,6 +922,7 @@ public final class VkPostProcess {
         VkSamplers.free(this.linear);
         this.cloudMap.free();
         if (this.weather != null) this.weather.free();
+        if (this.weatherRound != null) this.weatherRound.free();
         if (this.weatherUniformBuffer != null) this.weatherUniformBuffer.free();
         if (this.precipitationMap != null) this.precipitationMap.free();
         this.lightStandIn.free();

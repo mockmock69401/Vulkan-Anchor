@@ -86,6 +86,19 @@ class WeatherStyleTest {
     }
 
     @Test
+    void whileBothKindsAreRoundTheVariantWithoutTheSpritesIsDispatched() {
+        assertTrue(rainy(PostProcessSettings.from(new VisualsConfig())).roundOnly(), "the defaults: the round-only variant");
+        assertFalse(rainy(settings(c -> c.snowType = 1)).roundOnly());
+        assertFalse(rainy(settings(c -> c.rainType = 2)).roundOnly());
+        assertTrue(rainy(settings(c -> c.rainSize = 200)).roundOnly(), "a size is no type");
+        assertFalse(WeatherUniforms.off().roundOnly());
+        //The variant forces round after reading the type; the sizes (slot 17 .zw) stay, so its uniforms are the full pass's
+        int type = GLSL.indexOf("int type = int((isSnow ? style.y : style.x) + 0.5);");
+        int round = GLSL.indexOf("#ifdef WEATHER_ROUND_ONLY\n");
+        assertTrue(type > 0 && round > type && GLSL.indexOf("type = WEATHER_TYPE_ROUND;", round) < GLSL.indexOf("#endif", round));
+    }
+
+    @Test
     void theBrightnessScalesEachKindsColourApartFromIt() {
         WeatherUniforms.Values d = rainy(PostProcessSettings.from(new VisualsConfig()));
         assertArrayEquals(ShaderColours.DEFAULT.tint(ShaderColours.Colour.RAIN), d.rainTint(), 0, "100: the colour exactly");
