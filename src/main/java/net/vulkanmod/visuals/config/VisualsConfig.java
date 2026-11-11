@@ -42,8 +42,10 @@ public class VisualsConfig {
      * 13 (2026-11-11): the snow's and rain's own type, size and amount (ParticleEffect: snowType, snowSize, snowAmount, rainType, rainSize,
      * rainAmount) in place of the one weatherDensity, and their brightness (snowBrightness, rainBrightness); an older file's density becomes
      * both amounts (the picture it had), the rest default.
+     * 14 (2026-11-11, session 12): the star settings (starCount, starSize, starBrightness); an older file has none: vanilla's stars, the
+     * picture it had. The colour palettes and the performance presets do not set them.
      */
-    private static final int REVISION = 13;
+    private static final int REVISION = 14;
     /** The first revision with the snow's and rain's own amounts (an older file's weatherDensity is both). */
     static final int PARTICLE_EFFECTS_REVISION = 13;
     /** The field the particle effect amounts replaced (read from older files only). */
@@ -289,6 +291,13 @@ public class VisualsConfig {
     public int moonSize = 100;
     public int aurora = 2;
     public int auroraStrength = 100;
+    /**
+     * 2026-11-11 (session 12): the night sky's stars (vanilla's, StarMath): how many (percent of vanilla's 1500 tries), their size and
+     * their brightness (percent, 100 = vanilla's exactly).
+     */
+    public int starCount = 100;
+    public int starSize = 100;
+    public int starBrightness = 100;
     /**
      * 2026-11-09 (session 6): rain and snow drawn by the shader (thin streaks and small flakes in depth layers, none under roofs) in place
      * of vanilla's weather columns; off draws vanilla's exactly as before.
