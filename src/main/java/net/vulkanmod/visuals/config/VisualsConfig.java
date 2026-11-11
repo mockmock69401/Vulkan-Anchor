@@ -35,8 +35,12 @@ public class VisualsConfig {
      * file keeps its values, and shows its palette only while they are the palette's too (else Custom; ColourPresets.validated).
      * 10 (2026-11-10, session 11): the anime cloud style (cloudStyle 2), which the Anime palette now includes: an older file saved on the
      * Anime palette (its colours and looks still Anime's) takes the anime clouds and stays on it; any other file keeps its style.
+     * 11 (2026-11-11): the Realistic, Anime and Horror palettes' look values changed (ColourPresets.LOOK); a file of revision 9 or 10 still
+     * exactly on a palette's old values takes the new ones and stays on it (ColourPresets.moveOldLook); any other file keeps its values.
      */
-    private static final int REVISION = 10;
+    private static final int REVISION = 11;
+    /** 2026-11-11: the first revision with the changed palette look values; 9 the first with palette look values at all. */
+    static final int PALETTE_LOOK_REVISION = 11, FIRST_LOOK_REVISION = 9;
     /** Session 11: the first revision whose Anime palette includes the anime clouds. */
     static final int ANIME_CLOUDS_REVISION = 10;
     /** The first revision with the PBR settings. */
@@ -108,6 +112,8 @@ public class VisualsConfig {
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
         // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
+        //2026-11-11: a file still exactly on a palette's old look values takes the new ones (first: the Anime check below reads the new row)
+        if (fileRevision >= FIRST_LOOK_REVISION && fileRevision < PALETTE_LOOK_REVISION) ColourPresets.moveOldLook(c);
         //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
         if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
                 && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_ANIME
