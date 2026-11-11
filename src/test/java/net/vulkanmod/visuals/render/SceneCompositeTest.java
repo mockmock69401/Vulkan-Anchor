@@ -221,6 +221,7 @@ class SceneCompositeTest {
         expected.put("COPY_BEFORE_TRANSLUCENT", VulkanShaderMeta.Kind.SAMPLER);//2026-11-09 (session 2b)
         expected.put("COPY_TERRAIN_NORMAL", VulkanShaderMeta.Kind.IMAGE);//2026-11-10 (session 9)
         expected.put("COPY_TERRAIN_SPECULAR", VulkanShaderMeta.Kind.IMAGE);
+        expected.put("COPY_SUN_OPEN", VulkanShaderMeta.Kind.STORAGE_BUFFER);//2026-11-12 (session 14)
         Set<String> want = new TreeSet<>();
         for (Map.Entry<String, VulkanShaderMeta.Kind> e : expected.entrySet()) {
             Integer binding = fields.get(e.getKey());
@@ -234,7 +235,7 @@ class SceneCompositeTest {
             have.add(b.binding() + ":" + b.kind());
         }
         assertEquals(want, have);
-        assertEquals(20, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9)");
+        assertEquals(21, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14)");
         //Every slot 0..34 with the type its writer uses: the three matrices, then vec4
         for (int loc = 0; loc <= 34; loc++) assertEquals(loc <= 2 ? "mat4" : "vec4", member(loc).type(), "location " + loc);
         //The clean writers and W4 fill every slot but the held light's (HeldLightSystem needs a device buffer: its slot is checked by value)
@@ -1664,7 +1665,8 @@ class SceneCompositeTest {
     @Test
     void theCompositeTakesTranslucentParticlesApartAfterTheWholeTileIsComposited() {
         String c = COMP.replace(String.valueOf((char) 13), "");
-        int main = c.indexOf("void main() {");
+        //2026-11-12 (session 14): the composite's main is the last one (postSceneCopy.SUN_OPEN's comes first)
+        int main = c.lastIndexOf("void main() {");
         String body = c.substring(main);
         //One pixel's composite is a function; main reaches the barrier from every invocation (no return before it)
         assertTrue(c.contains("vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {"));
