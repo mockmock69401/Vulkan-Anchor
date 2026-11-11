@@ -289,6 +289,11 @@ void weatherDrop(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int laye
     // skipped): the streak, the sway, the widest drop and the pixel's footprint all bound how near the ray must pass the drop's spot
     float sway = isSnow ? SNOW_SWAY : 0.0;
     int type = int((isSnow ? style.y : style.x) + 0.5);
+#ifdef WEATHER_ROUND_ONLY
+    //2026-11-11: the variant VkPostProcess dispatches while both kinds are round (the defaults): the pixel sprites compiled out, so the
+    // round look costs what it did before the types (the sprites' code in the one program held more registers: +0.1 ms at 2560x1440)
+    type = WEATHER_TYPE_ROUND;
+#endif
     float scale = isSnow ? style.w : style.z;
     float radius = (isSnow ? SNOW_RADIUS : RAIN_WIDTH)*scale;
     //The pixel sprite's largest half size, kept inside the cell's margin (a snowflake turns: its corner too, and less the sway)

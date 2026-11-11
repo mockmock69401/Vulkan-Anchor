@@ -61,6 +61,11 @@ public final class WeatherUniforms {
             w.putVec4(WATER, this.water[0], this.water[1], this.water[2], this.water[3]);
             w.putVec4(STYLE, this.style[0], this.style[1], this.style[2], this.style[3]);
         }
+
+        /** 2026-11-11: both kinds round (slot 17's types): VkPostProcess dispatches postWeather.ROUND, the pixel sprites compiled out. */
+        public boolean roundOnly() {
+            return this.on && this.style[0] == WeatherMath.WEATHER_TYPE_ROUND && this.style[1] == WeatherMath.WEATHER_TYPE_ROUND;
+        }
     }
 
     private WeatherUniforms() {
