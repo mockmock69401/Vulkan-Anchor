@@ -31,7 +31,7 @@ public abstract class MTextureManager {
         }
         if (SpriteUtil.shouldUpload()) {
             SpriteUtil.transitionLayouts(DeviceManager.getGraphicsQueue().getCommandBuffer().getHandle());
-            DeviceManager.getGraphicsQueue().endRecordingAndSubmit();
+            DeviceManager.getGraphicsQueue().endUploadsAndSubmit();
         }
     }
 }

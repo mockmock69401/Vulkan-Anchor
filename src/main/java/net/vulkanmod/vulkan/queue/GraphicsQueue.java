@@ -46,10 +46,10 @@ public class GraphicsQueue extends Queue {
         DEFERRED.set(true);
     }
 
-    /** Submits the deferred uploads, if any were recorded on this thread. */
+    /** Submits the deferred uploads, if any were recorded on this thread (image uploads of the frame: Synchronization.addFrameUpload). */
     public void flushDeferred() {
         if (DEFERRED.get() && CURRENT.get() != null)
-            endRecordingAndSubmit();
+            endUploadsAndSubmit();
     }
 
     @Override
@@ -65,11 +65,29 @@ public class GraphicsQueue extends Queue {
     }
 
     public void endRecordingAndSubmit() {
+        endRecordingAndSubmit(false);
+    }
+
+    /**
+     * 2026-11-12 (shader roadmap session 14): ends and submits image uploads for the current frame whose recording ends with their
+     * layout transitions to shader read (the animated sprites' tick, the deferred sub-image uploads; a texture read in the frame
+     * takes its transition from the upload or records it in the frame): the frame's submit does not wait for them on the CPU
+     * (Synchronization.addFrameUpload says why).
+     */
+    public void endUploadsAndSubmit() {
+        endRecordingAndSubmit(true);
+    }
+
+    private void endRecordingAndSubmit(boolean frameUpload) {
         CommandPool.CommandBuffer commandBuffer = CURRENT.get();
         if (commandBuffer == null)
             return;
         long fence = submitCommands(commandBuffer);
-        Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
+        if (frameUpload) {
+            Synchronization.INSTANCE.addFrameUpload(commandBuffer);
+        } else {
+            Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
+        }
         if (net.vulkanmod.visuals.dev.FrameRecorder.ON) net.vulkanmod.visuals.dev.FrameRecorder.add(net.vulkanmod.visuals.dev.FrameRecorder.GFX_SUBMITS, 1);
 
         CURRENT.remove();

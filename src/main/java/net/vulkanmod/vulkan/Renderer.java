@@ -394,7 +394,8 @@ public class Renderer {
 
             vkResetFences(device, inFlightFences.get(currentFrame));
 
-            Synchronization.INSTANCE.waitFences();
+            //2026-11-12 (session 14): the frame's graphics-queue image uploads are not waited here (Synchronization.frameUploads)
+            Synchronization.INSTANCE.waitTransfers();
 
             vkResult = net.vulkanmod.vulkan.queue.QueueLock.submit(DeviceManager.getGraphicsQueue().queue(), submitInfo, fsrFence ? VK_NULL_HANDLE : inFlightFences.get(currentFrame));
             VkFrames.onSubmitted();
@@ -497,7 +498,8 @@ public class Renderer {
 
             vkResetFences(device, inFlightFences.get(currentFrame));
 
-            Synchronization.INSTANCE.waitFences();
+            //2026-11-12 (session 14): the frame's graphics-queue image uploads are not waited here (Synchronization.frameUploads)
+            Synchronization.INSTANCE.waitTransfers();
 
             int vkResult = net.vulkanmod.vulkan.queue.QueueLock.submit(DeviceManager.getGraphicsQueue().queue(), submitInfo, inFlightFences.get(currentFrame));
             VkFrames.onSubmitted();
@@ -536,7 +538,8 @@ public class Renderer {
 
             vkResetFences(device, inFlightFences.get(currentFrame));
 
-            Synchronization.INSTANCE.waitFences();
+            //2026-11-12 (session 14): the frame's graphics-queue image uploads are not waited here (Synchronization.frameUploads)
+            Synchronization.INSTANCE.waitTransfers();
 
             if ((vkResult = net.vulkanmod.vulkan.queue.QueueLock.submit(DeviceManager.getGraphicsQueue().queue(), submitInfo, inFlightFences.get(currentFrame))) != VK_SUCCESS) {
                 vkResetFences(device, inFlightFences.get(currentFrame));
@@ -599,6 +602,8 @@ public class Renderer {
 
         drawer.resetBuffers(currentFrame);
 
+        //2026-11-12 (session 14): the image uploads made with this frame index's staging buffer (framesNum frames ago, done by now)
+        Synchronization.INSTANCE.waitFrameUploads(currentFrame);
         Vulkan.getStagingBuffer().reset();
 
         long uploadStart = net.vulkanmod.visuals.dev.FrameRecorder.ON ? System.nanoTime() : 0;
