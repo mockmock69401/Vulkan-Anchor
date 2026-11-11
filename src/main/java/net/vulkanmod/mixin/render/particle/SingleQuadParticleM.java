@@ -6,11 +6,19 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.particle.SingleQuadParticle;
+import net.minecraft.client.particle.TextureSheetParticle;
+import net.minecraft.client.renderer.texture.SpriteContents;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.interfaces.ExtendedVertexBuilder;
+import net.vulkanmod.mixin.visuals.SpriteContentsAccessor;
+import net.vulkanmod.mixin.visuals.TextureSheetParticleAccessor;
+import net.vulkanmod.visuals.particle.ParticleEffectTag;
+import net.vulkanmod.visuals.particle.ParticleLook;
+import net.vulkanmod.visuals.particle.ParticleLookMath;
 import net.vulkanmod.render.chunk.RenderSection;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.vulkan.util.ColorUtil;
@@ -67,6 +75,25 @@ public abstract class SingleQuadParticleM extends Particle {
         Vector3f[] vector3fs = new Vector3f[]{new Vector3f(-1.0F, -1.0F, 0.0F), new Vector3f(-1.0F, 1.0F, 0.0F), new Vector3f(1.0F, 1.0F, 0.0F), new Vector3f(1.0F, -1.0F, 0.0F)};
         float j = this.m_5902_(f);
 
+        //2026-11-11 (shader roadmap session 13): the particle look options (ParticleLook); nothing changes while they are all at their defaults
+        int lookTag = ParticleLook.active() ? ((ParticleEffectTag) this).vulkanmod$effectTag() : 0;
+        int shape = 0, tintGroup = 0;
+        float[] stats = null;
+        if (lookTag != 0) {
+            j *= ParticleLook.sizeScale(lookTag);
+            tintGroup = ParticleLook.tintGroup(lookTag);
+            shape = ParticleLook.realisticShape(lookTag);
+            if (shape != 0 && (Object) this instanceof TextureSheetParticle) {
+                TextureAtlasSprite sprite = ((TextureSheetParticleAccessor) this).vulkanmod$sprite();
+                if (sprite != null) {
+                    SpriteContents contents = sprite.contents();
+                    stats = ParticleLook.spriteStats(contents, ((SpriteContentsAccessor) contents).vulkanmod$originalImage());
+                    j = ParticleLookMath.realisticSize(j, stats[3], shape);
+                }
+            }
+            if (stats == null) shape = 0;
+        }
+
         for(int k = 0; k < 4; ++k) {
             Vector3f vector3f = vector3fs[k];
             vector3f.rotate(quaternionf);
@@ -79,9 +106,22 @@ public abstract class SingleQuadParticleM extends Particle {
         float v0 = this.m_5951_();
         float v1 = this.m_5950_();
         int light = this.getLightColor(f);
+        float r = this.rCol, g = this.gCol, b = this.bCol;
+        if (shape != 0) {
+            //A realistic shape: no texels; u carries the seed, the colour is the sprite's mean (ParticleLookMath, particle.vsh)
+            int seed = System.identityHashCode(this);
+            u0 = ParticleLookMath.seedU(seed, 0);
+            u1 = ParticleLookMath.seedU(seed, 1);
+            v0 = 0f;
+            v1 = 1f;
+            r *= stats[0];
+            g *= stats[1];
+            b *= stats[2];
+        }
+        if (shape != 0 || tintGroup != 0) light = ParticleLookMath.light(light, shape, tintGroup);
 
         ExtendedVertexBuilder vertexBuilder = (ExtendedVertexBuilder)vertexConsumer;
-        int packedColor = ColorUtil.RGBA.pack(this.rCol, this.gCol, this.bCol, this.alpha);
+        int packedColor = ColorUtil.RGBA.pack(r, g, b, this.alpha);
 
         vertexBuilder.vertex(vector3fs[0].x(), vector3fs[0].y(), vector3fs[0].z(), u1, v1, packedColor, light);
         vertexBuilder.vertex(vector3fs[1].x(), vector3fs[1].y(), vector3fs[1].z(), u1, v0, packedColor, light);

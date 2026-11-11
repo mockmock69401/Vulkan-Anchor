@@ -211,15 +211,18 @@ class TerrainLightMathTest {
             for (var u : o.getAsJsonArray("UBOs")) ubo = Math.max(ubo, u.getAsJsonObject().get("binding").getAsInt());
             int first = ubo + 1 + o.getAsJsonArray("samplers").size();
             assertTrue(f.contains("#define SCENE_LIGHT_BINDING " + first + "\n#include \"terrain_light.glsl\""), s);
-            assertTrue(f.contains("float FogEnd;\n    float LightOut;\n};"), s);
+            //2026-11-11 (session 13): the particle shader's look tints follow LightOut, and its light is UV2 without the look's flags
+            boolean particle = s.equals("particle");
+            assertTrue(f.contains(particle ? "float FogEnd;\n    float LightOut;\n" : "float FogEnd;\n    float LightOut;\n};"), s);
             assertTrue(j.indexOf("\"FogEnd\"") < j.indexOf("\"LightOut\"") && j.contains("\"TerrainAlbedo\""), s);
-            assertTrue(v.contains("sceneLightLevels = vec2(UV2.y, UV2.x) / 16.0;"), s);
+            assertTrue(v.contains(particle ? "sceneLightLevels = vec2(light.y, light.x) / 16.0;" : "sceneLightLevels = vec2(UV2.y, UV2.x) / 16.0;"), s);
             int at = f.indexOf("writeSceneLight(");
             assertTrue(at > 0 && f.lastIndexOf("if (LightOut > 0.5) {", at) > 0, s);
             int lm = f.indexOf("color *= lightMapColor;");
             if (lm >= 0) assertTrue(at < lm, s + ": before the lightmap");
             //2026-11-11: the particle's colour also for translucent fragments (alpha 1), for the composite's translucentParticle
-            else if (s.equals("particle")) assertTrue(f.contains("writeSceneLight(sceneLightLevels, vec4((texture(Sampler0, texCoord0) * albedoTint * ColorModulator).rgb, 1.0),"), s);
+            //2026-11-11 (session 13): base is the sprite's texel or the realistic shape's
+            else if (particle) assertTrue(f.contains("base = texture(Sampler0, texCoord0);") && f.contains("writeSceneLight(sceneLightLevels, vec4((base * albedoTint * ColorModulator).rgb * tint, 1.0),"), s);
             else assertTrue(f.contains("writeSceneLight(sceneLightLevels, texture(Sampler0, texCoord0) * albedoTint * ColorModulator,"), s);
             writers++;
         }

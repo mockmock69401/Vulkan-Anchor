@@ -46,8 +46,14 @@ public class VisualsConfig {
      * and the star colour (colourStars, which every palette sets); an older file has none: vanilla's stars. A file on a palette (every
      * other colour the palette's) takes that palette's star colour and stays on it (ColourPresets.moveOldStars); any other file keeps
      * white stars, the picture it had.
+     * 15 (2026-11-11, session 13): the vanilla particle groups' look (ParticleEffect.PARTICLE_*: particle<Group>Type, Size, Amount,
+     * Brightness) and colours (colourParticle<Group>, which every palette sets), and the star type (starType); an older file has none:
+     * vanilla's particles and stars. A file on a palette (every other colour the palette's) takes that palette's particle colours and stays
+     * on it (ColourPresets.moveOldColours, with the star colour for a file older than 14); any other file keeps the default colours.
      */
-    private static final int REVISION = 14;
+    private static final int REVISION = 15;
+    /** Session 13: the first revision with the particle groups' colours. */
+    static final int PARTICLE_LOOK_REVISION = 15;
     /** The first revision with the snow's and rain's own amounts (an older file's weatherDensity is both). */
     static final int PARTICLE_EFFECTS_REVISION = 13;
     /** The field the particle effect amounts replaced (read from older files only). */
@@ -139,7 +145,15 @@ public class VisualsConfig {
         // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
         //2026-11-11: a file still exactly on a palette's old look values takes the new ones (first: the Anime check below reads the new row)
         //Session 12: a file on a palette before the star colour existed takes the palette's (first: the checks below compare every colour)
-        if (fileRevision < STARS_REVISION && !json.has("colourStars")) ColourPresets.moveOldStars(c);
+        //Session 13: likewise the particle groups' colours (and the star colour for a file older than both)
+        if (fileRevision < PARTICLE_LOOK_REVISION) {
+            java.util.EnumSet<Colour> missing = java.util.EnumSet.noneOf(Colour.class);
+            if (fileRevision < STARS_REVISION && !json.has("colourStars")) missing.add(Colour.STARS);
+            for (ParticleEffect e : ParticleEffect.values()) {
+                if (e.colour().key().startsWith("colour_particle_") && !json.has(colourField(e.colour()))) missing.add(e.colour());
+            }
+            ColourPresets.moveOldColours(c, missing);
+        }
         if (fileRevision >= FIRST_LOOK_REVISION && fileRevision < PALETTE_LOOK_REVISION) ColourPresets.moveOldLook(c);
         //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
         if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
@@ -180,6 +194,13 @@ public class VisualsConfig {
             case AURORA_END -> this.colourAuroraEnd;
             case WATER -> this.colourWater;
             case UNDERWATER -> this.colourUnderwater;
+            case PARTICLE_SMOKE -> this.colourParticleSmoke;
+            case PARTICLE_FLAMES -> this.colourParticleFlames;
+            case PARTICLE_EMBERS -> this.colourParticleEmbers;
+            case PARTICLE_DRIPS -> this.colourParticleDrips;
+            case PARTICLE_MAGIC -> this.colourParticleMagic;
+            case PARTICLE_AMBIENT -> this.colourParticleAmbient;
+            case PARTICLE_COMBAT -> this.colourParticleCombat;
         } & 0xFFFFFF;
     }
 
@@ -208,7 +229,29 @@ public class VisualsConfig {
             case AURORA_END -> this.colourAuroraEnd = v;
             case WATER -> this.colourWater = v;
             case UNDERWATER -> this.colourUnderwater = v;
+            case PARTICLE_SMOKE -> this.colourParticleSmoke = v;
+            case PARTICLE_FLAMES -> this.colourParticleFlames = v;
+            case PARTICLE_EMBERS -> this.colourParticleEmbers = v;
+            case PARTICLE_DRIPS -> this.colourParticleDrips = v;
+            case PARTICLE_MAGIC -> this.colourParticleMagic = v;
+            case PARTICLE_AMBIENT -> this.colourParticleAmbient = v;
+            case PARTICLE_COMBAT -> this.colourParticleCombat = v;
         }
+    }
+
+    /** Session 13: the field a colour is saved in ("colour_particle_smoke" -> "colourParticleSmoke"). */
+    static String colourField(Colour c) {
+        StringBuilder b = new StringBuilder();
+        boolean up = false;
+        for (char ch : c.key().toCharArray()) {
+            if (ch == '_') {
+                up = true;
+            } else {
+                b.append(up ? Character.toUpperCase(ch) : ch);
+                up = false;
+            }
+        }
+        return b.toString();
     }
 
     /** 2026-11-10 (session 8): every colour in ShaderColours.Colour order. */
@@ -306,6 +349,8 @@ public class VisualsConfig {
     public int starCount = 100;
     public int starSize = 100;
     public int starBrightness = 100;
+    /** 2026-11-11 (session 13): the stars' shape: 0 vanilla's squares, 1 round soft points (StarMath.TYPE_ROUND). */
+    public int starType = 0;
     /**
      * 2026-11-09 (session 6): rain and snow drawn by the shader (thin streaks and small flakes in depth layers, none under roofs) in place
      * of vanilla's weather columns; off draws vanilla's exactly as before.
@@ -391,6 +436,43 @@ public class VisualsConfig {
     public int colourAuroraEnd = Colour.AURORA_END.defaultRgb();
     public int colourWater = Colour.WATER.defaultRgb();
     public int colourUnderwater = Colour.UNDERWATER.defaultRgb();
+    //2026-11-11 (shader roadmap session 13): the particle look groups (VanillaParticles.Group, ParticleLook): type (0 vanilla, 1 realistic),
+    // size, amount and brightness in percent (100 = vanilla), and each group's colour (ParticleEffect.PARTICLE_*)
+    public int particleSmokeType = 0;
+    public int particleSmokeSize = 100;
+    public int particleSmokeAmount = 100;
+    public int particleSmokeBrightness = 100;
+    public int particleFlamesType = 0;
+    public int particleFlamesSize = 100;
+    public int particleFlamesAmount = 100;
+    public int particleFlamesBrightness = 100;
+    public int particleEmbersType = 0;
+    public int particleEmbersSize = 100;
+    public int particleEmbersAmount = 100;
+    public int particleEmbersBrightness = 100;
+    public int particleDripsType = 0;
+    public int particleDripsSize = 100;
+    public int particleDripsAmount = 100;
+    public int particleDripsBrightness = 100;
+    public int particleMagicType = 0;
+    public int particleMagicSize = 100;
+    public int particleMagicAmount = 100;
+    public int particleMagicBrightness = 100;
+    public int particleAmbientType = 0;
+    public int particleAmbientSize = 100;
+    public int particleAmbientAmount = 100;
+    public int particleAmbientBrightness = 100;
+    public int particleCombatType = 0;
+    public int particleCombatSize = 100;
+    public int particleCombatAmount = 100;
+    public int particleCombatBrightness = 100;
+    public int colourParticleSmoke = Colour.PARTICLE_SMOKE.defaultRgb();
+    public int colourParticleFlames = Colour.PARTICLE_FLAMES.defaultRgb();
+    public int colourParticleEmbers = Colour.PARTICLE_EMBERS.defaultRgb();
+    public int colourParticleDrips = Colour.PARTICLE_DRIPS.defaultRgb();
+    public int colourParticleMagic = Colour.PARTICLE_MAGIC.defaultRgb();
+    public int colourParticleAmbient = Colour.PARTICLE_AMBIENT.defaultRgb();
+    public int colourParticleCombat = Colour.PARTICLE_COMBAT.defaultRgb();
     public int revision = REVISION;
     public transient int lightDebug = 0;
     /** 2026-10-23 prototype (TerrainLightTarget): the terrain light for vanilla pixels; static, so it is neither saved nor an option (the pilot's set reaches it). */

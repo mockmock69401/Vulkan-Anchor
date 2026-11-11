@@ -9,4 +9,8 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 public interface LevelRendererStarsInvoker {
     @Invoker("createStars")
     void visuals$createStars();
+
+    /** Session 13: the star buffer, which the round stars draw with their own texture. */
+    @org.spongepowered.asm.mixin.gen.Accessor("starBuffer")
+    com.mojang.blaze3d.vertex.VertexBuffer visuals$starBuffer();
 }

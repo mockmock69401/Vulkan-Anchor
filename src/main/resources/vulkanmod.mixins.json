@@ -178,7 +178,11 @@
     "visuals.LevelRendererFrameTimesMixin",
     "visuals.LevelRendererEntityShadowMixin",
     "visuals.MouseHandlerLatencyMixin",
-    "visuals.ScreenshotFrameGenMixin"
+    "visuals.ScreenshotFrameGenMixin",
+    "visuals.ParticleTagMixin",
+    "visuals.ParticleEngineLookMixin",
+    "visuals.TextureSheetParticleAccessor",
+    "visuals.SpriteContentsAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

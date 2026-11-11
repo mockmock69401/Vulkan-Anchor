@@ -28,7 +28,8 @@ class VisualsConfigTest {
              "skyLightAmbient": 100, "perPixelLight": true, "lightColour": 70, "heldLight": true, "antiAliasing": 3, "edgeCover": true,
              "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "pbr": false, "pbrNormalStrength": 150,
              "pbrReflections": true, "pbrParallax": true, "colourSunlight": 16744512, "colourShadeLight": 8438015, "cloudStyle": 2, "sunSize": 70, "moonSize": 150, "snowType": 1, "snowSize": 150, "snowAmount": 60,
-             "rainType": 2, "rainSize": 80, "rainAmount": 140, "starCount": 250, "starSize": 60, "starBrightness": 180, "revision": 14}
+             "rainType": 2, "rainSize": 80, "rainAmount": 140, "starCount": 250, "starSize": 60, "starBrightness": 180, "starType": 1,
+             "particleSmokeType": 1, "particleSmokeSize": 150, "particleFlamesAmount": 50, "particleMagicBrightness": 160, "colourParticleDrips": 4227327, "revision": 15}
             """;
 
     private static List<Field> settingFields() {
