@@ -165,8 +165,11 @@ public final class PbrAtlas {
                 VisualsLog.info("Visuals PBR: no LabPBR maps in the resource packs (" + sprites.size() + " sprites), PBR draws nothing");
                 return;
             }
-            normal = upload(n, w, h);
-            specular = upload(s, w, h);
+            //2026-11-12 (session 14): an atlas without a single map is one value everywhere (flat, or no specular), which a 1x1 image
+            // gives the same at any coordinate and level: a pack (or a mod) with a few _n maps and no _s no longer keeps an atlas-sized
+            // specular image (8192x4096 with its levels: about 180 MB in CTE2), nor the other way round
+            normal = foundN > 0 ? upload(n, w, h) : constant(FLAT_NORMAL);
+            specular = foundS > 0 ? upload(s, w, h) : constant(NO_SPECULAR);
             spriteMap = spriteMap(w, h);
             VisualsLog.info(String.format("Visuals PBR atlas: %d normal and %d specular maps of %d sprites, %dx%d, %d levels, parallax %s, %.0f ms",
                     foundN, foundS, sprites.size(), w, h, levels, parallaxMap ? "on" : "off (sprites not on a cell grid)", (System.nanoTime() - start) / 1e6));
@@ -219,6 +222,20 @@ public final class PbrAtlas {
         if (level != level0) MemoryUtil.memFree(level);
         image.readOnlyLayout();
         return image;
+    }
+
+    /** Session 14: a 1x1 image of texel (little-endian RGBA, as the atlases), for an atlas without maps. */
+    private static VulkanImage constant(int texel) {
+        ByteBuffer one = MemoryUtil.memAlloc(4);
+        try {
+            one.putInt(0, texel);
+            VulkanImage image = new VulkanImage.Builder(1, 1).createVulkanImage();
+            image.uploadSubTextureAsync(0, 1, 1, 0, 0, 0, 0, 1, one);
+            image.readOnlyLayout();
+            return image;
+        } finally {
+            MemoryUtil.memFree(one);
+        }
     }
 
     private static void uploadLevel(VulkanImage image, int l, ByteBuffer pixels, int w, int h) {
