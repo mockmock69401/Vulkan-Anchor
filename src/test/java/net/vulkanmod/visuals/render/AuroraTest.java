@@ -232,7 +232,7 @@ class AuroraTest {
         assertTrue(REFLECTION.contains("layout(location = 27) uniform vec4 celestial;") && REFLECTION.contains("layout(location = 28) uniform vec4 auroraParams;"));
         int sky = COPY.indexOf("+ auroraSky(dir, p);"), clouds = COPY.indexOf("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)");
         assertTrue(sky > 0 && clouds > sky, "under the far clouds");
-        assertTrue(COPY.contains("imageStore(sceneOut, p, vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0));"), "the End's sky");
+        assertTrue(COPY.contains("return vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0);"), "the End's sky");
         assertTrue(COPY.contains("above += auroraSky(r, p);"), "Snell's window");
         assertTrue(COPY.contains("if (!(auroraParams.x > 0.0)) {\n        return vec3(0.0);"));
         int refl = REFLECTION.indexOf("sky += aurora(r, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, AURORA_REFLECTION_STEPS"), reflClouds = REFLECTION.indexOf("reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p)))");

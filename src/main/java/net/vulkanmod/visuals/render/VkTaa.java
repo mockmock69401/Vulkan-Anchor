@@ -28,7 +28,7 @@ public final class VkTaa {
 
     static final int FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
     //boundary.md 3.5
-    static final int OUT = 0, CURRENT = 1, HISTORY = 2, MAIN_DEPTH = 3, LOD_DEPTH = 4, OPAQUE_DEPTH = 5, LOOSE_UNIFORMS = 0;
+    static final int OUT = 0, CURRENT = 1, HISTORY = 2, MAIN_DEPTH = 3, LOD_DEPTH = 4, OPAQUE_DEPTH = 5, AFTER_DEPTH = 6, LOOSE_UNIFORMS = 0;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     private final VkComputeProgram program;
@@ -99,7 +99,7 @@ public final class VkTaa {
      * Outside a render pass, after prepare() and the upload commit: current (readable) blended with the history into the other
      * image, returned readable. The depth views are in SHADER_READ_ONLY_OPTIMAL (boundary 2).
      */
-    public VkImage2D compute(VkCommandBuffer cmd, VkImage2D current, long mainDepthView, long lodDepthView, long opaqueDepthView, long nearestSampler,
+    public VkImage2D compute(VkCommandBuffer cmd, VkImage2D current, long mainDepthView, long lodDepthView, long opaqueDepthView, long afterDepthView, long nearestSampler,
                              long linearSampler) {
         if (this.pendingCamera == null) throw new IllegalStateException("TAA: compute without prepare");
         //New images come only after a resize or on the first frame, whose history TaaHistory already refused in prepare()
@@ -114,7 +114,8 @@ public final class VkTaa {
         out.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
         VkBindings bindings = new VkBindings().storageImage(OUT, out.view()).sampled(CURRENT, current, nearestSampler)
                 .sampled(HISTORY, historyImage, linearSampler).sampledView(MAIN_DEPTH, mainDepthView, nearestSampler)
-                .sampledView(LOD_DEPTH, lodDepthView, nearestSampler).sampledView(OPAQUE_DEPTH, opaqueDepthView, nearestSampler);
+                .sampledView(LOD_DEPTH, lodDepthView, nearestSampler).sampledView(OPAQUE_DEPTH, opaqueDepthView, nearestSampler)
+                .sampledView(AFTER_DEPTH, afterDepthView, nearestSampler);
         if (this.uniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.uniformBuffer);
         this.program.dispatchWithPush(cmd, bindings, this.uniformBuffer == null ? this.uniforms.buffer() : null, groups(this.width), groups(this.height), 1);
         out.transition(cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT,

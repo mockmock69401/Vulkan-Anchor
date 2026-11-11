@@ -810,13 +810,26 @@ bool albedoMatches(vec3 albedo, vec3 vanilla, float block, float sky) {
     return all(lessThanEqual(d, vec3(TERRAIN_ALBEDO_MATCH_ABS) + TERRAIN_ALBEDO_MATCH_REL*vanilla));
 }
 
-void main() {
-    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
-    ivec2 size = imageSize(sceneOut);
-    if (any(greaterThanEqual(p, size))) {
-        return;
+//2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined): in rain surfaces under the sky fade by distance
+// (borderFog.w, AtmosphereUniforms.weatherFog), whatever the camera's height, into the horizon's fog colour tinted with vanilla's
+// fog hue (the biome's blue-grey, as Complementary's rain fog; vanilla's own brightness went navy in thunder). Gaussian in
+// distance: the street nearby stays clear, a hundred blocks away 70% is fog. The sky is left alone (and vanilla's clouds)
+vec3 weatherFogOver(Atmosphere a, vec3 lit, vec3 dir, float dist, float amount) {
+    if (!(borderFog.w > 0.0) || !atmosphereSky(a)) {
+        return lit;
     }
-    vec4 colour = texelFetch(mainColour, p, 0);
+    vec3 rainFog = fogColour(a, dir);
+    float vl = luminance(vanillaFog.rgb);
+    if (vanillaFog.w > 0.5 && vl > 1e-4) {
+        rainFog = vanillaFog.rgb*(luminance(rainFog)/vl);
+    }
+    float k = borderFog.w*min(dist, HAZE_MAX_DISTANCE);
+    return mix(rainFog, lit, exp(-k*k*amount));
+}
+
+//The composite of one pixel (main): colour is vanilla's there (or, for a translucent particle, its own colour, translucentParticle),
+// overdrawn whether something was drawn over the translucent terrain there (overdrawnAfterTranslucent); rgb the scene, a the mark
+vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     vec3 scene = vanillaToScene(colour.rgb);
     Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
             atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
@@ -829,20 +842,17 @@ void main() {
         // (session 2b): from inside water nothing in front: the water itself, or Snell's window where the view rises to the surface
         if (cameraUnderwater()) {
             vec3 skyDir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
-            imageStore(sceneOut, p, vec4(underwaterView(p, size, skyDir, UNDERWATER_LONGEST, true, vec3(0.0)), 0.0));
-            return;
+            return vec4(underwaterView(p, size, skyDir, UNDERWATER_LONGEST, true, vec3(0.0)), 0.0);
         }
         vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
         if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5) {
-            imageStore(sceneOut, p, vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0));
-            return;
+            return vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0);
         }
         //Session 5: the round discs (the round moon replaces vanilla's square one, which vanillaMoonKept drops) and the aurora, under
         // the far clouds
         vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial)
                 + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial) + auroraSky(dir, p);
-        imageStore(sceneOut, p, vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0));
-        return;
+        return vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0);
     }
     float dist = length(view);
     vec3 world = toWorld*view;
@@ -1109,12 +1119,10 @@ void main() {
     }
     int debug = int(lightMode.x + 0.5);
     if (debug >= DEBUG_SKY_VIEW && debug <= DEBUG_SHARE_VIEW) {
-        imageStore(sceneOut, p, vec4(debugView(debug, known, skyT, blockT, share, sunPart), 0.0));
-        return;
+        return vec4(debugView(debug, known, skyT, blockT, share, sunPart), 0.0);
     }
     if (debug == DEBUG_SOURCE_VIEW) {
-        imageStore(sceneOut, p, vec4(sourceView(pl.z, fromLod, hasAlbedo), 0.0));
-        return;
+        return vec4(sourceView(pl.z, fromLod, hasAlbedo), 0.0);
     }
     //W4's haze over the view distance: the sky light given to sunShadingAt (the lifted one); water its own unlifted sky light, as W6's
     // reflection hazes the reflected colour; LOD pixels full
@@ -1132,33 +1140,142 @@ void main() {
     if (border > 0.0) {
         lit = mix(lit, skyColour(a, dir) + glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y)), border);
     }
-    //2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined): in rain surfaces under the sky fade by distance
-    // (borderFog.w, AtmosphereUniforms.weatherFog), whatever the camera's height, into the horizon's fog colour tinted with vanilla's
-    // fog hue (the biome's blue-grey, as Complementary's rain fog; vanilla's own brightness went navy in thunder). Gaussian in
-    // distance: the street nearby stays clear, a hundred blocks away 70% is fog. The sky is left alone
-    if (borderFog.w > 0.0 && atmosphereSky(a) && !cloud) {
-        vec3 rainFog = fogColour(a, dir);
-        float vl = luminance(vanillaFog.rgb);
-        if (vanillaFog.w > 0.5 && vl > 1e-4) {
-            rainFog = vanillaFog.rgb*(luminance(rainFog)/vl);
-        }
-        float k = borderFog.w*min(dist, HAZE_MAX_DISTANCE);
-        lit = mix(rainFog, lit, exp(-k*k*amount));
+    if (!cloud) {
+        lit = weatherFogOver(a, lit, dir, dist, amount);
     }
     lit = farCloudsOver(a, lit, dir, dist, p);
     //2026-10-29 (the user: raindrops took the water's reflection): a pixel drawn over after the translucent terrain (rain and snow
-    // particles, splashes, ripples) keeps no mark, so it stays as drawn instead of being mirrored over
-    bool overdrawn = overdrawnAfterTranslucent(texelFetch(colourAfterTranslucent, p, 0).rgb, colour.rgb);
+    // particles, splashes, ripples) keeps no mark (overdrawn, from main), so it stays as drawn instead of being mirrored over
     //2026-11-09 (session 2b): from inside water, through the water (or the surface's window)
     vec3 shown = lit*underwaterExposure();
     if (cameraUnderwater()) {
         shown = underwaterView(p, size, dir, dist, false, shown);
     }
 #ifdef PBR
-    imageStore(sceneOut, p, vec4(shown, passRan && !cloud && !overdrawn
-            ? (kind != 0.0 ? reflectionMark(kind) : (pbrMarkValue < 0.0 ? pbrMarkValue : blockReflectionMark(smoothClass, glowParams.z))) : 0.0));
+    return vec4(shown, passRan && !cloud && !overdrawn
+            ? (kind != 0.0 ? reflectionMark(kind) : (pbrMarkValue < 0.0 ? pbrMarkValue : blockReflectionMark(smoothClass, glowParams.z))) : 0.0);
 #else
-    imageStore(sceneOut, p, vec4(shown,
-            passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0));
+    return vec4(shown,
+            passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0);
 #endif
+}
+
+//2026-11-11 (the user: in snowy weather the snowflakes looked see-through; Particle Rain's flakes, also vanilla's fading particles): a
+// translucent particle is blended by vanilla over vanilla's own background (its blue sky, its unhazed land) and writes the depth, so
+// the composite lit the blend as a surface at the particle's distance and vanilla's background showed through it. Here such a pixel
+// is taken apart: its cover (alpha) is where the final colour lies between the colour before the particles (colourAfterTranslucent)
+// and the particle's own colour (its albedo, which particle.fsh also writes for translucent fragments, times vanilla's lightmap); the
+// particle is composited as an opaque surface at its colour and laid at that cover over the composite's background, taken from the
+// pixels of the same tile that nothing was drawn over and that showed the same colour before the particles (a cross-bilateral
+// weight on that colour: the sky behind a flake takes the sky's pixels, the hill the hill's). SceneCompositeMath mirrors the steps.
+//Below this squared distance (display values) between the particle's colour and the one behind it its cover cannot be told
+const float PARTICLE_COVER_SPREAD_MIN = 0.0004;
+//A cover at least this is drawn as before: the particle alone
+const float PARTICLE_COVER_OPAQUE = 0.98;
+//A pixel the blend of the particle over what was behind does not explain within this squared distance (display values) is drawn as
+// before: particles overlapping there (a puff of smoke over another, the front one's dark rim chose a full cover: black specks)
+const float PARTICLE_BLEND_RESIDUAL_MAX = 0.0025;
+//The tile pixels' weight: exp(-d²/PARTICLE_BEHIND_MATCH²), d the distance between their colours before the particles and this one's
+const float PARTICLE_BEHIND_MATCH = 0.05;
+//The guess of what lies behind a particle (particleBehindGuess) counts as this much weight among the tile's pixels: where few showed
+// it (a large particle over the whole tile) the guess stands in, and the two blend without a step from one tile to the next
+const float PARTICLE_GUESS_WEIGHT = 0.5;
+const uint COMPOSITE_TILE = 64u;
+
+//The particle's cover where shown is drawn over behind (both display values) by a particle of colour own: shown's share of the way
+// from behind to own (vanilla's blend shown = own a + behind (1 - a)); 1 where the two colours are too close to tell or that blend
+// does not explain shown
+float particleCover(vec3 shown, vec3 behind, vec3 own) {
+    vec3 e = own - behind;
+    float ee = dot(e, e);
+    if (ee < PARTICLE_COVER_SPREAD_MIN) {
+        return 1.0;
+    }
+    float cover = clamp(dot(shown - behind, e)/ee, 0.0, 1.0);
+    vec3 r = shown - behind - e*cover;
+    return dot(r, r) > PARTICLE_BLEND_RESIDUAL_MAX ? 1.0 : cover;
+}
+
+//A pixel drawn over after the translucent terrain whose front fragment wrote the terrain light and its albedo (a particle): its own
+// colour (display values, before vanilla's blend) and cover; false when it covers at least PARTICLE_COVER_OPAQUE (drawn as before)
+bool translucentParticle(ivec2 p, vec3 shown, vec3 behind, out vec3 own, out float cover) {
+    own = shown;
+    cover = 1.0;
+    vec3 t = terrainLightAt(p, texelFetch(mainDepth, p, 0).r);
+    vec3 albedo;
+    if (t.z < 1.5 || !terrainAlbedoAt(p, albedo)) {
+        return false;
+    }
+    own = albedo*lightmapDisplay(t.y, t.x);
+    cover = particleCover(shown, behind, own);
+    return cover < PARTICLE_COVER_OPAQUE;
+}
+
+//The guess of what lies behind a translucent particle where few pixels of its tile showed it: vanilla's colour there hazed and fogged at
+// its own distance (the depth before the translucent terrain), or the sky and its glow where there is none
+vec3 particleBehindGuess(ivec2 p, ivec2 size, vec3 behind) {
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
+    vec3 scene = vanillaToScene(behind);
+    if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5 || cameraUnderwater()) {
+        return scene*underwaterExposure();
+    }
+    vec2 uv = pixelUvGl(p, size);
+    vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, uv));
+    float depth = texelFetch(beforeTranslucent, p, 0).r;
+    if (depth == FAR) {
+        return skyColour(a, dir) + sunGlow(a, dir);
+    }
+    float dist = length(viewPosition(invVanillaProj, uv, depth));
+    float amount = hazeAmount(a, 1.0, false);
+    return weatherFogOver(a, applyHazeOpen(a, scene, dir, dist, amount, 1.0), dir, dist, amount);
+}
+
+//The tile: each pixel's composite (rgb) and whether nothing was drawn over it (w 1), and its colour before the particles
+shared vec4 tileShown[COMPOSITE_TILE];
+shared vec3 tileBehind[COMPOSITE_TILE];
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(sceneOut);
+    uint here = gl_LocalInvocationIndex;
+    bool inside = all(lessThan(p, size));
+    vec4 result = vec4(0.0);
+    vec3 behind = vec3(0.0);
+    bool overdrawn = false;
+    float cover = 1.0;
+    if (inside) {
+        vec4 colour = texelFetch(mainColour, p, 0);
+        behind = texelFetch(colourAfterTranslucent, p, 0).rgb;
+        overdrawn = overdrawnAfterTranslucent(behind, colour.rgb);
+        vec3 own;
+        if (overdrawn && translucentParticle(p, colour.rgb, behind, own, cover)) {
+            colour = vec4(own, 1.0);
+        } else {
+            cover = 1.0;
+        }
+        result = compositeAt(p, size, colour, overdrawn);
+    }
+    //Every invocation reaches the barrier: the tile's composite where nothing was drawn over it, for the translucent particles
+    tileShown[here] = vec4(result.rgb, inside && !overdrawn ? 1.0 : 0.0);
+    tileBehind[here] = behind;
+    barrier();
+    if (!inside) {
+        return;
+    }
+    if (cover < PARTICLE_COVER_OPAQUE) {
+        vec3 sum = particleBehindGuess(p, size, behind)*PARTICLE_GUESS_WEIGHT;
+        float weight = PARTICLE_GUESS_WEIGHT;
+        for (uint i = 0u; i < COMPOSITE_TILE; i++) {
+            vec4 t = tileShown[i];
+            if (t.w > 0.5) {
+                vec3 d = tileBehind[i] - behind;
+                float w = exp(-dot(d, d)/(PARTICLE_BEHIND_MATCH*PARTICLE_BEHIND_MATCH));
+                sum += t.rgb*w;
+                weight += w;
+            }
+        }
+        result.rgb = mix(sum/weight, result.rgb, cover);
+    }
+    imageStore(sceneOut, p, result);
 }

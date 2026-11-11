@@ -218,6 +218,8 @@ class TerrainLightMathTest {
             assertTrue(at > 0 && f.lastIndexOf("if (LightOut > 0.5) {", at) > 0, s);
             int lm = f.indexOf("color *= lightMapColor;");
             if (lm >= 0) assertTrue(at < lm, s + ": before the lightmap");
+            //2026-11-11: the particle's colour also for translucent fragments (alpha 1), for the composite's translucentParticle
+            else if (s.equals("particle")) assertTrue(f.contains("writeSceneLight(sceneLightLevels, vec4((texture(Sampler0, texCoord0) * albedoTint * ColorModulator).rgb, 1.0),"), s);
             else assertTrue(f.contains("writeSceneLight(sceneLightLevels, texture(Sampler0, texCoord0) * albedoTint * ColorModulator,"), s);
             writers++;
         }
