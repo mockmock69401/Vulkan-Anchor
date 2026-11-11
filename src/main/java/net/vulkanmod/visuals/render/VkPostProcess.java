@@ -612,7 +612,11 @@ public final class VkPostProcess {
         }
         VkComputeProgram copyProgram = this.copyTintedOn && this.copyTinted != null ? this.copyTinted : this.copy;
         if (this.pbrOn) {
-            copyProgram = this.copyTintedOn && this.copyTintedPbr != null ? this.copyTintedPbr : this.copyPbr;
+            //2026-11-12 (shader roadmap session 14): the TINTED build whatever the colours. At the default colours its tints are exactly 1
+            // (the same picture), and with the PBR lighting compiled in it runs faster than the plain build on the RTX 5070 (2560x1440,
+            // Embrace Pixels, two alternating pairs: composite -0.12..-0.44 ms on land and at night, the same on the sea); the plain
+            // PBR build is kept for a driver that cannot build the tinted one
+            copyProgram = this.copyTintedPbr != null ? this.copyTintedPbr : this.copyPbr;
         }
         copyProgram.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
