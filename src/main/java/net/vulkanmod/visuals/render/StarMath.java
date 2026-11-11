@@ -34,6 +34,35 @@ public final class StarMath {
     private StarMath() {
     }
 
+    /**
+     * 2026-11-11 (session 13): the stars' shape. TYPE_VANILLA: vanilla's flat squares. TYPE_ROUND: each star's quad carries its corners'
+     * texture coordinates and is drawn with a soft round point (StarSky.roundTexture: opaque inside ROUND_CORE of its half size, fading to
+     * nothing at its edge) through vanilla's position-texture shader and the same additive draw; the half size is ROUND_SIZE x larger so a
+     * round star adds about the light its square did (the point's alpha sums to about 1 / ROUND_SIZE^2 of the square's).
+     */
+    public static final int TYPE_VANILLA = 0, TYPE_ROUND = 1, TYPE_MAX = 1;
+    public static final float ROUND_CORE = 0.35f, ROUND_SIZE = 1.6f;
+    /** The round point's texture size (texels a side). */
+    public static final int ROUND_TEXTURE = 32;
+
+    /** The round point's alpha at d (0 centre .. 1 edge of the quad's inscribed circle). */
+    public static float roundAlpha(float d) {
+        if (d >= 1f) return 0f;
+        if (d <= ROUND_CORE) return 1f;
+        float t = (d - ROUND_CORE) / (1f - ROUND_CORE);
+        float s = 1f - t;
+        return s * s * (3f - 2f * s);
+    }
+
+    /** The texture u, v of corner i (0..3) of vanilla's star quad (its corners go (-1, -1), (-1, 1), (1, 1), (1, -1)). */
+    public static float cornerU(int i) {
+        return (i & 2) == 0 ? 0f : 1f;
+    }
+
+    public static float cornerV(int i) {
+        return ((i + 1) & 2) == 0 ? 0f : 1f;
+    }
+
     /** The number of tries for a count setting (percent): VANILLA_STARS at 100. */
     public static int tries(int countPercent) {
         int p = Math.max(0, Math.min(COUNT_MAX, countPercent));

@@ -1,6 +1,7 @@
 package net.vulkanmod.visuals.config;
 
 import net.vulkanmod.visuals.fsr.FsrSettings;
+import net.vulkanmod.visuals.particle.VanillaParticles;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.PbrMath;
@@ -148,6 +149,8 @@ public final class VisualsOptionLayout {
                             new Item("aurora", Kind.CHOICE, 0, CelestialUniforms.AURORA_MAX, Impact.LOW, null),
                             new Item("aurora_strength", Kind.PERCENT, 0, CelestialUniforms.AURORA_STRENGTH_MAX, Impact.NONE, "aurora"),
                             //2026-11-11 (session 12): vanilla's stars: how many, how big, how bright (100 = vanilla's)
+                            //2026-11-11 (session 13): their shape (vanilla's squares or round soft points)
+                            new Item("star_type", Kind.CHOICE, 0, StarMath.TYPE_MAX, Impact.NONE, null),
                             new Item("star_count", Kind.PERCENT, 0, StarMath.COUNT_MAX, Impact.NONE, null),
                             new Item("star_size", Kind.PERCENT, StarMath.SIZE_MIN, StarMath.SIZE_MAX, Impact.NONE, null),
                             new Item("star_brightness", Kind.PERCENT, 0, StarMath.BRIGHTNESS_MAX, Impact.NONE, null))),
@@ -195,6 +198,9 @@ public final class VisualsOptionLayout {
                             percent("underwater_visibility", UNDERWATER_VISIBILITY_MIN, UNDERWATER_VISIBILITY_MAX, Impact.NONE))),
                     new Block("wind", List.of(
                             percent("foliage_wind", STRENGTH_MAX))))),
+            //2026-11-11 (shader roadmap session 13, the user: "every vanilla effect that looks pixel-shaped ... type, size, amount and colour"):
+            // a block per particle group (VanillaParticles.Group): type (vanilla / realistic), size and amount; the colours are on the colours page
+            new Page("particles", particleBlocks()),
             //2026-11-10 (session 8, the user: "the parts with set colours, such as the sunset and the sky's colour, as colour pickers"):
             // ShaderColours' colours by what they colour; the defaults are the look before the pickers, and the presets leave them alone
             new Page("colours", List.of(
@@ -227,9 +233,24 @@ public final class VisualsOptionLayout {
                             colour(Colour.AURORA_END, "aurora"))),
                     new Block("colours_water", List.of(
                             colour(Colour.WATER, null),
-                            colour(Colour.UNDERWATER, null))))));
+                            colour(Colour.UNDERWATER, null))),
+                    //Session 13: the particle groups' colours
+                    new Block("colours_particles", List.of(
+                            colour(Colour.PARTICLE_SMOKE, null),
+                            colour(Colour.PARTICLE_FLAMES, null),
+                            colour(Colour.PARTICLE_EMBERS, null),
+                            colour(Colour.PARTICLE_DRIPS, null),
+                            colour(Colour.PARTICLE_MAGIC, null),
+                            colour(Colour.PARTICLE_AMBIENT, null),
+                            colour(Colour.PARTICLE_COMBAT, null))))));
 
     private VisualsOptionLayout() {
+    }
+
+    private static List<Block> particleBlocks() {
+        java.util.ArrayList<Block> blocks = new java.util.ArrayList<>();
+        for (VanillaParticles.Group g : VanillaParticles.Group.values()) blocks.add(new Block("particles_" + g.key(), g.effect().items(Impact.LOW)));
+        return List.copyOf(blocks);
     }
 
     /** The item behind key (IllegalArgumentException when there is none). */
@@ -282,6 +303,7 @@ public final class VisualsOptionLayout {
             case "moon_size" -> c.moonSize;
             case "aurora" -> c.aurora;
             case "aurora_strength" -> c.auroraStrength;
+            case "star_type" -> c.starType;
             case "star_count" -> c.starCount;
             case "star_size" -> c.starSize;
             case "star_brightness" -> c.starBrightness;
@@ -363,6 +385,7 @@ public final class VisualsOptionLayout {
             case "moon_size" -> c.moonSize = v;
             case "aurora" -> c.aurora = v;
             case "aurora_strength" -> c.auroraStrength = v;
+            case "star_type" -> c.starType = v;
             case "star_count" -> c.starCount = v;
             case "star_size" -> c.starSize = v;
             case "star_brightness" -> c.starBrightness = v;

@@ -24,7 +24,16 @@ public enum ParticleEffect {
     /** Session 6's shader snow: 0 round flakes, 1 pixel flakes, 2 both (each flake one or the other). */
     SNOW("snow", "snow", 2, Colour.SNOW, "shader_weather"),
     /** Session 6's shader rain: 0 round streaks, 1 pixel drops, 2 both. */
-    RAIN("rain", "rain", 2, Colour.RAIN, "shader_weather");
+    RAIN("rain", "rain", 2, Colour.RAIN, "shader_weather"),
+    //2026-11-11 (shader roadmap session 13): the vanilla particle groups (net.vulkanmod.visuals.particle.VanillaParticles.Group, same order):
+    // 0 vanilla sprites, 1 realistic shapes (ParticleLook)
+    PARTICLE_SMOKE("particle_smoke", "particleSmoke", 1, Colour.PARTICLE_SMOKE, null),
+    PARTICLE_FLAMES("particle_flames", "particleFlames", 1, Colour.PARTICLE_FLAMES, null),
+    PARTICLE_EMBERS("particle_embers", "particleEmbers", 1, Colour.PARTICLE_EMBERS, null),
+    PARTICLE_DRIPS("particle_drips", "particleDrips", 1, Colour.PARTICLE_DRIPS, null),
+    PARTICLE_MAGIC("particle_magic", "particleMagic", 1, Colour.PARTICLE_MAGIC, null),
+    PARTICLE_AMBIENT("particle_ambient", "particleAmbient", 1, Colour.PARTICLE_AMBIENT, null),
+    PARTICLE_COMBAT("particle_combat", "particleCombat", 1, Colour.PARTICLE_COMBAT, null);
 
     /** The parts of an effect, by the option layout key's suffix and the config field's. */
     public enum Part {

@@ -48,18 +48,24 @@ public final class ColourPresets {
     /**
      * The palettes, one row per level (DEFAULT is ShaderColours' defaults), in ShaderColours.Colour order: day sky, sunset, sunrise, sun glow,
      * night sky, stars (session 12), fog, rainy sky, clouds, rain, snow, sunlight, shade light, moon, torch light, aurora body, aurora top, aurora lower edge,
-     * End aurora, water, underwater.
+     * End aurora, water, underwater; session 13's particle groups: smoke, flames, embers, drips, magic, ambient, combat (Realistic: real
+     * smoke a little darker; Cinematic: warm smoke and fire, teal water; Anime: light clean smoke, bright fire and magic; Horror: dark smoke,
+     * sickly fire, murky drips).
      */
     private static final int[][] PALETTES = {
             ShaderColours.defaults(),
             {0x6A94CC, 0xFF8A48, 0xF7B486, 0xFFE6C4, 0x1C2A46, 0xF2F5FF, 0xC2CBD4, 0xE6ECF2, 0xF2F2F2, 0xDCE6F0, 0xF7F9FF, 0xFFC88C, 0xE8F0FF, 0xEEEEEA, 0xFFA458,
-                    0x48FF8C, 0xFF4A6A, 0xA868FF, 0xCB89FF, 0x4C9CBC, 0x4AA6AA},
+                    0x48FF8C, 0xFF4A6A, 0xA868FF, 0xCB89FF, 0x4C9CBC, 0x4AA6AA,
+                    0x6E6A66, 0xFFA848, 0xFFA020, 0x3F76E4, 0xB070F0, 0xA0A0A0, 0xE7E7E7},
             {0x5C98C0, 0xFF7A2E, 0xFF9C5A, 0xFFC48A, 0x183C4C, 0xD6F0FF, 0xF0B8A8, 0xB6C6CA, 0xFFEEDC, 0xC4DEE6, 0xEEF8FF, 0xFFB066, 0xD0F0F0, 0xD2EEFF, 0xFF8C3A,
-                    0x3CF2E2, 0xFF5A86, 0x7E62FF, 0x9E74FF, 0x369AA6, 0x28868E},
+                    0x3CF2E2, 0xFF5A86, 0x7E62FF, 0x9E74FF, 0x369AA6, 0x28868E,
+                    0x9A8E84, 0xFF9030, 0xFF7020, 0x3C8CC0, 0x8C70FF, 0xA49A8E, 0xE8D8C8},
             {0x58A6F4, 0xFF9874, 0xFFC0AA, 0xFFF2CC, 0x2E3C7C, 0xE0E6FF, 0xC6DEF8, 0xDCE6FF, 0xFFFFFF, 0xD4EAFF, 0xFFFFFF, 0xFFD08E, 0xE0E4FF, 0xF4F6FF, 0xFFB46E,
-                    0x4CFFD6, 0xFF74E4, 0xB482FF, 0xD494FF, 0x3CD2EA, 0x3CCAE2},
+                    0x4CFFD6, 0xFF74E4, 0xB482FF, 0xD494FF, 0x3CD2EA, 0x3CCAE2,
+                    0xB4B8C8, 0xFFB850, 0xFFA040, 0x4CA8FF, 0xD080FF, 0xC0C4D8, 0xFFFFFF},
             {0x6C7876, 0xA23C2C, 0x8C7A5E, 0xC49482, 0x0E1316, 0x8E968A, 0x858F84, 0x6E766E, 0x9A9C98, 0x98A298, 0xC6CAC6, 0xD8D0B0, 0xB8C8C0, 0xD04A3A, 0xFF6A30,
-                    0x2E9E44, 0x7E1020, 0x5E1E7C, 0x5E1E5E, 0x2E4E46, 0x283E36},
+                    0x2E9E44, 0x7E1020, 0x5E1E7C, 0x5E1E5E, 0x2E4E46, 0x283E36,
+                    0x4A4C48, 0xC8A040, 0xD04A20, 0x4A6E5E, 0x6A3A6A, 0x5E625A, 0xB0A8A0},
     };
 
     /**
@@ -192,10 +198,20 @@ public final class ColourPresets {
      * palette's takes the palette's star colour, so it stays on the palette it chose. Returns whether it did.
      */
     static boolean moveOldStars(VisualsConfig c) {
+        return moveOldColours(c, java.util.EnumSet.of(Colour.STARS));
+    }
+
+    /**
+     * Sessions 12 and 13: a file saved before some colours existed (missing: their fields absent, so at their defaults) on a palette whose
+     * every other colour is still the palette's takes the palette's values for them, so it stays on the palette it chose. Returns whether
+     * it did.
+     */
+    static boolean moveOldColours(VisualsConfig c, java.util.Set<Colour> missing) {
         int level = c.colourPreset;
-        if (!isLevel(level) || c.colour(Colour.STARS) != Colour.STARS.defaultRgb()) return false;
-        for (Colour colour : Colour.values()) if (colour != Colour.STARS && c.colour(colour) != value(colour, level)) return false;
-        c.setColour(Colour.STARS, value(Colour.STARS, level));
+        if (!isLevel(level) || missing.isEmpty()) return false;
+        for (Colour colour : missing) if (c.colour(colour) != colour.defaultRgb()) return false;
+        for (Colour colour : Colour.values()) if (!missing.contains(colour) && c.colour(colour) != value(colour, level)) return false;
+        for (Colour colour : missing) c.setColour(colour, value(colour, level));
         return true;
     }
 

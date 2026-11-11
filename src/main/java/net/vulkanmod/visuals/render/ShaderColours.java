@@ -68,7 +68,15 @@ public final class ShaderColours {
         AURORA_LOWER("colour_aurora_lower", Swatch.of(AuroraMath.AURORA_FRINGE_R, AuroraMath.AURORA_FRINGE_G, AuroraMath.AURORA_FRINGE_B)),
         AURORA_END("colour_aurora_end", Swatch.of(AuroraMath.AURORA_END_MID_R, AuroraMath.AURORA_END_MID_G, AuroraMath.AURORA_END_MID_B)),
         WATER("colour_water", Swatch.of(WaterMath.WATER_BODY_RED, WaterMath.WATER_BODY_GREEN, WaterMath.WATER_BODY_BLUE)),
-        UNDERWATER("colour_underwater", Swatch.of(WaterMath.WATER_BODY_RED, WaterMath.WATER_BODY_GREEN, WaterMath.WATER_BODY_BLUE));
+        UNDERWATER("colour_underwater", Swatch.of(WaterMath.WATER_BODY_RED, WaterMath.WATER_BODY_GREEN, WaterMath.WATER_BODY_BLUE)),
+        //2026-11-11 (session 13): the particle look groups (VanillaParticles.Group): the group's typical colour (its vanilla sprites' mean)
+        PARTICLE_SMOKE("colour_particle_smoke", 0x7E7873),
+        PARTICLE_FLAMES("colour_particle_flames", 0xFFA51B),
+        PARTICLE_EMBERS("colour_particle_embers", 0xFFB425),
+        PARTICLE_DRIPS("colour_particle_drips", 0x3F76E4),
+        PARTICLE_MAGIC("colour_particle_magic", 0xB070F0),
+        PARTICLE_AMBIENT("colour_particle_ambient", 0xA0A0A0),
+        PARTICLE_COMBAT("colour_particle_combat", 0xE7E7E7);
 
         private final String key;
         private final int defaultRgb;
