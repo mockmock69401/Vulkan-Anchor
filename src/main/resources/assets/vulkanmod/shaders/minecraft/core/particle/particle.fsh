@@ -28,7 +28,9 @@ void main() {
         discard;
     }
     if (LightOut > 0.5) {
-        writeSceneLight(sceneLightLevels, texture(Sampler0, texCoord0) * albedoTint * ColorModulator, vertexDistance <= FogStart);
+        //2026-11-11 (the user: see-through snowflakes): a translucent particle's colour too (its alpha taken as 1), from which the
+        // composite tells how much of the pixel it covers (scene_copy.comp, translucentParticle)
+        writeSceneLight(sceneLightLevels, vec4((texture(Sampler0, texCoord0) * albedoTint * ColorModulator).rgb, 1.0), vertexDistance <= FogStart);
     }
     fragColor = linear_fog(color, vertexDistance, FogStart, FogEnd, FogColor);
 }

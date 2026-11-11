@@ -157,6 +157,15 @@ public final class TaaMath {
         return storedMaxDepth < Math.min(expectedDepth, SKY_DEPTH) * (1f - DISOCCLUSION_DEPTH);
     }
 
+    /**
+     * 2026-11-11 (the user: see-through snowflakes): post_taa.comp's particle test: the main depth (window values) nearer than the copy
+     * taken right after the translucent terrain (the main depth itself when no copy was taken): a particle drawn afterwards, which
+     * takes the current colour unblended (it has no motion here; its history is what lay behind it).
+     */
+    public static boolean particle(float mainDepth, float afterTranslucentDepth) {
+        return afterTranslucentDepth > mainDepth;
+    }
+
     /** The history (YCoCg) clipped toward the centre of the box [lo, hi] (Karis 2014). */
     static float[] clip(float[] history, float[] lo, float[] hi) {
         float[] centre = new float[3], v = new float[3];

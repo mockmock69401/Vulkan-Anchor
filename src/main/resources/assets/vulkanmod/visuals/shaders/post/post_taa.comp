@@ -16,6 +16,9 @@ layout(binding = 2) uniform sampler2D historyTex;//linear filtering
 layout(binding = 3) uniform sampler2D mainDepth;
 layout(binding = 4) uniform sampler2D lodDepth;
 layout(binding = 5) uniform sampler2D opaqueDepth;//the main depth before the translucent terrain
+//2026-11-11 (the user: see-through snowflakes): the main depth right after the translucent terrain (the main depth itself when that
+// copy was not taken this frame): a pixel nearer than it is a particle drawn afterwards
+layout(binding = 6) uniform sampler2D afterDepth;
 
 layout(location = 0) uniform mat4 invVanillaProj;//this frame's, without the jitter
 layout(location = 1) uniform mat4 invLodProj;//this frame's, without the jitter
@@ -117,6 +120,13 @@ void main() {
     bool ownGeometry = scenePositionFrom(p, size, ownView, ownLod);
     float ownDepth = ownGeometry ? min(-ownView.z, SKY_DEPTH) : SKY_DEPTH;//LODs past SKY_DEPTH count as sky (rgba16f range)
     if (taaParams.x < 0.5) {
+        imageStore(taaOut, p, vec4(current, ownDepth));
+        return;
+    }
+    //2026-11-11 (the user: see-through snowflakes): a particle (snow, rain, smoke) moves on its own and has no motion here, so its
+    // history is what lay behind it; blended with that it showed at a fraction (the current weight) and looked see-through. It takes
+    // this frame's colour (TaaMath.particle)
+    if (texelFetch(afterDepth, p, 0).r > texelFetch(mainDepth, p, 0).r) {
         imageStore(taaOut, p, vec4(current, ownDepth));
         return;
     }

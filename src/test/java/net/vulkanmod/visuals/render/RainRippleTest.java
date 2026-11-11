@@ -100,6 +100,9 @@ class RainRippleTest {
         assertFalse(WaterMath.overdrawnAfterTranslucent(water, new float[]{0.2f + 1f / 255, 0.4f, 0.6f}), "8-bit rounding is not a particle");
         assertTrue(WaterMath.overdrawnAfterTranslucent(water, new float[]{0.6f, 0.65f, 0.7f}), "a raindrop over it");
         String copy = ShaderFiles.read("post/scene_copy.comp");
-        assertTrue(copy.contains("bool overdrawn = overdrawnAfterTranslucent(texelFetch(colourAfterTranslucent, p, 0).rgb, colour.rgb);"));
+        //2026-11-11: main reads it before the pixel's composite (compositeAt) and hands it over
+        assertTrue(copy.contains("behind = texelFetch(colourAfterTranslucent, p, 0).rgb;"));
+        assertTrue(copy.contains("overdrawn = overdrawnAfterTranslucent(behind, colour.rgb);"));
+        assertTrue(copy.contains("compositeAt(p, size, colour, overdrawn)"));
     }
 }

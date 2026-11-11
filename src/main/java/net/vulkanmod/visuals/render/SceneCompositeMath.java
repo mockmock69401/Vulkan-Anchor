@@ -77,6 +77,16 @@ public final class SceneCompositeMath {
     /** 2026-10-23: an albedo times vanilla's lightmap at the stored levels must give vanilla's pixel within ABS + REL x it (albedoMatches). */
     public static final float TERRAIN_ALBEDO_MATCH_ABS = 0.03f, TERRAIN_ALBEDO_MATCH_REL = 0.12f;
     public static final float DEBUG_UNKNOWN_RED = 0.25f, DEBUG_UNKNOWN_GREEN = 0.0f, DEBUG_UNKNOWN_BLUE = 0.25f;
+    /**
+     * 2026-11-11 (the user: see-through snowflakes): a translucent particle's cover is told only where its colour and the one behind it
+     * differ by this squared distance (display values); at least PARTICLE_COVER_OPAQUE it is drawn as before; the tile pixels behind it
+     * weigh exp(-d²/PARTICLE_BEHIND_MATCH²) by their colours' distance before the particles, and the shader's guess of it
+     * (particleBehindGuess, shader only) PARTICLE_GUESS_WEIGHT among them.
+     */
+    public static final float PARTICLE_COVER_SPREAD_MIN = 0.0004f, PARTICLE_COVER_OPAQUE = 0.98f, PARTICLE_BEHIND_MATCH = 0.05f,
+            PARTICLE_GUESS_WEIGHT = 0.5f;
+    /** A pixel the blend of the particle over what was behind does not explain within this squared distance is drawn as before (overlaps). */
+    public static final float PARTICLE_BLEND_RESIDUAL_MAX = 0.0025f;
 
     // ---- the composite's slots (boundary 3.2) ----
     public static final int SLOTS = 60;
@@ -396,6 +406,52 @@ public final class SceneCompositeMath {
     private static float[] mix(float[] a, float[] b, float w) {
         float k = Math.max(0, Math.min(1, w));
         return new float[]{a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k};
+    }
+
+    /**
+     * scene_copy.comp particleCover: the cover of a particle of colour own drawn by vanilla over behind where the frame shows shown (all
+     * display rgb): shown's share of the way from behind to own, 1 where own and behind are too close to tell or that blend leaves more
+     * than PARTICLE_BLEND_RESIDUAL_MAX of shown unexplained (particles overlapping there).
+     */
+    public static float particleCover(float[] shown, float[] behind, float[] own) {
+        float ee = 0, se = 0;
+        for (int i = 0; i < 3; i++) {
+            float e = own[i] - behind[i];
+            ee += e * e;
+            se += (shown[i] - behind[i]) * e;
+        }
+        if (ee < PARTICLE_COVER_SPREAD_MIN) return 1;
+        float cover = clamp01(se / ee), rr = 0;
+        for (int i = 0; i < 3; i++) {
+            float r = shown[i] - behind[i] - (own[i] - behind[i]) * cover;
+            rr += r * r;
+        }
+        return rr > PARTICLE_BLEND_RESIDUAL_MAX ? 1 : cover;
+    }
+
+    /**
+     * scene_copy.comp main: what lies behind a translucent particle whose pixel showed behind (display rgb) before the particles, from
+     * its tile: the composite (shown) of the tile pixels nothing was drawn over (open), weighted by how alike their colours before the
+     * particles (tileBehind) are, with the guess (the shader's particleBehindGuess) at PARTICLE_GUESS_WEIGHT: where no pixel of the tile
+     * showed it (a large particle over the whole tile) the guess, and no step between tiles that have a few such pixels and tiles without.
+     */
+    public static float[] particleBehind(float[] behind, float[][] shown, float[][] tileBehind, boolean[] open, float[] guess) {
+        float[] sum = scale(guess, PARTICLE_GUESS_WEIGHT);
+        float weight = PARTICLE_GUESS_WEIGHT;
+        for (int i = 0; i < shown.length; i++) {
+            if (!open[i]) continue;
+            float d = 0;
+            for (int c = 0; c < 3; c++) d += (tileBehind[i][c] - behind[c]) * (tileBehind[i][c] - behind[c]);
+            float w = (float) Math.exp(-d / (PARTICLE_BEHIND_MATCH * PARTICLE_BEHIND_MATCH));
+            for (int c = 0; c < 3; c++) sum[c] += shown[i][c] * w;
+            weight += w;
+        }
+        return scale(sum, 1 / weight);
+    }
+
+    /** scene_copy.comp main: the particle composited as an opaque surface (particle) laid at its cover over what lies behind it (back). */
+    public static float[] particleOver(float[] back, float[] particle, float cover) {
+        return cover >= PARTICLE_COVER_OPAQUE ? particle : mix(back, particle, cover);
     }
 
     /** scene_copy.comp albedoMatches: albedo (display) times vanilla's lightmap at (block, sky) gives vanilla's pixel (display rgb). */

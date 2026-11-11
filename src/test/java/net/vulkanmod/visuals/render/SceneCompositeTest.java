@@ -706,7 +706,7 @@ class SceneCompositeTest {
         assertArrayEquals(SceneCompositeMath.composite(surface(wall, NORTH, SHADED, -1, new float[]{0, 15, 1}, 0, false, 120), off, LIGHTMAP), roofed, 1e-6f);
         assertArrayEquals(SceneCompositeMath.composite(skyPixel(new float[]{0.5f, 0.6f, 0.8f, 1}, dir(0, 0.3f, 1)), off, LIGHTMAP),
                 SceneCompositeMath.composite(skyPixel(new float[]{0.5f, 0.6f, 0.8f, 1}, dir(0, 0.3f, 1)), rain, LIGHTMAP), 1e-6f);
-        assertTrue(COMP.contains("lit = mix(rainFog, lit, exp(-k*k*amount));"));
+        assertTrue(COMP.contains("return mix(rainFog, lit, exp(-k*k*amount));") && COMP.contains("lit = weatherFogOver(a, lit, dir, dist, amount);"));
     }
 
     // ---- 6c. 2026-10-28: block glow and ore glow (slot 33) ----
@@ -1587,6 +1587,108 @@ class SceneCompositeTest {
 
     private static float[] add(float[] a, float[] b) {
         return new float[]{a[0] + b[0], a[1] + b[1], a[2] + b[2]};
+    }
+
+    // ---- translucent particles (2026-11-11, the user: see-through snowflakes) ----
+
+    private static float[] blend8(float[] own, float[] behind, float a) {
+        //vanilla's blend into the 8-bit target
+        float[] c = new float[3];
+        for (int i = 0; i < 3; i++) c[i] = Math.round((own[i] * a + behind[i] * (1 - a)) * 255f) / 255f;
+        return c;
+    }
+
+    @Test
+    void aTranslucentParticlesCoverIsReadBackFromVanillasBlend() {
+        float[] flake = {0.92f, 0.93f, 0.95f};
+        float[] blueSky = {0.47f, 0.62f, 0.98f};
+        for (float a : new float[]{0.15f, 0.4f, 0.7f, 0.95f}) {
+            assertEquals(a, SceneCompositeMath.particleCover(blend8(flake, blueSky, a), blueSky, flake), 0.01f, "cover " + a);
+        }
+        //Over a dark hill too
+        float[] hill = {0.12f, 0.2f, 0.1f};
+        assertEquals(0.3f, SceneCompositeMath.particleCover(blend8(flake, hill, 0.3f), hill, flake), 0.01f);
+        //Never past 0..1, and 1 where the particle is the colour behind it (nothing to tell: drawn as before)
+        assertEquals(1f, SceneCompositeMath.particleCover(new float[]{1, 1, 1}, hill, flake), 0f);
+        assertEquals(0f, SceneCompositeMath.particleCover(new float[]{0.11f, 0.19f, 0.09f}, hill, flake), 0f);
+        assertEquals(1f, SceneCompositeMath.particleCover(blend8(flake, flake, 0.5f), new float[]{0.91f, 0.93f, 0.95f}, flake), 0f);
+        assertTrue(SceneCompositeMath.particleCover(blend8(flake, blueSky, 1f), blueSky, flake) >= SceneCompositeMath.PARTICLE_COVER_OPAQUE);
+        //Two puffs of smoke overlapping: the front one's dark rim over a grey puff over the sky is no blend of that rim over the sky; taken
+        // as one it chose a full cover and drew the rim (black specks). Drawn as before
+        float[] rim = {0.05f, 0.05f, 0.05f}, puff = {0.55f, 0.55f, 0.55f};
+        float[] overlap = blend8(rim, blend8(puff, blueSky, 0.8f), 0.15f);
+        assertEquals(1f, SceneCompositeMath.particleCover(overlap, blueSky, rim), 0f);
+        //Snowflakes over snowflakes stay close to one blend: still taken apart
+        float[] twoFlakes = blend8(flake, blend8(new float[]{0.9f, 0.9f, 0.93f}, blueSky, 0.5f), 0.5f);
+        assertTrue(SceneCompositeMath.particleCover(twoFlakes, blueSky, flake) < SceneCompositeMath.PARTICLE_COVER_OPAQUE);
+    }
+
+    @Test
+    void whatLiesBehindAParticleIsTakenFromTheTilesPixelsThatShowedTheSameBeforeIt() {
+        //A tile half vanilla's blue sky (our composite made it grey) and half a green hill (our composite hazed it), one pixel covered
+        float[] vanillaSky = {0.47f, 0.62f, 0.98f}, ourSky = {0.6f, 0.6f, 0.62f};
+        float[] vanillaHill = {0.2f, 0.45f, 0.15f}, ourHill = {0.35f, 0.42f, 0.4f};
+        int n = 64;
+        float[][] shown = new float[n][], behind = new float[n][];
+        boolean[] open = new boolean[n];
+        for (int i = 0; i < n; i++) {
+            boolean sky = i < 32;
+            behind[i] = sky ? vanillaSky : vanillaHill;
+            shown[i] = sky ? ourSky : ourHill;
+            open[i] = true;
+        }
+        open[10] = false;
+        shown[10] = new float[]{9, 9, 9};//a particle's own composite: never a background
+        //The shader's guess (vanilla's colour hazed, or our sky without its clouds) counts little among many alike pixels
+        float[] guessSky = {0.65f, 0.65f, 0.7f}, guessHill = {0.3f, 0.4f, 0.4f};
+        float[] back = SceneCompositeMath.particleBehind(new float[]{0.47f, 0.62f, 0.97f}, shown, behind, open, guessSky);
+        assertArrayEquals(ourSky, back, 2e-3f, "a flake over the sky gets our sky, not vanilla's blue");
+        assertArrayEquals(ourHill, SceneCompositeMath.particleBehind(vanillaHill, shown, behind, open, guessHill), 2e-3f);
+        //A flake at cover 0.4 over the sky: 40% the flake, the rest our sky; vanilla's blue never shows
+        float[] flake = {1.2f, 1.2f, 1.25f};
+        assertArrayEquals(new float[]{0.6f * 0.6f + 0.4f * 1.2f, 0.6f * 0.6f + 0.4f * 1.2f, 0.6f * 0.62f + 0.4f * 1.25f},
+                SceneCompositeMath.particleOver(back, flake, 0.4f), 1e-3f);
+        assertArrayEquals(flake, SceneCompositeMath.particleOver(back, flake, 1f), 0f);
+        //No tile pixel showed it (a large particle over the whole tile, or nothing alike): the guess
+        boolean[] none = new boolean[n];
+        assertArrayEquals(guessSky, SceneCompositeMath.particleBehind(vanillaSky, shown, behind, none, guessSky), 1e-6f);
+        assertArrayEquals(guessHill, SceneCompositeMath.particleBehind(new float[]{1, 0, 0}, shown, behind, open, guessHill), 1e-6f);
+        //A single alike pixel in the tile weighs twice the guess: the tiles beside one another blend, no step from one to the next
+        boolean[] one = new boolean[n];
+        one[0] = true;
+        float[] few = SceneCompositeMath.particleBehind(vanillaSky, shown, behind, one, guessSky);
+        for (int c = 0; c < 3; c++) assertEquals((ourSky[c] * 1f + guessSky[c] * 0.5f) / 1.5f, few[c], 1e-5f);
+    }
+
+    @Test
+    void theCompositeTakesTranslucentParticlesApartAfterTheWholeTileIsComposited() {
+        String c = COMP.replace(String.valueOf((char) 13), "");
+        int main = c.indexOf("void main() {");
+        String body = c.substring(main);
+        //One pixel's composite is a function; main reaches the barrier from every invocation (no return before it)
+        assertTrue(c.contains("vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {"));
+        int barrier = body.indexOf("barrier();");
+        assertTrue(barrier > 0 && barrier == body.lastIndexOf("barrier();") && !body.substring(0, barrier).contains("return"),
+                "one barrier, reached by every invocation");
+        assertEquals(1, body.split("imageStore\\(sceneOut", -1).length - 1, "main stores once");
+        assertFalse(c.substring(0, main).contains("imageStore(sceneOut"), "compositeAt returns its colour");
+        assertTrue(c.contains("shared vec4 tileShown[COMPOSITE_TILE];") && c.contains("layout(local_size_x = 8, local_size_y = 8) in;")
+                && c.contains("const uint COMPOSITE_TILE = 64u;"));
+        //The particle's own colour is its albedo times vanilla's lightmap, at the levels its fragment left
+        assertTrue(c.contains("own = albedo*lightmapDisplay(t.y, t.x);"));
+        assertTrue(body.contains("if (overdrawn && translucentParticle(p, colour.rgb, behind, own, cover)) {"));
+        int own = body.indexOf("colour = vec4(own, 1.0);");
+        assertTrue(own > 0 && own < body.indexOf("result = compositeAt(p, size, colour, overdrawn);"), "the particle's own colour composited");
+        assertEquals(1, body.split("compositeAt\\(", -1).length - 1, "one composite per pixel");
+        assertTrue(body.contains("tileShown[here] = vec4(result.rgb, inside && !overdrawn ? 1.0 : 0.0);"));
+        //The background behind a particle: the tile pixels nothing was drawn over, by their colour before the particles, and the guess
+        // (vanilla's colour hazed and fogged as the composite does, or the sky) at a small weight: no step where a tile has none
+        assertTrue(body.contains("vec3 sum = particleBehindGuess(p, size, behind)*PARTICLE_GUESS_WEIGHT;"));
+        assertTrue(body.contains("float w = exp(-dot(d, d)/(PARTICLE_BEHIND_MATCH*PARTICLE_BEHIND_MATCH));"));
+        assertTrue(body.contains("result.rgb = mix(sum/weight, result.rgb, cover);"));
+        assertTrue(c.contains("return weatherFogOver(a, applyHazeOpen(a, scene, dir, dist, amount, 1.0), dir, dist, amount);"));
+        //The rain fog is one function, for the composite and the guess
+        assertTrue(c.contains("lit = weatherFogOver(a, lit, dir, dist, amount);"));
     }
 
     // ---- the mirror ----

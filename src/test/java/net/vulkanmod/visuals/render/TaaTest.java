@@ -324,14 +324,32 @@ class TaaTest {
     }
 
     @Test
+    void aParticleTakesTheCurrentColourUnblended() {
+        //2026-11-11 (the user: see-through snowflakes): nearer than the depth right after the translucent terrain is a particle
+        assertTrue(TaaMath.particle(0.90f, 0.99f));
+        assertFalse(TaaMath.particle(0.99f, 0.99f), "the terrain, water included, is not");
+        assertFalse(TaaMath.particle(0.95f, 0.95f), "without the copy the main depth stands in: nothing is");
+        //Its old blend: a white flake over a grey history at the current weight showed mostly the grey
+        float[][] n = new float[9][];
+        for (int i = 0; i < 9; i++) n[i] = new float[]{0.5f, 0.5f, 0.5f};
+        n[4] = new float[]{0.9f, 0.9f, 0.9f};
+        float[] blended = TaaMath.resolve(n, new float[]{0.5f, 0.5f, 0.5f}, true, 10, 10, 1, true, false);
+        assertTrue(blended[0] < 0.75f, "blended " + blended[0]);
+        String comp = ShaderFiles.read("post/post_taa.comp").replace(String.valueOf((char) 13), "");
+        int at = comp.indexOf("if (texelFetch(afterDepth, p, 0).r > texelFetch(mainDepth, p, 0).r) {");
+        assertTrue(at > comp.indexOf("if (taaParams.x < 0.5) {") && at < comp.indexOf("vec3 m1 = vec3(0.0)"), "before the neighbourhood");
+        assertTrue(comp.startsWith("        imageStore(taaOut, p, vec4(current, ownDepth));", comp.indexOf('{', at) + 2));
+    }
+
+    @Test
     void theShaderDeclaresBoundary35sBindingsAndEveryUniformIsWritten() {
         VulkanShaderMeta m = meta();
         assertEquals(VulkanShaderMeta.Kind.IMAGE, kind(m, VkTaa.OUT));
-        for (int b : new int[]{VkTaa.CURRENT, VkTaa.HISTORY, VkTaa.MAIN_DEPTH, VkTaa.LOD_DEPTH, VkTaa.OPAQUE_DEPTH}) {
+        for (int b : new int[]{VkTaa.CURRENT, VkTaa.HISTORY, VkTaa.MAIN_DEPTH, VkTaa.LOD_DEPTH, VkTaa.OPAQUE_DEPTH, VkTaa.AFTER_DEPTH}) {
             assertEquals(VulkanShaderMeta.Kind.SAMPLER, kind(m, b), "binding " + b);
         }
-        assertEquals(List.of(0, 1, 2, 3, 4, 5), List.of(VkTaa.OUT, VkTaa.CURRENT, VkTaa.HISTORY, VkTaa.MAIN_DEPTH, VkTaa.LOD_DEPTH, VkTaa.OPAQUE_DEPTH));
-        assertEquals(6, m.bindings().stream().filter(b -> b.kind() != VulkanShaderMeta.Kind.UNIFORM_BUFFER).count());
+        assertEquals(List.of(0, 1, 2, 3, 4, 5, 6), List.of(VkTaa.OUT, VkTaa.CURRENT, VkTaa.HISTORY, VkTaa.MAIN_DEPTH, VkTaa.LOD_DEPTH, VkTaa.OPAQUE_DEPTH, VkTaa.AFTER_DEPTH));
+        assertEquals(7, m.bindings().stream().filter(b -> b.kind() != VulkanShaderMeta.Kind.UNIFORM_BUFFER).count());
         TaaMath.Camera prev = TaaMath.camera(still(), new float[]{0.0005f, -0.0003f});
         for (TaaMath.Values v : new TaaMath.Values[]{TaaMath.compute(still(), new float[2], prev, true), TaaMath.compute(still(), new float[2], null, false)}) {
             LooseUniformWriter w = new LooseUniformWriter(m);

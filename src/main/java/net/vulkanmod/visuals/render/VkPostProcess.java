@@ -838,7 +838,8 @@ public final class VkPostProcess {
             VkImage2D image = this.smaa.finalColour(cmd, values, this.scene, this.bloom[0], this.shaftImage, this.nearest, this.linear);
             if (taaOn) {
                 try {
-                    image = this.taa.compute(cmd, image, this.lastDepths.main(), this.lastDepths.lod(), this.lastDepths.beforeTranslucent(), this.nearest, this.linear);
+                    image = this.taa.compute(cmd, image, this.lastDepths.main(), this.lastDepths.lod(), this.lastDepths.beforeTranslucent(),
+                            this.lastDepths.afterTranslucent(), this.nearest, this.linear);
                     this.taaDrawn = true;
                 } catch (RuntimeException e) {
                     this.taaFailed = true;
