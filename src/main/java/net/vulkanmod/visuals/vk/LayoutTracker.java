@@ -28,6 +28,9 @@ public final class LayoutTracker {
     }
 
     public void tick(long completedSerial, LongPredicate isDropped) {
+        //2026-11-12 (session 14): every image ticks every frame; nothing pending (most of them) allocates nothing, and the completed
+        // transitions go without removeIf's capturing lambda
+        if (this.pending.isEmpty()) return;
         for (int i = 0; i < this.pending.size(); i++) {
             if (isDropped.test(this.pending.get(i).serial())) {
                 this.current = this.pending.get(i).before();
@@ -35,6 +38,11 @@ public final class LayoutTracker {
                 break;
             }
         }
-        this.pending.removeIf(t -> t.serial() <= completedSerial);
+        int kept = 0;
+        for (int i = 0; i < this.pending.size(); i++) {
+            Transition t = this.pending.get(i);
+            if (t.serial() > completedSerial) this.pending.set(kept++, t);
+        }
+        this.pending.subList(kept, this.pending.size()).clear();
     }
 }

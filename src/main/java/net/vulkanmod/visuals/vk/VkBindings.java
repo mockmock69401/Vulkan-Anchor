@@ -9,11 +9,7 @@ import org.lwjgl.vulkan.VkWriteDescriptorSet;
 
 import java.nio.LongBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import static org.lwjgl.vulkan.VK10.*;
 
@@ -68,20 +64,39 @@ public final class VkBindings {
         return this;
     }
 
-    /** Every resource the converted shader declares is provided exactly once with the declared kind, and nothing else. */
+    /**
+     * Every resource the converted shader declares is provided exactly once with the declared kind, and nothing else.
+     * 2026-11-12 (shader roadmap session 14): runs on every dispatch (dozens a frame), so it looks the lists through instead of
+     * building string-keyed maps and sets: those were about a tenth of the render thread's allocations (JFR). Same checks, same
+     * messages; a shader declares each set and binding once.
+     */
     public void validate(String program, VulkanShaderMeta meta) {
-        Map<String, VulkanShaderMeta.Kind> declared = new HashMap<>();
-        for (VulkanShaderMeta.Binding b : meta.bindings()) declared.put(b.set() + ":" + b.binding(), b.kind());
-        Set<String> provided = new HashSet<>();
-        for (Entry e : this.entries) {
-            String key = e.set() + ":" + e.binding();
-            VulkanShaderMeta.Kind kind = declared.get(key);
-            if (kind == null) throw new IllegalArgumentException(program + ": " + key + " (" + e.kind() + ") is not declared by the shader");
-            if (kind != e.kind()) throw new IllegalArgumentException(program + ": " + key + " is " + kind + ", got " + e.kind());
-            if (!provided.add(key)) throw new IllegalArgumentException(program + ": " + key + " provided twice");
+        List<VulkanShaderMeta.Binding> declared = meta.bindings();
+        for (int i = 0; i < this.entries.size(); i++) {
+            Entry e = this.entries.get(i);
+            VulkanShaderMeta.Kind kind = null;
+            for (int j = 0; j < declared.size(); j++) {
+                VulkanShaderMeta.Binding b = declared.get(j);
+                if (b.set() == e.set() && b.binding() == e.binding()) {
+                    kind = b.kind();
+                    break;
+                }
+            }
+            if (kind == null) throw new IllegalArgumentException(program + ": " + e.set() + ":" + e.binding() + " (" + e.kind() + ") is not declared by the shader");
+            if (kind != e.kind()) throw new IllegalArgumentException(program + ": " + e.set() + ":" + e.binding() + " is " + kind + ", got " + e.kind());
+            for (int k = 0; k < i; k++) {
+                Entry o = this.entries.get(k);
+                if (o.set() == e.set() && o.binding() == e.binding()) throw new IllegalArgumentException(program + ": " + e.set() + ":" + e.binding() + " provided twice");
+            }
         }
-        for (Map.Entry<String, VulkanShaderMeta.Kind> d : declared.entrySet()) {
-            if (!provided.contains(d.getKey())) throw new IllegalArgumentException(program + ": " + d.getKey() + " (" + d.getValue() + ") not provided");
+        for (int j = 0; j < declared.size(); j++) {
+            VulkanShaderMeta.Binding b = declared.get(j);
+            boolean provided = false;
+            for (int i = 0; i < this.entries.size() && !provided; i++) {
+                Entry e = this.entries.get(i);
+                provided = e.set() == b.set() && e.binding() == b.binding();
+            }
+            if (!provided) throw new IllegalArgumentException(program + ": " + b.set() + ":" + b.binding() + " (" + b.kind() + ") not provided");
         }
     }
 
