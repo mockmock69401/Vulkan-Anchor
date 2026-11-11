@@ -37,8 +37,10 @@ public class VisualsConfig {
      * Anime palette (its colours and looks still Anime's) takes the anime clouds and stays on it; any other file keeps its style.
      * 11 (2026-11-11): the Realistic, Anime and Horror palettes' look values changed (ColourPresets.LOOK); a file of revision 9 or 10 still
      * exactly on a palette's old values takes the new ones and stays on it (ColourPresets.moveOldLook); any other file keeps its values.
+     * 12 (2026-11-11, session 10 follow-up): the round sun's and moon's size (sunSize, moonSize); an older file has neither: 100, the new
+     * default sizes (a smaller round sun and a bigger round moon than before, as the user asked).
      */
-    private static final int REVISION = 11;
+    private static final int REVISION = 12;
     /** 2026-11-11: the first revision with the changed palette look values; 9 the first with palette look values at all. */
     static final int PALETTE_LOOK_REVISION = 11, FIRST_LOOK_REVISION = 9;
     /** Session 11: the first revision whose Anime palette includes the anime clouds. */
@@ -262,6 +264,12 @@ public class VisualsConfig {
      * End) and their strength (percent, 100 = default).
      */
     public int celestialShape = 0;
+    /**
+     * 2026-11-11 (session 10 follow-up): the round sun's and moon's size (percent, 100 = default: WaterMath.SUN_ROUND_RADIUS and
+     * MOON_ROUND_RADIUS; CelestialUniforms.SIZE_MIN..SIZE_MAX). The square shape keeps vanilla's sizes.
+     */
+    public int sunSize = 100;
+    public int moonSize = 100;
     public int aurora = 2;
     public int auroraStrength = 100;
     /**

@@ -1125,7 +1125,7 @@ void main() {
     float sunOpen = 1.0;
     float sunWeight = atmosphereSky(a) ? sunOpenWeight(dot(dir, a.sun.xyz)) : 0.0;
     if (sunWeight > 0.0) {
-        sunOpen = sunOpenAt(sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size), sunWeight);
+        sunOpen = sunOpenAt(sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size, sunExtent(celestial)), sunWeight);
     }
     lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);
     float border = atmosphereSky(a) ? borderAmount(world, fromLod) : 0.0;

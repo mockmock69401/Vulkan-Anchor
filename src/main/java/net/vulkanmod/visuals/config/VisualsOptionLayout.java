@@ -131,6 +131,9 @@ public final class VisualsOptionLayout {
                             new Item("cloud_quality", Kind.CHOICE, 0, CloudMath.QUALITY_MAX, Impact.HIGH, "cloud_style"),
                             //2026-11-09 (session 5): round sun and moon; auroras (the strength greyed out with them off)
                             new Item("celestial_shape", Kind.CHOICE, 0, CelestialUniforms.SHAPE_MAX, Impact.NONE, null),
+                            //2026-11-11 (session 10 follow-up): the round sun's and moon's size (greyed out with the square shape: vanilla's art)
+                            new Item("sun_size", Kind.PERCENT, CelestialUniforms.SIZE_MIN, CelestialUniforms.SIZE_MAX, Impact.NONE, "celestial_shape"),
+                            new Item("moon_size", Kind.PERCENT, CelestialUniforms.SIZE_MIN, CelestialUniforms.SIZE_MAX, Impact.NONE, "celestial_shape"),
                             new Item("aurora", Kind.CHOICE, 0, CelestialUniforms.AURORA_MAX, Impact.LOW, null),
                             new Item("aurora_strength", Kind.PERCENT, 0, CelestialUniforms.AURORA_STRENGTH_MAX, Impact.NONE, "aurora"),
                             //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns) and how many drops fall
@@ -258,6 +261,8 @@ public final class VisualsOptionLayout {
             case "cloud_size" -> c.cloudSize;
             case "cloud_count" -> c.cloudCount;
             case "celestial_shape" -> c.celestialShape;
+            case "sun_size" -> c.sunSize;
+            case "moon_size" -> c.moonSize;
             case "aurora" -> c.aurora;
             case "aurora_strength" -> c.auroraStrength;
             case "shader_weather" -> c.shaderWeather ? 1 : 0;
@@ -333,6 +338,8 @@ public final class VisualsOptionLayout {
             case "cloud_size" -> c.cloudSize = v;
             case "cloud_count" -> c.cloudCount = v;
             case "celestial_shape" -> c.celestialShape = v;
+            case "sun_size" -> c.sunSize = v;
+            case "moon_size" -> c.moonSize = v;
             case "aurora" -> c.aurora = v;
             case "aurora_strength" -> c.auroraStrength = v;
             case "shader_weather" -> c.shaderWeather = v != 0;

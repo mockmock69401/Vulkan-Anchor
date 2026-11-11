@@ -42,7 +42,9 @@ public final class WaterMath {
     public static final float MOON_DISC_LUMINANCE = 0.6f, MOON_RED = 0.92f, MOON_GREEN = 0.98f, MOON_BLUE = 1.12f;
     public static final float GLINT_POWER = 800.0f, GLINT_PEAK = 0.5f;
     /** 2026-11-09 (session 5): the round discs (water.glsl's shape section; CelestialUniforms writes the slot). */
-    public static final float CELESTIAL_ROUND = 1.0f, SUN_ROUND_RADIUS = 0.084f, MOON_ROUND_RADIUS = 0.046f, SUN_LIMB_DARKENING = 0.6f;
+    public static final float CELESTIAL_ROUND = 1.0f, SUN_ROUND_RADIUS = 0.06f, MOON_ROUND_RADIUS = 0.056f, SUN_LIMB_DARKENING = 0.6f;
+    /** 2026-11-11 (session 10 follow-up): the round sun keeps session 5's light at any size (water.glsl sunShape). */
+    public static final float SUN_FLUX_RADIUS = 0.084f, SUN_BRIGHTNESS_MAX = 16.0f;
     public static final float MOON_TERMINATOR = 0.06f, MOON_EARTHSHINE = 0.02f;
     public static final float VANILLA_MOON_MASK = 0.056f;
     /** 2026-11-10 (session 10): the round moon's face (water.glsl's face section: maria, craters, rays). */
@@ -155,6 +157,20 @@ public final class WaterMath {
         return celestial != null && celestial[0] > CELESTIAL_ROUND * 0.5f;
     }
 
+    /** The round sun's and moon's size (celestial z, w; 1 = 100%, an unwritten 0 is 1). */
+    public static float sunScale(float[] celestial) {
+        return celestial != null && celestial.length > 2 && celestial[2] > 0 ? celestial[2] : 1;
+    }
+
+    public static float moonScale(float[] celestial) {
+        return celestial != null && celestial.length > 3 && celestial[3] > 0 ? celestial[3] : 1;
+    }
+
+    /** The sun disc's half extent: the square's half size, or the round sun's radius at its size. */
+    public static float sunExtent(float[] celestial) {
+        return celestialRound(celestial) ? SUN_ROUND_RADIUS * sunScale(celestial) : SUN_HALF_SIZE;
+    }
+
     static float roundCover(float[] uv, float r) {
         return 1 - smoothstep(r - DISC_EDGE, r + DISC_EDGE, (float) Math.hypot(uv[0], uv[1]));
     }
@@ -163,10 +179,11 @@ public final class WaterMath {
         if (!celestialRound(celestial)) return discCover(dir, centre, SUN_HALF_SIZE);
         float[] uv = discPlane(dir, centre);
         if (uv == null) return 0;
-        float r = SUN_ROUND_RADIUS;
+        float r = SUN_ROUND_RADIUS * sunScale(celestial);
         float e = Math.min((float) Math.hypot(uv[0], uv[1]) / r, 1);
         float mu = (float) Math.sqrt(Math.max(1 - e * e, 0));
-        return roundCover(uv, r) * (1 - SUN_LIMB_DARKENING * (1 - mu)) / (1 - SUN_LIMB_DARKENING / 3);
+        float flux = Math.min(SUN_FLUX_RADIUS * SUN_FLUX_RADIUS / (r * r), SUN_BRIGHTNESS_MAX);
+        return roundCover(uv, r) * (1 - SUN_LIMB_DARKENING * (1 - mu)) / (1 - SUN_LIMB_DARKENING / 3) * flux;
     }
 
     public static float moonLit(float[] celestial) {
@@ -238,7 +255,7 @@ public final class WaterMath {
         if (!celestialRound(celestial)) return discCover(dir, centre, MOON_HALF_SIZE);
         float[] uv = discPlane(dir, centre);
         if (uv == null) return 0;
-        float r = MOON_ROUND_RADIUS;
+        float r = MOON_ROUND_RADIUS * moonScale(celestial);
         float cover = roundCover(uv, r);
         if (!(cover > 0)) return 0;
         float ex = uv[0] / r, ey = uv[1] / r;
@@ -412,12 +429,15 @@ public final class WaterMath {
         return 1 + (s - 1) * w;
     }
 
-    /** sunopen.glsl's taps: the GL screen uv (0..1, y up) of each of the 3 x 3 taps over the sun's disc, null behind the camera. */
-    public static float[][] sunOpenTaps(org.joml.Matrix4fc viewToClip, float[] sunView) {
+    /**
+     * sunopen.glsl's taps: the GL screen uv (0..1, y up) of each of the 3 x 3 taps over the sun's disc of half extent extent (sunExtent),
+     * null behind the camera.
+     */
+    public static float[][] sunOpenTaps(org.joml.Matrix4fc viewToClip, float[] sunView, float extent) {
         org.joml.Vector4f c = viewToClip.transform(new org.joml.Vector4f(sunView[0], sunView[1], sunView[2], 0), new org.joml.Vector4f());
         if (!(c.w > 0.000001f)) return null;
         float u = c.x / c.w * 0.5f + 0.5f, v = c.y / c.w * 0.5f + 0.5f;
-        float hx = SUN_HALF_SIZE * 0.5f * Math.abs(viewToClip.m00()), hy = SUN_HALF_SIZE * 0.5f * Math.abs(viewToClip.m11());
+        float hx = extent * 0.5f * Math.abs(viewToClip.m00()), hy = extent * 0.5f * Math.abs(viewToClip.m11());
         float[][] taps = new float[9][];
         int n = 0;
         for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) taps[n++] = new float[]{u + i * SUN_OPEN_TAP * hx, v + j * SUN_OPEN_TAP * hy};
@@ -425,8 +445,8 @@ public final class WaterMath {
     }
 
     /** sunOpenShare: the share of taps open (open.test(uv): the sky there, for one on the screen; off the screen counts open); 1 behind the camera. */
-    public static float sunOpenShare(org.joml.Matrix4fc viewToClip, float[] sunView, java.util.function.Predicate<float[]> open) {
-        float[][] taps = sunOpenTaps(viewToClip, sunView);
+    public static float sunOpenShare(org.joml.Matrix4fc viewToClip, float[] sunView, float extent, java.util.function.Predicate<float[]> open) {
+        float[][] taps = sunOpenTaps(viewToClip, sunView, extent);
         if (taps == null) return 1;
         int n = 0;
         for (float[] t : taps) {

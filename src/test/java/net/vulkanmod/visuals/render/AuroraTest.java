@@ -202,7 +202,16 @@ class AuroraTest {
         //The slots
         CelestialUniforms.Values v = CelestialUniforms.compute(settings(c -> c.celestialShape = CelestialUniforms.SHAPE_ROUND), CelestialUniforms.Sky.END, 0, 0, 0, 0,
                 11, AuroraMath.AURORA_TIME_WRAP * 3 + 12.5, 7, true);
-        assertArrayEquals(new float[]{WaterMath.CELESTIAL_ROUND, 3, 0, 0}, v.celestial(), 0);
+        assertArrayEquals(new float[]{WaterMath.CELESTIAL_ROUND, 3, 1, 1}, v.celestial(), 0, "the round shape, the moon phase, the sun's and moon's size (100%)");
+        //2026-11-11: the size settings, clamped to SIZE_MIN..SIZE_MAX
+        CelestialUniforms.Values sized = CelestialUniforms.compute(settings(c -> {
+            c.celestialShape = CelestialUniforms.SHAPE_ROUND;
+            c.sunSize = 60;
+            c.moonSize = 900;
+        }), CelestialUniforms.Sky.SUN, 0.5f, 0, 0, 0, 0, 0, 0, false);
+        assertEquals(0.6f, sized.celestial()[2], 1e-6f);
+        assertEquals(CelestialUniforms.SIZE_MAX / 100f, sized.celestial()[3], 1e-6f);
+        assertEquals(CelestialUniforms.SIZE_MIN / 100f, CelestialUniforms.compute(settings(c -> c.sunSize = 0), CelestialUniforms.Sky.SUN, 0.5f, 0, 0, 0, 0, 0, 0, false).celestial()[2], 1e-6f);
         assertEquals(1, v.aurora()[0], 1e-6f);
         assertEquals(12.5f, v.aurora()[1], 1e-3f, "wrapped");
         assertEquals(1, v.aurora()[2], 0, "the End");

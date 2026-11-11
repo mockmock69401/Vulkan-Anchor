@@ -305,7 +305,8 @@ class WaterTest {
         float diag = WaterMath.sunShape(offDisc(sun, 0.7f * h / (float) Math.sqrt(2), 0.7f * h / (float) Math.sqrt(2)), sun, cel);
         assertEquals(axis, diag, 1e-3f, "round");
         float centre = WaterMath.sunShape(sun, sun, cel), rim = WaterMath.sunShape(offDisc(sun, 0.97f * h, 0), sun, cel);
-        assertEquals(1 / (1 - WaterMath.SUN_LIMB_DARKENING / 3), centre, 1e-4f, "the limb-darkened middle");
+        float flux = WaterMath.SUN_FLUX_RADIUS * WaterMath.SUN_FLUX_RADIUS / (h * h);
+        assertEquals(flux / (1 - WaterMath.SUN_LIMB_DARKENING / 3), centre, 1e-3f, "the limb-darkened middle (brighter than session 5's bigger disc by the area ratio)");
         assertTrue(rim < 0.7f * centre && rim > 0, "a darker rim: " + rim);
         assertTrue(lum(WaterMath.sunDisc(a, offDisc(sun, 0.97f * h, 0), cel)) > AtmosphereMath.SHAFT_THRESHOLD * 2, "the shafts see the rim");
         //The same disc mirrored on calm water
@@ -349,7 +350,7 @@ class WaterTest {
         assertEquals(1, WaterMath.vanillaMoonKept(night, moon, WaterMath.SQUARE), 0);
         assertEquals(0, WaterMath.vanillaMoonKept(night, moon, round(0)), 0);
         assertEquals(1, WaterMath.vanillaMoonKept(night, offDisc(moon, 0, 2 * WaterMath.VANILLA_MOON_MASK), round(0)), 0, "stars away from the moon stay");
-        assertTrue(WaterMath.VANILLA_MOON_MASK > r, "the mask covers the round moon");
+        assertTrue(WaterMath.VANILLA_MOON_MASK > 0.045f, "the mask covers vanilla's moon art (about 0.045; the round moon is drawn over it)");
         //Never negative or NaN over the disc, any phase
         for (int phase = 0; phase < 8; phase++) {
             for (float u = -1.2f; u <= 1.2f; u += 0.1f) {
@@ -416,6 +417,42 @@ class WaterTest {
             }
             assertEquals(1, WaterMath.moonShape(offDisc(moon, 0.3f * r, -0.4f * r), moon, new float[]{0, phase, 0, 0}), 0, "the square: plain");
         }
+    }
+
+    /**
+     * 2026-11-11 (session 10 follow-up, the user: "make the round sun smaller and the round moon somewhat bigger by default, and put sun and
+     * moon size in the options"): the round discs take the slot's size (z sun, w moon; 1 = SUN_ROUND_RADIUS / MOON_ROUND_RADIUS). The round
+     * sun keeps session 5's light at any size (a smaller disc is brighter by the area ratio); the moon keeps its surface brightness and its
+     * face scales with it. The squares ignore the sizes (vanilla's art).
+     */
+    @Test
+    void theRoundSunAndMoonTakeTheirSize() {
+        assertTrue(WaterMath.SUN_ROUND_RADIUS < 0.084f && WaterMath.MOON_ROUND_RADIUS > 0.046f, "a smaller sun and a bigger moon than session 5's by default");
+        Atmosphere a = atmosphere(NOON, 0, true), night = atmosphere(MIDNIGHT, 0, true);
+        float[] sun = a.sun(), moon = {-night.sun()[0], -night.sun()[1], -night.sun()[2]};
+        for (float size : new float[]{0.5f, 1, 1.5f, 2}) {
+            float[] cel = {WaterMath.CELESTIAL_ROUND, 0, size, size};
+            float rs = WaterMath.SUN_ROUND_RADIUS * size, rm = WaterMath.MOON_ROUND_RADIUS * size;
+            assertTrue(WaterMath.sunShape(offDisc(sun, 0.9f * rs, 0), sun, cel) > 0 && WaterMath.sunShape(offDisc(sun, 1.1f * rs, 0), sun, cel) == 0, "sun " + size);
+            assertTrue(WaterMath.moonShape(offDisc(moon, 0, 0.9f * rm), moon, cel) > 0 && WaterMath.moonShape(offDisc(moon, 0, 1.1f * rm), moon, cel) == 0, "moon " + size);
+            //The sun's light (its shape summed over the plane) is the same at every size
+            double flux = 0, step = WaterMath.SUN_ROUND_RADIUS / 40;
+            for (double u = -0.25; u <= 0.25; u += step) {
+                for (double v = -0.25; v <= 0.25; v += step) flux += WaterMath.sunShape(offDisc(sun, (float) u, (float) v), sun, cel) * step * step;
+            }
+            double session5 = Math.PI * WaterMath.SUN_FLUX_RADIUS * WaterMath.SUN_FLUX_RADIUS;
+            assertEquals(1, flux / session5, 0.03, "the sun's light at size " + size);
+            //The moon's face scales with it: the same face point is the same brightness
+            float[] base = {WaterMath.CELESTIAL_ROUND, 2, 1, 1};
+            assertEquals(WaterMath.moonShape(offDisc(moon, 0.3f * WaterMath.MOON_ROUND_RADIUS, -0.2f * WaterMath.MOON_ROUND_RADIUS), moon, base),
+                    WaterMath.moonShape(offDisc(moon, 0.3f * rm, -0.2f * rm), moon, new float[]{WaterMath.CELESTIAL_ROUND, 2, size, size}), 0.01f, "moon face " + size);
+            //The squares keep vanilla's size
+            float[] square = {0, 0, size, size};
+            assertEquals(1, WaterMath.sunShape(offDisc(sun, 0.07f, 0.07f), sun, square), 0, "the square sun " + size);
+            assertEquals(1, WaterMath.moonShape(offDisc(moon, 0.05f, 0.05f), moon, square), 0, "the square moon " + size);
+        }
+        //An unwritten size (0) is 100%
+        assertEquals(WaterMath.sunShape(offDisc(sun, 0.03f, 0), sun, round(0)), WaterMath.sunShape(offDisc(sun, 0.03f, 0), sun, new float[]{1, 0, 1, 1}), 0);
     }
 
     /** water.glsl's face tables (MOON_MARE, MOON_CRATER, MOON_CRATER_LOOK) equal the mirror's. */
@@ -606,29 +643,36 @@ class WaterTest {
         assertEquals(1, WaterMath.sunOpenAt(Float.NaN, Float.NaN), 0, "NaN: as before");
         //The taps lie on the sun's disc on screen: straight ahead at the centre, behind the camera none (open)
         Matrix4f proj = new Matrix4f().perspective((float) Math.toRadians(70), 16f / 9, 0.05f, 1000);
-        float[][] ahead = WaterMath.sunOpenTaps(proj, new float[]{0, 0, -1});
+        float[][] ahead = WaterMath.sunOpenTaps(proj, new float[]{0, 0, -1}, WaterMath.SUN_HALF_SIZE);
         assertEquals(0.5f, ahead[4][0], 1e-6f);
         assertEquals(0.5f, ahead[4][1], 1e-6f);
         float discU = WaterMath.SUN_HALF_SIZE * 0.5f * proj.m00();
         assertEquals(0.5f + WaterMath.SUN_OPEN_TAP * discU, ahead[5][0], 1e-6f, "within the disc");
         assertTrue(WaterMath.SUN_OPEN_TAP < 1);
-        assertEquals(1, WaterMath.sunOpenShare(proj, new float[]{0, 0, 1}, t -> false), 0, "behind the camera");
-        assertEquals(0, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, t -> false), 0, "hidden");
-        assertEquals(1, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, t -> true), 0, "open");
-        assertEquals(4 / 9f, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, t -> t[1] > 0.5f + 1e-4f || t[0] > 0.5f + 1e-4f && t[1] > 0.5f - 1e-4f), 1e-6f,
+        //2026-11-11: the round sun's taps follow its size (sunExtent), the square's stay vanilla's
+        float[] half = {WaterMath.CELESTIAL_ROUND, 0, 0.5f, 1};
+        assertEquals(WaterMath.SUN_ROUND_RADIUS * 0.5f, WaterMath.sunExtent(half), 1e-7f);
+        assertEquals(WaterMath.SUN_HALF_SIZE, WaterMath.sunExtent(new float[]{0, 0, 0.5f, 1}), 0, "the square: vanilla's size");
+        assertEquals(WaterMath.SUN_ROUND_RADIUS, WaterMath.sunExtent(round(0)), 0, "an unwritten size is 100%");
+        float[][] small = WaterMath.sunOpenTaps(proj, new float[]{0, 0, -1}, WaterMath.sunExtent(half));
+        assertEquals(0.5f + WaterMath.SUN_OPEN_TAP * WaterMath.SUN_ROUND_RADIUS * 0.5f * 0.5f * proj.m00(), small[5][0], 1e-6f, "within the smaller disc");
+        assertEquals(1, WaterMath.sunOpenShare(proj, new float[]{0, 0, 1}, WaterMath.SUN_HALF_SIZE, t -> false), 0, "behind the camera");
+        assertEquals(0, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, WaterMath.SUN_HALF_SIZE, t -> false), 0, "hidden");
+        assertEquals(1, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, WaterMath.SUN_HALF_SIZE, t -> true), 0, "open");
+        assertEquals(4 / 9f, WaterMath.sunOpenShare(proj, new float[]{0, 0, -1}, WaterMath.SUN_HALF_SIZE, t -> t[1] > 0.5f + 1e-4f || t[0] > 0.5f + 1e-4f && t[1] > 0.5f - 1e-4f), 1e-6f,
                 "a ridge over the disc's lower part");
         float[] edge = {(float) Math.tan(Math.toRadians(35)) * 16 / 9 * 1.0f, 0, -1};
-        assertTrue(WaterMath.sunOpenShare(proj, edge, t -> false) >= 3 / 9f, "taps off the screen count as open");
+        assertTrue(WaterMath.sunOpenShare(proj, edge, WaterMath.SUN_HALF_SIZE, t -> false) >= 3 / 9f, "taps off the screen count as open");
         //Where the shaders take it
         String copy = ShaderFiles.read("post/scene_copy.comp"), open = ShaderFiles.read("post/sunopen.glsl");
-        assertTrue(copy.contains("sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size)"));
+        assertTrue(copy.contains("sunOpenShare(mainDepth, inverse(invVanillaProj), transpose(mat3(invView)), a.sun.xyz, size, sunExtent(celestial))"));
         assertTrue(copy.contains("lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);"));
         assertTrue(copy.contains("glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y))"), "the border's fade too");
-        assertTrue(COMP.contains("sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size)"));
+        assertTrue(COMP.contains("sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size, sunExtent(celestial))"));
         assertTrue(COMP.contains("applyHazeOpen(a, hitColour, r, extra, amount, 0.0)"));
         assertTrue(open.contains("return depth == FAR || (clampedToLod(depth) && texelFetch(lodDepth, lodTexel(q, size), 0).r == FAR);"),
                 "only the sky is open: the sea at the horizon hides a sun half below it");
-        assertTrue(open.contains("vec2 h = SUN_HALF_SIZE*0.5*vec2(abs(viewToClip[0][0]), abs(viewToClip[1][1]));"));
+        assertTrue(open.contains("vec2 h = extent*0.5*vec2(abs(viewToClip[0][0]), abs(viewToClip[1][1]));"));
     }
 
     @Test
