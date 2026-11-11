@@ -85,9 +85,14 @@ public final class PbrAtlas {
         boolean want = wanted() && !sprites.isEmpty();
         if (!want) {
             if (normal != null) free();
+            //turned on again later: built again
+            builtGeneration = -1;
             return;
         }
-        if (builtGeneration == generation && normal != null) return;
+        //2026-11-12 (shader roadmap session 14): built for this atlas, or found no LabPBR maps in it (or could not be built). Before, a
+        // build that found no maps left normal null and ran again every frame: two atlas-sized buffers filled and every sprite's _n and
+        // _s looked up, about 30 ms of CPU a frame with PBR on (the default) and no LabPBR pack (fps 640 -> 32 at 2560x1440)
+        if (builtGeneration == generation) return;
         free();
         try {
             build();
