@@ -20,7 +20,9 @@ import java.util.Arrays;
  * haze band's range), and the low one also on the twilight dome. The sun disc, the sun-side glow, the haze and the realistic clouds take
  * the sky's sunlight, so they follow.</li>
  * <li>SUN_GLOW: the sun-side glow on top of the above. NIGHT_SKY: the moon's light in the sky, the moon's dome and the night sky's
- * airglow.</li>
+ * airglow. STARS (2026-11-11, session 12, the user: "the star colour in the colour section too"): vanilla's stars, which the composite
+ * keeps on the sky as white (atmosphere.glsl vanillaStars), outside vanilla's square moon (water.glsl vanillaStarTint; CelestialUniforms'
+ * STAR_TINT, the composite's .TINTED build). A darker pick dims them, as with every tint.</li>
  * <li>FOG: the ground fog's colour (atmosphere.glsl fogColour: the morning mist, the fog band at the horizon, the rain's fog) and the
  * aerial haze over terrain, fading to none as its air mass reaches the sky's (far terrain still meets the sky without a seam).
  * OVERCAST: rain's grey (atmosphere.glsl overcast). CLOUDS: the far clouds' light (both styles). RAIN, SNOW: the shader weather's
@@ -48,6 +50,8 @@ public final class ShaderColours {
         SUNRISE("colour_sunrise", 0xF0C4A0),
         SUN_GLOW("colour_sun_glow", 0xFFE4C0),
         NIGHT_SKY("colour_night_sky", 0x2A3A58),
+        //2026-11-11 (session 12): the stars, white as vanilla draws them
+        STARS("colour_stars", 0xFFFFFF),
         FOG("colour_fog", 0xC0CAD4),
         OVERCAST("colour_overcast", Swatch.of(AtmosphereMath.OVERCAST_RED, AtmosphereMath.OVERCAST_GREEN, AtmosphereMath.OVERCAST_BLUE)),
         CLOUDS("colour_clouds", 0xFFFFFF),

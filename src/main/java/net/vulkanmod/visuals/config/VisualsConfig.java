@@ -42,8 +42,10 @@ public class VisualsConfig {
      * 13 (2026-11-11): the snow's and rain's own type, size and amount (ParticleEffect: snowType, snowSize, snowAmount, rainType, rainSize,
      * rainAmount) in place of the one weatherDensity, and their brightness (snowBrightness, rainBrightness); an older file's density becomes
      * both amounts (the picture it had), the rest default.
-     * 14 (2026-11-11, session 12): the star settings (starCount, starSize, starBrightness); an older file has none: vanilla's stars, the
-     * picture it had. The colour palettes and the performance presets do not set them.
+     * 14 (2026-11-11, session 12): the star settings (starCount, starSize, starBrightness; neither the palettes nor the presets set them)
+     * and the star colour (colourStars, which every palette sets); an older file has none: vanilla's stars. A file on a palette (every
+     * other colour the palette's) takes that palette's star colour and stays on it (ColourPresets.moveOldStars); any other file keeps
+     * white stars, the picture it had.
      */
     private static final int REVISION = 14;
     /** The first revision with the snow's and rain's own amounts (an older file's weatherDensity is both). */
@@ -52,6 +54,8 @@ public class VisualsConfig {
     static final String OLD_WEATHER_DENSITY = "weatherDensity";
     /** 2026-11-11: the first revision with the changed palette look values; 9 the first with palette look values at all. */
     static final int PALETTE_LOOK_REVISION = 11, FIRST_LOOK_REVISION = 9;
+    /** Session 12: the first revision with the star settings and the star colour. */
+    static final int STARS_REVISION = 14;
     /** Session 11: the first revision whose Anime palette includes the anime clouds. */
     static final int ANIME_CLOUDS_REVISION = 10;
     /** The first revision with the PBR settings. */
@@ -134,6 +138,8 @@ public class VisualsConfig {
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
         // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
         //2026-11-11: a file still exactly on a palette's old look values takes the new ones (first: the Anime check below reads the new row)
+        //Session 12: a file on a palette before the star colour existed takes the palette's (first: the checks below compare every colour)
+        if (fileRevision < STARS_REVISION && !json.has("colourStars")) ColourPresets.moveOldStars(c);
         if (fileRevision >= FIRST_LOOK_REVISION && fileRevision < PALETTE_LOOK_REVISION) ColourPresets.moveOldLook(c);
         //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
         if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
@@ -158,6 +164,7 @@ public class VisualsConfig {
             case SUNRISE -> this.colourSunrise;
             case SUN_GLOW -> this.colourSunGlow;
             case NIGHT_SKY -> this.colourNightSky;
+            case STARS -> this.colourStars;
             case FOG -> this.colourFog;
             case OVERCAST -> this.colourOvercast;
             case CLOUDS -> this.colourClouds;
@@ -185,6 +192,7 @@ public class VisualsConfig {
             case SUNRISE -> this.colourSunrise = v;
             case SUN_GLOW -> this.colourSunGlow = v;
             case NIGHT_SKY -> this.colourNightSky = v;
+            case STARS -> this.colourStars = v;
             case FOG -> this.colourFog = v;
             case OVERCAST -> this.colourOvercast = v;
             case CLOUDS -> this.colourClouds = v;
@@ -365,6 +373,8 @@ public class VisualsConfig {
     public int colourSunrise = Colour.SUNRISE.defaultRgb();
     public int colourSunGlow = Colour.SUN_GLOW.defaultRgb();
     public int colourNightSky = Colour.NIGHT_SKY.defaultRgb();
+    /** 2026-11-11 (session 12): the stars' colour. */
+    public int colourStars = Colour.STARS.defaultRgb();
     public int colourFog = Colour.FOG.defaultRgb();
     public int colourOvercast = Colour.OVERCAST.defaultRgb();
     public int colourClouds = Colour.CLOUDS.defaultRgb();

@@ -17,6 +17,8 @@ import net.vulkanmod.visuals.vk.LooseUniformWriter;
  * <li>Session 8 follow-up: GLOW_TINT (composite 59): rgb the picked torch light colour's tint (ShaderColours BLOCK_LIGHT) on the glow of
  * light sources' bright texels and of LabPBR emissive texels, so they glow in the colour of the light they cast, w 0; read by the .TINTED
  * builds only, like the others.</li>
+ * <li>2026-11-11 (session 12): STAR_TINT (composite 60): rgb the picked star colour's tint on vanilla's stars (water.glsl vanillaStarTint,
+ * outside vanilla's square moon), w 0; read by the .TINTED build only.</li>
  * </ul>
  * The aurora's strength is the setting's (aurora strength x the mode) times, in a dimension with a sun (the Overworld), the night (none
  * while the sun is above NIGHT_HIGH, full below NIGHT_LOW), the weather (only clear skies: gone once the rain level reaches RAIN_FADE,
@@ -30,6 +32,8 @@ public final class CelestialUniforms {
     public static final int COPY_AURORA_TINTS = 54, REFLECTION_AURORA_TINTS = 32, COPY_WATER_TINT = 57;
     /** Session 8 follow-up: the light sources' glow tint (the torch light colour's). */
     public static final int COPY_GLOW_TINT = 59;
+    /** 2026-11-11 (session 12): the stars' colour tint. */
+    public static final int COPY_STAR_TINT = 60;
     /** The celestial shape setting's values. */
     public static final int SHAPE_SQUARE = 0, SHAPE_ROUND = 1, SHAPE_MAX = 1;
     /** 2026-11-11 (session 10 follow-up): the round sun's and moon's size settings' range (percent; 100 = WaterMath's round radii). */
@@ -63,8 +67,8 @@ public final class CelestialUniforms {
     }
 
     /**
-     * tints: 2026-11-10 (session 8), 20 floats: the aurora's lower, main and upper colour tints, the water's, and (session 8 follow-up) the
-     * light sources' glow tint (five vec4, w 0).
+     * tints: 2026-11-10 (session 8), 24 floats: the aurora's lower, main and upper colour tints, the water's, (session 8 follow-up) the
+     * light sources' glow tint and (session 12) the stars' (six vec4, w 0).
      */
     public record Values(float[] celestial, float[] aurora, float[] tints) {
         /** The composite's slots. */
@@ -72,6 +76,7 @@ public final class CelestialUniforms {
             write(w, COPY_CELESTIAL, COPY_AURORA, COPY_AURORA_TINTS);
             if (w.has(COPY_WATER_TINT)) w.putVec4(COPY_WATER_TINT, this.tints[12], this.tints[13], this.tints[14], this.tints[15]);
             if (w.has(COPY_GLOW_TINT)) w.putVec4(COPY_GLOW_TINT, this.tints[16], this.tints[17], this.tints[18], this.tints[19]);
+            if (w.has(COPY_STAR_TINT)) w.putVec4(COPY_STAR_TINT, this.tints[20], this.tints[21], this.tints[22], this.tints[23]);
         }
 
         /** The reflection's slots (after ReflectionUniforms wrote its own). */
@@ -93,11 +98,11 @@ public final class CelestialUniforms {
 
         /**
          * 2026-11-10 (session 8): a picked aurora or water colour's tint is not 1 (the composite's .TINTED build draws it); since the
-         * session 8 follow-up also the glow's (a picked torch light colour).
+         * session 8 follow-up also the glow's (a picked torch light colour); since session 12 the stars' (a picked star colour).
          */
         public boolean tinted() {
             if (this.auroraTinted()) return true;
-            for (int i = 12; i < 19; i++) if (i != 15 && this.tints[i] != 1) return true;
+            for (int i = 12; i < 23; i++) if (i % 4 != 3 && this.tints[i] != 1) return true;
             return false;
         }
 
@@ -120,15 +125,17 @@ public final class CelestialUniforms {
 
     /**
      * 2026-11-10 (session 8): the aurora's three colour tints (lower, main, upper: in the End the End colour's in all three) and the water's,
-     * then (session 8 follow-up) the torch light colour's on the glow: 20 floats (five vec4, w 0), from the picked colours.
+     * then (session 8 follow-up) the torch light colour's on the glow and (session 12) the star colour's: 24 floats (six vec4, w 0), from
+     * the picked colours.
      */
     public static float[] tints(ShaderColours colours, boolean end) {
         ShaderColours.Colour[] order = end ? new ShaderColours.Colour[]{ShaderColours.Colour.AURORA_END, ShaderColours.Colour.AURORA_END, ShaderColours.Colour.AURORA_END}
                 : new ShaderColours.Colour[]{ShaderColours.Colour.AURORA_LOWER, ShaderColours.Colour.AURORA_MAIN, ShaderColours.Colour.AURORA_UPPER};
-        float[] t = new float[20];
+        float[] t = new float[24];
         for (int v = 0; v < 3; v++) System.arraycopy(colours.tint(order[v]), 0, t, v * 4, 3);
         System.arraycopy(colours.tint(ShaderColours.Colour.WATER), 0, t, 12, 3);
         System.arraycopy(colours.tint(ShaderColours.Colour.BLOCK_LIGHT), 0, t, 16, 3);
+        System.arraycopy(colours.tint(ShaderColours.Colour.STARS), 0, t, 20, 3);
         return t;
     }
 

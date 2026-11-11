@@ -154,6 +154,9 @@ layout(location = 58) uniform vec4 pbrParams;
 //Session 8 follow-up (CelestialUniforms.COPY_GLOW_TINT): rgb the picked torch light colour's tint on the light sources' glow (their bright
 // texels and LabPBR emission), exactly 1 at its default, w 0; read only by postSceneCopy.TINTED, like the tints above
 layout(location = 59) uniform vec4 glowTint;
+//2026-11-11 (session 12): CelestialUniforms' STAR_TINT, the picked star colour's tint on vanilla's stars (water.glsl vanillaStarTint),
+// exactly 1 at its default, w 0; read only by postSceneCopy.TINTED
+layout(location = 60) uniform vec4 starTint;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -850,8 +853,12 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         //Session 5: the round discs (the round moon replaces vanilla's square one, which vanillaMoonKept drops) and the aurora, under
         // the far clouds
-        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial)
-                + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial) + auroraSky(dir, p);
+        //Session 12: the picked star colour on the stars (the .TINTED build)
+        vec3 stars = vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial);
+#ifdef ATMOSPHERE_TINTS
+        stars *= vanillaStarTint(a, dir, starTint);
+#endif
+        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraSky(dir, p);
         return vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0);
     }
     float dist = length(view);

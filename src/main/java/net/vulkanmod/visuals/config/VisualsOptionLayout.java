@@ -204,7 +204,9 @@ public final class VisualsOptionLayout {
                             colour(Colour.SUNSET, null),
                             colour(Colour.SUNRISE, null),
                             colour(Colour.SUN_GLOW, null),
-                            colour(Colour.NIGHT_SKY, null))),
+                            colour(Colour.NIGHT_SKY, null),
+                            //2026-11-11 (session 12): the stars
+                            colour(Colour.STARS, null))),
                     //Session 8 follow-up: what a palette sets besides the colours (also on the image and atmosphere pages)
                     new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG)),
                     new Block("colours_air", List.of(

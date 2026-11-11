@@ -34,6 +34,12 @@ import java.util.function.ToIntFunction;
  * grade's two poles), a wider glow (the films' halation), a slightly muted saturation and more haze. ANIME a warm bright sun and a
  * blue-violet shade (cel-shaded shadows are tinted, not grey), strong bloom, high saturation and clear air (less fog). HORROR a pale,
  * sickly daylight and a grey-green shade, little bloom, low saturation and the fog at twice the default.
+ *
+ * <p>Session 12 (2026-11-11, the user: the star colour in the colours section): every palette sets the stars' colour too, from the same
+ * references. REALISTIC a faint blue-white (night-sky photographs: most naked-eye stars read white, the brightest ones blue-white; the
+ * palette's near-white moon), CINEMATIC a teal-white (the grade's cool night, its moon's hue), ANIME a pale lavender (the blue-violet
+ * night of cel-shaded games and Shinkai's starry skies), HORROR a dim grey-green (the almost black night: a darker colour dims the stars
+ * to about a third, the sickly cast of its daylight). The star count, size and brightness are the player's: no palette sets them.
  */
 public final class ColourPresets {
     public static final int DEFAULT = 0, REALISTIC = 1, CINEMATIC = 2, ANIME = 3, HORROR = 4, CUSTOM = 5;
@@ -41,18 +47,18 @@ public final class ColourPresets {
 
     /**
      * The palettes, one row per level (DEFAULT is ShaderColours' defaults), in ShaderColours.Colour order: day sky, sunset, sunrise, sun glow,
-     * night sky, fog, rainy sky, clouds, rain, snow, sunlight, shade light, moon, torch light, aurora body, aurora top, aurora lower edge,
+     * night sky, stars (session 12), fog, rainy sky, clouds, rain, snow, sunlight, shade light, moon, torch light, aurora body, aurora top, aurora lower edge,
      * End aurora, water, underwater.
      */
     private static final int[][] PALETTES = {
             ShaderColours.defaults(),
-            {0x6A94CC, 0xFF8A48, 0xF7B486, 0xFFE6C4, 0x1C2A46, 0xC2CBD4, 0xE6ECF2, 0xF2F2F2, 0xDCE6F0, 0xF7F9FF, 0xFFC88C, 0xE8F0FF, 0xEEEEEA, 0xFFA458,
+            {0x6A94CC, 0xFF8A48, 0xF7B486, 0xFFE6C4, 0x1C2A46, 0xF2F5FF, 0xC2CBD4, 0xE6ECF2, 0xF2F2F2, 0xDCE6F0, 0xF7F9FF, 0xFFC88C, 0xE8F0FF, 0xEEEEEA, 0xFFA458,
                     0x48FF8C, 0xFF4A6A, 0xA868FF, 0xCB89FF, 0x4C9CBC, 0x4AA6AA},
-            {0x5C98C0, 0xFF7A2E, 0xFF9C5A, 0xFFC48A, 0x183C4C, 0xF0B8A8, 0xB6C6CA, 0xFFEEDC, 0xC4DEE6, 0xEEF8FF, 0xFFB066, 0xD0F0F0, 0xD2EEFF, 0xFF8C3A,
+            {0x5C98C0, 0xFF7A2E, 0xFF9C5A, 0xFFC48A, 0x183C4C, 0xD6F0FF, 0xF0B8A8, 0xB6C6CA, 0xFFEEDC, 0xC4DEE6, 0xEEF8FF, 0xFFB066, 0xD0F0F0, 0xD2EEFF, 0xFF8C3A,
                     0x3CF2E2, 0xFF5A86, 0x7E62FF, 0x9E74FF, 0x369AA6, 0x28868E},
-            {0x58A6F4, 0xFF9874, 0xFFC0AA, 0xFFF2CC, 0x2E3C7C, 0xC6DEF8, 0xDCE6FF, 0xFFFFFF, 0xD4EAFF, 0xFFFFFF, 0xFFD08E, 0xE0E4FF, 0xF4F6FF, 0xFFB46E,
+            {0x58A6F4, 0xFF9874, 0xFFC0AA, 0xFFF2CC, 0x2E3C7C, 0xE0E6FF, 0xC6DEF8, 0xDCE6FF, 0xFFFFFF, 0xD4EAFF, 0xFFFFFF, 0xFFD08E, 0xE0E4FF, 0xF4F6FF, 0xFFB46E,
                     0x4CFFD6, 0xFF74E4, 0xB482FF, 0xD494FF, 0x3CD2EA, 0x3CCAE2},
-            {0x6C7876, 0xA23C2C, 0x8C7A5E, 0xC49482, 0x0E1316, 0x858F84, 0x6E766E, 0x9A9C98, 0x98A298, 0xC6CAC6, 0xD8D0B0, 0xB8C8C0, 0xD04A3A, 0xFF6A30,
+            {0x6C7876, 0xA23C2C, 0x8C7A5E, 0xC49482, 0x0E1316, 0x8E968A, 0x858F84, 0x6E766E, 0x9A9C98, 0x98A298, 0xC6CAC6, 0xD8D0B0, 0xB8C8C0, 0xD04A3A, 0xFF6A30,
                     0x2E9E44, 0x7E1020, 0x5E1E7C, 0x5E1E5E, 0x2E4E46, 0x283E36},
     };
 
@@ -178,6 +184,18 @@ public final class ColourPresets {
             if (VisualsOptionLayout.get(c, VisualsOptionLayout.item(LOOK_KEYS[i])) != LOOK_BEFORE_11[level][i]) return false;
         }
         for (int i = 0; i < LOOK_KEYS.length; i++) VisualsOptionLayout.set(c, VisualsOptionLayout.item(LOOK_KEYS[i]), LOOK[level][i]);
+        return true;
+    }
+
+    /**
+     * Session 12: a file saved before the star colour (white stars, the default) on a palette whose every other colour is still the
+     * palette's takes the palette's star colour, so it stays on the palette it chose. Returns whether it did.
+     */
+    static boolean moveOldStars(VisualsConfig c) {
+        int level = c.colourPreset;
+        if (!isLevel(level) || c.colour(Colour.STARS) != Colour.STARS.defaultRgb()) return false;
+        for (Colour colour : Colour.values()) if (colour != Colour.STARS && c.colour(colour) != value(colour, level)) return false;
+        c.setColour(Colour.STARS, value(Colour.STARS, level));
         return true;
     }
 

@@ -316,6 +316,8 @@
   "vulkanmod.visuals.colour_sun_glow.tooltip": "The glow around the sun, on top of the sky's colour (Sun Glow on the Atmosphere page sets how strong it is)",
   "vulkanmod.visuals.colour_night_sky": "Night Sky",
   "vulkanmod.visuals.colour_night_sky.tooltip": "The night sky's colour: the moonlit air and the faint glow of a moonless night",
+  "vulkanmod.visuals.colour_stars": "Stars",
+  "vulkanmod.visuals.colour_stars.tooltip": "The stars' colour (white by default). A darker colour also dims them; their number, size and brightness are on the Atmosphere page",
   "vulkanmod.visuals.colour_fog": "Fog",
   "vulkanmod.visuals.colour_fog.tooltip": "The ground fog and morning mist, the fog band at the horizon and the rain's fog; also the haze over nearby terrain, fading into the sky's own colour far away",
   "vulkanmod.visuals.colour_overcast": "Rainy Sky",
