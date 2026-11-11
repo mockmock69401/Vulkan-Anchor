@@ -146,12 +146,17 @@ float discCover(vec3 dir, vec3 centre, float h) {
 
 // ---- 2026-11-09 (session 5, the user: "an option to make the sun and moon round"): the discs' shape ----
 //The composite's slot 46 and the reflection's slot 27 (CelestialUniforms): x the shape (0 vanilla's squares, as before; CELESTIAL_ROUND
-// round), y vanilla's moon phase 0..7 (Level.getMoonPhase: 0 full, 4 new), zw 0. The round sun's radius is the square's half size (the
-// circle inside vanilla's square); the round moon's is vanilla's moon art (measured in session 5: about 0.045 at the zenith, FOV 30,
-// smaller than MOON_HALF_SIZE, the reflection's square)
+// round), y vanilla's moon phase 0..7 (Level.getMoonPhase: 0 full, 4 new), z the round sun's size and w the round moon's (2026-11-11,
+// session 10 follow-up: the settings' sun and moon size, 1 = 100%; 0, as a slot nobody wrote, is 1 too). Session 5 made the round sun the
+// circle inside vanilla's square (radius 0.084) and the round moon vanilla's moon art (0.046); the user then asked for a smaller sun and a
+// somewhat bigger moon by default: SUN_ROUND_RADIUS and MOON_ROUND_RADIUS are those defaults (100%)
 const float CELESTIAL_ROUND = 1.0;
-const float SUN_ROUND_RADIUS = 0.084;
-const float MOON_ROUND_RADIUS = 0.046;
+const float SUN_ROUND_RADIUS = 0.06;
+const float MOON_ROUND_RADIUS = 0.056;
+//The round sun keeps the light of session 5's disc (radius SUN_FLUX_RADIUS) whatever its size: a smaller disc is brighter by the area
+// ratio (at most SUN_BRIGHTNESS_MAX times), so the light shafts and the bloom it feeds keep their strength
+const float SUN_FLUX_RADIUS = 0.084;
+const float SUN_BRIGHTNESS_MAX = 16.0;
 //The round sun's limb darkening, the linear law I(mu) = 1 - u (1 - mu) with u about 0.6 in the visible (Milne 1921; values in Neckel
 // and Labs 1994, "Solar limb darkening 1986-1990", Solar Physics 153), normalised to a mean of 1 over the disc (the mean of 1 - u + u mu
 // over a disc is 1 - u/3)
@@ -247,12 +252,27 @@ bool celestialRound(vec4 celestial) {
     return celestial.x > CELESTIAL_ROUND*0.5;
 }
 
+//The round sun's and moon's size (1 = 100%; a slot nobody wrote is 0: 1)
+float sunScale(vec4 celestial) {
+    return celestial.z > 0.0 ? celestial.z : 1.0;
+}
+
+float moonScale(vec4 celestial) {
+    return celestial.w > 0.0 ? celestial.w : 1.0;
+}
+
+//The sun disc's half extent (tangent of the half angle): the square's half size, or the round sun's radius at its size
+float sunExtent(vec4 celestial) {
+    return celestialRound(celestial) ? SUN_ROUND_RADIUS*sunScale(celestial) : SUN_HALF_SIZE;
+}
+
 //The round disc of radius r in the plane (soft edge)
 float roundCover(vec2 uv, float r) {
     return 1.0 - smoothstep(r - DISC_EDGE, r + DISC_EDGE, length(uv));
 }
 
-//The sun's shape along dir (0..): the square of half size SUN_HALF_SIZE (1 inside), or the round disc with limb darkening (mean 1)
+//The sun's shape along dir (0..): the square of half size SUN_HALF_SIZE (1 inside), or the round disc with limb darkening (mean 1 for
+// session 5's disc; a smaller one brighter, the same light: SUN_FLUX_RADIUS)
 float sunShape(vec3 dir, vec3 centre, vec4 celestial) {
     if (!celestialRound(celestial)) {
         return discCover(dir, centre, SUN_HALF_SIZE);
@@ -261,10 +281,11 @@ float sunShape(vec3 dir, vec3 centre, vec4 celestial) {
     if (!discPlane(dir, centre, uv)) {
         return 0.0;
     }
-    float r = SUN_ROUND_RADIUS;
+    float r = SUN_ROUND_RADIUS*sunScale(celestial);
     float e = min(length(uv)/r, 1.0);
     float mu = sqrt(max(1.0 - e*e, 0.0));
-    return roundCover(uv, r)*(1.0 - SUN_LIMB_DARKENING*(1.0 - mu))/(1.0 - SUN_LIMB_DARKENING/3.0);
+    float flux = min(SUN_FLUX_RADIUS*SUN_FLUX_RADIUS/(r*r), SUN_BRIGHTNESS_MAX);
+    return roundCover(uv, r)*(1.0 - SUN_LIMB_DARKENING*(1.0 - mu))/(1.0 - SUN_LIMB_DARKENING/3.0)*flux;
 }
 
 //The share of the moon's face that is lit at phase 0..7 (1 full, 0 new): (1 + cos phi)/2 with phi = phase x 45 degrees; 1 for the square
@@ -341,7 +362,7 @@ float moonShape(vec3 dir, vec3 centre, vec4 celestial) {
     if (!discPlane(dir, centre, uv)) {
         return 0.0;
     }
-    float r = MOON_ROUND_RADIUS;
+    float r = MOON_ROUND_RADIUS*moonScale(celestial);
     float cover = roundCover(uv, r);
     if (!(cover > 0.0)) {
         return 0.0;

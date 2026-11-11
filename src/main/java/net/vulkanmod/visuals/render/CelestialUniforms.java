@@ -32,6 +32,8 @@ public final class CelestialUniforms {
     public static final int COPY_GLOW_TINT = 59;
     /** The celestial shape setting's values. */
     public static final int SHAPE_SQUARE = 0, SHAPE_ROUND = 1, SHAPE_MAX = 1;
+    /** 2026-11-11 (session 10 follow-up): the round sun's and moon's size settings' range (percent; 100 = WaterMath's round radii). */
+    public static final int SIZE_MIN = 25, SIZE_MAX = 200;
     /** The aurora setting's values. */
     public static final int AURORA_OFF = 0, AURORA_END_ONLY = 1, AURORA_NIGHT_AND_END = 2, AURORA_MAX = 2;
     /** The aurora strength setting's range (percent; 100 = AuroraMath's tuning). */
@@ -138,7 +140,8 @@ public final class CelestialUniforms {
     public static Values compute(PostProcessSettings s, Sky sky, float sunHeight, float rain, float thunder, float climate, int moonPhase,
                                  double seconds, long frame, boolean taa) {
         if (s == null || !s.enabled()) return off();
-        float[] celestial = {s.celestialShape() == SHAPE_ROUND ? WaterMath.CELESTIAL_ROUND : 0, Math.floorMod(moonPhase, 8), 0, 0};
+        //z, w: the round sun's and moon's size (water.glsl sunScale, moonScale)
+        float[] celestial = {s.celestialShape() == SHAPE_ROUND ? WaterMath.CELESTIAL_ROUND : 0, Math.floorMod(moonPhase, 8), s.sunSize(), s.moonSize()};
         float strength = auroraStrength(s, sky, sunHeight, rain, thunder, climate);
         float[] aurora = new float[4];
         if (strength > 0) {

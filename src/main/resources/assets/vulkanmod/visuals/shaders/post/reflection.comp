@@ -648,7 +648,7 @@ void main() {
         }
         //2026-11-10: the view's haze over the water carries the sun's glow only as far as the sun is open on screen (sunopen.glsl)
         float sunWeight = atmosphereSky(a) ? sunOpenWeight(dot(d, a.sun.xyz)) : 0.0;
-        float sunOpen = sunWeight > 0.0 ? sunOpenAt(sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size), sunWeight) : 1.0;
+        float sunOpen = sunWeight > 0.0 ? sunOpenAt(sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size, sunExtent(celestial)), sunWeight) : 1.0;
         reflection = reflectFallback(applyHazeOpen(a, sky, d, dist, amount, sunOpen), own, skyAccess);
     }
     //2026-11-10 (session 7): a whole hit (w 1) is all the mix below keeps, so the sky, its clouds and aurora are not evaluated for it
