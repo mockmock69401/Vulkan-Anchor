@@ -73,6 +73,7 @@ public final class FrameTracker {
     }
 
     public boolean isDropped(long serial) {
-        return this.dropped.contains(serial);
+        //2026-11-12 (session 14): asked for every tracked image every frame; the set is almost always empty, and contains boxes the serial
+        return !this.dropped.isEmpty() && this.dropped.contains(serial);
     }
 }

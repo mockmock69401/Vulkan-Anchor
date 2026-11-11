@@ -60,7 +60,10 @@ public final class LooseUniformWriter {
     }
 
     private int offsetOf(int glLocation, String type) {
-        for (VulkanShaderMeta.PushMember m : this.meta.push()) {
+        //2026-11-12 (session 14): every uniform of every pass each frame comes through here; an indexed loop leaves no iterator behind
+        java.util.List<VulkanShaderMeta.PushMember> push = this.meta.push();
+        for (int i = 0; i < push.size(); i++) {
+            VulkanShaderMeta.PushMember m = push.get(i);
             if (m.location() != glLocation) continue;
             if (!m.type().equals(type)) {
                 throw new IllegalArgumentException("GL location " + glLocation + " (" + m.name() + ") is " + m.type() + ", not " + type);
