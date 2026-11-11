@@ -116,14 +116,14 @@ class WeatherTest {
         int map = PASS.indexOf("uint weatherMapAt(ivec2 texel)"), light = PASS.indexOf("vec3 weatherLight(vec3 rel, bool snow)");
         int model = PASS.indexOf("#import <vulkanmod:visuals/post/weather.glsl>");
         assertTrue(map > 0 && light > 0 && model > map && model > light);
-        assertTrue(PASS.contains("weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion)"));
+        assertTrue(PASS.contains("weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion, weatherStyle)"));
         //The bindings VkPostProcess binds
         for (String[] b : new String[][]{{"0", "weatherOut"}, {"1", "mainDepth"}, {"2", "lodDepth"}, {"3", "precipitationMap"}, {"6", "lightmapTex"}}) {
             assertTrue(Pattern.compile("binding = " + b[0] + "\\b[^;]*\\b" + b[1] + ";").matcher(PASS).find(), b[1]);
         }
         assertTrue(PASS.contains("binding = 4, std430") && PASS.contains("binding = 5, std430"));
         for (String[] slot : new String[][]{{"0", "invVanillaProj"}, {"3", "depthParams"}, {"4", "lightCamera"}, {"8", "weatherCamera"},
-                {"10", "weatherParams"}, {"12", "snowMotion"}, {"14", "snowTint"}}) {
+                {"10", "weatherParams"}, {"12", "snowMotion"}, {"14", "snowTint"}, {"17", "weatherStyle"}}) {
             assertTrue(PASS.contains("layout(location = " + slot[0] + ") uniform vec4 " + slot[1]) || PASS.contains("layout(location = " + slot[0] + ") uniform mat4 " + slot[1]), slot[1]);
         }
         assertEquals(WeatherUniforms.CAMERA, 8);
@@ -312,7 +312,7 @@ class WeatherTest {
         WeatherUniforms.Values light = WeatherUniforms.compute(on, 0.3f, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
         WeatherUniforms.Values full = WeatherUniforms.compute(on, 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
         WeatherUniforms.Values storm = WeatherUniforms.compute(on, 1, 1, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
-        WeatherUniforms.Values dense = WeatherUniforms.compute(settings(c -> c.weatherDensity = 200), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
+        WeatherUniforms.Values dense = WeatherUniforms.compute(settings(c -> c.rainAmount = 200), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null);
         assertTrue(light.params()[0] < full.params()[0] && full.params()[0] < storm.params()[0], "more drops with more rain and thunder");
         assertTrue(light.params()[2] < full.params()[2]);
         assertEquals(Math.min(1, 2 * full.params()[0]), dense.params()[0], 1e-6);

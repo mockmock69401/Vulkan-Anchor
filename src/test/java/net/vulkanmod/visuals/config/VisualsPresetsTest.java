@@ -51,7 +51,9 @@ class VisualsPresetsTest {
         c.cloudSize = 60;
         c.cloudCount = 150;
         c.auroraStrength = 170;
-        c.weatherDensity = 40;
+        c.snowAmount = 40;
+        c.rainType = 2;
+        c.snowSize = 250;
         c.antiAliasing = 3;
         c.shadowDistance = 7;
         c.taa = false;
@@ -161,7 +163,9 @@ class VisualsPresetsTest {
             c.waterRippleDensity = 25;
             c.cloudCount = 0;
             c.auroraStrength = 200;
-            c.weatherDensity = 200;
+            c.rainAmount = 200;
+            c.snowType = 1;
+            c.rainSize = 50;
             c.exposure = 150;
             assertEquals(level, validated(c), "look-only settings keep the level");
             assertEquals(level, detect(c));
