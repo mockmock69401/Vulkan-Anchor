@@ -964,8 +964,9 @@ class SceneCompositeTest {
         assertTrue(star[0] > dark[0] + 0.3f);
         //2026-11-09 (session 5): the round discs and the aurora join the sky under the far clouds; with the square shape moonDisc is 0 and
         // vanillaMoonKept 1 (vanilla's moon is kept through vanillaStars)
-        assertTrue(COMP.contains("vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial)\n"
-                + "                + vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial) + auroraSky(dir, p);"));
+        //Session 12: the stars (times the picked star colour in the .TINTED build) in the same place of the sum
+        assertTrue(COMP.contains("vec3 stars = vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial);"));
+        assertTrue(COMP.contains("vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraSky(dir, p);"));
         assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)"));
     }
 
@@ -1695,7 +1696,7 @@ class SceneCompositeTest {
 
     private static final Set<String> JAVA_ONLY = Set.of("SLOTS", "CELESTIAL", "AURORA", "UNDERWATER_PARAMS", "UNDERWATER_RIPPLE_A", "UNDERWATER_RIPPLE_B", "UNDERWATER_LIGHT", "AIR_FIRST", "LIGHTING", "WATER", "CLOUD_SHAPE", "CLOUD_LIT", "CLOUD_AMBIENT", "CLOUD_LIGHT_DIR",
             "LIGHT_CAMERA", "LIGHT_FRAC", "LIGHT_MODE", "LIGHT_SUN", "LIGHT_SHADE", "HELD_ORIGIN", "HELD_EYE", "VANILLA_SKY", "VANILLA_FOG", "STAR_GATE", "LOOK", "BORDER_FOG", "BLOCK_LIGHT", "MOON_LIGHT", "GLOW",
-            "AURORA_TINTS", "WATER_TINT", "GLOW_TINT");
+            "AURORA_TINTS", "WATER_TINT", "GLOW_TINT", "STAR_TINT");
 
     @Test
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {

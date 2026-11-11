@@ -120,7 +120,7 @@ public final class VkPostProcess {
      */
     private final VkComputeProgram reflectionTinted, reflectionLeanTinted;
     private boolean tintedOn;
-    /** Session 8: postSceneCopy.TINTED (null: not built) and whether this frame needs it (a fog, rainy sky, moon, aurora or water colour picked). */
+    /** Session 8: postSceneCopy.TINTED (null: not built) and whether this frame needs it (a fog, rainy sky, moon, aurora, water, torch light or (session 12) star colour picked). */
     private final VkComputeProgram copyTinted;
     private boolean copyTintedOn;
     /**

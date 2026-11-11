@@ -116,6 +116,90 @@ class StarMathTest {
         }
     }
 
+    /** Session 12 follow-up (the user: "the star colour in the colours section too"): ShaderColours.STARS. */
+    @Test
+    void theStarColourIsWhiteByDefaultAndTintsOnlyThroughTheTintedBuild() throws IOException {
+        assertEquals(0xFFFFFF, ShaderColours.Colour.STARS.defaultRgb(), "vanilla's stars are white");
+        assertEquals(ShaderColours.Colour.NIGHT_SKY.ordinal() + 1, ShaderColours.Colour.STARS.ordinal(), "next to the night sky");
+        VisualsConfig c = new VisualsConfig();
+        assertEquals(0xFFFFFF, c.colourStars);
+        assertSame(ShaderColours.DEFAULT, ShaderColours.of(c.colours()));
+        CelestialUniforms.Values off = CelestialUniforms.off();
+        assertFalse(off.tinted(), "the default colour keeps the plain build");
+        assertArrayEquals(new float[]{1, 1, 1, 0}, java.util.Arrays.copyOfRange(off.tints(), 20, 24), 0);
+        c.colourStars = 0xFFB070;
+        ShaderColours picked = ShaderColours.of(c.colours());
+        float[] t = CelestialUniforms.tints(picked, false);
+        assertArrayEquals(ShaderColours.tint(0xFFB070, 0xFFFFFF), java.util.Arrays.copyOfRange(t, 20, 23), 0);
+        assertTrue(new CelestialUniforms.Values(new float[4], new float[4], t).tinted(), "a picked star colour runs the .TINTED build");
+        assertFalse(new CelestialUniforms.Values(new float[4], new float[4], t).auroraTinted(), "not the reflection's (no stars there)");
+        assertEquals(VisualsOptionLayout.Kind.COLOUR, VisualsOptionLayout.item("colour_stars").kind());
+        //the shader: slot 60, applied in the .TINTED build only, the plain build's sum unchanged
+        String comp = Files.readString(Path.of("src/main/resources/assets/vulkanmod/visuals/shaders/post/scene_copy.comp"));
+        assertTrue(comp.contains("layout(location = 60) uniform vec4 starTint;"));
+        assertTrue(comp.replace("\r\n", "\n").contains("#ifdef ATMOSPHERE_TINTS\n        stars *= vanillaStarTint(a, dir, starTint);\n#endif"));
+        assertEquals(60, SceneCompositeMath.STAR_TINT);
+        String water = Files.readString(Path.of("src/main/resources/assets/vulkanmod/visuals/shaders/post/water.glsl"));
+        assertTrue(water.contains("return mix(tint.rgb, vec3(1.0), discCover(dir, -a.sun.xyz, VANILLA_MOON_MASK));"));
+    }
+
+    @Test
+    void theStarTintLeavesVanillasSquareMoonWhite() {
+        float[] block = new float[40];
+        block[0] = 0;
+        block[1] = -1;
+        block[2] = 0;
+        block[3] = AtmosphereMath.ATMOSPHERE_SKY;
+        AtmosphereMath.Atmosphere a = AtmosphereMath.Atmosphere.of(block);
+        float[] tint = {1.6f, 0.7f, 0.2f, 0};
+        assertArrayEquals(new float[]{1, 1, 1}, WaterMath.vanillaStarTint(a, new float[]{0, 1, 0}, tint), 1e-6f, "the moon (straight up at midnight)");
+        float s = (float) Math.sqrt(0.5);
+        assertArrayEquals(new float[]{1.6f, 0.7f, 0.2f}, WaterMath.vanillaStarTint(a, new float[]{s, s, 0}, tint), 1e-6f, "a star 45 degrees away");
+        float[] white = {1, 1, 1, 0};
+        assertArrayEquals(new float[]{1, 1, 1}, WaterMath.vanillaStarTint(a, new float[]{s, s, 0}, white), 0, "the default: exactly 1");
+    }
+
+    @Test
+    void everyPaletteSetsAStarColourAndAnOlderPaletteFileTakesIt(@org.junit.jupiter.api.io.TempDir Path dir) throws IOException {
+        assertEquals(0xFFFFFF, ColourPresets.value(ShaderColours.Colour.STARS, ColourPresets.DEFAULT));
+        for (int level = ColourPresets.REALISTIC; level < ColourPresets.CUSTOM; level++) {
+            int v = ColourPresets.value(ShaderColours.Colour.STARS, level);
+            assertNotEquals(0xFFFFFF, v, "palette " + level);
+            VisualsConfig c = new VisualsConfig();
+            ColourPresets.apply(c, level);
+            assertEquals(v, c.colourStars);
+            assertEquals(level, ColourPresets.detect(c));
+            c.colourStars = 0x123456;
+            assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c), "a star colour picked by hand shows Custom");
+        }
+        //Horror's stars are dim: its colour's luminance well under white's
+        int h = ColourPresets.value(ShaderColours.Colour.STARS, ColourPresets.HORROR);
+        float[] ht = ShaderColours.tint(h, 0xFFFFFF);
+        assertTrue(0.2126f * ht[0] + 0.7152f * ht[1] + 0.0722f * ht[2] < 0.4f);
+        //a revision 11 file on Horror (no star colour yet: white) takes Horror's and stays on it; a Custom one keeps white stars
+        for (int level : new int[]{ColourPresets.HORROR, ColourPresets.ANIME, ColourPresets.DEFAULT}) {
+            VisualsConfig before = new VisualsConfig();
+            ColourPresets.apply(before, level);
+            Path f = dir.resolve("p" + level + ".json");
+            before.write(f);
+            Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 11")
+                    .replaceAll("\\s*\"colourStars\": \\d+,", ""));
+            assertFalse(Files.readString(f).contains("colourStars"));
+            VisualsConfig read = VisualsConfig.read(f);
+            assertEquals(level, read.colourPreset, "palette " + level);
+            assertEquals(ColourPresets.value(ShaderColours.Colour.STARS, level), read.colourStars, "palette " + level);
+        }
+        VisualsConfig custom = new VisualsConfig();
+        ColourPresets.apply(custom, ColourPresets.HORROR);
+        custom.colourMoon = 0x00FF00;
+        custom.colourPreset = ColourPresets.CUSTOM;
+        Path f = dir.resolve("custom.json");
+        custom.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 11")
+                .replaceAll("\\s*\"colourStars\": \\d+,", ""));
+        assertEquals(0xFFFFFF, VisualsConfig.read(f).colourStars, "not on a palette: the white stars it had");
+    }
+
     @Test
     void theMixinChangesVanillasStarsOnlyThroughStarSky() throws IOException {
         String mixin = Files.readString(Path.of("src/main/java/net/vulkanmod/mixin/visuals/LevelRendererStarsMixin.java"));

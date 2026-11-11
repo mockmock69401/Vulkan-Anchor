@@ -102,9 +102,9 @@ class ShaderColoursTest {
             }
         }
         float[] t = CelestialUniforms.tints(DEFAULTS, false);
-        assertEquals(20, t.length);
+        assertEquals(24, t.length);
         assertFalse(CelestialUniforms.off().tinted());
-        for (int v = 0; v < 5; v++) assertArrayEquals(new float[]{1, 1, 1, 0}, java.util.Arrays.copyOfRange(t, v * 4, v * 4 + 4), 0);
+        for (int v = 0; v < 6; v++) assertArrayEquals(new float[]{1, 1, 1, 0}, java.util.Arrays.copyOfRange(t, v * 4, v * 4 + 4), 0);
     }
 
     @Test

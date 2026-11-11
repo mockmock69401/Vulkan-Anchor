@@ -239,6 +239,8 @@
   "vulkanmod.visuals.colour_sun_glow.tooltip": "하늘 색 위에 더해지는 해 둘레의 빛 (세기는 대기 페이지의 해 주변 빛)",
   "vulkanmod.visuals.colour_night_sky": "밤하늘",
   "vulkanmod.visuals.colour_night_sky.tooltip": "밤하늘의 색: 달빛 받은 공기와 달 없는 밤의 희미한 빛",
+  "vulkanmod.visuals.colour_stars": "별",
+  "vulkanmod.visuals.colour_stars.tooltip": "별의 색 (기본은 흰색). 어두운 색을 고르면 별도 어두워집니다. 별 개수·크기·밝기는 대기 페이지에 있습니다",
   "vulkanmod.visuals.colour_fog": "안개",
   "vulkanmod.visuals.colour_fog.tooltip": "땅 안개와 아침 안개, 지평선의 안개 띠, 비 안개. 가까운 지형 위의 연무도 이 색이고, 멀어질수록 하늘 색으로 이어집니다",
   "vulkanmod.visuals.colour_overcast": "비 오는 하늘",

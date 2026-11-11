@@ -56,7 +56,7 @@ class LeanReflectionTest {
         fog.setColour(ShaderColours.Colour.FOG, 0xFF0000);
         float[] plain = AtmosphereUniforms.block(def, null, true);
         assertFalse(new ReflectionUniforms.Values(true, null, null, null, false, null, plain, new float[8], 1, 1, 1, false, 0, 0, 0, 0, 1).tinted());
-        assertTrue(CelestialUniforms.off().tints().length == 20 && !CelestialUniforms.off().auroraTinted());
+        assertTrue(CelestialUniforms.off().tints().length == 24 && !CelestialUniforms.off().auroraTinted());
         net.vulkanmod.visuals.config.VisualsConfig green = new net.vulkanmod.visuals.config.VisualsConfig();
         green.setColour(ShaderColours.Colour.AURORA_MAIN, 0x00FF00);
         ShaderColours aurora = ShaderColours.of(green.colours());

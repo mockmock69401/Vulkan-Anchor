@@ -450,6 +450,12 @@ float vanillaMoonKept(Atmosphere a, vec3 dir, vec4 celestial) {
     return 1.0 - discCover(dir, -a.sun.xyz, VANILLA_MOON_MASK);
 }
 
+//2026-11-11 (session 12): the picked star colour's tint (tint.rgb) on vanillaStars' residue along dir: all of it outside vanilla's square
+// moon, none inside (the square moon keeps its own white; the round one drops that square anyway, vanillaMoonKept)
+vec3 vanillaStarTint(Atmosphere a, vec3 dir, vec4 tint) {
+    return mix(tint.rgb, vec3(1.0), discCover(dir, -a.sun.xyz, VANILLA_MOON_MASK));
+}
+
 //The sun disc's brightness (scene units): SUN_DISC_LUMINANCE times the sky's sunlight tint at luminance 1, gone in rain (the overcast
 // share) and as the sun sets below the horizon. 0 outside ATMOSPHERE_SKY
 vec3 sunRadiance(Atmosphere a) {

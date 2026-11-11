@@ -334,6 +334,12 @@ public final class WaterMath {
         return 1 - discCover(dir, moonCentre(a), VANILLA_MOON_MASK);
     }
 
+    /** Session 12: the star colour's tint on vanillaStars' residue along dir: tint outside vanilla's square moon, 1 inside it. */
+    public static float[] vanillaStarTint(Atmosphere a, float[] dir, float[] tint) {
+        float m = discCover(dir, moonCentre(a), VANILLA_MOON_MASK);
+        return new float[]{tint[0] + (1 - tint[0]) * m, tint[1] + (1 - tint[1]) * m, tint[2] + (1 - tint[2]) * m};
+    }
+
     public static float[] sunRadiance(Atmosphere a) {
         if (!AtmosphereMath.atmosphereSky(a)) return new float[3];
         float[] c = {Math.max(a.sunLight()[0], 0), Math.max(a.sunLight()[1], 0), Math.max(a.sunLight()[2], 0)};

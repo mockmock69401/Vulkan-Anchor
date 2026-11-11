@@ -89,13 +89,15 @@ public final class SceneCompositeMath {
     public static final float PARTICLE_BLEND_RESIDUAL_MAX = 0.0025f;
 
     // ---- the composite's slots (boundary 3.2) ----
-    public static final int SLOTS = 60;
+    public static final int SLOTS = 61;
     /** 2026-11-09 (session 5): CelestialUniforms' discs' shape (46) and aurora (47). */
     public static final int CELESTIAL = CelestialUniforms.COPY_CELESTIAL, AURORA = CelestialUniforms.COPY_AURORA;
     /** 2026-11-10 (session 8): the aurora's three colour tints (54..56) and the water's body colour tint (57). */
     public static final int AURORA_TINTS = CelestialUniforms.COPY_AURORA_TINTS, WATER_TINT = CelestialUniforms.COPY_WATER_TINT;
     /** Session 8 follow-up: the light sources' glow tint (59; 58 is the PBR builds' pbrParams, PbrMath's). */
     public static final int GLOW_TINT = CelestialUniforms.COPY_GLOW_TINT;
+    /** 2026-11-11 (session 12): the stars' colour tint (60). */
+    public static final int STAR_TINT = CelestialUniforms.COPY_STAR_TINT;
     /** 2026-11-09 (session 2b): UnderwaterUniforms' slots 35..38 and the air's struct Atmosphere at 39..45. */
     public static final int UNDERWATER_PARAMS = UnderwaterUniforms.PARAMS, UNDERWATER_RIPPLE_A = UnderwaterUniforms.RIPPLE_A,
             UNDERWATER_RIPPLE_B = UnderwaterUniforms.RIPPLE_B, UNDERWATER_LIGHT = UnderwaterUniforms.LIGHT, AIR_FIRST = UnderwaterUniforms.AIR_FIRST;
@@ -511,6 +513,8 @@ public final class SceneCompositeMath {
             float[] celestial = slots[CELESTIAL];
             float[] stars = scale(AtmosphereMath.vanillaStars(a, px.dir, scene, slots[VANILLA_SKY], slots[VANILLA_FOG], slots[STAR_GATE]),
                     WaterMath.vanillaMoonKept(a, px.dir, celestial));
+            //Session 12: the star colour (the .TINTED build; 1 at its default)
+            stars = mul(stars, WaterMath.vanillaStarTint(a, px.dir, slots[STAR_TINT]));
             float[] sky = add(add(add(AtmosphereMath.skyColour(a, px.dir), AtmosphereMath.sunGlow(a, px.dir)),
                     add(WaterMath.sunDisc(a, px.dir, celestial), WaterMath.moonDisc(a, px.dir, celestial))), add(stars, auroraSky(slots, px.dir)));
             return rgba(scale(farCloudsOver(a, slots, sky, px.dir, px.cloudMarch), underwaterExposure(slots[LOOK])), 0);
