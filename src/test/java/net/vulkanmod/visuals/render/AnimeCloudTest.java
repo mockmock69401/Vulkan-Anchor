@@ -53,7 +53,7 @@ class AnimeCloudTest {
         assertEquals(CloudMath.ANIME_SAMPLES_MEDIUM, CloudMath.animeSamples(1));
         assertEquals(CloudMath.ANIME_SAMPLES_HIGH, CloudMath.animeSamples(2));
         String reflection = ShaderFiles.read("post/reflection.comp");
-        assertTrue(reflection.contains("animeMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, ANIME_REFLECT_REFINE)"));
+        assertTrue(reflection.contains("animeMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES)"));
         //Left out of the lean reflection build with the realistic march (VkPostProcess picks the lean one when Values.realistic() is false)
         int lean = reflection.indexOf("#ifndef REFLECT_LEAN"), anime = reflection.indexOf("if (cloudAnime())"), end = reflection.indexOf("#endif", lean);
         assertTrue(lean >= 0 && lean < anime && anime < end, "the anime branch sits in the non-lean part");
@@ -199,37 +199,52 @@ class AnimeCloudTest {
         assertTrue(few < 0.8 * def, few + " vs " + def);
     }
 
-    /** The cel bands: shadow, lit and the top's highlight are flat levels with narrow steps between; the rim brightens the silhouette. */
+    /**
+     * The light is soft (no bands): it rises smoothly from ANIME_SHADOW facing away to 1 facing the light, creases are darker, the sky
+     * light dims toward the base, and the rim brightens the silhouette.
+     */
     @Test
-    void theBandsAreFlat() {
-        float[] sun = {0.6f, 0.8f, 0};
-        float l = (float) Math.sqrt(0.6 * 0.6 + 0.8 * 0.8);
-        sun = new float[]{sun[0] / l, sun[1] / l, 0};
-        float[] view = {0, 1, 0};
-        float shadow = CloudMath.animeLight(new float[]{0, -1, 0}, view, sun);
-        float top = CloudMath.animeLight(sun, view, sun);
-        assertEquals(CloudMath.ANIME_SHADOW, shadow, 1e-4f);
-        assertEquals(1 + CloudMath.ANIME_HIGHLIGHT, top, 0.01f);
-        //Turning the normal through the lit band away from the terminator and the highlight edge: the same level
-        float x0 = CloudMath.animeLight(new float[]{0.6f, 0.8f * 0.6f, 0.64f}, view, sun);
-        assertTrue(x0 >= 1 - 1e-4f && x0 <= 1 + CloudMath.ANIME_HIGHLIGHT + 1e-4f);
-        //Seen edge-on the rim adds up to ANIME_RIM_GAIN
+    void theLightIsSoft() {
+        float[] sun = {0.6f, 0.8f, 0}, view = {0, 1, 0};
+        float away = CloudMath.animeLight(new float[]{0, -1, 0}, 1, 1, view, sun)[0];
+        float toward = CloudMath.animeLight(sun, 1, 1, sun, sun)[0];//seen face on: no rim
+        assertEquals(CloudMath.ANIME_SHADOW, away, 1e-4f);
+        assertEquals(1f, toward, 1e-4f);
+        //Smooth: turning the normal in small steps never jumps by more than a few percent
+        float prev = Float.NaN;
+        for (int i = 0; i <= 180; i++) {
+            double a = Math.toRadians(i);
+            float[] n = {(float) Math.cos(a) * 0.6f - (float) Math.sin(a) * 0.8f, (float) Math.cos(a) * 0.8f + (float) Math.sin(a) * 0.6f, 0};
+            float v = CloudMath.animeLight(n, 1, 1, view, sun)[0];
+            if (!Float.isNaN(prev)) assertTrue(Math.abs(v - prev) < 0.04f, "step at " + i + ": " + prev + " -> " + v);
+            prev = v;
+        }
+        assertEquals(1 - CloudMath.ANIME_CREASE_SHADE, CloudMath.animeLight(sun, 0, 1, sun, sun)[0], 1e-4f, "a crease is shaded");
+        assertEquals(CloudMath.ANIME_AMBIENT_LOW, CloudMath.animeLight(sun, 1, 0, view, sun)[1], 1e-4f, "the base gets less sky light");
+        assertEquals(1f, CloudMath.animeLight(sun, 1, 1, view, sun)[1], 1e-4f);
         float[] side = {0, 0, 1};
-        float edge = CloudMath.animeLight(side, new float[]{1, 0, 0}, sun) - CloudMath.animeLight(side, new float[]{0, 0, -1}, sun);
-        assertTrue(edge > 0.1f && edge <= CloudMath.ANIME_RIM_GAIN + 1e-4f, "rim " + edge);
-        //The light at the horizon: the flat level
-        assertEquals(CloudMath.ANIME_FLAT, CloudMath.animeLight(new float[]{0, -1, 0}, view, new float[]{1, 0, 0}), 1e-4f);
+        float rim = CloudMath.animeLight(side, 1, 1, new float[]{1, 0, 0}, sun)[0] - CloudMath.animeLight(side, 1, 1, new float[]{0, 0, -1}, sun)[0];
+        assertTrue(rim > 0.1f && rim <= CloudMath.ANIME_RIM_GAIN + 1e-4f, "rim " + rim);
+        assertEquals(CloudMath.ANIME_FLAT, CloudMath.animeLight(new float[]{0, -1, 0}, 1, 1, view, new float[]{1, 0, 0})[0], 1e-4f, "the light at the horizon");
     }
 
-    /** The march finds the first surface a fine walk finds, to within a block, and is opaque there (inside the LOD fade). */
+    /**
+     * The march: the clouds are opaque inside and soft at their edges (some rays partly covered), its distance lies near the first surface
+     * a fine walk finds, and nothing is drawn past ANIME_FADE_FAR: the layer fades out before it ends instead of stopping at a line.
+     */
     @Test
-    void theMarchFindsTheSurface() {
+    void theMarchIsSoftAndFadesOut() {
         CloudMath.Realistic r = new CloudMath.Realistic(120, CloudMath.ANIME_THICKNESS, 8192, 1000, 1500, CloudMath.REAL_COVER);
-        int hits = 0, agree = 0;
-        for (int i = 0; i < 200; i++) {
+        int hits = 0, solid = 0, soft = 0, near = 0;
+        for (int i = 0; i < 400; i++) {
             double az = i * 0.0317, el = Math.toRadians(20 + (i % 9) * 6);
             float[] d = {(float) (Math.cos(el) * Math.sin(az)), (float) Math.sin(el), (float) (Math.cos(el) * Math.cos(az))};
-            float[] m = CloudMath.animeMarch(MAP, r, new float[3], d, 1e6f, UP, 0.5f, CloudMath.ANIME_SAMPLES_HIGH, CloudMath.ANIME_REFINE);
+            float[] m = CloudMath.animeMarch(MAP, r, new float[3], d, 1e6f, UP, 0.5f, CloudMath.ANIME_SAMPLES_HIGH);
+            if (!(m[2] > 0.01f)) continue;
+            hits++;
+            if (m[2] > 0.95f) solid++;
+            else soft++;
+            assertTrue(m[1] <= m[2] + 1e-5f, "sky-lit weight within the coverage");
             float fine = -1;
             for (float t = 120 / d[1]; t < (120 + CloudMath.ANIME_THICKNESS) / d[1]; t += 0.25f) {
                 if (CloudMath.animeInside(MAP, r, d[0] * t, d[1] * t, d[2] * t)) {
@@ -237,16 +252,24 @@ class AnimeCloudTest {
                     break;
                 }
             }
-            if (m[2] > 0) {
-                hits++;
-                assertEquals(1f, m[2], 1e-6f, "opaque");
-                assertEquals(m[2], m[1], 1e-6f, "sky-lit weight = coverage");
-                if (fine >= 0 && Math.abs(fine - m[3]) < 1.5f) agree++;
-            }
+            float at = m[3] / CloudMath.ANIME_HAZE;//the distance is the haze's share of it
+            if (fine >= 0 && at >= fine - 1 && at < fine + 3 * CloudMath.ANIME_SOFT + 6) near++;
         }
-        assertTrue(hits > 20, "hits " + hits);
-        assertTrue(agree > 0.85 * hits, agree + " of " + hits + " within a block and a half of the fine walk");
-        assertArrayEquals(new float[4], CloudMath.animeMarch(MAP, layer(0), new float[3], UP, 1e6f, UP, 0.5f, 40, 6), 1e-6f);
+        assertTrue(hits > 40, "hits " + hits);
+        assertTrue(solid > 0.5 * hits, "mostly opaque: " + solid + " of " + hits);
+        assertTrue(soft > 0.03 * hits, "soft edges: " + soft + " of " + hits);
+        assertTrue(near > 0.85 * hits, near + " of " + hits + " near the first surface");
+        assertArrayEquals(new float[4], CloudMath.animeMarch(MAP, layer(0), new float[3], UP, 1e6f, UP, 0.5f, 40), 1e-6f);
+        //The fade: full to ANIME_FADE_NEAR, none from ANIME_FADE_FAR; a grazing ray toward the horizon covers nothing beyond it
+        assertEquals(1f, CloudMath.animeFade(CloudMath.ANIME_FADE_NEAR), 1e-6f);
+        assertEquals(0f, CloudMath.animeFade(CloudMath.ANIME_FADE_FAR), 1e-6f);
+        CloudMath.Realistic full = new CloudMath.Realistic(60, CloudMath.ANIME_THICKNESS, 8192, 1000, 1500, 1f);
+        for (int i = 0; i < 50; i++) {
+            double az = i * 0.13, el = Math.toRadians(0.3 + i * 0.02);
+            float[] d = {(float) (Math.cos(el) * Math.sin(az)), (float) Math.sin(el), (float) (Math.cos(el) * Math.cos(az))};
+            float[] m = CloudMath.animeMarch(MAP, full, new float[3], d, 1e6f, UP, 0.5f, CloudMath.ANIME_SAMPLES_HIGH);
+            assertTrue(m[3] / CloudMath.ANIME_HAZE * Math.cos(el) <= CloudMath.ANIME_FADE_FAR + 1, "drawn at " + m[3]);
+        }
     }
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {

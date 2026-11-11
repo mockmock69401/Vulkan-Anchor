@@ -57,7 +57,7 @@
   "vulkanmod.visuals.far_clouds": "먼 구름",
   "vulkanmod.visuals.far_clouds.tooltip": "구름을 먼 시야 거리까지 둥근 가장자리와 음영으로 그리고 물에도 비춥니다. 끄면 바닐라 구름으로 돌아갑니다",
   "vulkanmod.visuals.cloud_style": "구름 스타일",
-  "vulkanmod.visuals.cloud_style.tooltip": "바닐라 모양은 먼 구름을 바닐라의 네모난 칸 모양으로 그립니다. 사실적은 바닥이 둥글고 아랫면에 그늘이 지며 해 쪽 가장자리가 밝은 뭉게구름과, 높은 곳의 얇은 새털구름을 그립니다. 애니메이션은 윤곽이 깔끔하고 몽글몽글한 구름을 평평한 셀 음영으로 그립니다(위는 하얗고 아랫면은 하늘색). 애니메이션 색 팔레트를 고르면 애니메이션 구름이 됩니다. 사실적과 애니메이션은 더 무겁습니다",
+  "vulkanmod.visuals.cloud_style.tooltip": "바닐라 모양은 먼 구름을 바닐라의 네모난 칸 모양으로 그립니다. 사실적은 바닥이 둥글고 아랫면에 그늘이 지며 해 쪽 가장자리가 밝은 뭉게구름과, 높은 곳의 얇은 새털구름을 그립니다. 애니메이션은 크고 부드러운 뭉게구름을 그립니다(하얀 윗면, 은은한 청회색 아랫면). 지평선 쪽으로 갈수록 옅어져 연무 속으로 사라집니다. 애니메이션 색 팔레트를 고르면 애니메이션 구름이 됩니다. 사실적과 애니메이션은 더 무겁습니다",
   "vulkanmod.visuals.cloud_style.0": "바닐라 모양",
   "vulkanmod.visuals.cloud_style.1": "사실적",
   "vulkanmod.visuals.cloud_style.2": "애니메이션",

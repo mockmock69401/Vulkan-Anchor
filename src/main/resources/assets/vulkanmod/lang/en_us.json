@@ -339,7 +339,7 @@
   "vulkanmod.visuals.far_clouds": "Far Clouds",
   "vulkanmod.visuals.far_clouds.tooltip": "Draws the clouds out to the far view distance with rounded edges and shading, and mirrors them on water; off restores vanilla's clouds",
   "vulkanmod.visuals.cloud_style": "Cloud Style",
-  "vulkanmod.visuals.cloud_style.tooltip": "Vanilla Shape keeps the far clouds in vanilla's blocky cells; Realistic draws billowing cumulus with rounded bases, shaded undersides and bright edges toward the sun, and thin cirrus streaks high above; Anime draws smooth puffy clouds with clean outlines and flat cel-shaded light, a white top and a sky-coloured underside. The Anime colour palette picks Anime. Realistic and Anime cost more",
+  "vulkanmod.visuals.cloud_style.tooltip": "Vanilla Shape keeps the far clouds in vanilla's blocky cells; Realistic draws billowing cumulus with rounded bases, shaded undersides and bright edges toward the sun, and thin cirrus streaks high above; Anime draws big soft puffy clouds with white tops and gentle blue-grey undersides, which thin out into the haze toward the horizon. The Anime colour palette picks Anime. Realistic and Anime cost more",
   "vulkanmod.visuals.cloud_style.0": "Vanilla Shape",
   "vulkanmod.visuals.cloud_style.1": "Realistic",
   "vulkanmod.visuals.cloud_style.2": "Anime",
