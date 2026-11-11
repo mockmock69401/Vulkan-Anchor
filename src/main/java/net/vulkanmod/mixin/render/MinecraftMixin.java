@@ -60,6 +60,8 @@ public class MinecraftMixin {
         Renderer.getInstance().preInitFrame();
         //2026-11-10 (shader roadmap session 9): the LabPBR atlases built, rebuilt or freed outside the frame's recording
         net.vulkanmod.visuals.render.PbrAtlas.update();
+        //2026-11-11 (session 12): vanilla's star buffer rebuilt when the star count or size setting changed, outside the recording too
+        net.vulkanmod.visuals.render.StarSky.update();
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/systems/RenderSystem;clear(IZ)V"))

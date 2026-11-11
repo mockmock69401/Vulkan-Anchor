@@ -28,7 +28,7 @@ class VisualsConfigTest {
              "skyLightAmbient": 100, "perPixelLight": true, "lightColour": 70, "heldLight": true, "antiAliasing": 3, "edgeCover": true,
              "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "pbr": false, "pbrNormalStrength": 150,
              "pbrReflections": true, "pbrParallax": true, "colourSunlight": 16744512, "colourShadeLight": 8438015, "cloudStyle": 2, "sunSize": 70, "moonSize": 150, "snowType": 1, "snowSize": 150, "snowAmount": 60,
-             "rainType": 2, "rainSize": 80, "rainAmount": 140, "revision": 13}
+             "rainType": 2, "rainSize": 80, "rainAmount": 140, "starCount": 250, "starSize": 60, "starBrightness": 180, "revision": 14}
             """;
 
     private static List<Field> settingFields() {
@@ -172,7 +172,7 @@ class VisualsConfigTest {
         assertEquals(VisualsPresets.CUSTOM, c.preset, "session 4: a file before the preset is Custom");
         Files.writeString(old, "{\"exposure\": 130, \"revision\": 0}");
         assertEquals(VisualsConfig.currentRevision(), VisualsConfig.read(old).revision);
-        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": 13", "\"revision\": 99"));
+        Files.writeString(old, SAVED_BY_CURRENT_MOD.replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 99"));
         assertEquals(99, VisualsConfig.read(old).revision, "a newer file is left alone");
     }
 
