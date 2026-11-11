@@ -66,6 +66,24 @@ public final class WeatherMath {
     public static final float IMPACT_END = 10.0f;
     public static final float IMPACT_FADE = 4.0f;
     public static final int WEATHER_FLAG_WATER = 1 << 27;
+    public static final int WEATHER_TYPE_ROUND = 0;
+    public static final int WEATHER_TYPE_PIXEL = 1;
+    public static final int WEATHER_TYPE_BOTH = 2;
+    public static final int PIXEL_GRID = 5;
+    public static final float SNOW_PIXEL_HALF = 0.07f;
+    public static final float SNOW_PIXEL_ALPHA = 0.9f;
+    public static final float SNOW_PIXEL_SPIN = 0.2f;
+    public static final int SNOW_PIXEL_SHAPES = 4;
+    public static final int SNOW_PIXEL_SHAPE_0 = 145536;
+    public static final int SNOW_PIXEL_SHAPE_1 = 4353156;
+    public static final int SNOW_PIXEL_SHAPE_2 = 18157905;
+    public static final int SNOW_PIXEL_SHAPE_3 = 4543812;
+    public static final float RAIN_PIXEL_HALF_WIDTH = 0.0125f;
+    public static final float RAIN_PIXEL_HALF_LENGTH = 0.15f;
+    public static final float RAIN_PIXEL_ALPHA = 0.6f;
+    public static final float WEATHER_BOTH_SPLIT = 8.0f;
+    public static final float PIXEL_TEXEL_BLEND_LOW = 0.5f;
+    public static final float PIXEL_TEXEL_BLEND_HIGH = 1.0f;
     public static final int WEATHER_PRIME_X = 73856093;
     public static final int WEATHER_PRIME_Z = 19349663;
     public static final int WEATHER_PRIME_Y = 50331653;
@@ -163,9 +181,46 @@ public final class WeatherMath {
         return alpha * (width / w) * (1 - smoothstep(0, w, dist));
     }
 
-    /** weatherDrop: blends one cell's drop under acc (premultiplied rgb, alpha). */
+    /** weatherSnowShape: the PIXEL_GRID mask of snowflake shape index. */
+    public static int snowShape(int index) {
+        return index == 0 ? SNOW_PIXEL_SHAPE_0 : (index == 1 ? SNOW_PIXEL_SHAPE_1 : (index == 2 ? SNOW_PIXEL_SHAPE_2 : SNOW_PIXEL_SHAPE_3));
+    }
+
+    /**
+     * weatherSprite: a pixel sprite at a (blocks from the camera) facing the camera, halfSize {across, up}, turned by angle: {its cover of
+     * the pixel along unit dir (0..1, before the sprite's alpha), the ray's distance at it}; shape a PIXEL_GRID mask or -1 (solid).
+     */
+    public static float[] sprite(float[] dir, float[] a, float[] halfSize, float angle, int shape, float pixelAngle) {
+        float aa = dot(a, a), da = dot(dir, a);
+        if (!(da > 0) || aa < 1e-8f) return new float[2];
+        float t = aa / da;
+        float[] q = {dir[0] * t - a[0], dir[1] * t - a[1], dir[2] * t - a[2]};
+        float inv = (float) (1 / Math.sqrt(aa));
+        float[] f = {a[0] * inv, a[1] * inv, a[2] * inv};
+        float hx = f[2], hz = -f[0];
+        float hl = (float) Math.sqrt(hx * hx + hz * hz);
+        float[] right = hl > 1e-4f ? new float[]{hx / hl, 0, hz / hl} : new float[]{1, 0, 0};
+        float[] up = {f[1] * right[2] - f[2] * right[1], f[2] * right[0] - f[0] * right[2], f[0] * right[1] - f[1] * right[0]};
+        float u0 = dot(q, right), v0 = dot(q, up);
+        float c = (float) Math.cos(angle), s = (float) Math.sin(angle);
+        float u = c * u0 + s * v0, v = c * v0 - s * u0;
+        float foot = 0.5f * pixelAngle * t;
+        float wideX = Math.max(halfSize[0], foot), wideY = Math.max(halfSize[1], foot);
+        if (Math.abs(u) > wideX || Math.abs(v) > wideY) return new float[]{0, t};
+        float shrink = (halfSize[0] / wideX) * (halfSize[1] / wideY);
+        if (shape < 0) return new float[]{shrink, t};
+        int cx = Math.max(0, Math.min(PIXEL_GRID - 1, (int) Math.floor((u / halfSize[0] * 0.5f + 0.5f) * PIXEL_GRID)));
+        int cy = Math.max(0, Math.min(PIXEL_GRID - 1, (int) Math.floor((v / halfSize[1] * 0.5f + 0.5f) * PIXEL_GRID)));
+        boolean inside = Math.abs(u) <= halfSize[0] && Math.abs(v) <= halfSize[1];
+        float bit = inside ? (shape >> ((PIXEL_GRID - 1 - cy) * PIXEL_GRID + cx)) & 1 : 0;
+        float mean = Integer.bitCount(shape) / (float) (PIXEL_GRID * PIXEL_GRID);
+        float texel = 2 * Math.min(halfSize[0], halfSize[1]) / PIXEL_GRID;
+        return new float[]{mix(bit, mean, smoothstep(PIXEL_TEXEL_BLEND_LOW, PIXEL_TEXEL_BLEND_HIGH, 2 * foot / texel)) * shrink, t};
+    }
+
+    /** weatherDrop: blends one cell's drop under acc (premultiplied rgb, alpha); style {rain's type, snow's, rain's size, snow's}. */
     static void drop(float[] acc, float[] dir, float sceneDist, int cellX, int cellY, int cellZ, int layer, int dropIndex, boolean isSnow, float[] origin,
-                     float[] camera, float[] frac, float[] params, float[] motion, Map map, Light light) {
+                     float[] camera, float[] frac, float[] params, float[] motion, float[] style, Map map, Light light) {
         int camX = (int) camera[0], camZ = (int) camera[2];
         float size = 1 << layer;
         float cellHeight = (isSnow ? SNOW_PERIOD : RAIN_PERIOD) * size;
@@ -179,10 +234,25 @@ public final class WeatherMath {
         float ay = (cellY + mix(WEATHER_MARGIN, 1 - WEATHER_MARGIN, r[2])) * cellHeight - origin[1];
         float az = (cellZ + mix(WEATHER_MARGIN, 1 - WEATHER_MARGIN, r[1])) * size - origin[2];
         float sway = isSnow ? SNOW_SWAY : 0;
+        int type = (int) ((isSnow ? style[1] : style[0]) + 0.5f);
+        float scale = isSnow ? style[3] : style[2];
+        float radius = (isSnow ? SNOW_RADIUS : RAIN_WIDTH) * scale;
+        float[] spriteHalf = isSnow ? new float[]{SNOW_PIXEL_HALF, SNOW_PIXEL_HALF} : new float[]{RAIN_PIXEL_HALF_WIDTH, RAIN_PIXEL_HALF_LENGTH};
+        for (int i = 0; i < 2; i++) spriteHalf[i] *= scale * (1 + WEATHER_SIZE_SPREAD);
+        if (isSnow) {
+            float limit = Math.max(size * WEATHER_MARGIN - sway, 0) * 0.70710678f;
+            spriteHalf[0] = Math.min(spriteHalf[0], limit);
+            spriteHalf[1] = Math.min(spriteHalf[1], limit);
+        } else {
+            spriteHalf[0] = Math.min(spriteHalf[0], size * WEATHER_MARGIN);
+            spriteHalf[1] = Math.min(spriteHalf[1], cellHeight * WEATHER_MARGIN);
+        }
+        float extent = radius * (1 + WEATHER_SIZE_SPREAD);
+        if (type != WEATHER_TYPE_ROUND) extent = Math.max(extent, (float) Math.hypot(spriteHalf[0], spriteHalf[1]));
         float t0 = ax * dir[0] + ay * dir[1] + az * dir[2];
         float reach = (float) Math.sqrt(motion[0] * motion[0] + motion[1] * motion[1] + motion[2] * motion[2]) + sway;
         float px = ax - dir[0] * t0, py = ay - dir[1] * t0, pz = az - dir[2] * t0;
-        if ((float) Math.sqrt(px * px + py * py + pz * pz) > reach + (isSnow ? SNOW_RADIUS : RAIN_WIDTH) * (1 + WEATHER_SIZE_SPREAD) + frac[3] * (Math.max(t0, 0) + reach)) return;
+        if ((float) Math.sqrt(px * px + py * py + pz * pz) > reach + extent + frac[3] * (Math.max(t0, 0) + reach)) return;
         int columnX = camX + (int) Math.floor(frac[0] + ax), columnZ = camZ + (int) Math.floor(frac[2] + az);
         int texel = map.at(columnX & WEATHER_MAP_MASK, columnZ & WEATHER_MAP_MASK);
         if (kind(texel, (int) Math.floor(camera[3])) != (isSnow ? SNOW : RAIN)) return;
@@ -191,17 +261,32 @@ public final class WeatherMath {
             ax += SNOW_SWAY * (float) Math.sin(params[3] + 6.2831853f * v[0]);
             az += SNOW_SWAY * (float) Math.cos(0.8f * params[3] + 6.2831853f * v[1]);
         }
-        float[] streak = halfStreak(motion, size, cellHeight, sway);
-        if (camera[3] + ay - Math.abs(streak[1]) < height(texel)) return;
-        float[] hit = raySegment(dir, new float[]{ax - streak[0], ay - streak[1], az - streak[2]}, new float[]{ax + streak[0], ay + streak[1], az + streak[2]});
-        float width = (isSnow ? SNOW_RADIUS : RAIN_WIDTH) * (1 + WEATHER_SIZE_SPREAD * (2 * v[2] - 1));
-        float alpha = coverage(hit[0], width, hit[1], frac[3], isSnow ? SNOW_ALPHA : RAIN_ALPHA);
+        float spread = 1 + WEATHER_SIZE_SPREAD * (2 * v[2] - 1);
+        boolean pixel = isPixel(type, v[3]);
+        float[] streak = new float[3];
+        float[] hit;
+        float alpha;
+        if (pixel) {
+            float k = spread / (1 + WEATHER_SIZE_SPREAD);
+            float[] halfSize = {spriteHalf[0] * k, spriteHalf[1] * k};
+            if (camera[3] + ay - (isSnow ? (float) Math.hypot(halfSize[0], halfSize[1]) : halfSize[1]) < height(texel)) return;
+            float angle = isSnow ? 6.2831853f * v[0] + params[3] * (v[1] < 0.5f ? -SNOW_PIXEL_SPIN : SNOW_PIXEL_SPIN) : 0;
+            int shape = isSnow ? snowShape((int) (fract(v[2] * 7.0f) * SNOW_PIXEL_SHAPES)) : -1;
+            float[] sp = sprite(dir, new float[]{ax, ay, az}, halfSize, angle, shape, frac[3]);
+            hit = new float[]{0, sp[1], 0.5f};
+            alpha = sp[0] * (isSnow ? SNOW_PIXEL_ALPHA : RAIN_PIXEL_ALPHA);
+        } else {
+            streak = halfStreak(motion, size, cellHeight, sway);
+            if (camera[3] + ay - Math.abs(streak[1]) < height(texel)) return;
+            hit = raySegment(dir, new float[]{ax - streak[0], ay - streak[1], az - streak[2]}, new float[]{ax + streak[0], ay + streak[1], az + streak[2]});
+            alpha = coverage(hit[0], radius * spread, hit[1], frac[3], isSnow ? SNOW_ALPHA : RAIN_ALPHA);
+        }
         float start = layer == 0 ? WEATHER_NEAR : layerEnd(layer - 1);
         float fadeIn = layer == 0 ? WEATHER_NEAR_FADE : size;
         float end = layerEnd(layer);
         alpha *= smoothstep(start, start + fadeIn, hit[1]) * (1 - smoothstep(end - size, end, hit[1]));
         alpha *= clamp((sceneDist - hit[1]) / WEATHER_DEPTH_FADE, 0, 1);
-        if (!isSnow) alpha *= mix(RAIN_TAIL, 1, hit[2]);
+        if (!isSnow && !pixel) alpha *= mix(RAIN_TAIL, 1, hit[2]);
         alpha *= params[2];
         if (alpha <= 0) return;
         float k = 2 * hit[2] - 1;
@@ -211,8 +296,18 @@ public final class WeatherMath {
         acc[3] += (1 - acc[3]) * alpha;
     }
 
+    /** weatherDrop's choice of a drop's look: PIXEL always, BOTH by its brightness byte (half each), ROUND never. */
+    public static boolean isPixel(int type, float brightnessByte) {
+        return type == WEATHER_TYPE_PIXEL || (type == WEATHER_TYPE_BOTH && fract(brightnessByte * WEATHER_BOTH_SPLIT) < 0.5f);
+    }
+
+    static float fract(float x) {
+        return x - (float) Math.floor(x);
+    }
+
     /** weatherWalk: one kind's drops along dir, layer by layer, cells in the frame falling with that kind, nearest first. */
-    static void walk(float[] acc, float[] dir, float sceneDist, boolean isSnow, float[] camera, float[] frac, float[] params, float[] motion, Map map, Light light) {
+    static void walk(float[] acc, float[] dir, float sceneDist, boolean isSnow, float[] camera, float[] frac, float[] params, float[] motion, float[] style,
+                     Map map, Light light) {
         int camX = (int) camera[0], camZ = (int) camera[2];
         for (int layer = 0; layer < WEATHER_LAYERS; layer++) {
             float tStart = layer == 0 ? WEATHER_NEAR : layerEnd(layer - 1);
@@ -234,7 +329,7 @@ public final class WeatherMath {
             float t = tStart;
             for (int i = 0; i < WEATHER_MAX_STEPS && t < tEnd; i++) {
                 for (int k = 0; k < WEATHER_DROPS; k++) {
-                    drop(acc, dir, sceneDist, cell[0], cell[1], cell[2], layer, k, isSnow, origin, camera, frac, params, motion, map, light);
+                    drop(acc, dir, sceneDist, cell[0], cell[1], cell[2], layer, k, isSnow, origin, camera, frac, params, motion, style, map, light);
                 }
                 if (acc[3] > WEATHER_OPAQUE) return;
                 int a = tMax[0] <= tMax[1] && tMax[0] <= tMax[2] ? 0 : (tMax[1] <= tMax[2] ? 1 : 2);
@@ -329,9 +424,18 @@ public final class WeatherMath {
      * kind's walk is skipped), coverage scale, sway angle; rain / snow: the streak's half vector, w the fall offset (WeatherUniforms).
      */
     public static float[] pixel(float[] dir, float sceneDist, float[] camera, float[] frac, float[] params, float[] rain, float[] snow, Map map, Light light) {
+        return pixel(dir, sceneDist, camera, frac, params, rain, snow, DEFAULT_STYLE, map, light);
+    }
+
+    /** The default style (slot 17): both kinds round at the tuned size. */
+    private static final float[] DEFAULT_STYLE = {WEATHER_TYPE_ROUND, WEATHER_TYPE_ROUND, 1, 1};
+
+    /** weatherPixel with each kind's type and size (style {rain's type, snow's, rain's size, snow's}). */
+    public static float[] pixel(float[] dir, float sceneDist, float[] camera, float[] frac, float[] params, float[] rain, float[] snow, float[] style,
+                                Map map, Light light) {
         float[] acc = new float[4];
-        if (params[0] > 0) walk(acc, dir, sceneDist, false, camera, frac, params, rain, map, light);
-        if (params[1] > 0 && acc[3] <= WEATHER_OPAQUE) walk(acc, dir, sceneDist, true, camera, frac, params, snow, map, light);
+        if (params[0] > 0) walk(acc, dir, sceneDist, false, camera, frac, params, rain, style, map, light);
+        if (params[1] > 0 && acc[3] <= WEATHER_OPAQUE) walk(acc, dir, sceneDist, true, camera, frac, params, snow, style, map, light);
         return acc;
     }
 

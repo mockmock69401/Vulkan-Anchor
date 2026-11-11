@@ -120,6 +120,35 @@ const float IMPACT_ALPHA = 0.7;
 const float IMPACT_END = 10.0;
 const float IMPACT_FADE = 4.0;
 const int WEATHER_FLAG_WATER = 134217728;
+//2026-11-11 (the user: "the snow and rain particles' type (round, pixel, both), size, amount and colour"; ParticleEffect): each kind's type
+// and size (weatherPixel's style: x rain's type, y snow's, z rain's size, w snow's; 1 = the tuned size, the amount is the share in params).
+// ROUND the soft flakes and streaks above; PIXEL crisp pixel-art sprites at the same drops (same cells, light, roofs and fades): a snowflake
+// is one of SNOW_PIXEL_SHAPES PIXEL_GRID x PIXEL_GRID masks (bit row*5 + column, row 0 at the top) SNOW_PIXEL_HALF blocks either way,
+// turned at random and slowly spinning (SNOW_PIXEL_SPIN of the sway angle: a whole turn in its wrap), a raindrop a solid upright bar
+// RAIN_PIXEL_HALF_WIDTH by RAIN_PIXEL_HALF_LENGTH that the camera's motion does not draw out; both face the camera. BOTH: each drop is one or
+// the other at random (half each; the two looks in one wave cost a little more). Where a sprite's texel is smaller than the pixel the shape fades to its
+// mean cover (PIXEL_TEXEL_BLEND_LOW..HIGH of a texel per pixel), and a sprite smaller than the pixel is widened to it and fainter by as much
+// (no flicker). A sprite is kept inside its cell's margin (as the streaks)
+const int WEATHER_TYPE_ROUND = 0;
+const int WEATHER_TYPE_PIXEL = 1;
+const int WEATHER_TYPE_BOTH = 2;
+const int PIXEL_GRID = 5;
+const float SNOW_PIXEL_HALF = 0.07;
+const float SNOW_PIXEL_ALPHA = 0.9;
+const float SNOW_PIXEL_SPIN = 0.2;
+const int SNOW_PIXEL_SHAPES = 4;
+//A small plus, a hollow plus, a diagonal cross, a diamond ring
+const int SNOW_PIXEL_SHAPE_0 = 145536;
+const int SNOW_PIXEL_SHAPE_1 = 4353156;
+const int SNOW_PIXEL_SHAPE_2 = 18157905;
+const int SNOW_PIXEL_SHAPE_3 = 4543812;
+const float RAIN_PIXEL_HALF_WIDTH = 0.0125;
+const float RAIN_PIXEL_HALF_LENGTH = 0.15;
+const float RAIN_PIXEL_ALPHA = 0.6;
+//BOTH picks a drop's type from its brightness byte, spread over this many cycles
+const float WEATHER_BOTH_SPLIT = 8.0;
+const float PIXEL_TEXEL_BLEND_LOW = 0.5;
+const float PIXEL_TEXEL_BLEND_HIGH = 1.0;
 //Hash constants (Teschner et al. 2003 primes, Wellons 2018's finaliser, as aurora.glsl)
 const int WEATHER_PRIME_X = 73856093;
 const int WEATHER_PRIME_Z = 19349663;
@@ -198,12 +227,53 @@ float weatherCoverage(float dist, float width, float t, float pixelAngle, float 
     return alpha*(width/w)*(1.0 - smoothstep(0.0, w, dist));
 }
 
+int weatherSnowShape(int index) {
+    return index == 0 ? SNOW_PIXEL_SHAPE_0 : (index == 1 ? SNOW_PIXEL_SHAPE_1 : (index == 2 ? SNOW_PIXEL_SHAPE_2 : SNOW_PIXEL_SHAPE_3));
+}
+
+//A pixel sprite at a (blocks from the camera) facing the camera, halfSize either way (x across, y up), turned by angle: x its cover of the
+// pixel along unit dir (0..1, before the sprite's alpha), y the ray's distance at it. shape: a PIXEL_GRID mask, or -1 for a solid sprite
+vec2 weatherSprite(vec3 dir, vec3 a, vec2 halfSize, float angle, int shape, float pixelAngle) {
+    float aa = dot(a, a);
+    float da = dot(dir, a);
+    if (!(da > 0.0) || aa < 1e-8) {
+        return vec2(0.0);
+    }
+    float t = aa/da;
+    vec3 q = dir*t - a;
+    vec3 f = a*inversesqrt(aa);
+    vec2 h = vec2(f.z, -f.x);
+    float hl = length(h);
+    vec3 right = hl > 1e-4 ? vec3(h.x/hl, 0.0, h.y/hl) : vec3(1.0, 0.0, 0.0);
+    vec3 up = cross(f, right);
+    vec2 uv = vec2(dot(q, right), dot(q, up));
+    float c = cos(angle);
+    float s = sin(angle);
+    uv = vec2(c*uv.x + s*uv.y, c*uv.y - s*uv.x);
+    float foot = 0.5*pixelAngle*t;
+    vec2 wide = max(halfSize, vec2(foot));
+    if (abs(uv.x) > wide.x || abs(uv.y) > wide.y) {
+        return vec2(0.0, t);
+    }
+    float shrink = (halfSize.x/wide.x)*(halfSize.y/wide.y);
+    if (shape < 0) {
+        return vec2(shrink, t);
+    }
+    ivec2 cell = clamp(ivec2(floor((uv/halfSize*0.5 + 0.5)*float(PIXEL_GRID))), ivec2(0), ivec2(PIXEL_GRID - 1));
+    bool inside = abs(uv.x) <= halfSize.x && abs(uv.y) <= halfSize.y;
+    float bit = inside ? float((shape >> ((PIXEL_GRID - 1 - cell.y)*PIXEL_GRID + cell.x)) & 1) : 0.0;
+    float mean = float(bitCount(shape))/float(PIXEL_GRID*PIXEL_GRID);
+    float texel = 2.0*min(halfSize.x, halfSize.y)/float(PIXEL_GRID);
+    return vec2(mix(bit, mean, smoothstep(PIXEL_TEXEL_BLEND_LOW, PIXEL_TEXEL_BLEND_HIGH, 2.0*foot/texel))*shrink, t);
+}
+
 //One of a cell's drops (drop 0..WEATHER_DROPS - 1), blended under acc (premultiplied rgb, alpha). cell: the cell (x, z from the layer's origin cell, y in the falling frame);
 // origin: the camera in the layer's frame (x, z from the origin cell's corner, y its height plus the fall); camera: xyz the camera's block
 // (x, z modulo WEATHER_WRAP), w its y; frac: xyz the camera within its block, w the pixel's angle; params: x rain's and y snow's share of
-// cells with a drop, z the coverage scale, w the sway angle; motion: xyz the streak's half vector u T / 2, w the fall offset
+// cells with a drop, z the coverage scale, w the sway angle; motion: xyz the streak's half vector u T / 2, w the fall offset; style: x
+// rain's type, y snow's (WEATHER_TYPE_*), z rain's size, w snow's (1 = tuned)
 void weatherDrop(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int layer, int drop, bool isSnow, vec3 origin, vec4 camera, vec4 frac,
-                 vec4 params, vec4 motion) {
+                 vec4 params, vec4 motion, vec4 style) {
     ivec3 cam = ivec3(camera.xyz);
     float size = float(1 << layer);
     float cellHeight = (isSnow ? SNOW_PERIOD : RAIN_PERIOD)*size;
@@ -218,9 +288,20 @@ void weatherDrop(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int laye
     //Most drops of a cell the ray crosses pass far from it: skip them before the map and the streak. Conservative (nothing drawn is
     // skipped): the streak, the sway, the widest drop and the pixel's footprint all bound how near the ray must pass the drop's spot
     float sway = isSnow ? SNOW_SWAY : 0.0;
+    int type = int((isSnow ? style.y : style.x) + 0.5);
+    float scale = isSnow ? style.w : style.z;
+    float radius = (isSnow ? SNOW_RADIUS : RAIN_WIDTH)*scale;
+    //The pixel sprite's largest half size, kept inside the cell's margin (a snowflake turns: its corner too, and less the sway)
+    vec2 spriteHalf = (isSnow ? vec2(SNOW_PIXEL_HALF) : vec2(RAIN_PIXEL_HALF_WIDTH, RAIN_PIXEL_HALF_LENGTH))*scale*(1.0 + WEATHER_SIZE_SPREAD);
+    spriteHalf = isSnow ? min(spriteHalf, vec2(max(size*WEATHER_MARGIN - sway, 0.0)*0.70710678))
+            : min(spriteHalf, vec2(size, cellHeight)*WEATHER_MARGIN);
+    float extent = radius*(1.0 + WEATHER_SIZE_SPREAD);
+    if (type != WEATHER_TYPE_ROUND) {
+        extent = max(extent, length(spriteHalf));
+    }
     float t0 = dot(a, dir);
     float reach = length(motion.xyz) + sway;
-    if (length(a - dir*t0) > reach + (isSnow ? SNOW_RADIUS : RAIN_WIDTH)*(1.0 + WEATHER_SIZE_SPREAD) + frac.w*(max(t0, 0.0) + reach)) {
+    if (length(a - dir*t0) > reach + extent + frac.w*(max(t0, 0.0) + reach)) {
         return;
     }
     ivec2 column = cam.xz + ivec2(floor(frac.xz + a.xz));
@@ -232,20 +313,36 @@ void weatherDrop(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int laye
     if (isSnow) {
         a.xz += SNOW_SWAY*vec2(sin(params.w + 6.2831853*v.x), cos(0.8*params.w + 6.2831853*v.y));
     }
-    vec3 streak = weatherHalfStreak(motion.xyz, size, cellHeight, sway);
-    //The whole streak above the column's height (none of it under a roof)
-    if (camera.w + a.y - abs(streak.y) < float(weatherHeight(texel))) {
-        return;
+    float spread = 1.0 + WEATHER_SIZE_SPREAD*(2.0*v.z - 1.0);
+    bool pixel = type == WEATHER_TYPE_PIXEL || (type == WEATHER_TYPE_BOTH && fract(v.w*WEATHER_BOTH_SPLIT) < 0.5);
+    vec3 streak = vec3(0.0);
+    vec3 hit;
+    float alpha;
+    if (pixel) {
+        vec2 halfSize = spriteHalf*(spread/(1.0 + WEATHER_SIZE_SPREAD));
+        //The whole sprite above the column's height
+        if (camera.w + a.y - (isSnow ? length(halfSize) : halfSize.y) < float(weatherHeight(texel))) {
+            return;
+        }
+        float angle = isSnow ? 6.2831853*v.x + params.w*(v.y < 0.5 ? -SNOW_PIXEL_SPIN : SNOW_PIXEL_SPIN) : 0.0;
+        vec2 sprite = weatherSprite(dir, a, halfSize, angle, isSnow ? weatherSnowShape(int(fract(v.z*7.0)*float(SNOW_PIXEL_SHAPES))) : -1, frac.w);
+        hit = vec3(0.0, sprite.y, 0.5);
+        alpha = sprite.x*(isSnow ? SNOW_PIXEL_ALPHA : RAIN_PIXEL_ALPHA);
+    } else {
+        streak = weatherHalfStreak(motion.xyz, size, cellHeight, sway);
+        //The whole streak above the column's height (none of it under a roof)
+        if (camera.w + a.y - abs(streak.y) < float(weatherHeight(texel))) {
+            return;
+        }
+        hit = raySegment(dir, a - streak, a + streak);
+        alpha = weatherCoverage(hit.x, radius*spread, hit.y, frac.w, isSnow ? SNOW_ALPHA : RAIN_ALPHA);
     }
-    vec3 hit = raySegment(dir, a - streak, a + streak);
-    float width = (isSnow ? SNOW_RADIUS : RAIN_WIDTH)*(1.0 + WEATHER_SIZE_SPREAD*(2.0*v.z - 1.0));
-    float alpha = weatherCoverage(hit.x, width, hit.y, frac.w, isSnow ? SNOW_ALPHA : RAIN_ALPHA);
     float start = layer == 0 ? WEATHER_NEAR : weatherLayerEnd(layer - 1);
     float fadeIn = layer == 0 ? WEATHER_NEAR_FADE : size;
     float end = weatherLayerEnd(layer);
     alpha *= smoothstep(start, start + fadeIn, hit.y)*(1.0 - smoothstep(end - size, end, hit.y));
     alpha *= clamp((sceneDist - hit.y)/WEATHER_DEPTH_FADE, 0.0, 1.0);
-    if (!isSnow) {
+    if (!isSnow && !pixel) {
         alpha *= mix(RAIN_TAIL, 1.0, hit.z);
     }
     alpha *= params.z;
@@ -259,7 +356,7 @@ void weatherDrop(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int laye
 
 //One kind's drops along the view ray: each layer's cells (size x cellHeight x size) in the frame falling with that kind, walked in 3D
 // (Amanatides and Woo 1987) from the layer's start to its end or the scene, nearest first
-void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 camera, vec4 frac, vec4 params, vec4 motion) {
+void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 camera, vec4 frac, vec4 params, vec4 motion, vec4 style) {
     ivec3 cam = ivec3(camera.xyz);
     for (int layer = 0; layer < WEATHER_LAYERS; layer++) {
         float tStart = layer == 0 ? WEATHER_NEAR : weatherLayerEnd(layer - 1);
@@ -283,7 +380,7 @@ void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 ca
         float t = tStart;
         for (int i = 0; i < WEATHER_MAX_STEPS && t < tEnd; i++) {
             for (int k = 0; k < WEATHER_DROPS; k++) {
-                weatherDrop(acc, dir, sceneDist, cell, layer, k, isSnow, origin, camera, frac, params, motion);
+                weatherDrop(acc, dir, sceneDist, cell, layer, k, isSnow, origin, camera, frac, params, motion, style);
             }
             if (acc.a > WEATHER_OPAQUE) {
                 return;
@@ -409,13 +506,13 @@ vec4 weatherSplash(vec3 rel, vec3 dir, float dist, vec4 camera, vec4 frac, vec4 
     return vec4(weatherLight(rel, false)*alpha, alpha);
 }
 
-vec4 weatherPixel(vec3 dir, float sceneDist, vec4 camera, vec4 frac, vec4 params, vec4 rain, vec4 snow) {
+vec4 weatherPixel(vec3 dir, float sceneDist, vec4 camera, vec4 frac, vec4 params, vec4 rain, vec4 snow, vec4 style) {
     vec4 acc = vec4(0.0);
     if (params.x > 0.0) {
-        weatherWalk(acc, dir, sceneDist, false, camera, frac, params, rain);
+        weatherWalk(acc, dir, sceneDist, false, camera, frac, params, rain, style);
     }
     if (params.y > 0.0 && acc.a <= WEATHER_OPAQUE) {
-        weatherWalk(acc, dir, sceneDist, true, camera, frac, params, snow);
+        weatherWalk(acc, dir, sceneDist, true, camera, frac, params, snow, style);
     }
     return acc;
 }

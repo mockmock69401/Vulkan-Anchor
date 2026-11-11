@@ -38,6 +38,8 @@ layout(location = 15) uniform vec4 splashParams;
 //2026-11-10, WeatherUniforms: the rings on the water (weatherImpact): x their time and y the rain on the water (reflection.comp's
 // rainParams), zw water.glsl's first ripple offset (RippleMath.offsets)
 layout(location = 16) uniform vec4 waterRain;
+//2026-11-11, WeatherUniforms: each kind's type and size (weather.glsl's style: x rain's type, y snow's, z rain's size, w snow's)
+layout(location = 17) uniform vec4 weatherStyle;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -102,7 +104,7 @@ void main() {
     bool scene = scenePosition(p, size, view);
     float sceneDist = scene ? length(view) : 1e30;
     vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(p, size)));
-    vec4 acc = weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion);
+    vec4 acc = weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion, weatherStyle);
     //2026-11-10: the splashes on the ground behind the drops
     if (scene && acc.a <= WEATHER_OPAQUE) {
         vec3 rel = mat3(invView)*view;

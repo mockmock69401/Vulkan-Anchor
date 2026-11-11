@@ -6,7 +6,6 @@ import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.PbrMath;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import net.vulkanmod.visuals.render.ShadowMath;
-import net.vulkanmod.visuals.render.WeatherUniforms;
 
 import java.util.List;
 
@@ -62,6 +61,17 @@ public final class VisualsOptionLayout {
 
     private static Item toggle(String key, Impact impact, String requires) {
         return new Item(key, Kind.SWITCH, 0, 1, impact, requires);
+    }
+
+    /** 2026-11-11: the atmosphere page's weather block: the shader weather switch, then each effect's type, size and amount. */
+    public static final String WEATHER_BLOCK = "weather";
+
+    private static List<Item> weatherItems() {
+        List<Item> items = new java.util.ArrayList<>();
+        items.add(toggle("shader_weather", Impact.LOW, null));
+        items.addAll(ParticleEffect.SNOW.items(Impact.LOW));
+        items.addAll(ParticleEffect.RAIN.items(Impact.LOW));
+        return List.copyOf(items);
     }
 
     /** 2026-11-10 (session 4): the performance preset (VisualsPresets), first on the first page, above the reset. */
@@ -135,10 +145,10 @@ public final class VisualsOptionLayout {
                             new Item("sun_size", Kind.PERCENT, CelestialUniforms.SIZE_MIN, CelestialUniforms.SIZE_MAX, Impact.NONE, "celestial_shape"),
                             new Item("moon_size", Kind.PERCENT, CelestialUniforms.SIZE_MIN, CelestialUniforms.SIZE_MAX, Impact.NONE, "celestial_shape"),
                             new Item("aurora", Kind.CHOICE, 0, CelestialUniforms.AURORA_MAX, Impact.LOW, null),
-                            new Item("aurora_strength", Kind.PERCENT, 0, CelestialUniforms.AURORA_STRENGTH_MAX, Impact.NONE, "aurora"),
-                            //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns) and how many drops fall
-                            toggle("shader_weather", Impact.LOW, null),
-                            new Item("weather_density", Kind.PERCENT, 0, WeatherUniforms.DENSITY_MAX, Impact.NONE, "shader_weather"))))),
+                            new Item("aurora_strength", Kind.PERCENT, 0, CelestialUniforms.AURORA_STRENGTH_MAX, Impact.NONE, "aurora"))),
+                    //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns); 2026-11-11: the snow's and the rain's type,
+                    // size and amount (ParticleEffect's rows; the amount costs as many drops: about 75% of the pass at 50, 110% at 200)
+                    new Block(WEATHER_BLOCK, weatherItems()))),
             new Page("lighting", List.of(
                     new Block("shading", List.of(
                             percent("sun_shading", STRENGTH_MAX),
@@ -266,7 +276,6 @@ public final class VisualsOptionLayout {
             case "aurora" -> c.aurora;
             case "aurora_strength" -> c.auroraStrength;
             case "shader_weather" -> c.shaderWeather ? 1 : 0;
-            case "weather_density" -> c.weatherDensity;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
@@ -299,6 +308,8 @@ public final class VisualsOptionLayout {
             case "underwater_visibility" -> c.underwaterVisibility;
             case "foliage_wind" -> c.foliageWind;
             default -> {
+                ParticleEffect.Target effect = ParticleEffect.byItemKey(item.key());
+                if (effect != null) yield effect.effect().get(c, effect.part());
                 Colour colour = Colour.byKey(item.key());
                 if (colour == null) throw new IllegalArgumentException(item.key());
                 yield c.colour(colour);
@@ -343,7 +354,6 @@ public final class VisualsOptionLayout {
             case "aurora" -> c.aurora = v;
             case "aurora_strength" -> c.auroraStrength = v;
             case "shader_weather" -> c.shaderWeather = v != 0;
-            case "weather_density" -> c.weatherDensity = v;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;
@@ -376,6 +386,11 @@ public final class VisualsOptionLayout {
             case "underwater_visibility" -> c.underwaterVisibility = v;
             case "foliage_wind" -> c.foliageWind = v;
             default -> {
+                ParticleEffect.Target effect = ParticleEffect.byItemKey(item.key());
+                if (effect != null) {
+                    effect.effect().set(c, effect.part(), v);
+                    return;
+                }
                 Colour colour = Colour.byKey(item.key());
                 if (colour == null) throw new IllegalArgumentException(item.key());
                 c.setColour(colour, v);

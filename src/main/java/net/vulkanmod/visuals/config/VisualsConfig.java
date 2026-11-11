@@ -39,8 +39,15 @@ public class VisualsConfig {
      * exactly on a palette's old values takes the new ones and stays on it (ColourPresets.moveOldLook); any other file keeps its values.
      * 12 (2026-11-11, session 10 follow-up): the round sun's and moon's size (sunSize, moonSize); an older file has neither: 100, the new
      * default sizes (a smaller round sun and a bigger round moon than before, as the user asked).
+     * 13 (2026-11-11): the snow's and rain's own type, size and amount (ParticleEffect: snowType, snowSize, snowAmount, rainType, rainSize,
+     * rainAmount) in place of the one weatherDensity, and their brightness (snowBrightness, rainBrightness); an older file's density becomes
+     * both amounts (the picture it had), the rest default.
      */
-    private static final int REVISION = 12;
+    private static final int REVISION = 13;
+    /** The first revision with the snow's and rain's own amounts (an older file's weatherDensity is both). */
+    static final int PARTICLE_EFFECTS_REVISION = 13;
+    /** The field the particle effect amounts replaced (read from older files only). */
+    static final String OLD_WEATHER_DENSITY = "weatherDensity";
     /** 2026-11-11: the first revision with the changed palette look values; 9 the first with palette look values at all. */
     static final int PALETTE_LOOK_REVISION = 11, FIRST_LOOK_REVISION = 9;
     /** Session 11: the first revision whose Anime palette includes the anime clouds. */
@@ -106,6 +113,16 @@ public class VisualsConfig {
             }
         }
         int fileRevision = json.has("revision") ? c.revision : 0;
+        //2026-11-11: the one precipitation density became the snow's and the rain's amounts
+        if (fileRevision < PARTICLE_EFFECTS_REVISION && json.has(OLD_WEATHER_DENSITY)) {
+            try {
+                int density = json.get(OLD_WEATHER_DENSITY).getAsJsonPrimitive().getAsBigDecimal().intValue();
+                c.snowAmount = density;
+                c.rainAmount = density;
+            } catch (RuntimeException e) {
+                LOGGER.warn("Visuals setting {} in {} is invalid ({}), using the default amounts", OLD_WEATHER_DENSITY, file, e.getMessage());
+            }
+        }
         if (fileRevision < PRESET_REVISION || !json.has("preset")) c.preset = VisualsPresets.CUSTOM;
         //Session 9: a level saved before the PBR settings existed keeps its level
         if (fileRevision < PBR_REVISION && VisualsPresets.isLevel(c.preset)) {
@@ -274,10 +291,21 @@ public class VisualsConfig {
     public int auroraStrength = 100;
     /**
      * 2026-11-09 (session 6): rain and snow drawn by the shader (thin streaks and small flakes in depth layers, none under roofs) in place
-     * of vanilla's weather columns; off draws vanilla's exactly as before. The density (percent, 100 = default) scales how many drops fall.
+     * of vanilla's weather columns; off draws vanilla's exactly as before.
      */
     public boolean shaderWeather = true;
-    public int weatherDensity = 100;
+    /**
+     * 2026-11-11: the shader snow's and rain's look (ParticleEffect.SNOW, RAIN): the type (0 round, 1 pixel, 2 both), the size, the
+     * amount and the brightness (percent, 100 = default; the amount replaced session 6's one density; the brightness multiplies the colour).
+     */
+    public int snowType = 0;
+    public int snowSize = 100;
+    public int snowAmount = 100;
+    public int snowBrightness = 100;
+    public int rainType = 0;
+    public int rainSize = 100;
+    public int rainAmount = 100;
+    public int rainBrightness = 100;
     public boolean sunShadows = true;
     public boolean vanillaShadows = true;
     /** 2026-10-29: chunks around the camera the vanilla terrain casts sharp sun shadows in (ShadowMath.nearReach); 4 is the old 64 blocks. */
