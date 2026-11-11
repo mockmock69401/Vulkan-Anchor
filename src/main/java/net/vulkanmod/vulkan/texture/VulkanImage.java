@@ -322,7 +322,15 @@ public class VulkanImage {
             readOnlyLayout(stack, commandBuffer.getHandle());
         }
         DeviceManager.getGraphicsQueue().submitCommands(commandBuffer);
-        Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
+        //2026-11-12 (shader roadmap session 14): asked while a frame records (a descriptor bind finds the block atlas still in its upload
+        // layout after a tick's sprite uploads: once every tick frame), the transition runs on the frame's queue before the frame, so the
+        // frame's submit does not wait for it on the CPU (that wait was the tick frames' 2-4 ms); its buffer is reset with the frame's
+        // operations, as the tick's own upload buffer (GraphicsQueue.endRecordingAndSubmit)
+        if (net.vulkanmod.vulkan.Renderer.isRecording() && com.mojang.blaze3d.systems.RenderSystem.isOnRenderThread()) {
+            net.vulkanmod.vulkan.memory.MemoryManager.getInstance().addFrameOp(commandBuffer::reset);
+        } else {
+            Synchronization.INSTANCE.addCommandBuffer(commandBuffer);
+        }
     }
 
     public void readOnlyLayout(MemoryStack stack, VkCommandBuffer commandBuffer) {
