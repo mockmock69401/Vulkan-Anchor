@@ -681,7 +681,10 @@ class WaterTest {
         assertTrue(copy.contains("Atmosphere a = Atmosphere(atmosphereSun, "), "a.sun is atmosphereSun");
         assertTrue(copy.contains("lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);"));
         assertTrue(copy.contains("glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y))"), "the border's fade too");
-        assertTrue(COMP.contains("sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size, sunExtent(celestial))"));
+        //2026-11-13: the reflection reads the same frame's share (the buffer the composite's pass wrote), not its own per pixel
+        assertTrue(COMP.contains("float sunOpen = sunWeight > 0.0 ? sunOpenAt(sunOpenShareValue, sunWeight) : 1.0;"));
+        assertTrue(COMP.contains("layout(binding = 12, std430) readonly restrict buffer SunOpenShare { float sunOpenShareValue; };"));
+        assertFalse(COMP.contains("sunOpenShare("), "no per-pixel share in the reflection");
         assertTrue(COMP.contains("applyHazeOpen(a, hitColour, r, extra, amount, 0.0)"));
         assertTrue(open.contains("return depth == FAR || (clampedToLod(depth) && texelFetch(lodDepth, lodTexel(q, size), 0).r == FAR);"),
                 "only the sky is open: the sea at the horizon hides a sun half below it");
