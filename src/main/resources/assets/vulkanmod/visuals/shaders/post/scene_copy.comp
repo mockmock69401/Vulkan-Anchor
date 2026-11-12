@@ -32,7 +32,12 @@
 // SceneCompositeMath mirrors every const and the per-pixel combination here (SceneCompositeTest): change both together.
 layout(local_size_x = 8, local_size_y = 8) in;
 
+#ifdef PARTICLE_PASS
+//Session 14 follow-up: the translucent particles' pass reads the composite back (the tile's pixels) and writes its particles over it
+layout(binding = 0, rgba16f) uniform restrict image2D sceneOut;
+#else
 layout(binding = 0, rgba16f) uniform writeonly restrict image2D sceneOut;
+#endif
 layout(binding = 1) uniform sampler2D mainColour;
 layout(binding = 2) uniform sampler2D mainDepth;
 layout(binding = 3) uniform sampler2D lodDepth;
@@ -64,6 +69,9 @@ layout(binding = 19, r32ui) uniform readonly restrict uimage2D terrainSpecular;
 // (SUN_OPEN_PASS, one invocation) works it out once into this buffer right before the composite, which reads it. Every pixel near
 // the sun used to work it out itself (its taps and a 4x4 inverse): up to +0.3 ms at 2560x1440 looking toward a high sun
 layout(binding = 20, std430) restrict buffer SunOpenShare { float sunOpenShareValue; };
+//Session 14 follow-up: one flag per workgroup tile (row-major over the dispatch), set by the composite where a pixel of the tile is a
+// translucent particle (cleared to 0 before it each frame); the .PARTICLES pass works only the flagged tiles
+layout(binding = 21, std430) restrict buffer ParticleTiles { uint particleTile[]; };
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -1242,10 +1250,6 @@ vec3 particleBehindGuess(ivec2 p, ivec2 size, vec3 behind) {
     return weatherFogOver(a, applyHazeOpen(a, scene, dir, dist, amount, 1.0), dir, dist, amount);
 }
 
-//The tile: each pixel's composite (rgb) and whether nothing was drawn over it (w 1), and its colour before the particles
-shared vec4 tileShown[COMPOSITE_TILE];
-shared vec3 tileBehind[COMPOSITE_TILE];
-
 #ifdef SUN_OPEN_PASS
 //Session 14: the frame's sun open share, by one invocation (dispatched as one group), as compositeAt used to work it out per pixel
 void main() {
@@ -1256,7 +1260,20 @@ void main() {
             sunExtent(celestial));
 }
 #else
+#ifdef PARTICLE_PASS
+//The tile: each pixel's composite (rgb) and whether nothing was drawn over it (w 1), and its colour before the particles
+shared vec4 tileShown[COMPOSITE_TILE];
+shared vec3 tileBehind[COMPOSITE_TILE];
+
+//Session 14 follow-up (2026-11-12): the translucent particles laid over the background of their tile, after the composite (which drew
+// each as an opaque surface at its own colour and flagged its tile): the steps the composite took in one pass with the tile in shared
+// memory until then. That tile, its barrier and the loop cost every pixel of the composite 0.7 ms (11%) on an AMD iGPU at 1280x720 with
+// no particle on screen. The tile's pixels are the composite's results read back (rgba16f); a particle pixel is never read by another,
+// so the pass writes over the composite's image in place
 void main() {
+    if (particleTile[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x] == 0u) {
+        return;
+    }
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(sceneOut);
     uint here = gl_LocalInvocationIndex;
@@ -1270,34 +1287,51 @@ void main() {
         behind = texelFetch(colourAfterTranslucent, p, 0).rgb;
         overdrawn = overdrawnAfterTranslucent(behind, colour.rgb);
         vec3 own;
-        if (overdrawn && translucentParticle(p, colour.rgb, behind, own, cover)) {
-            colour = vec4(own, 1.0);
-        } else {
+        if (!(overdrawn && translucentParticle(p, colour.rgb, behind, own, cover))) {
             cover = 1.0;
         }
-        result = compositeAt(p, size, colour, overdrawn);
+        result = imageLoad(sceneOut, p);
     }
-    //Every invocation reaches the barrier: the tile's composite where nothing was drawn over it, for the translucent particles
+    //Every invocation of a flagged tile reaches the barrier: the tile's composite where nothing was drawn over it
     tileShown[here] = vec4(result.rgb, inside && !overdrawn ? 1.0 : 0.0);
     tileBehind[here] = behind;
     barrier();
-    if (!inside) {
+    if (!inside || !(cover < PARTICLE_COVER_OPAQUE)) {
         return;
     }
-    if (cover < PARTICLE_COVER_OPAQUE) {
-        vec3 sum = particleBehindGuess(p, size, behind)*PARTICLE_GUESS_WEIGHT;
-        float weight = PARTICLE_GUESS_WEIGHT;
-        for (uint i = 0u; i < COMPOSITE_TILE; i++) {
-            vec4 t = tileShown[i];
-            if (t.w > 0.5) {
-                vec3 d = tileBehind[i] - behind;
-                float w = exp(-dot(d, d)/(PARTICLE_BEHIND_MATCH*PARTICLE_BEHIND_MATCH));
-                sum += t.rgb*w;
-                weight += w;
-            }
+    vec3 sum = particleBehindGuess(p, size, behind)*PARTICLE_GUESS_WEIGHT;
+    float weight = PARTICLE_GUESS_WEIGHT;
+    for (uint i = 0u; i < COMPOSITE_TILE; i++) {
+        vec4 t = tileShown[i];
+        if (t.w > 0.5) {
+            vec3 d = tileBehind[i] - behind;
+            float w = exp(-dot(d, d)/(PARTICLE_BEHIND_MATCH*PARTICLE_BEHIND_MATCH));
+            sum += t.rgb*w;
+            weight += w;
         }
-        result.rgb = mix(sum/weight, result.rgb, cover);
     }
+    result.rgb = mix(sum/weight, result.rgb, cover);
     imageStore(sceneOut, p, result);
 }
+#else
+//The composite: one pixel each. A translucent particle is composited as an opaque surface at its own colour and its tile flagged for
+// the .PARTICLES pass, which lays it over its background
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(sceneOut);
+    if (any(greaterThanEqual(p, size))) {
+        return;
+    }
+    vec4 colour = texelFetch(mainColour, p, 0);
+    vec3 behind = texelFetch(colourAfterTranslucent, p, 0).rgb;
+    bool overdrawn = overdrawnAfterTranslucent(behind, colour.rgb);
+    vec3 own;
+    float cover;
+    if (overdrawn && translucentParticle(p, colour.rgb, behind, own, cover)) {
+        colour = vec4(own, 1.0);
+        particleTile[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x] = 1u;
+    }
+    imageStore(sceneOut, p, compositeAt(p, size, colour, overdrawn));
+}
+#endif
 #endif
