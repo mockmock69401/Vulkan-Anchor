@@ -29,6 +29,9 @@ layout(binding = 10, r32ui) uniform readonly restrict uimage2D terrainNormal;
 //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace, water.glsl moonShape): the mirrored moon reads it too (session
 // 10's plain face for the reflection went with the procedural face)
 layout(binding = 11) uniform sampler2D moonFace;
+//2026-11-13: the frame's sun open share (sunopen.glsl), worked out once by postSceneCopy.SUN_OPEN right before the composite (VkPostProcess
+// sunOpenBuffer, 1 when that pass is not built). Each water pixel near the sun used to work it out itself: 9 taps, up to 18 depth reads
+layout(binding = 12, std430) readonly restrict buffer SunOpenShare { float sunOpenShareValue; };
 
 //0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
@@ -83,7 +86,6 @@ layout(location = 34) uniform vec4 auroraTintTop;
 //Session 15: water.glsl reads the moon's face at a pixel's footprint, the tangent of one pixel's angle at the screen's centre
 #define MOON_FACE_PIXEL (2.0*abs(invVanillaProj[1][1])/float(imageSize(sceneOut).y))
 #import <vulkanmod:visuals/post/water.glsl>
-#import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
@@ -647,9 +649,10 @@ void main() {
             vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
             sky = sky*(1.0 - cloud.a) + cloud.rgb;
         }
-        //2026-11-10: the view's haze over the water carries the sun's glow only as far as the sun is open on screen (sunopen.glsl)
+        //2026-11-10: the view's haze over the water carries the sun's glow only as far as the sun is open on screen (sunopen.glsl; the
+        // frame's share from the composite's pass, binding 12)
         float sunWeight = atmosphereSky(a) ? sunOpenWeight(dot(d, a.sun.xyz)) : 0.0;
-        float sunOpen = sunWeight > 0.0 ? sunOpenAt(sunOpenShare(mainDepth, proj, toView, a.sun.xyz, size, sunExtent(celestial)), sunWeight) : 1.0;
+        float sunOpen = sunWeight > 0.0 ? sunOpenAt(sunOpenShareValue, sunWeight) : 1.0;
         reflection = reflectFallback(applyHazeOpen(a, sky, d, dist, amount, sunOpen), own, skyAccess);
     }
     //2026-11-10 (session 7): a whole hit (w 1) is all the mix below keeps, so the sky, its clouds and aurora are not evaluated for it

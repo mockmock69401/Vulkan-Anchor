@@ -86,6 +86,8 @@ public final class VkPostProcess {
     COPY_SKY_HALF_CLOUD = 22, COPY_SKY_HALF_AURORA = 23,
     //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace, water.glsl moonShape), the copy at 24, the reflection at 11
     COPY_MOON_FACE = 24, REFLECTION_MOON_FACE = 11,
+    //2026-11-13: the reflection reads the frame's sun open share at 12 (sunOpenBuffer, written before the composite)
+    REFLECTION_SUN_OPEN = 12,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -896,7 +898,8 @@ public final class VkPostProcess {
                 .sampled(REFLECTION_CLOUD_MAP, this.cloudMap, this.nearest)
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight)
-                .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal).sampled(REFLECTION_MOON_FACE, this.moonFace, this.moonSampler);
+                .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal).sampled(REFLECTION_MOON_FACE, this.moonFace, this.moonSampler)
+                .storage(REFLECTION_SUN_OPEN, this.sunOpenBuffer);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
         VkComputeProgram program = this.tintedOn && this.reflectionTinted != null
                 ? (this.leanOn && this.reflectionLeanTinted != null ? this.reflectionLeanTinted : this.reflectionTinted)
