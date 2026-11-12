@@ -165,12 +165,6 @@ public final class PbrAtlas {
                 VisualsLog.info("Visuals PBR: no LabPBR maps in the resource packs (" + sprites.size() + " sprites), PBR draws nothing");
                 return;
             }
-            //Session 14 follow-up: a handful of maps (often a mod's own _n or _s texture) do not turn the whole PBR path on
-            if (!PbrMath.enoughMaps(foundN, foundS)) {
-                VisualsLog.info("Visuals PBR: only " + foundN + " normal and " + foundS + " specular maps of " + sprites.size() + " sprites (fewer than "
-                        + PbrMath.MIN_LABPBR_MAPS + ": not a LabPBR pack), PBR stays off");
-                return;
-            }
             //2026-11-12 (session 14): an atlas without a single map is one value everywhere (flat, or no specular), which a 1x1 image
             // gives the same at any coordinate and level: a pack (or a mod) with a few _n maps and no _s no longer keeps an atlas-sized
             // specular image (8192x4096 with its levels: about 180 MB in CTE2), nor the other way round
