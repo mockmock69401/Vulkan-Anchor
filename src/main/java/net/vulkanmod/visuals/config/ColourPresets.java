@@ -71,21 +71,26 @@ public final class ColourPresets {
     /**
      * Session 8 follow-up (the user: "in each palette, bloom, saturation and fog amount too"): the look settings a palette also sets, by
      * VisualsOptionLayout key. Look only: none is a performance preset setting (VisualsPresets.VALUES; tested), so the two kinds of preset
-     * never set the same setting. The distance haze, the rain's fog and the fog height stay the player's.
+     * never set the same setting. The distance haze, the rain's fog and the fog height stay the player's. 2026-11-12 (the user: "check
+     * whether there is a night brightness setting, and have the colour presets include it"): the moonlight, the night's brightness.
      */
-    public static final String[] LOOK_KEYS = {"bloom_strength", "saturation", "fog_strength"};
+    public static final String[] LOOK_KEYS = {"bloom_strength", "saturation", "fog_strength", "moonlight"};
     /**
      * Each palette's LOOK_KEYS values, one row per level (DEFAULT is VisualsConfig's defaults; tested). 2026-11-11 (the user, after trying
-     * them): Realistic's fog 110 -> 40, Anime 70 / 120 / 70 -> 35 / 110 / 80, Horror's bloom 20 -> 15.
+     * them): Realistic's fog 110 -> 40, Anime 70 / 120 / 70 -> 35 / 110 / 80, Horror's bloom 20 -> 15. 2026-11-12, the moonlight: Default
+     * the setting's default; Realistic a little darker (a real moonlit night); Cinematic brighter (film's day-for-night); Anime brighter
+     * still (the bright blue-violet nights of cel-shaded games); Horror almost dark (its almost black night).
      */
     private static final int[][] LOOK = {
-            {45, 94, 100},
-            {30, 94, 40},
-            {60, 85, 125},
-            {35, 110, 80},
-            {15, 60, 200},
+            {45, 94, 100, 50},
+            {30, 94, 40, 40},
+            {60, 85, 125, 60},
+            {35, 110, 80, 70},
+            {15, 60, 200, 15},
     };
-    /** The rows revisions 9 and 10 saved (VisualsConfig.read moves a file still exactly on one of them to LOOK's row). */
+    /** The moonlight's value before the palettes set it (VisualsConfig's default): an older file on a palette with it takes the palette's. */
+    static final int MOONLIGHT_BEFORE_16 = 50;
+    /** The rows revisions 9 and 10 saved, without the moonlight (VisualsConfig.read moves a file still exactly on one of them to LOOK's row). */
     static final int[][] LOOK_BEFORE_11 = {
             {45, 94, 100},
             {30, 94, 110},
@@ -186,10 +191,26 @@ public final class ColourPresets {
         int level = c.colourPreset;
         if (!isLevel(level)) return false;
         for (Colour colour : Colour.values()) if (c.colour(colour) != value(colour, level)) return false;
-        for (int i = 0; i < LOOK_KEYS.length; i++) {
+        int old = LOOK_BEFORE_11[level].length;
+        for (int i = 0; i < old; i++) {
             if (VisualsOptionLayout.get(c, VisualsOptionLayout.item(LOOK_KEYS[i])) != LOOK_BEFORE_11[level][i]) return false;
         }
-        for (int i = 0; i < LOOK_KEYS.length; i++) VisualsOptionLayout.set(c, VisualsOptionLayout.item(LOOK_KEYS[i]), LOOK[level][i]);
+        for (int i = 0; i < old; i++) VisualsOptionLayout.set(c, VisualsOptionLayout.item(LOOK_KEYS[i]), LOOK[level][i]);
+        return true;
+    }
+
+    /**
+     * 2026-11-12: a file saved before the palettes set the moonlight, on a palette (its colours and other look values all the palette's)
+     * with the moonlight still at its old default, takes the palette's moonlight and stays on it; a moonlight the player changed is kept.
+     */
+    static boolean moveOldMoonlight(VisualsConfig c) {
+        int level = c.colourPreset;
+        if (!isLevel(level) || c.moonlight != MOONLIGHT_BEFORE_16) return false;
+        for (Colour colour : Colour.values()) if (c.colour(colour) != value(colour, level)) return false;
+        for (int i = 0; i < LOOK_KEYS.length; i++) {
+            if (!LOOK_KEYS[i].equals("moonlight") && VisualsOptionLayout.get(c, VisualsOptionLayout.item(LOOK_KEYS[i])) != LOOK[level][i]) return false;
+        }
+        c.moonlight = look("moonlight", level);
         return true;
     }
 

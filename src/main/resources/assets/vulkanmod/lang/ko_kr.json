@@ -224,7 +224,7 @@
   "vulkanmod.visuals.block.colours_aurora": "오로라 색",
   "vulkanmod.visuals.block.colours_water": "물 색",
   "vulkanmod.visuals.colour_preset": "색 팔레트",
-  "vulkanmod.visuals.colour_preset.tooltip": "이 페이지의 모든 색과 그 아래의 블룸, 채도, 안개를 한 번에 정합니다. 기본: 컬러피커 전의 모습. 현실적: 실제 하늘과 물 사진 기준. 시네마틱: 청록과 주황의 영화 색감. 애니메이션: 밝은 카툰풍 게임 색감과 애니메이션 구름(다른 팔레트를 고르면 구름이 돌아옵니다). 공포: 회녹색 안개, 핏빛 노을과 달, 어두운 밤. 하나라도 바꾸면 사용자 지정이 됩니다. 성능 프리셋은 이 값들을 바꾸지 않습니다",
+  "vulkanmod.visuals.colour_preset.tooltip": "이 페이지의 모든 색과 그 아래의 블룸, 채도, 안개, 달빛(밤의 밝기)을 한 번에 정합니다. 기본: 컬러피커 전의 모습. 현실적: 실제 하늘과 물 사진 기준. 시네마틱: 청록과 주황의 영화 색감. 애니메이션: 밝은 카툰풍 게임 색감과 애니메이션 구름(다른 팔레트를 고르면 구름이 돌아옵니다). 공포: 회녹색 안개, 핏빛 노을과 달, 거의 캄캄한 밤. 하나라도 바꾸면 사용자 지정이 됩니다. 성능 프리셋은 이 값들을 바꾸지 않습니다",
   "vulkanmod.visuals.colour_preset.0": "기본",
   "vulkanmod.visuals.colour_preset.1": "현실적",
   "vulkanmod.visuals.colour_preset.2": "시네마틱",

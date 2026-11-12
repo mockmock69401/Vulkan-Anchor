@@ -301,7 +301,7 @@
   "vulkanmod.visuals.block.colours_aurora": "Aurora Colours",
   "vulkanmod.visuals.block.colours_water": "Water Colours",
   "vulkanmod.visuals.colour_preset": "Colour Palette",
-  "vulkanmod.visuals.colour_preset.tooltip": "Sets every colour on this page at once, with the bloom, saturation and fog under it. Default: the look before the pickers. Realistic: after photographs of real skies and water. Cinematic: the teal-and-orange film look. Anime: a bright cel-shaded game look, with the Anime cloud style (another palette puts the clouds back). Horror: grey-green fog, a blood-red sunset and moon, dark nights. Changing any of them shows Custom. The performance presets never change these",
+  "vulkanmod.visuals.colour_preset.tooltip": "Sets every colour on this page at once, with the bloom, saturation, fog and moonlight (how bright the night is) under it. Default: the look before the pickers. Realistic: after photographs of real skies and water. Cinematic: the teal-and-orange film look. Anime: a bright cel-shaded game look, with the Anime cloud style (another palette puts the clouds back). Horror: grey-green fog, a blood-red sunset and moon, almost dark nights. Changing any of them shows Custom. The performance presets never change these",
   "vulkanmod.visuals.colour_preset.0": "Default",
   "vulkanmod.visuals.colour_preset.1": "Realistic",
   "vulkanmod.visuals.colour_preset.2": "Cinematic",

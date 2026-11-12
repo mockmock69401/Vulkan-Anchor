@@ -50,8 +50,12 @@ public class VisualsConfig {
      * Brightness) and colours (colourParticle<Group>, which every palette sets), and the star type (starType); an older file has none:
      * vanilla's particles and stars. A file on a palette (every other colour the palette's) takes that palette's particle colours and stays
      * on it (ColourPresets.moveOldColours, with the star colour for a file older than 14); any other file keeps the default colours.
+     * 16 (2026-11-12): the palettes also set the moonlight (ColourPresets.LOOK_KEYS); a file on a palette with the moonlight at its old
+     * default takes the palette's and stays on it (ColourPresets.moveOldMoonlight); any other file keeps its moonlight.
      */
-    private static final int REVISION = 15;
+    private static final int REVISION = 16;
+    /** 2026-11-12: the first revision whose palettes set the moonlight. */
+    static final int MOONLIGHT_REVISION = 16;
     /** Session 13: the first revision with the particle groups' colours. */
     static final int PARTICLE_LOOK_REVISION = 15;
     /** The first revision with the snow's and rain's own amounts (an older file's weatherDensity is both). */
@@ -155,6 +159,8 @@ public class VisualsConfig {
             ColourPresets.moveOldColours(c, missing);
         }
         if (fileRevision >= FIRST_LOOK_REVISION && fileRevision < PALETTE_LOOK_REVISION) ColourPresets.moveOldLook(c);
+        //2026-11-12: a file on a palette before the palettes set the moonlight takes the palette's (first: the Anime check reads it)
+        if (fileRevision < MOONLIGHT_REVISION) ColourPresets.moveOldMoonlight(c);
         //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
         if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
                 && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_ANIME
