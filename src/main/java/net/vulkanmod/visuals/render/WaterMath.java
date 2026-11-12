@@ -47,34 +47,15 @@ public final class WaterMath {
     public static final float SUN_FLUX_RADIUS = 0.084f, SUN_BRIGHTNESS_MAX = 16.0f;
     public static final float MOON_TERMINATOR = 0.06f, MOON_EARTHSHINE = 0.02f;
     public static final float VANILLA_MOON_MASK = 0.056f;
-    /** 2026-11-10 (session 10): the round moon's face (water.glsl's face section: maria, craters, rays). */
-    public static final float MOON_MARIA = 0.36f, MOON_MOTTLE = 0.16f;
-    public static final int MOON_MARIA_SEED = 9;
-    public static final float MOON_CRATER_DEPTH = 0.32f, MOON_CRATER_RIM = 0.10f, MOON_CRATER_RIM_WIDTH = 0.45f;
-    public static final float MOON_CRATER_CELL = 0.16f, MOON_CRATER_SHARE = 0.45f, MOON_CRATER_MIN = 0.022f, MOON_CRATER_MAX = 0.075f;
-    public static final int MOON_CRATER_SEED = 41;
-    public static final float MOON_RIM_ALBEDO = 0.03f;
-    public static final int MOON_RAY_BINS = 20, MOON_RAY_SEED = 31;
-    public static final float MOON_RELIEF_MAX = 1.8f, MOON_NIGHT_REACH = 0.25f, MOON_LIMB = 0.985f, MOON_PLAIN_CELLS = 2.5f;
-    public static final int MOON_MARE_COUNT = 17, MOON_CRATER_COUNT = 10;
-    /** The maria: xyz the centre on the unit sphere (face space, see water.glsl), w the radius. */
-    public static final float[][] MOON_MARE = {
-            {0.2312f, -0.5446f, 0.8062f, 0.3f}, {-0.2655f, -0.4695f, 0.8421f, 0.18f}, {-0.5094f, -0.1478f, 0.8478f, 0.21f},
-            {-0.8197f, -0.2924f, 0.4925f, 0.13f}, {-0.7618f, 0.1045f, 0.6393f, 0.15f}, {-0.5401f, 0.2588f, 0.8008f, 0.09f},
-            {0.2573f, 0.3584f, 0.8974f, 0.16f}, {0.3848f, 0.1736f, 0.9065f, 0.1f}, {0.5749f, 0.4067f, 0.71f, 0.1f},
-            {0.7595f, -0.3746f, 0.5318f, 0.26f}, {0.788f, 0.0f, 0.6157f, 0.22f}, {0.4924f, -0.6428f, 0.5868f, 0.15f},
-            {0.51f, -0.1392f, 0.8488f, 0.12f}, {-0.068f, -0.225f, 0.972f, 0.08f}, {0.1447f, -0.829f, 0.5401f, 0.08f},
-            {-0.1102f, -0.848f, 0.5183f, 0.08f}, {-0.3744f, -0.0349f, 0.9266f, 0.1f}};
-    /** The named craters (Tycho, Copernicus, Kepler, Aristarchus, Plato, Clavius, Ptolemaeus, Theophilus, Petavius, Grimaldi): centre, radius. */
-    public static final float[][] MOON_CRATER = {
-            {0.1395f, 0.682f, 0.7179f, 0.045f}, {0.3372f, -0.1668f, 0.9265f, 0.05f}, {0.6097f, -0.1392f, 0.7803f, 0.03f},
-            {0.674f, -0.4019f, 0.6198f, 0.025f}, {0.1014f, -0.7837f, 0.6128f, 0.045f}, {0.1282f, 0.848f, 0.5142f, 0.09f},
-            {0.0345f, 0.1564f, 0.9871f, 0.065f}, {-0.4359f, 0.1977f, 0.878f, 0.05f}, {-0.7849f, 0.4226f, 0.4532f, 0.065f},
-            {0.9237f, 0.0872f, 0.3732f, 0.06f}};
-    /** Their albedo: x the rays, y the dark floor (negative). */
-    public static final float[][] MOON_CRATER_LOOK = {
-            {0.22f, 0.0f}, {0.12f, 0.0f}, {0.1f, 0.0f}, {0.12f, 0.0f}, {0.0f, -0.35f},
-            {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, -0.3f}};
+    /**
+     * 2026-11-12 (session 15): the round moon's face (water.glsl's face section): MoonFace's albedo and slopes (in place of session 10's
+     * procedural maria and craters), the slopes times MOON_RELIEF, the albedo times MOON_ALBEDO_GAIN.
+     */
+    public static final float MOON_SLOPE_RANGE = MoonFace.SLOPE_RANGE, MOON_RELIEF = 3.0f, MOON_ALBEDO_GAIN = 2.0f, MOON_FACE_MAX = 2.5f;
+    public static final float MOON_RELIEF_MAX = 1.8f, MOON_NIGHT_REACH = 0.1f, MOON_LIMB = 0.985f;
+    public static final float MOON_LIMB_RELIEF_START = 0.05f, MOON_LIMB_RELIEF_FULL = 0.3f;
+    /** water.glsl's least level past MOON_LIMB (the mirror reads the top level everywhere). */
+    public static final float MOON_EDGE_LOD = 5.0f;
     public static final float REFLECT_MIN_UP = 0.02f;
     public static final float HIT_CLEARANCE = 0.1f, HIT_CLEARANCE_SHARE = 0.002f;
     public static final float COVER_LOW = 0.3f, COVER_HIGH = 0.9f;
@@ -191,67 +172,8 @@ public final class WaterMath {
         return 0.5f + 0.5f * (float) Math.cos(Math.max(0, Math.min(celestial[1], 8)) * 0.7853982f);
     }
 
-    static float moonHash(int x, int y, int seed) {
-        int h = (x * 73856093) ^ (y * 19349663) ^ (seed * 83492791);
-        h ^= h >>> 16;
-        h *= 0x7feb352d;
-        h ^= h >>> 15;
-        h *= 0x846ca68b;
-        h ^= h >>> 16;
-        return (h & 0xFFFFFF) / 16777215f;
-    }
-
-    public static float moonNoise(float x, float y, int seed) {
-        float fx0 = (float) Math.floor(x), fy0 = (float) Math.floor(y);
-        int ix = (int) fx0, iy = (int) fy0;
-        float fx = x - fx0, fy = y - fy0;
-        float ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
-        float a = moonHash(ix, iy, seed), b = moonHash(ix + 1, iy, seed), c = moonHash(ix, iy + 1, seed), d = moonHash(ix + 1, iy + 1, seed);
-        float ab = a + (b - a) * ux, cd = c + (d - c) * ux;
-        return ab + (cd - ab) * uy;
-    }
-
-    /** One crater (water.glsl moonCrater): adds to slope[0..2] and rim[0]; returns s (distance over radius, 9 behind it). */
-    static float moonCrater(float[] p, float[] c, float radius, float strength, float[] slope, float[] rim) {
-        float along = dot(p, c);
-        float[] d = {p[0] - c[0] * along, p[1] - c[1] * along, p[2] - c[2] * along};
-        float dl = (float) Math.sqrt(dot(d, d));
-        float s = along > 0 ? dl / radius : 9;
-        if (s < 3 && dl > 0.000001f) {
-            float o = (s - 1) / MOON_CRATER_RIM_WIDTH;
-            float g = s < 1 ? 2 * MOON_CRATER_DEPTH * s : -2 * MOON_CRATER_RIM * o / MOON_CRATER_RIM_WIDTH * (float) Math.exp(-o * o);
-            float k = strength * smoothstep(0.05f, 0.3f, c[2]);
-            for (int i = 0; i < 3; i++) slope[i] += d[i] * (g * k / dl);
-            rim[0] += k * MOON_RIM_ALBEDO * (float) Math.exp(-(s - 1) * (s - 1) * 16);
-        }
-        return s;
-    }
-
-    /** A named crater's rays and halo (water.glsl moonRays). */
-    static float moonRays(float[] p, float[] c, float radius, float s) {
-        float[] b1 = cross(new float[]{0, 1, 0}, c);
-        float bl = (float) Math.sqrt(dot(b1, b1));
-        b1 = scale(b1, 1 / bl);
-        float[] b2 = cross(c, b1);
-        float along = dot(p, c);
-        float[] d = {p[0] - c[0] * along, p[1] - c[1] * along, p[2] - c[2] * along};
-        float t = ((float) Math.atan2(dot(d, b2), dot(d, b1)) / 6.2831853f + 0.5f) * MOON_RAY_BINS;
-        float i = (float) Math.floor(t);
-        float f = t - i;
-        int i0 = (int) i % MOON_RAY_BINS;
-        float h0 = moonHash(i0, 0, MOON_RAY_SEED), h1 = moonHash((i0 + 1) % MOON_RAY_BINS, 0, MOON_RAY_SEED);
-        float streak = smoothstep(0.5f, 1, h0 + (h1 - h0) * (f * f * (3 - 2 * f)));
-        float halo = s < 3 ? 0.5f * (float) Math.exp(-Math.max(s - 1, 0) * 1.2f) : 0;
-        return streak * (float) Math.exp(-Math.sqrt(dot(d, d)) / (10 * radius)) * smoothstep(1, 1.6f, s) + halo;
-    }
-
-    /** The sky's moon (the composite: the cratered face). */
+    /** The moon's shape (the composite and the reflection: the face at its top level; water.glsl reads the level of a pixel's footprint). */
     public static float moonShape(float[] dir, float[] centre, float[] celestial) {
-        return moonShape(dir, centre, celestial, false);
-    }
-
-    /** plain: reflection.comp's MOON_PLAIN_FACE (session 5's plain face: phase, earthshine, value-noise maria). */
-    public static float moonShape(float[] dir, float[] centre, float[] celestial, boolean plain) {
         if (!celestialRound(celestial)) return discCover(dir, centre, MOON_HALF_SIZE);
         float[] uv = discPlane(dir, centre);
         if (uv == null) return 0;
@@ -260,62 +182,32 @@ public final class WaterMath {
         if (!(cover > 0)) return 0;
         float ex = uv[0] / r, ey = uv[1] / r;
         float l = (float) Math.hypot(ex, ey);
+        float readX = ex / Math.max(l, 1), readY = ey / Math.max(l, 1);
         if (l > MOON_LIMB) {
             ex *= MOON_LIMB / l;
             ey *= MOON_LIMB / l;
         }
-        if (plain) {
-            float z = (float) Math.sqrt(Math.max(1 - ex * ex - ey * ey, 0));
-            float phi = Math.max(0, Math.min(celestial[1], 8)) * 0.7853982f;
-            float lit = smoothstep(-MOON_TERMINATOR, MOON_TERMINATOR, ex * (float) Math.sin(phi) + z * (float) Math.cos(phi));
-            float maria = 1 - MOON_MARIA * smoothstep(0.45f, 0.75f, moonNoise(ex * MOON_PLAIN_CELLS + 3.7f, ey * MOON_PLAIN_CELLS + 1.9f, MOON_MARIA_SEED));
-            return Math.min(cover * maria * (MOON_EARTHSHINE + (1 - MOON_EARTHSHINE) * lit), 1);
-        }
-        return Math.min(cover * moonFace(ex, ey, celestial[1]), 1);
+        return Math.min(cover * moonFace(ex, ey, readX, readY, celestial[1]), MOON_FACE_MAX);
     }
 
-    /** The round moon's brightness at e (the unit disc; water.glsl moonShape before the cover) and moon phase 0..7 (about 0..1.2). */
+    /** The round moon's brightness at e (the unit disc; water.glsl moonShape before the cover) and moon phase 0..7 (0..MOON_FACE_MAX). */
     public static float moonFace(float ex, float ey, float moonPhase) {
+        return moonFace(ex, ey, ex, ey, moonPhase);
+    }
+
+    /** moonFace lit at e and read at (readX, readY) (water.glsl: lit at most MOON_LIMB out, read out to the limb). */
+    public static float moonFace(float ex, float ey, float readX, float readY, float moonPhase) {
         float z = (float) Math.sqrt(Math.max(1 - ex * ex - ey * ey, 0));
         float[] p = {ex, ey, z};
-        float phase = Math.max(0, Math.min(moonPhase, 8));
-        float phi = phase * 0.7853982f;
+        float phi = Math.max(0, Math.min(moonPhase, 8)) * 0.7853982f;
         float[] sunward = {(float) Math.sin(phi), 0, (float) Math.cos(phi)};
-        float wobble = (moonNoise(ex * 5 + 1.3f, ey * 5 + 7.1f, MOON_MARIA_SEED + 1) - 0.5f) * 0.16f
-                + (moonNoise(ex * 13 + 4.1f, ey * 13 + 2.2f, MOON_MARIA_SEED + 2) - 0.5f) * 0.06f;
-        float mare = 0;
-        for (int k = 0; k < MOON_MARE_COUNT; k++) {
-            float[] m = MOON_MARE[k];
-            float dx = p[0] - m[0], dy = p[1] - m[1], dz = p[2] - m[2];
-            mare = Math.max(mare, 1 - smoothstep(0.6f * m[3], 1.15f * m[3], (float) Math.sqrt(dx * dx + dy * dy + dz * dz) + wobble));
-        }
-        float mottle = 0.6f * moonNoise(ex * 3.5f + 3.7f, ey * 3.5f + 1.9f, MOON_MARIA_SEED) + 0.4f * moonNoise(ex * 9 + 0.7f, ey * 9 + 5.3f, MOON_MARIA_SEED + 3);
-        float albedo = (1 - MOON_MOTTLE * mottle) * (1 - MOON_MARIA * mare * (0.8f + 0.4f * moonNoise(ex * 7 + 9.1f, ey * 7 + 3.3f, MOON_MARIA_SEED + 4)));
-        float[] slope = new float[3], rim = new float[1];
-        float rays = 0;
-        for (int k = 0; k < MOON_CRATER_COUNT; k++) {
-            float[] c = MOON_CRATER[k], look = MOON_CRATER_LOOK[k];
-            float[] cc = {c[0], c[1], c[2]};
-            float s = moonCrater(p, cc, c[3], 1, slope, rim);
-            if (look[0] > 0 && s < 30) rays += look[0] * moonRays(p, cc, c[3], s);
-            if (look[1] < 0) albedo *= 1 + look[1] * (1 - smoothstep(0.75f, 0.95f, s));
-        }
-        int cx = (int) Math.floor(ex / MOON_CRATER_CELL), cy = (int) Math.floor(ey / MOON_CRATER_CELL);
-        for (int y = -1; y <= 1; y++) {
-            for (int x = -1; x <= 1; x++) {
-                int ix = cx + x, iy = cy + y;
-                float h = moonHash(ix, iy, MOON_CRATER_SEED);
-                float ax = (ix + 0.2f + 0.6f * moonHash(ix, iy, MOON_CRATER_SEED + 2)) * MOON_CRATER_CELL;
-                float ay = (iy + 0.2f + 0.6f * moonHash(ix, iy, MOON_CRATER_SEED + 6)) * MOON_CRATER_CELL;
-                float ll = ax * ax + ay * ay;
-                if (h < MOON_CRATER_SHARE && ll < 0.96f) {
-                    float w = h / MOON_CRATER_SHARE;
-                    moonCrater(p, new float[]{ax, ay, (float) Math.sqrt(1 - ll)}, MOON_CRATER_MIN + (MOON_CRATER_MAX - MOON_CRATER_MIN) * w * w * w,
-                            1 - 0.65f * mare, slope, rim);
-                }
-            }
-        }
-        float[] n = {p[0] - slope[0], p[1] - slope[1], p[2] - slope[2]};
+        float[] face = MoonFace.get().at(readX, readY);
+        float limb = smoothstep(MOON_LIMB_RELIEF_START, MOON_LIMB_RELIEF_FULL, z);
+        float albedo = face[0] * MOON_ALBEDO_GAIN, gEast = face[1] * MOON_RELIEF * limb, gNorth = face[2] * MOON_RELIEF * limb;
+        float[] east = cross(new float[]{0, -1, 0}, p);
+        east = scale(east, 1 / Math.max((float) Math.sqrt(dot(east, east)), 0.0001f));
+        float[] north = cross(p, east);
+        float[] n = {p[0] - gEast * east[0] - gNorth * north[0], p[1] - gEast * east[1] - gNorth * north[1], p[2] - gEast * east[2] - gNorth * north[2]};
         n = scale(n, 1 / (float) Math.sqrt(dot(n, n)));
         float mu0 = dot(n, sunward), smooth0 = dot(p, sunward);
         float lit = Math.min(smoothstep(-MOON_TERMINATOR, MOON_TERMINATOR, mu0), smoothstep(-MOON_NIGHT_REACH, -MOON_NIGHT_REACH * 0.3f, smooth0));
@@ -325,7 +217,6 @@ public final class WaterMath {
             float even = smooth0 / (smooth0 + Math.max(z, 0.05f));
             relief = Math.max(0, Math.min(tilted / Math.max(even, 0.0001f), MOON_RELIEF_MAX));
         }
-        albedo *= 1 + (rim[0] + rays) * smoothstep(0.1f, 0.6f, smooth0);
         return albedo * (MOON_EARTHSHINE + (relief - MOON_EARTHSHINE) * lit);
     }
 
@@ -386,7 +277,7 @@ public final class WaterMath {
         float v = sunVisibility > 0 ? Math.min(sunVisibility, 1) : 0;
         float[] moon = moonCentre(a);
         return add(scale(glintOf(sunRadiance(a), r, a.sun(), sunShape(r, a.sun(), celestial), 1, ripple), v),
-                glintOf(moonRadiance(a), r, moon, moonShape(r, moon, celestial, true), moonLit(celestial), ripple));
+                glintOf(moonRadiance(a), r, moon, moonShape(r, moon, celestial), moonLit(celestial), ripple));
     }
 
     /**

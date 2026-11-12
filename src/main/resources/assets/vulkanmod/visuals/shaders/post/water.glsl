@@ -169,84 +169,40 @@ const float MOON_EARTHSHINE = 0.02;
 // size VANILLA_MOON_MASK around the moon (vanilla's moon art fills about 0.045; a little more for its soft edge)
 const float VANILLA_MOON_MASK = 0.056;
 
-// ---- 2026-11-10 (session 10, the user: "when the round moon is selected, add craters to its surface"): the round moon's face ----
-//Drawn on the sphere seen from the front: p = (e, sqrt(1 - |e|^2)) with e the disc-plane position over the radius (discPlane: e.x along
-// the sun's rotation axis, world z; e.y along its path), so the face turns with the disc's plane and never with the camera. The face is
-// the Moon's near side as photographed (the named features' latitude and longitude turned into the unit sphere's orthographic view):
-// lunar north is -e.y and lunar east -e.x, so vanilla's phases (lit toward +z waning, -z waxing) sweep the terminator across the face
-// from east to west as the real Moon's do.
-//  maria: dark basalt plains, albedo about 0.07 against 0.11..0.18 for the highlands (Lucey et al. 2006, "Understanding the lunar surface
-//   and space-Moon interactions", Rev. Mineral. Geochem. 60): MOON_MARE's caps (xyz centre on the unit sphere, w radius in its units)
-//   darken by MOON_MARIA, their edges wobbled by two octaves of value noise; the highlands mottle by MOON_MOTTLE.
-//  craters: bowls (depth about a fifth of the diameter, Pike 1977, "Size-dependence in the shape of fresh impact craters on the moon")
-//   with a raised rim: the slope 2 MOON_CRATER_DEPTH s inside (s = distance / radius), a gaussian rim MOON_CRATER_RIM high and
-//   MOON_CRATER_RIM_WIDTH wide outside. They tilt the surface normal and the sun lights the tilted normal: across the terminator the
-//   rims catch the light and the bowls' sunward walls fall in shade. The relief is a ratio of the Lommel-Seeliger law mu0 / (mu0 + mu)
-//   (the dark regolith's reflectance, which makes the full Moon flat), so craters stand out near the terminator and fade toward the
-//   full Moon, as the real ones do. MOON_CRATER: ten named ones (Tycho, Copernicus, Kepler, Aristarchus, Plato, Clavius, Ptolemaeus,
-//   Theophilus, Petavius, Grimaldi; radii two to four times the real ones, so they read on a disc a hundred pixels across) and
-//   MOON_CRATER_LOOK their albedo: x the bright young ray systems (MOON_RAY_BINS streaks around the crater, hidden at a low sun as on the
-//   real Moon), y the dark lava floors (Plato, Grimaldi). Smaller craters on a grid of MOON_CRATER_CELL cells (in e), one per cell with
-//   probability MOON_CRATER_SHARE, radius MOON_CRATER_MIN..MOON_CRATER_MAX (mostly small), fainter on the maria. Every crater's relief
-//   fades toward the limb (where it would be a sliver of a few pixels).
+// ---- 2026-11-12 (session 15, the user: "the moon's craters are still disappointing; replace them with a more realistic, higher-resolution
+// image"): the round moon's face ----
+//Session 10 drew a procedural face (maria caps, named craters, a crater grid); session 15 reads the real one: MoonFace's texture (binding
+// moonFace where the including shader defines MOON_FACE_PIXEL), baked by tools/moon/bake_moon_face.py from NASA's CGI Moon Kit (NASA's
+// Scientific Visualization Studio, public domain): the LRO camera's colour mosaic as the albedo (r) and the LRO laser altimeter's heights
+// as the surface slope east and north (g, b at 0.5 + slope/(2 MOON_SLOPE_RANGE)), the near side as seen from Earth in the disc frame:
+// texel e*0.5 + 0.5 with e the disc-plane position over the radius (discPlane: e.x along the sun's rotation axis, world z; e.y along its
+// path), so the face turns with the disc's plane and never with the camera. Lunar north is -e.y and lunar east -e.x, so vanilla's
+// phases (lit toward +z waning, -z waxing) sweep the terminator across the face from east to west as the real Moon's do.
+//The level read is the pixel's footprint over a texel (MOON_FACE_PIXEL, the tangent of one pixel's angle): a small moon reads a
+// pre-filtered level and does not shimmer, a zoomed one the full 1024 texels across.
+//The slopes tilt the surface normal and the sun lights the tilted normal by a ratio of the Lommel-Seeliger law mu0 / (mu0 + mu) (the dark
+// regolith's reflectance, which makes the full Moon flat), so the relief stands out near the terminator and fades toward the full
+// Moon, as the real one does: MOON_RELIEF exaggerates the altimeter's slopes (16 samples a degree, gentle at that scale) so the crater
+// walls read at the quarters. The slopes fade toward the limb (MOON_LIMB_RELIEF, in the sphere's z), where they would be slivers a pixel
+// wide and could catch the sun deep in the night.
 //The moon colour (moonRadiance) multiplies the whole face, so the colour picker and the palettes keep it. The square moon is vanilla's art.
-const float MOON_MARIA = 0.36;
-const float MOON_MOTTLE = 0.16;
-const int MOON_MARIA_SEED = 9;
-const float MOON_CRATER_DEPTH = 0.32;
-const float MOON_CRATER_RIM = 0.10;
-const float MOON_CRATER_RIM_WIDTH = 0.45;
-const float MOON_CRATER_CELL = 0.16;
-const float MOON_CRATER_SHARE = 0.45;
-const float MOON_CRATER_MIN = 0.022;
-const float MOON_CRATER_MAX = 0.075;
-const int MOON_CRATER_SEED = 41;
-//Every crater's rim brightening (fresh ejecta), and the named craters' ray streaks
-const float MOON_RIM_ALBEDO = 0.03;
-const int MOON_RAY_BINS = 20;
-const int MOON_RAY_SEED = 31;
-//The relief ratio's ceiling (a rim facing a grazing sun)
+const float MOON_SLOPE_RANGE = 0.5;
+const float MOON_RELIEF = 3.0;
+const float MOON_LIMB_RELIEF_START = 0.05;
+const float MOON_LIMB_RELIEF_FULL = 0.3;
+//The albedo's gain: the texture's brightest percent is 1 and its mean about 0.41; this keeps the disc about as bright as session 10's face
+const float MOON_ALBEDO_GAIN = 2.0;
+//The face's ceiling (a bright crater facing a grazing sun)
+const float MOON_FACE_MAX = 2.5;
+//The relief ratio's ceiling (a slope facing a grazing sun)
 const float MOON_RELIEF_MAX = 1.8;
 //How far past the terminator (in the smooth sphere's cosine to the sun) a crater rim can still catch the light
-const float MOON_NIGHT_REACH = 0.25;
-//How far out (share of the radius) the face is read: the limb's z stays above 0.17, so a new moon's limb stays dark
+const float MOON_NIGHT_REACH = 0.1;
+//How far out (share of the radius) the face is lit: the limb's z stays above 0.17, so a new moon's limb stays dark
 const float MOON_LIMB = 0.985;
-//The reflections' plain face (MOON_PLAIN_FACE, reflection.comp): session 5's maria noise, this many cells across the disc
-const float MOON_PLAIN_CELLS = 2.5;
-const int MOON_MARE_COUNT = 17;
-const vec4 MOON_MARE[17] = vec4[](
-        vec4(0.2312, -0.5446, 0.8062, 0.3), // Imbrium
-        vec4(-0.2655, -0.4695, 0.8421, 0.18), // Serenitatis
-        vec4(-0.5094, -0.1478, 0.8478, 0.21), // Tranquillitatis
-        vec4(-0.8197, -0.2924, 0.4925, 0.13), // Crisium
-        vec4(-0.7618, 0.1045, 0.6393, 0.15), // Fecunditatis
-        vec4(-0.5401, 0.2588, 0.8008, 0.09), // Nectaris
-        vec4(0.2573, 0.3584, 0.8974, 0.16), // Nubium
-        vec4(0.3848, 0.1736, 0.9065, 0.1), // Cognitum
-        vec4(0.5749, 0.4067, 0.71, 0.1), // Humorum
-        vec4(0.7595, -0.3746, 0.5318, 0.26), // Procellarum, north
-        vec4(0.788, 0.0, 0.6157, 0.22), // Procellarum, south
-        vec4(0.4924, -0.6428, 0.5868, 0.15), // between Imbrium and Procellarum
-        vec4(0.51, -0.1392, 0.8488, 0.12), // Insularum
-        vec4(-0.068, -0.225, 0.972, 0.08), // Vaporum
-        vec4(0.1447, -0.829, 0.5401, 0.08), // Frigoris, west
-        vec4(-0.1102, -0.848, 0.5183, 0.08), // Frigoris, east
-        vec4(-0.3744, -0.0349, 0.9266, 0.1)); // Tranquillitatis, west
-const int MOON_CRATER_COUNT = 10;
-const vec4 MOON_CRATER[10] = vec4[](
-        vec4(0.1395, 0.682, 0.7179, 0.045), // Tycho
-        vec4(0.3372, -0.1668, 0.9265, 0.05), // Copernicus
-        vec4(0.6097, -0.1392, 0.7803, 0.03), // Kepler
-        vec4(0.674, -0.4019, 0.6198, 0.025), // Aristarchus
-        vec4(0.1014, -0.7837, 0.6128, 0.045), // Plato
-        vec4(0.1282, 0.848, 0.5142, 0.09), // Clavius
-        vec4(0.0345, 0.1564, 0.9871, 0.065), // Ptolemaeus
-        vec4(-0.4359, 0.1977, 0.878, 0.05), // Theophilus
-        vec4(-0.7849, 0.4226, 0.4532, 0.065), // Petavius
-        vec4(0.9237, 0.0872, 0.3732, 0.06)); // Grimaldi
-const vec2 MOON_CRATER_LOOK[10] = vec2[](
-        vec2(0.22, 0.0), vec2(0.12, 0.0), vec2(0.1, 0.0), vec2(0.12, 0.0), vec2(0.0, -0.35),
-        vec2(0.0, 0.0), vec2(0.0, 0.0), vec2(0.0, 0.0), vec2(0.0, 0.0), vec2(0.0, -0.3));
+//From MOON_LIMB out to the limb the face is read at least at this level (32 texels across): the disc fills the texture's square, so the
+// soft edge past the limb reads its outermost ring, which drew radial streaks at a zoomed terminator; this level is smooth along it
+const float MOON_EDGE_LOD = 5.0;
 
 bool celestialRound(vec4 celestial) {
     return celestial.x > CELESTIAL_ROUND*0.5;
@@ -296,64 +252,21 @@ float moonLit(vec4 celestial) {
     return 0.5 + 0.5*cos(clamp(celestial.y, 0.0, 8.0)*0.7853982);
 }
 
-//The moon's hash 0..1 of the integer cell i (the ripples' hash and primes, below, with a seed; written out here as GLSL needs it first)
-float moonHash(ivec2 i, int seed) {
-    uint h = (uint(i.x)*73856093u) ^ (uint(i.y)*19349663u) ^ (uint(seed)*83492791u);
-    h ^= h >> 16u;
-    h *= 0x7feb352du;
-    h ^= h >> 15u;
-    h *= 0x846ca68bu;
-    h ^= h >> 16u;
-    return float(h & 0xFFFFFFu)/16777215.0;
+#ifdef MOON_FACE_PIXEL
+//Session 15: the face at e (the unit disc) for a disc of radius r (tangent units): x the albedo (times MOON_ALBEDO_GAIN), yz the slope
+// east and north (times MOON_RELIEF), at the level of MOON_FACE_PIXEL's footprint (at least MOON_EDGE_LOD by edge, 0..1)
+vec3 moonFaceAt(vec2 e, float r, float edge) {
+    float texels = float(textureSize(moonFace, 0).x);
+    float lod = max(log2(max(MOON_FACE_PIXEL*texels/(2.0*r), 0.0001)), MOON_EDGE_LOD*edge);
+    vec4 t = textureLod(moonFace, e*0.5 + 0.5, lod);
+    return vec3(t.r*MOON_ALBEDO_GAIN, (t.gb*2.0 - 1.0)*(MOON_SLOPE_RANGE*MOON_RELIEF));
 }
+#endif
 
-//The moon's value noise 0..1 at x
-float moonNoise(vec2 x, int seed) {
-    vec2 f = floor(x);
-    ivec2 i = ivec2(f);
-    f = x - f;
-    vec2 u = f*f*(3.0 - 2.0*f);
-    return mix(mix(moonHash(i, seed), moonHash(i + ivec2(1, 0), seed), u.x), mix(moonHash(i + ivec2(0, 1), seed), moonHash(i + ivec2(1, 1), seed), u.x), u.y);
-}
-
-//One crater of radius radius centred on c (unit) at the face point p (unit): adds its slope (times strength, fading toward the limb) to
-// slope and its rim's brightening to rim; returns s, p's distance from c over the radius (9 behind it)
-float moonCrater(vec3 p, vec3 c, float radius, float strength, inout vec3 slope, inout float rim) {
-    float along = dot(p, c);
-    vec3 d = p - c*along;
-    float dl = length(d);
-    float s = along > 0.0 ? dl/radius : 9.0;
-    if (s < 3.0 && dl > 0.000001) {
-        float o = (s - 1.0)/MOON_CRATER_RIM_WIDTH;
-        float g = s < 1.0 ? 2.0*MOON_CRATER_DEPTH*s : -2.0*MOON_CRATER_RIM*o/MOON_CRATER_RIM_WIDTH*exp(-o*o);
-        float k = strength*smoothstep(0.05, 0.3, c.z);
-        slope += d*(g*k/dl);
-        rim += k*MOON_RIM_ALBEDO*exp(-(s - 1.0)*(s - 1.0)*16.0);
-    }
-    return s;
-}
-
-//A named crater's bright rays and halo at p (s: moonCrater's): MOON_RAY_BINS streaks of random strength around it, fading over about
-// ten radii
-float moonRays(vec3 p, vec3 c, float radius, float s) {
-    vec3 b1 = normalize(cross(vec3(0.0, 1.0, 0.0), c));
-    vec3 b2 = cross(c, b1);
-    vec3 d = p - c*dot(p, c);
-    float t = (atan(dot(d, b2), dot(d, b1))/6.2831853 + 0.5)*float(MOON_RAY_BINS);
-    float i = floor(t);
-    float f = t - i;
-    int i0 = int(i) % MOON_RAY_BINS;
-    float h0 = moonHash(ivec2(i0, 0), MOON_RAY_SEED);
-    float h1 = moonHash(ivec2((i0 + 1) % MOON_RAY_BINS, 0), MOON_RAY_SEED);
-    float streak = smoothstep(0.5, 1.0, mix(h0, h1, f*f*(3.0 - 2.0*f)));
-    float halo = s < 3.0 ? 0.5*exp(-max(s - 1.0, 0.0)*1.2) : 0.0;
-    return streak*exp(-length(d)/(10.0*radius))*smoothstep(1.0, 1.6, s) + halo;
-}
-
-//The moon's shape along dir (0..1): the square of half size MOON_HALF_SIZE (1 inside, no phase: vanilla's moon keeps its own), or the
+//The moon's shape along dir (0..): the square of half size MOON_HALF_SIZE (1 inside, no phase: vanilla's moon keeps its own), or the
 // round disc lit by phase: a sphere seen from the front, lit from phi = phase x 45 degrees off the view (0 full, 180 new) toward the
 // sun's rotation axis (world +z while waning, phases 1..3: sin phi > 0; -z while waxing, 5..7), as vanilla's phase art grows and
-// shrinks; the dark side keeps MOON_EARTHSHINE. Session 10: the face above (maria, craters, rays)
+// shrinks; the dark side keeps MOON_EARTHSHINE. Session 15: the real face above (without MOON_FACE_PIXEL, a plain white sphere)
 float moonShape(vec3 dir, vec3 centre, vec4 celestial) {
     if (!celestialRound(celestial)) {
         return discCover(dir, centre, MOON_HALF_SIZE);
@@ -367,68 +280,34 @@ float moonShape(vec3 dir, vec3 centre, vec4 celestial) {
     if (!(cover > 0.0)) {
         return 0.0;
     }
-    //Session 10: the face is read no further out than MOON_LIMB (the soft edge's outer half was read at the limb itself, z 0, where the
-    // new moon's terminator lit a thin bright ring)
+    //Session 10: the face is lit no further out than MOON_LIMB (the soft edge's outer half was read at the limb itself, z 0, where the
+    // new moon's terminator lit a thin bright ring). Session 15: the texture is read out to the limb itself (held at MOON_LIMB, the
+    // soft edge stretched one texel ring into radial streaks); past it the bake holds the limb smoothed around the circle
     vec2 e = uv/r;
     float l = length(e);
+    vec2 read = e/max(l, 1.0);
     if (l > MOON_LIMB) {
         e *= MOON_LIMB/l;
     }
     float z = sqrt(max(1.0 - dot(e, e), 0.0));
     vec3 p = vec3(e, z);
-    float phase = clamp(celestial.y, 0.0, 8.0);
-    float phi = phase*0.7853982;
+    float phi = clamp(celestial.y, 0.0, 8.0)*0.7853982;
     vec3 sunward = vec3(sin(phi), 0.0, cos(phi));
-#ifdef MOON_PLAIN_FACE
-    //reflection.comp: session 5's plain face (phase, earthshine, a value-noise patch of maria). The full face below cost the reflection
-    // pass about 0.12 ms over the sea (2560x1440) whatever the moon's shape, being compiled in at all; the mirrored moon is small and
-    // usually rippled
-    float plain = 1.0 - MOON_MARIA*smoothstep(0.45, 0.75, moonNoise(e*MOON_PLAIN_CELLS + vec2(3.7, 1.9), MOON_MARIA_SEED));
-    return min(cover*plain*mix(MOON_EARTHSHINE, 1.0, smoothstep(-MOON_TERMINATOR, MOON_TERMINATOR, dot(p, sunward))), 1.0);
+#ifdef MOON_FACE_PIXEL
+    vec3 face = moonFaceAt(read, r, smoothstep(MOON_LIMB, 1.0, l));
+    face.yz *= smoothstep(MOON_LIMB_RELIEF_START, MOON_LIMB_RELIEF_FULL, z);
 #else
-    //The albedo: the maria (wobbled edges, uneven darkness) over the mottled highlands
-    float wobble = (moonNoise(e*5.0 + vec2(1.3, 7.1), MOON_MARIA_SEED + 1) - 0.5)*0.16
-            + (moonNoise(e*13.0 + vec2(4.1, 2.2), MOON_MARIA_SEED + 2) - 0.5)*0.06;
-    float mare = 0.0;
-    for (int k = 0; k < MOON_MARE_COUNT; k++) {
-        vec4 m = MOON_MARE[k];
-        mare = max(mare, 1.0 - smoothstep(0.6*m.w, 1.15*m.w, length(p - m.xyz) + wobble));
-    }
-    float mottle = 0.6*moonNoise(e*3.5 + vec2(3.7, 1.9), MOON_MARIA_SEED) + 0.4*moonNoise(e*9.0 + vec2(0.7, 5.3), MOON_MARIA_SEED + 3);
-    float albedo = (1.0 - MOON_MOTTLE*mottle)*(1.0 - MOON_MARIA*mare*(0.8 + 0.4*moonNoise(e*7.0 + vec2(9.1, 3.3), MOON_MARIA_SEED + 4)));
-    //The craters' slopes, rims, rays and dark floors
-    vec3 slope = vec3(0.0);
-    float rim = 0.0;
-    float rays = 0.0;
-    for (int k = 0; k < MOON_CRATER_COUNT; k++) {
-        vec4 c = MOON_CRATER[k];
-        vec2 look = MOON_CRATER_LOOK[k];
-        float s = moonCrater(p, c.xyz, c.w, 1.0, slope, rim);
-        if (look.x > 0.0 && s < 30.0) {
-            rays += look.x*moonRays(p, c.xyz, c.w, s);
-        }
-        if (look.y < 0.0) {
-            albedo *= 1.0 + look.y*(1.0 - smoothstep(0.75, 0.95, s));
-        }
-    }
-    ivec2 cell = ivec2(floor(e/MOON_CRATER_CELL));
-    for (int y = -1; y <= 1; y++) {
-        for (int x = -1; x <= 1; x++) {
-            ivec2 i = cell + ivec2(x, y);
-            float h = moonHash(i, MOON_CRATER_SEED);
-            vec2 at = (vec2(i) + 0.2 + 0.6*vec2(moonHash(i, MOON_CRATER_SEED + 2), moonHash(i, MOON_CRATER_SEED + 6)))*MOON_CRATER_CELL;
-            float ll = dot(at, at);
-            if (h < MOON_CRATER_SHARE && ll < 0.96) {
-                float w = h/MOON_CRATER_SHARE;
-                moonCrater(p, vec3(at, sqrt(1.0 - ll)), MOON_CRATER_MIN + (MOON_CRATER_MAX - MOON_CRATER_MIN)*w*w*w, 1.0 - 0.65*mare, slope, rim);
-            }
-        }
-    }
-    //Lit along the tilted normal; the relief is the Lommel-Seeliger ratio against the smooth sphere (1 without craters)
-    vec3 n = normalize(p - slope);
+    vec3 face = vec3(1.0, 0.0, 0.0);
+#endif
+    //The tangent frame at p: lunar east (-e.x at the centre) and north (-e.y); the frame's pole lies on the limb, beyond MOON_LIMB
+    vec3 east = cross(vec3(0.0, -1.0, 0.0), p);
+    east /= max(length(east), 0.0001);
+    vec3 north = cross(p, east);
+    vec3 n = normalize(p - face.y*east - face.z*north);
+    //Lit along the tilted normal; the relief is the Lommel-Seeliger ratio against the smooth sphere (1 where it is level)
     float mu0 = dot(n, sunward);
     float smooth0 = dot(p, sunward);
-    //Only near the terminator: a rim far into the night (the new moon's limb) never catches the sun
+    //Only near the terminator: a slope far into the night (the new moon's limb) never catches the sun
     float lit = min(smoothstep(-MOON_TERMINATOR, MOON_TERMINATOR, mu0), smoothstep(-MOON_NIGHT_REACH, -MOON_NIGHT_REACH*0.3, smooth0));
     float relief = 1.0;
     if (smooth0 > 0.0) {
@@ -436,9 +315,7 @@ float moonShape(vec3 dir, vec3 centre, vec4 celestial) {
         float even = smooth0/(smooth0 + max(z, 0.05));
         relief = clamp(tilted/max(even, 0.0001), 0.0, MOON_RELIEF_MAX);
     }
-    albedo *= 1.0 + (rim + rays)*smoothstep(0.1, 0.6, smooth0);
-    return min(cover*albedo*mix(MOON_EARTHSHINE, relief, lit), 1.0);
-#endif
+    return min(cover*face.x*mix(MOON_EARTHSHINE, relief, lit), MOON_FACE_MAX);
 }
 
 //vanillaStars' residue kept along dir: all of it with the square moon; with the round moon none inside vanilla's square moon (W6 draws the

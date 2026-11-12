@@ -12,10 +12,6 @@
 // WaterMath mirrors the consts here and in water.glsl (WaterTest).
 layout(local_size_x = 8, local_size_y = 8) in;
 
-//2026-11-10 (session 10): the mirrored round moon keeps the plain face (water.glsl moonShape): the cratered one, compiled in, cost this
-// pass about 0.12 ms over the sea at any moon shape
-#define MOON_PLAIN_FACE
-
 layout(binding = 0, rgba16f) uniform writeonly restrict image2D sceneOut;
 layout(binding = 1) uniform sampler2D sceneLit;
 layout(binding = 2) uniform sampler2D mainDepth;
@@ -30,6 +26,9 @@ layout(binding = 9, r32ui) uniform readonly restrict uimage2D terrainLight;
 //2026-11-10 (session 9, PBR): the terrain's material normals (TerrainLightTarget, pbr.glsl), read only by the .PBR builds for the pixels
 // the composite marked (bound always: the terrain light stands in)
 layout(binding = 10, r32ui) uniform readonly restrict uimage2D terrainNormal;
+//2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace, water.glsl moonShape): the mirrored moon reads it too (session
+// 10's plain face for the reflection went with the procedural face)
+layout(binding = 11) uniform sampler2D moonFace;
 
 //0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
@@ -81,6 +80,8 @@ layout(location = 34) uniform vec4 auroraTintTop;
 #import <vulkanmod:visuals/post/lightvolume.glsl>
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
+//Session 15: water.glsl reads the moon's face at a pixel's footprint, the tangent of one pixel's angle at the screen's centre
+#define MOON_FACE_PIXEL (2.0*abs(invVanillaProj[1][1])/float(imageSize(sceneOut).y))
 #import <vulkanmod:visuals/post/water.glsl>
 #import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>
