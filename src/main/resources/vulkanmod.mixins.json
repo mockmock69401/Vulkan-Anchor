@@ -185,6 +185,7 @@
     "visuals.LevelRendererWeatherMixin",
     "visuals.LevelRendererTicksAccessor",
     "visuals.ClientLevelLightMixin",
+    "visuals.ClientLevelSkyColourMixin",
     "visuals.ClientChunkCacheLightMixin",
     "visuals.FogRendererUnderwaterMixin",
     "visuals.LevelRendererFrameTimesMixin",
