@@ -82,6 +82,8 @@
   "vulkanmod.visuals.moon_size.tooltip": "둥근 달의 크기(바다와 크레이터도 함께). 100이 기본값입니다. 네모 달은 바닐라 크기 그대로",
   "vulkanmod.visuals.aurora": "오로라",
   "vulkanmod.visuals.aurora.tooltip": "하늘을 가로질러 흐르는 초록·보라색 빛의 커튼. 오버월드의 맑은 밤(눈 덮인 바이옴에서 가장 밝고 비나 눈이 올 때는 보이지 않음)과 엔드에서는 언제나 보입니다. 물에도 비칩니다",
+  "vulkanmod.visuals.half_res_effects": "날씨·하늘 절반 해상도",
+  "vulkanmod.visuals.half_res_effects.tooltip": "셰이더 비·눈과 먼 구름을 절반 해상도로 그린 뒤 키웁니다. 약한 GPU에서 훨씬 빠르고(내장 그래픽에서 비는 약 4분의 1, 사실적인 구름은 약 절반) 조금 부드러워집니다(가는 빗줄기, 픽셀 종류 빗방울의 가장자리). 오로라는 전체 해상도 그대로. 포테이토·낮음·중간 프리셋에서 켜짐. 끄면 전체 해상도",
   "vulkanmod.visuals.aurora.0": "끔",
   "vulkanmod.visuals.aurora.1": "엔드만",
   "vulkanmod.visuals.aurora.2": "밤과 엔드",

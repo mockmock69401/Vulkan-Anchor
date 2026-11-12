@@ -223,6 +223,8 @@ class SceneCompositeTest {
         expected.put("COPY_TERRAIN_SPECULAR", VulkanShaderMeta.Kind.IMAGE);
         expected.put("COPY_SUN_OPEN", VulkanShaderMeta.Kind.STORAGE_BUFFER);//2026-11-12 (session 14)
         expected.put("COPY_PARTICLE_TILES", VulkanShaderMeta.Kind.STORAGE_BUFFER);//2026-11-12 (session 14 follow-up)
+        expected.put("COPY_SKY_HALF_CLOUD", VulkanShaderMeta.Kind.IMAGE);//2026-11-12 (session 14 follow-up, half resolution)
+        expected.put("COPY_SKY_HALF_AURORA", VulkanShaderMeta.Kind.IMAGE);
         Set<String> want = new TreeSet<>();
         for (Map.Entry<String, VulkanShaderMeta.Kind> e : expected.entrySet()) {
             Integer binding = fields.get(e.getKey());
@@ -236,7 +238,7 @@ class SceneCompositeTest {
             have.add(b.binding() + ":" + b.kind());
         }
         assertEquals(want, have);
-        assertEquals(22, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14), the particle tiles at 21 (session 14 follow-up)");
+        assertEquals(24, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14), the particle tiles at 21, the half-size clouds and aurora at 22, 23 (session 14 follow-up)");
         //Every slot 0..34 with the type its writer uses: the three matrices, then vec4
         for (int loc = 0; loc <= 34; loc++) assertEquals(loc <= 2 ? "mat4" : "vec4", member(loc).type(), "location " + loc);
         //The clean writers and W4 fill every slot but the held light's (HeldLightSystem needs a device buffer: its slot is checked by value)
@@ -968,7 +970,7 @@ class SceneCompositeTest {
         // vanillaMoonKept 1 (vanilla's moon is kept through vanillaStars)
         //Session 12: the stars (times the picked star colour in the .TINTED build) in the same place of the sum
         assertTrue(COMP.contains("vec3 stars = vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial);"));
-        assertTrue(COMP.contains("vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraSky(dir, p);"));
+        assertTrue(COMP.contains("vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraScreen(dir, p);"));
         assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)"));
     }
 
@@ -1274,7 +1276,7 @@ class SceneCompositeTest {
         assertEquals(0f, SceneCompositeMath.farCloudNear(new float[]{2.3f, 4, 512, 1}), "below the layer: nothing in front looking down anyway");
         assertEquals(0f, SceneCompositeMath.farCloudNear(new float[]{-10, 4, 512, 1}), "above: the clouds just below stay");
         assertEquals(0f, SceneCompositeMath.farCloudNear(new float[]{60, 4, 512, 1}), "far below");
-        assertTrue(COMP.contains("vec4 m = farCloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));"));
+        assertTrue(COMP.contains("        m = farCloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));"));
         assertTrue(COMP.contains("m.w += near;"));
     }
 
@@ -1669,7 +1671,9 @@ class SceneCompositeTest {
         //Session 14 follow-up: three mains, SUN_OPEN_PASS's, PARTICLE_PASS's, then the composite's (each in its own #ifdef branch)
         int sun = c.indexOf("#ifdef SUN_OPEN_PASS\n//Session 14: the frame"), part = c.indexOf("#ifdef PARTICLE_PASS\n//The tile"),
                 main = c.lastIndexOf("void main() {");
-        assertTrue(sun > 0 && sun < part && part < main && c.split("void main\\(\\) \\{", -1).length - 1 == 3);
+        //Session 14 follow-up: and SKY_HALF_PASS's first (the half-size clouds and aurora)
+        int half = c.indexOf("#ifdef SKY_HALF_PASS");
+        assertTrue(half > 0 && half < sun && sun < part && part < main && c.split("void main\\(\\) \\{", -1).length - 1 == 4);
         String particles = c.substring(part, main), body = c.substring(main);
         assertTrue(c.contains("vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {"));
         assertFalse(c.substring(0, sun).contains("imageStore(sceneOut"), "compositeAt returns its colour");

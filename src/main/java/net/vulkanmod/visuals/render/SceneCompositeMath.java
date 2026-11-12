@@ -54,6 +54,18 @@ public final class SceneCompositeMath {
     public static final float OVERCAST_EXPOSURE = 1.8f, NIGHT_SKY_EXPOSURE = 0.85f;
     /** Tuning round 3: the far clouds start this far out with the camera inside vanilla's cloud layer (within the margin). */
     public static final float FAR_CLOUD_NEAR = 16.0f, CLOUD_CAMERA_MARGIN = 1.0f;
+    /**
+     * 2026-11-12 (session 14 follow-up, Half-resolution Weather & Sky): how sharply a half-size texel's weight falls with its view distance's
+     * gap from the pixel's (halfSkyAt), the farthest distance the rgba16f images hold (the sky's), the aurora's samples at half size.
+     */
+    public static final float HALF_SKY_DEPTH_SHARPNESS = 16.0f, HALF_SKY_FAR = 60000.0f;
+    public static final int HALF_SKY_AURORA_STEPS = AuroraMath.AURORA_STEPS;
+
+    /** halfSkyAt's weight of a half-size texel: its bilinear share, divided by 1 + sharpness times the relative distance gap. */
+    public static float halfSkyWeight(float bilinear, float texelDist, float pixelDist) {
+        float d = Math.min(pixelDist, HALF_SKY_FAR);
+        return bilinear / (1 + HALF_SKY_DEPTH_SHARPNESS * Math.abs(Math.min(texelDist, HALF_SKY_FAR) - d) / Math.max(d, 1));
+    }
     /** 2026-10-28: the block-lit light's steeper falloff at full block light colour strength, and the most a channel is lifted. */
     public static final float BLOCK_LIGHT_FALLOFF = 1.0f, BLOCK_LIGHT_KNEE = 0.62f, BLOCK_LIGHT_GAIN_MAX = 16.0f;
     /** 2026-10-28: scene_copy.comp's glow constants (lightGlow, oreSpeck, oreGlow). */

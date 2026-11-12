@@ -23,7 +23,7 @@ class ShaderCatalogTest {
             "vulkanmod:visuals/post/volumetric.comp", "vulkanmod:visuals/post/volumetric_blur.comp",
             "vulkanmod:visuals/shadow/vanilla.vert", "vulkanmod:visuals/shadow/vanilla.frag", "vulkanmod:visuals/shadow/entity.vert", "vulkanmod:visuals/shadow/entity.frag", "vulkanmod:visuals/shadow/sublevel.vert", "vulkanmod:visuals/post/colour_capture.comp", "vulkanmod:visuals/post/edge_cover.vert", "vulkanmod:visuals/post/edge_cover.frag",
             "vulkanmod:visuals/post/post_ldr.comp", "vulkanmod:visuals/post/smaa_edges.comp", "vulkanmod:visuals/post/smaa_weights.comp",
-            "vulkanmod:visuals/post/smaa_blend.comp", "vulkanmod:visuals/post/post_blit.frag", "vulkanmod:visuals/post/weather.comp", "vulkanmod:visuals/post/post_taa.comp",
+            "vulkanmod:visuals/post/smaa_blend.comp", "vulkanmod:visuals/post/post_blit.frag", "vulkanmod:visuals/post/weather.comp", "vulkanmod:visuals/post/weather_up.comp", "vulkanmod:visuals/post/post_taa.comp",
             "vulkanmod:visuals/lod/lod_composite.vert", "vulkanmod:visuals/lod/lod_composite.frag",
             "vulkanmod:visuals/dh/terrain.vert", "vulkanmod:visuals/dh/terrain.frag",
             "vulkanmod:visuals/dh/shadow.vert", "vulkanmod:visuals/dh/shadow.frag",
@@ -36,7 +36,7 @@ class ShaderCatalogTest {
         Set<String> covered = new TreeSet<>();
         ShaderCatalog.visuals().all().forEach(p -> p.stages().forEach(s -> covered.add(s.id())));
         assertEquals(new TreeSet<>(USED_STAGES), covered);
-        assertEquals(52, ShaderCatalog.visuals().all().size());//2026-11-12 (session 14 follow-up): the composite's two translucent particle builds; (session 14): the composite's sun open share build; 2026-11-11: the shader weather's round-only build; 2026-11-10 (session 9): the composite's two and the reflection's four PBR builds; (session 8): the composite's and the reflection's TINTED builds; (session 7): the reflection's LEAN build; 2026-11-09 (session 6): the shader weather; 2026-10-29: the entity shadow caster and the colour copy; FSR's inputs and HUD-less copy (2), frame generation (5), the post-process (W10's three AO passes included), SMAA, the shadow caster, the edge cover, the LOD composite, DH's terrain and DH's shadow casters
+        assertEquals(55, ShaderCatalog.visuals().all().size());//2026-11-12 (session 14 follow-up): the composite's two half-size sky passes and the weather's upsample; the composite's two translucent particle builds; (session 14): the composite's sun open share build; 2026-11-11: the shader weather's round-only build; 2026-11-10 (session 9): the composite's two and the reflection's four PBR builds; (session 8): the composite's and the reflection's TINTED builds; (session 7): the reflection's LEAN build; 2026-11-09 (session 6): the shader weather; 2026-10-29: the entity shadow caster and the colour copy; FSR's inputs and HUD-less copy (2), frame generation (5), the post-process (W10's three AO passes included), SMAA, the shadow caster, the edge cover, the LOD composite, DH's terrain and DH's shadow casters
     }
 
 

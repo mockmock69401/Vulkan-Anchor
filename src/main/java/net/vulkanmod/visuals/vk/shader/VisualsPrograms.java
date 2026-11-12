@@ -39,6 +39,10 @@ final class VisualsPrograms {
         add(c, "postSceneCopy.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", ""), c.compute("post/scene_copy.comp"));
         //Session 14: the frame's sun open share (SUN_OPEN_PASS: one invocation into the composite's buffer at 20), before the composite
         add(c, "postSceneCopy.SUN_OPEN", defs("USE_ZERO_ONE_DEPTH", "", "SUN_OPEN_PASS", ""), c.compute("post/scene_copy.comp"));
+        //Session 14 follow-up (Half-resolution Weather & Sky): the far clouds and the aurora at half the size, with the plain or the picked
+        // colours (the aurora's tints) as the composite runs
+        add(c, "postSceneCopy.SKY_HALF", defs("USE_ZERO_ONE_DEPTH", "", "SKY_HALF_PASS", ""), c.compute("post/scene_copy.comp"));
+        add(c, "postSceneCopy.TINTED.SKY_HALF", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", "", "SKY_HALF_PASS", ""), c.compute("post/scene_copy.comp"));
         //Session 14 follow-up: the translucent particles over their tiles' background (PARTICLE_PASS), after the composite, in the tiles it
         // flagged (binding 21), with the plain or the picked colours as the composite ran
         add(c, "postSceneCopy.PARTICLES", defs("USE_ZERO_ONE_DEPTH", "", "PARTICLE_PASS", ""), c.compute("post/scene_copy.comp"));
@@ -67,6 +71,8 @@ final class VisualsPrograms {
         add(c, "shafts.VL_BLUR", defs(), c.compute("post/volumetric_blur.comp"));
         //2026-11-09 (session 6): the shader weather overlay (VkPostProcess.weather), blended by postFinal or postBlit
         add(c, "postWeather", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/weather.comp"));
+        //Session 14 follow-up (Half-resolution Weather & Sky): the half-size weather overlay up to the full-size one
+        add(c, "postWeatherUp", defs(), c.compute("post/weather_up.comp"));
         //2026-11-11: the same while snow and rain are both round (WEATHER_ROUND_ONLY: the pixel sprites compiled out)
         add(c, "postWeather.ROUND", defs("USE_ZERO_ONE_DEPTH", "", "WEATHER_ROUND_ONLY", ""), c.compute("post/weather.comp"));
         add(c, "postFinal", defs("USE_ZERO_ONE_DEPTH", ""),c.vertex("post/fullscreen.vert"), c.fragment("post/post_final.frag"));

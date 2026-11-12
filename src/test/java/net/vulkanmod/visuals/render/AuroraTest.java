@@ -230,9 +230,15 @@ class AuroraTest {
         assertTrue(COPY.contains("#import <vulkanmod:visuals/post/aurora.glsl>") && REFLECTION.contains("#import <vulkanmod:visuals/post/aurora.glsl>"));
         assertTrue(COPY.contains("layout(location = 46) uniform vec4 celestial;") && COPY.contains("layout(location = 47) uniform vec4 auroraParams;"));
         assertTrue(REFLECTION.contains("layout(location = 27) uniform vec4 celestial;") && REFLECTION.contains("layout(location = 28) uniform vec4 auroraParams;"));
-        int sky = COPY.indexOf("+ auroraSky(dir, p);"), clouds = COPY.indexOf("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)");
+        int sky = COPY.indexOf("+ auroraScreen(dir, p);"), clouds = COPY.indexOf("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)");
         assertTrue(sky > 0 && clouds > sky, "under the far clouds");
-        assertTrue(COPY.contains("return vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0);"), "the End's sky");
+        assertTrue(COPY.contains("return vec4((scene + auroraScreen(dir, p))*underwaterExposure(), 0.0);"), "the End's sky");
+        //Session 14 follow-up: on a sky pixel the half-size aurora with Half-resolution Weather & Sky, else the full-size march as before
+        assertTrue(COPY.replace("\r\n", "\n").contains("    if (halfParams.y > 0.5) {\n        return auroraParams.x > 0.0 ? halfSkyAt(true, p, HAZE_MAX_DISTANCE).rgb : vec3(0.0);\n    }\n    return auroraSky(dir, p);"));
+        //The half-size pass fades rays finer than its texel (moire at 1280x720); the full size calls the march with no pixel angle
+        assertTrue(GLSL.contains("rayNoise = mix(rayNoise, AURORA_RAY_MEAN, smoothstep(AURORA_RAY_ALIAS_LOW, AURORA_RAY_ALIAS_HIGH, cells));"));
+        assertTrue(GLSL.contains("return aurora(dir, params, tintLow, tintMid, tintTop, steps, jitter, 0.0);"));
+        assertTrue(COPY.contains("HALF_SKY_AURORA_STEPS, jk, pixelAngle);") && COPY.contains("au *= 0.5;"));
         assertTrue(COPY.contains("above += auroraSky(r, p);"), "Snell's window");
         assertTrue(COPY.contains("if (!(auroraParams.x > 0.0)) {\n        return vec3(0.0);"));
         int refl = REFLECTION.indexOf("sky += aurora(r, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, AURORA_REFLECTION_STEPS"), reflClouds = REFLECTION.indexOf("reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p)))");

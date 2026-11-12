@@ -154,7 +154,10 @@ public final class VisualsOptionLayout {
                             new Item("star_type", Kind.CHOICE, 0, StarMath.TYPE_MAX, Impact.NONE, null),
                             new Item("star_count", Kind.PERCENT, 0, StarMath.COUNT_MAX, Impact.NONE, null),
                             new Item("star_size", Kind.PERCENT, StarMath.SIZE_MIN, StarMath.SIZE_MAX, Impact.NONE, null),
-                            new Item("star_brightness", Kind.PERCENT, 0, StarMath.BRIGHTNESS_MAX, Impact.NONE, null))),
+                            new Item("star_brightness", Kind.PERCENT, 0, StarMath.BRIGHTNESS_MAX, Impact.NONE, null),
+                            //2026-11-12 (session 14 follow-up): the far clouds and the shader weather at half resolution (much cheaper, a little
+                            // softer); on in the Potato, Low and Medium presets
+                            toggle("half_res_effects", Impact.NONE, null))),
                     //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns); 2026-11-11: the snow's and the rain's type,
                     // size and amount (ParticleEffect's rows; the amount costs as many drops: about 75% of the pass at 50, 110% at 200)
                     new Block(WEATHER_BLOCK, weatherItems()))),
@@ -309,6 +312,7 @@ public final class VisualsOptionLayout {
             case "star_size" -> c.starSize;
             case "star_brightness" -> c.starBrightness;
             case "shader_weather" -> c.shaderWeather ? 1 : 0;
+            case "half_res_effects" -> c.halfResEffects ? 1 : 0;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
@@ -391,6 +395,7 @@ public final class VisualsOptionLayout {
             case "star_size" -> c.starSize = v;
             case "star_brightness" -> c.starBrightness = v;
             case "shader_weather" -> c.shaderWeather = v != 0;
+            case "half_res_effects" -> c.halfResEffects = v != 0;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;

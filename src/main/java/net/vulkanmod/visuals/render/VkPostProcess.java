@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.DeferredFree;
 import net.vulkanmod.visuals.vk.LooseUniformWriter;
 import net.vulkanmod.visuals.vk.VkBindings;
@@ -38,6 +39,8 @@ public final class VkPostProcess {
     static final int BLOOM_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
     /** Storage and linear filtering are required for this format; the shafts use its red channel. */
     static final int SHAFT_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
+    /** Session 14 follow-up: the half-size clouds' march and aurora (and its view distance, up to 60000 blocks: rgba16f's range). */
+    static final int SKY_HALF_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
     static final int LIGHT_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
     /**
      * The format of the LOD light attachment: each LOD fragment's light in the low byte (sky in the low nibble, block in the high) and,
@@ -79,6 +82,8 @@ public final class VkPostProcess {
     COPY_SUN_OPEN = 20,
     //Session 14 follow-up: the copy flags its tiles with translucent particles at 21, which postSceneCopy.PARTICLES reads
     COPY_PARTICLE_TILES = 21,
+    //Session 14 follow-up (Half-resolution Weather & Sky): the copy reads the half-size clouds and aurora at 22, 23 (.SKY_HALF writes them)
+    COPY_SKY_HALF_CLOUD = 22, COPY_SKY_HALF_AURORA = 23,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -87,6 +92,23 @@ public final class VkPostProcess {
     WEATHER_LIGHTMAP = 6, FINAL_WEATHER = 3;
     /** 2026-11-09 (session 6): the weather overlay, premultiplied display colour and coverage (weather.comp). */
     static final int WEATHER_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
+    /** Session 14 follow-up: the composite's loose uniform slot telling it to read the half-size clouds and aurora (halfParams). */
+    static final int COPY_HALF_SLOT = 61;
+    /**
+     * Session 14 follow-up: the aurora from the half-size pass too. Off: at 1280x720 (drawn at 640x360) its march's dither came up as curved
+     * bands (one direction a texel) or a diagonal hatching (two) that TAA does not settle, so the aurora stays at full size; the half-size
+     * aurora (rays faded where finer than a texel, two directions) is kept for work on it behind this flag.
+     */
+    static final boolean HALF_AURORA = Boolean.getBoolean("vulkanmod.debug.halfAurora");
+    /**
+     * 2026-11-12 (session 14 follow-up, Half-resolution Weather & Sky, VisualsConfig.halfResEffects): the shader weather drawn at half the
+     * size into weatherHalf and brought up to weatherImage (postWeatherUp), and the far clouds and the aurora marched at half the size into
+     * skyHalfCloud (postSceneCopy.SKY_HALF, .TINTED.SKY_HALF) for the composite to read; the aurora stays at full size (HALF_AURORA). On an
+     * AMD iGPU at 1280x720: rain 10.5 -> 2.9 ms, the realistic clouds 17.3 -> 7.9 ms. Off (the default): everything as before.
+     */
+    private VkImage2D skyHalfCloud, skyHalfAurora, weatherHalf;
+    private final VkComputeProgram copySkyHalf, copyTintedSkyHalf, weatherUp;
+    private boolean halfOn, skyHalfOn;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     /**
@@ -283,6 +305,8 @@ public final class VkPostProcess {
         this.copyPbr = variant("postSceneCopy.PBR", copy);
         this.copyTintedPbr = variant("postSceneCopy.TINTED.PBR", copy);
         this.copySunOpen = variant("postSceneCopy.SUN_OPEN", copy);
+        this.copySkyHalf = variant("postSceneCopy.SKY_HALF", copy);
+        this.copyTintedSkyHalf = variant("postSceneCopy.TINTED.SKY_HALF", copy);
         this.copyParticles = variant("postSceneCopy.PARTICLES", copy);
         this.copyTintedParticles = variant("postSceneCopy.TINTED.PARTICLES", copy);
         this.sunOpenBuffer = sunOpenBuffer;
@@ -339,6 +363,7 @@ public final class VkPostProcess {
         }
         this.weather = weather;
         this.weatherRound = weather != null ? variant("postWeather.ROUND", weather) : null;
+        this.weatherUp = optional("postWeatherUp");
         this.weatherUniforms = weatherUniforms;
         this.weatherUniformBuffer = weatherUniformBuffer;
         this.precipitationMap = precipitationMap;
@@ -403,6 +428,9 @@ public final class VkPostProcess {
                 if (oldTiles != null) oldTiles.free();
             }, VkFrames.serial());
             this.particleTiles = null;
+            this.weatherHalf = null;
+            this.skyHalfCloud = null;
+            this.skyHalfAurora = null;
             this.scene = null;
             this.sceneLit = null;
             this.bloom = null;
@@ -417,6 +445,7 @@ public final class VkPostProcess {
         int[][] sizes = PostMath.bloomSizes(width, height);
         VkImage2D[] bloom = new VkImage2D[sizes.length];
         VkImage2D scene = null, sceneLit = null, shaftMaskImage = null, shaftImage = null, lightImage = null, lightBlurImage = null, sunImage = null, plantSunImage = null, weatherImage = null;
+        VkImage2D weatherHalf = null, skyHalfCloud = null, skyHalfAurora = null;
         try {
             int usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             scene = VkImage2D.create(SCENE_FORMAT, width, height, 1, usage);
@@ -432,8 +461,13 @@ public final class VkPostProcess {
             plantSunImage = VkImage2D.create(PLANT_SUN_FORMAT, width, height, 1, usage);
             //2026-11-09 (session 6): the weather overlay, at full resolution (the streaks are a few pixels wide)
             weatherImage = VkImage2D.create(WEATHER_FORMAT, width, height, 1, usage);
+            //Session 14 follow-up: the half-size weather, clouds and aurora (Half-resolution Weather & Sky; bound always)
+            weatherHalf = VkImage2D.create(WEATHER_FORMAT, (width + 1) / 2, (height + 1) / 2, 1, usage);
+            skyHalfCloud = VkImage2D.create(SKY_HALF_FORMAT, (width + 1) / 2, (height + 1) / 2, 1, usage);
+            skyHalfAurora = VkImage2D.create(SKY_HALF_FORMAT, (width + 1) / 2, (height + 1) / 2, 1, usage);
         } catch (RuntimeException e) {
-            destroy(concat(new VkImage2D[]{scene, sceneLit, shaftMaskImage, shaftImage, lightImage, lightBlurImage, sunImage, plantSunImage, weatherImage}, bloom));
+            destroy(concat(new VkImage2D[]{scene, sceneLit, shaftMaskImage, shaftImage, lightImage, lightBlurImage, sunImage, plantSunImage, weatherImage,
+                    weatherHalf, skyHalfCloud, skyHalfAurora}, bloom));
             throw e;
         }
         this.scene = scene;
@@ -446,6 +480,9 @@ public final class VkPostProcess {
         this.sunImage = sunImage;
         this.plantSunImage = plantSunImage;
         this.weatherImage = weatherImage;
+        this.weatherHalf = weatherHalf;
+        this.skyHalfCloud = skyHalfCloud;
+        this.skyHalfAurora = skyHalfAurora;
         //Session 14 follow-up: a flag per composite workgroup (the copy's dispatch, groups(width) x groups(height))
         this.particleTiles = VkGpuBuffer.device(4L * groups(width) * groups(height), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         this.width = width;
@@ -457,7 +494,8 @@ public final class VkPostProcess {
     }
 
     private VkImage2D[] images() {
-        return concat(new VkImage2D[]{this.scene, this.sceneLit, this.shaftMaskImage, this.shaftImage, this.lightImage, this.lightBlurImage, this.sunImage, this.plantSunImage, this.weatherImage}, this.bloom);
+        return concat(new VkImage2D[]{this.scene, this.sceneLit, this.shaftMaskImage, this.shaftImage, this.lightImage, this.lightBlurImage, this.sunImage, this.plantSunImage, this.weatherImage,
+                this.weatherHalf, this.skyHalfCloud, this.skyHalfAurora}, this.bloom);
     }
 
     private static VkImage2D[] concat(VkImage2D[] fixed, VkImage2D[] rest) {
@@ -558,6 +596,10 @@ public final class VkPostProcess {
         shadow.writeCopy(this.copyUniforms);
         light.write(this.copyUniforms, LightVolumeUniforms.COPY_FIRST);
         held.writeCopy(this.copyUniforms, light.on() ? light.camera() : null);
+        //Session 14 follow-up: Half-resolution Weather & Sky (the composite reads the half-size clouds and aurora while x is 1)
+        this.halfOn = VisualsConfig.get().halfResEffects;
+        this.skyHalfOn = this.halfOn && this.copySkyHalf != null;
+        if (this.copyUniforms.has(COPY_HALF_SLOT)) this.copyUniforms.putVec4(COPY_HALF_SLOT, this.skyHalfOn ? 1 : 0, this.skyHalfOn && HALF_AURORA ? 1 : 0, 0, 0);
         if (this.copyUniformBuffer != null) upload.upload(this.copyUniformBuffer, 0, this.copyUniforms.buffer());
         lighting.writeLighting(this.lightingUniforms, light.terrain());
         shadow.write(this.lightingUniforms);
@@ -618,12 +660,25 @@ public final class VkPostProcess {
                 .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest)
                 .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest)
                 .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular())
-                .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles);
+                .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles)
+                .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view());
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         //Session 14 follow-up: no tile flagged yet (the composite flags its tiles with translucent particles), after the last frame's
         // .PARTICLES pass read them
         memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, 0);
         vkCmdFillBuffer(cmd, this.particleTiles.handle(), 0, VK_WHOLE_SIZE, 0);
+        //Session 14 follow-up: the half-size clouds and aurora (bound in every build, written only with Half-resolution Weather & Sky on)
+        this.skyHalfCloud.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
+        this.skyHalfAurora.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
+        if (this.skyHalfOn) {
+            VkComputeProgram skyHalf = this.copyTintedOn && this.copyTintedSkyHalf != null ? this.copyTintedSkyHalf : this.copySkyHalf;
+            skyHalf.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
+                    groups(this.skyHalfCloud.width), groups(this.skyHalfCloud.height), 1);
+            memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_SHADER_READ_BIT);
+        }
         memoryBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
         //Session 14: the frame's sun open share first (one group), made visible to the composite's reads
@@ -698,13 +753,23 @@ public final class VkPostProcess {
         }
         this.weatherImage.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT);
-        VkBindings bindings = new VkBindings().storageImage(WEATHER_OUT, this.weatherImage.view()).sampledView(WEATHER_MAIN_DEPTH, depths.main(), this.nearest)
+        //Session 14 follow-up (Half-resolution Weather & Sky): at half the size, then brought up
+        boolean half = this.halfWeather();
+        VkImage2D target = half ? this.weatherHalf : this.weatherImage;
+        if (half) this.weatherHalf.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_WRITE_BIT);
+        VkBindings bindings = new VkBindings().storageImage(WEATHER_OUT, target.view()).sampledView(WEATHER_MAIN_DEPTH, depths.main(), this.nearest)
                 .sampledView(WEATHER_LOD_DEPTH, depths.lod(), this.nearest).sampled(WEATHER_MAP, this.precipitationMap, this.nearest)
                 .storage(WEATHER_LIGHT_DATA, data).storage(WEATHER_LIGHT_READY, ready).sampledView(WEATHER_LIGHTMAP, lightmap, this.linear);
         if (this.weatherUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.weatherUniformBuffer);
         VkComputeProgram program = this.weatherRoundOnly && this.weatherRound != null ? this.weatherRound : this.weather;
         program.dispatchWithPush(cmd, bindings, this.weatherUniformBuffer == null ? this.weatherUniforms.buffer() : null,
-                groups(this.width), groups(this.height), 1);
+                groups(target.width), groups(target.height), 1);
+        if (half) {
+            toRead(cmd, this.weatherHalf);
+            this.weatherUp.dispatchWithPush(cmd, new VkBindings().storageImage(DST, this.weatherImage.view()).sampled(SRC, this.weatherHalf, this.linear),
+                    null, groups(this.width), groups(this.height), 1);
+        }
         toRead(cmd, this.weatherImage);
         this.weatherDrawn = true;
     }
@@ -756,6 +821,21 @@ public final class VkPostProcess {
     /** Session 7: NAME.LEAN, or null when it cannot be built or takes other uniforms or bindings than the full program NAME. */
     private static VkComputeProgram lean(String name, VkComputeProgram full) {
         return variant(name + ".LEAN", full);
+    }
+
+    /** Session 14 follow-up: whether the shader weather is drawn at half the size (the weather's pixel angle is then the half size's). */
+    public boolean halfWeather() {
+        return VisualsConfig.get().halfResEffects && this.weatherUp != null;
+    }
+
+    /** Session 14 follow-up: a pass of its own (no full build to fall back to), or null when it cannot be built. */
+    private static VkComputeProgram optional(String name) {
+        try {
+            return VkComputeProgram.of(name);
+        } catch (RuntimeException | LinkageError e) {
+            VisualsLog.warn("Visuals " + name + " could not be built, it stays off", e);
+            return null;
+        }
     }
 
     /** Session 8: the program `variant`, or null when it cannot be built or takes other uniforms or bindings than `full`. */
@@ -977,6 +1057,9 @@ public final class VkPostProcess {
         this.sunOpenBuffer.free();
         if (this.copyParticles != null) this.copyParticles.free();
         if (this.copyTintedParticles != null) this.copyTintedParticles.free();
+        for (VkComputeProgram p : new VkComputeProgram[]{this.copySkyHalf, this.copyTintedSkyHalf, this.weatherUp}) {
+            if (p != null) p.free();
+        }
         if (this.particleTiles != null) this.particleTiles.free();
         this.prefilter.free();
         this.down.free();

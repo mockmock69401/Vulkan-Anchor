@@ -16,6 +16,8 @@ public final class AuroraMath {
     public static final float AURORA_WARP_DRIFT = 0.01f, AURORA_CREST_DRIFT = 0.02f, AURORA_TIME_WRAP = 25600.0f;
     public static final float AURORA_PERIOD = 256.0f;
     public static final float AURORA_RAY_CELLS = 24.0f, AURORA_RAY_DEPTH = 0.8f, AURORA_RAY_DRIFT = 0.05f;
+    /** Session 14 follow-up: the half-size pass fades rays finer than a pixel to their mean (aurora.glsl). */
+    public static final float AURORA_RAY_MEAN = 0.5f, AURORA_RAY_ALIAS_LOW = 0.2f, AURORA_RAY_ALIAS_HIGH = 0.4f;
     public static final float AURORA_PATCH_MIN = 0.15f;
     public static final float AURORA_BORDER_LIFT = 0.5f, AURORA_BORDER_EDGE = 0.04f;
     public static final float AURORA_GREEN_SCALE = 0.6f, AURORA_RED_LOW = 1.4f, AURORA_RED_HIGH = 2.2f, AURORA_RED_SCALE = 0.8f, AURORA_RED_SHARE = 0.2f;

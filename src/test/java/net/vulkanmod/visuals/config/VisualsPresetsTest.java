@@ -90,8 +90,10 @@ class VisualsPresetsTest {
     @Test
     void aHigherLevelNeverTurnsACostDown() {
         for (Map.Entry<String, int[]> e : VALUES.entrySet()) {
+            //Session 14 follow-up: Half-resolution Weather & Sky lowers the cost when on, so a higher level turns it off
+            boolean saves = e.getKey().equals("half_res_effects");
             for (int level = 1; level < LEVELS; level++) {
-                assertTrue(e.getValue()[level] >= e.getValue()[level - 1], e.getKey() + " at level " + level);
+                assertTrue(saves ? e.getValue()[level] <= e.getValue()[level - 1] : e.getValue()[level] >= e.getValue()[level - 1], e.getKey() + " at level " + level);
             }
         }
     }

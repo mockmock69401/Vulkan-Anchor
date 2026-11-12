@@ -29,7 +29,7 @@ class VisualsConfigTest {
              "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "pbr": false, "pbrNormalStrength": 150,
              "pbrReflections": true, "pbrParallax": true, "colourSunlight": 16744512, "colourShadeLight": 8438015, "cloudStyle": 2, "sunSize": 70, "moonSize": 150, "snowType": 1, "snowSize": 150, "snowAmount": 60,
              "rainType": 2, "rainSize": 80, "rainAmount": 140, "starCount": 250, "starSize": 60, "starBrightness": 180, "starType": 1,
-             "particleSmokeType": 1, "particleSmokeSize": 150, "particleFlamesAmount": 50, "particleMagicBrightness": 160, "colourParticleDrips": 4227327, "revision": 16}
+             "particleSmokeType": 1, "particleSmokeSize": 150, "particleFlamesAmount": 50, "particleMagicBrightness": 160, "colourParticleDrips": 4227327, "halfResEffects": true, "revision": 17}
             """;
 
     private static List<Field> settingFields() {
@@ -68,7 +68,9 @@ class VisualsConfigTest {
                 checked++;
             } else if (item.kind() == VisualsOptionLayout.Kind.SWITCH) {
                 //FG design 7 / FSR design 7: the two frame generation switches are the ones that start off; session 9: and the parallax
-                assertEquals(item.key().equals("frame_generation") || item.key().equals("fsr_frame_generation") || item.key().equals("pbr_parallax") ? 0 : 1,
+                //Session 14 follow-up: and Half-resolution Weather & Sky (the presets below High turn it on)
+                assertEquals(item.key().equals("frame_generation") || item.key().equals("fsr_frame_generation") || item.key().equals("pbr_parallax")
+                        || item.key().equals("half_res_effects") ? 0 : 1,
                         VisualsOptionLayout.get(c, item), item.key());
                 checked++;
             }
