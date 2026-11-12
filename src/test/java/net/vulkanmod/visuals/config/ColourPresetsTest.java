@@ -231,7 +231,51 @@ class ColourPresetsTest {
         assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
     }
 
-    /** Session 8 follow-up: the look block on the colours page holds the same three settings as their own pages, with its label. */
+    /**
+     * 2026-11-12: the palettes set the moonlight (the night's brightness) too: Horror's night is the darkest, Anime's the brightest. A file
+     * saved before, on a palette with the moonlight still at its old default, takes the palette's and stays on it; a moonlight the player
+     * changed is kept (the palette then shows Custom).
+     */
+    @Test
+    void thePalettesSetTheMoonlight(@TempDir Path dir) throws Exception {
+        assertTrue(java.util.List.of(ColourPresets.LOOK_KEYS).contains("moonlight"));
+        int horror = ColourPresets.look("moonlight", ColourPresets.HORROR), def = ColourPresets.look("moonlight", ColourPresets.DEFAULT),
+                anime = ColourPresets.look("moonlight", ColourPresets.ANIME);
+        assertTrue(horror < def && def < anime);
+        VisualsConfig c = new VisualsConfig();
+        ColourPresets.apply(c, ColourPresets.HORROR);
+        assertEquals(horror, c.moonlight);
+        c.moonlight = 80;
+        assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c));
+        Path f = dir.resolve("fifteen.json");
+        for (int palette = 0; palette < ColourPresets.LEVELS; palette++) {
+            VisualsConfig old = new VisualsConfig();
+            ColourPresets.apply(old, palette);
+            old.moonlight = ColourPresets.MOONLIGHT_BEFORE_16;
+            old.write(f);
+            Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 15"));
+            VisualsConfig read = VisualsConfig.read(f);
+            assertEquals(ColourPresets.look("moonlight", palette), read.moonlight, "palette " + palette);
+            assertEquals(palette, read.colourPreset, "palette " + palette);
+        }
+        VisualsConfig tuned = new VisualsConfig();
+        ColourPresets.apply(tuned, ColourPresets.ANIME);
+        tuned.moonlight = 90;
+        tuned.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 15"));
+        VisualsConfig kept = VisualsConfig.read(f);
+        assertEquals(90, kept.moonlight);
+        assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
+        //an older file on Custom keeps its moonlight
+        VisualsConfig custom = new VisualsConfig();
+        custom.setColour(Colour.WATER, 0x123456);
+        custom.colourPreset = ColourPresets.CUSTOM;
+        custom.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 15"));
+        assertEquals(ColourPresets.MOONLIGHT_BEFORE_16, VisualsConfig.read(f).moonlight);
+    }
+
+    /** Session 8 follow-up: the look block on the colours page holds the same settings as their own pages, with its label. */
     @Test
     void theColoursPageShowsThePalettesLookSettings() throws Exception {
         VisualsOptionLayout.Page colours = VisualsOptionLayout.PAGES.stream().filter(p -> p.key().equals("colours")).findFirst().orElseThrow();

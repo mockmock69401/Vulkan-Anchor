@@ -102,6 +102,7 @@ public final class VisualsOptionLayout {
     private static final Item SATURATION = percent("saturation", SATURATION_MIN, SATURATION_MAX, Impact.NONE);
     private static final Item BLOOM = percent("bloom_strength", 0, STRENGTH_MAX, Impact.LOW);
     private static final Item FOG = percent("fog_strength", 0, FOG_STRENGTH_MAX, Impact.NONE);
+    private static final Item MOONLIGHT = percent("moonlight", STRENGTH_MAX);
 
     public static final List<Page> PAGES = List.of(
             new Page("image", List.of(
@@ -132,7 +133,7 @@ public final class VisualsOptionLayout {
                     new Block("sky", List.of(
                             percent("sunset_light", STRENGTH_MAX),
                             percent("light_shafts", 0, STRENGTH_MAX, Impact.MEDIUM),
-                            percent("moonlight", STRENGTH_MAX),
+                            MOONLIGHT,
                             toggle("far_clouds", Impact.MEDIUM, null),
                             //2026-11-09 (session 3): the realistic clouds and their settings (greyed out with the vanilla shape)
                             new Item("cloud_style", Kind.CHOICE, 0, CloudMath.STYLE_MAX, Impact.HIGH, "far_clouds"),
@@ -214,7 +215,7 @@ public final class VisualsOptionLayout {
                             //2026-11-11 (session 12): the stars
                             colour(Colour.STARS, null))),
                     //Session 8 follow-up: what a palette sets besides the colours (also on the image and atmosphere pages)
-                    new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG)),
+                    new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG, MOONLIGHT)),
                     new Block("colours_air", List.of(
                             colour(Colour.FOG, null),
                             colour(Colour.OVERCAST, null),
