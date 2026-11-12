@@ -76,6 +76,8 @@ layout(binding = 21, std430) restrict buffer ParticleTiles { uint particleTile[]
 // its distances from the camera) and the aurora, with the texel's view distance in w; the composite reads them while halfParams.x is 1
 layout(binding = 22, rgba16f) uniform restrict image2D skyHalfCloud;
 layout(binding = 23, rgba16f) uniform restrict image2D skyHalfAurora;
+//2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace: albedo and slopes with their mips, water.glsl moonShape)
+layout(binding = 24) uniform sampler2D moonFace;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -190,6 +192,8 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/lightvolume.glsl>
 #import <vulkanmod:visuals/post/clouds.glsl>
 #import <vulkanmod:visuals/post/lighting.glsl>
+//Session 15: water.glsl reads the moon's face at a pixel's footprint, the tangent of one pixel's angle at the screen's centre
+#define MOON_FACE_PIXEL (2.0*abs(invVanillaProj[1][1])/float(imageSize(sceneOut).y))
 #import <vulkanmod:visuals/post/water.glsl>
 #import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>

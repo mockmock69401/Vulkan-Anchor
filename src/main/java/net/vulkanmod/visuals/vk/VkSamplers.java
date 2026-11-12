@@ -21,6 +21,11 @@ public final class VkSamplers {
         return create(VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_LOD_CLAMP_NONE);
     }
 
+    /** Linear texels, linear between mips, clamped to the edge (session 15: the round moon's face, MoonFace). */
+    public static long linearMipClamp() {
+        return create(VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_LOD_CLAMP_NONE);
+    }
+
     /** ModelStore's block sampler: GL_NEAREST_MIPMAP_LINEAR / GL_NEAREST, GL's default repeat, LOD 0 to maxLod. */
     public static long modelAtlas(float maxLod) {
         return create(VK_FILTER_NEAREST, VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT, maxLod);

@@ -84,6 +84,8 @@ public final class VkPostProcess {
     COPY_PARTICLE_TILES = 21,
     //Session 14 follow-up (Half-resolution Weather & Sky): the copy reads the half-size clouds and aurora at 22, 23 (.SKY_HALF writes them)
     COPY_SKY_HALF_CLOUD = 22, COPY_SKY_HALF_AURORA = 23,
+    //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace, water.glsl moonShape), the copy at 24, the reflection at 11
+    COPY_MOON_FACE = 24, REFLECTION_MOON_FACE = 11,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -198,6 +200,10 @@ public final class VkPostProcess {
     private final long nearest, linear;
     //P7h design 3.3: clouds.png as 256x256 RGBA8 (1 on cloud cells), uploaded once; a dropped upload frame is uploaded again
     private final VkImage2D cloudMap;
+    //Session 15: the round moon's face with its mips (MoonFace), uploaded once (again if that frame was dropped), and its sampler
+    private final VkImage2D moonFace;
+    private final long moonSampler;
+    private long moonFaceSerial = -1;
     //P7l design 3.3: bound in place of the light volume (16 bytes) and of the LOD light (1x1) when there is none
     private final VkGpuBuffer lightStandIn;
     private final VkImage2D lodLightStandIn;
@@ -220,10 +226,10 @@ public final class VkPostProcess {
         VkGraphicsProgram finalDraw = null;
         VkComputeProgram lighting = null, lightingBlur = null, reflection = null, volumetric = null, volumetricBlur = null;
         VkGpuBuffer copyUniformBuffer = null, lightingUniformBuffer = null, reflectionUniformBuffer = null, volumetricUniformBuffer = null;
-        VkImage2D cloudMap = null, lodLightStandIn = null;
+        VkImage2D cloudMap = null, lodLightStandIn = null, moonFace = null;
         VkGpuBuffer lightStandIn = null, sunOpenBuffer = null;
         VkAmbientOcclusion ao = null;
-        long nearest = 0, linear = 0;
+        long nearest = 0, linear = 0, moonSampler = 0;
         try {
             copy = VkComputeProgram.of("postSceneCopy");
             prefilter = VkComputeProgram.of("bloom.PREFILTER");
@@ -235,6 +241,9 @@ public final class VkPostProcess {
             nearest = VkSamplers.nearestClamp();
             linear = VkSamplers.linearClamp();
             cloudMap = VkImage2D.create(VK_FORMAT_R8G8B8A8_UNORM, CloudMath.MAP, CloudMath.MAP, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            MoonFace face = MoonFace.get();
+            moonFace = VkImage2D.create(VK_FORMAT_R8G8B8A8_UNORM, face.size, face.size, face.levels.length, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            moonSampler = VkSamplers.linearMipClamp();
             lightStandIn = VkGpuBuffer.device(16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
             sunOpenBuffer = VkGpuBuffer.device(16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
             lodLightStandIn = VkImage2D.create(LOD_LIGHT_FORMAT, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -279,6 +288,8 @@ public final class VkPostProcess {
             if (nearest != 0) VkSamplers.free(nearest);
             if (linear != 0) VkSamplers.free(linear);
             if (cloudMap != null) cloudMap.free();
+            if (moonFace != null) moonFace.free();
+            if (moonSampler != 0) VkSamplers.free(moonSampler);
             if (lightStandIn != null) lightStandIn.free();
             if (sunOpenBuffer != null) sunOpenBuffer.free();
             if (lodLightStandIn != null) lodLightStandIn.free();
@@ -320,6 +331,8 @@ public final class VkPostProcess {
         this.nearest = nearest;
         this.linear = linear;
         this.cloudMap = cloudMap;
+        this.moonFace = moonFace;
+        this.moonSampler = moonSampler;
         this.lightStandIn = lightStandIn;
         this.lodLightStandIn = lodLightStandIn;
         this.ao = ao;
@@ -588,6 +601,22 @@ public final class VkPostProcess {
             }
             this.cloudMapSerial = VkFrames.serial();
         }
+        //Session 15: the moon's face, every level, once (5.6 MB through the stream)
+        if (this.moonFaceSerial < 0 || VkFrames.isDropped(this.moonFaceSerial)) {
+            MoonFace face = MoonFace.get();
+            for (int level = 0; level < face.levels.length; level++) {
+                byte[] bytes = face.levels[level];
+                int n = Math.max(face.size >> level, 1);
+                ByteBuffer pixels = MemoryUtil.memAlloc(bytes.length);
+                try {
+                    pixels.put(bytes).flip();
+                    upload.uploadImage(this.moonFace, level, 0, 0, n, n, MemoryUtil.memAddress(pixels));
+                } finally {
+                    MemoryUtil.memFree(pixels);
+                }
+            }
+            this.moonFaceSerial = VkFrames.serial();
+        }
         if (this.smaa != null) this.smaa.prepare(upload);
         clouds.write(this.copyUniforms, CloudUniforms.COPY_FIRST);
         clouds.write(this.reflectionUniforms, CloudUniforms.REFLECTION_FIRST);
@@ -661,7 +690,8 @@ public final class VkPostProcess {
                 .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest)
                 .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular())
                 .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles)
-                .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view());
+                .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view())
+                .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         //Session 14 follow-up: no tile flagged yet (the composite flags its tiles with translucent particles), after the last frame's
         // .PARTICLES pass read them
@@ -866,7 +896,7 @@ public final class VkPostProcess {
                 .sampled(REFLECTION_CLOUD_MAP, this.cloudMap, this.nearest)
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight)
-                .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal);
+                .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal).sampled(REFLECTION_MOON_FACE, this.moonFace, this.moonSampler);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
         VkComputeProgram program = this.tintedOn && this.reflectionTinted != null
                 ? (this.leanOn && this.reflectionLeanTinted != null ? this.reflectionLeanTinted : this.reflectionTinted)
@@ -1087,6 +1117,8 @@ public final class VkPostProcess {
         VkSamplers.free(this.nearest);
         VkSamplers.free(this.linear);
         this.cloudMap.free();
+        this.moonFace.free();
+        VkSamplers.free(this.moonSampler);
         if (this.weather != null) this.weather.free();
         if (this.weatherRound != null) this.weatherRound.free();
         if (this.weatherUniformBuffer != null) this.weatherUniformBuffer.free();
