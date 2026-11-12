@@ -52,8 +52,12 @@ public class VisualsConfig {
      * on it (ColourPresets.moveOldColours, with the star colour for a file older than 14); any other file keeps the default colours.
      * 16 (2026-11-12): the palettes also set the moonlight (ColourPresets.LOOK_KEYS); a file on a palette with the moonlight at its old
      * default takes the palette's and stays on it (ColourPresets.moveOldMoonlight); any other file keeps its moonlight.
+     * 17 (2026-11-12, session 14 follow-up): Half-resolution Weather & Sky (halfResEffects), which the presets set (on at Potato, Low and
+     * Medium); a file on a level takes that level's value and stays on it, any other file keeps it off (as before).
      */
-    private static final int REVISION = 16;
+    private static final int REVISION = 17;
+    /** Session 14 follow-up: the first revision with Half-resolution Weather & Sky. */
+    static final int HALF_RES_REVISION = 17;
     /** 2026-11-12: the first revision whose palettes set the moonlight. */
     static final int MOONLIGHT_REVISION = 16;
     /** Session 13: the first revision with the particle groups' colours. */
@@ -143,6 +147,10 @@ public class VisualsConfig {
         //Session 9: a level saved before the PBR settings existed keeps its level
         if (fileRevision < PBR_REVISION && VisualsPresets.isLevel(c.preset)) {
             for (String key : PBR_PRESET_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), VisualsPresets.value(key, c.preset));
+        }
+        //Session 14 follow-up: likewise a level saved before Half-resolution Weather & Sky existed (Potato, Low, Medium turn it on)
+        if (fileRevision < HALF_RES_REVISION && VisualsPresets.isLevel(c.preset)) {
+            VisualsOptionLayout.set(c, VisualsOptionLayout.item("half_res_effects"), VisualsPresets.value("half_res_effects", c.preset));
         }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
@@ -362,6 +370,13 @@ public class VisualsConfig {
      * of vanilla's weather columns; off draws vanilla's exactly as before.
      */
     public boolean shaderWeather = true;
+    /**
+     * 2026-11-12 (session 14 follow-up, the user: "날씨와 구름에 오로라까지 하고 오로라는 물결무늬 줄여줘"): the shader weather and the far
+     * clouds drawn at half resolution and brought up (VkPostProcess): much cheaper (an AMD iGPU at 1280x720: rain 10.5 -> 2.9 ms, realistic
+     * clouds 17.3 -> 7.9), a little softer (thin rain streaks, pixel-type rain's edges). The aurora stays at full size: at half size its
+     * banding could not be brought down (VkPostProcess.HALF_AURORA). Off by default; the Potato, Low and Medium presets turn it on.
+     */
+    public boolean halfResEffects = false;
     /**
      * 2026-11-11: the shader snow's and rain's look (ParticleEffect.SNOW, RAIN): the type (0 round, 1 pixel, 2 both), the size, the
      * amount and the brightness (percent, 100 = default; the amount replaced session 6's one density; the brightness multiplies the colour).

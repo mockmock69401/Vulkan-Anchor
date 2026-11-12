@@ -43,6 +43,9 @@ public final class VisualsPresets {
         v.put("cloud_quality", new int[]{1, 1, 1, 1, 2});
         v.put("aurora", new int[]{0, 1, 1, 2, 2});
         v.put("shader_weather", new int[]{0, 1, 1, 1, 1});
+        //session 14 follow-up: the far clouds and the shader weather at half resolution (on an AMD iGPU at 1280x720: rain 10.5 -> 2.9 ms,
+        // realistic clouds 17.3 -> 7.9; RTX 5070 at 1440: about 0.6 ms each)
+        v.put("half_res_effects", new int[]{1, 1, 1, 0, 0});
         //lighting: ambient occlusion (0 skips the pass: 0.15 ms), per-pixel light (0.27 ms), Distant Horizons' shadows, sun shadows
         v.put("ao_strength", new int[]{0, 100, 100, 100, 100});
         v.put("per_pixel_light", new int[]{0, 1, 1, 1, 1});

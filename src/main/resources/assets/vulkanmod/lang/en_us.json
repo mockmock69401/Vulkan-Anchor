@@ -159,6 +159,8 @@
   "vulkanmod.visuals.moon_size.tooltip": "How big the round moon is, with its maria and craters. 100 is the default. The square moon keeps vanilla's size",
   "vulkanmod.visuals.aurora": "Auroras",
   "vulkanmod.visuals.aurora.tooltip": "Curtains of green and violet light drifting across the sky: on clear nights in the Overworld (brightest in snowy biomes, never in rain or snow) and always in the End. Also seen in the water",
+  "vulkanmod.visuals.half_res_effects": "Half-resolution Weather & Sky",
+  "vulkanmod.visuals.half_res_effects.tooltip": "Draws the shader rain and snow and the far clouds at half resolution and scales them up: much faster on weak GPUs (on integrated graphics rain costs about a quarter, realistic clouds about half), slightly softer (thin rain streaks, the edges of pixel-type raindrops). Auroras stay at full resolution. On in the Potato, Low and Medium presets. Off: full resolution",
   "vulkanmod.visuals.aurora.0": "Off",
   "vulkanmod.visuals.aurora.1": "End Only",
   "vulkanmod.visuals.aurora.2": "Night and End",

@@ -100,10 +100,28 @@ void main() {
     if (any(greaterThanEqual(p, size))) {
         return;
     }
+    //2026-11-12 (session 14 follow-up, Half-resolution Weather & Sky): at half the size each texel stands for a 2x2 block of the
+    // screen; its depth and view are the block's nearest pixel's (the drops stop at the nearest surface), then a pass upsamples it
+    ivec2 full = textureSize(mainDepth, 0);
+    ivec2 q = p;
+    ivec2 qs = size;
+    if (size != full) {
+        qs = full;
+        q = min(p*2, full - 1);
+        float best = texelFetch(mainDepth, q, 0).r;
+        for (int i = 1; i < 4; i++) {
+            ivec2 c = min(p*2 + ivec2(i & 1, i >> 1), full - 1);
+            float d = texelFetch(mainDepth, c, 0).r;
+            if (d < best) {
+                best = d;
+                q = c;
+            }
+        }
+    }
     vec3 view;
-    bool scene = scenePosition(p, size, view);
+    bool scene = scenePosition(q, qs, view);
     float sceneDist = scene ? length(view) : 1e30;
-    vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(p, size)));
+    vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(q, qs)));
     vec4 acc = weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion, weatherStyle);
     //2026-11-10: the splashes on the ground behind the drops
     if (scene && acc.a <= WEATHER_OPAQUE) {

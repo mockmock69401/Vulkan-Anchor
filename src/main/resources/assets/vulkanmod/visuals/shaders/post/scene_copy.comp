@@ -72,6 +72,10 @@ layout(binding = 20, std430) restrict buffer SunOpenShare { float sunOpenShareVa
 //Session 14 follow-up: one flag per workgroup tile (row-major over the dispatch), set by the composite where a pixel of the tile is a
 // translucent particle (cleared to 0 before it each frame); the .PARTICLES pass works only the flagged tiles
 layout(binding = 21, std430) restrict buffer ParticleTiles { uint particleTile[]; };
+//2026-11-12 (session 14 follow-up, Half-resolution Weather & Sky): .SKY_HALF writes, at half the size, the far clouds' march (farCloudMarch,
+// its distances from the camera) and the aurora, with the texel's view distance in w; the composite reads them while halfParams.x is 1
+layout(binding = 22, rgba16f) uniform restrict image2D skyHalfCloud;
+layout(binding = 23, rgba16f) uniform restrict image2D skyHalfAurora;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -169,6 +173,8 @@ layout(location = 59) uniform vec4 glowTint;
 //2026-11-11 (session 12): CelestialUniforms' STAR_TINT, the picked star colour's tint on vanilla's stars (water.glsl vanillaStarTint),
 // exactly 1 at its default, w 0; read only by postSceneCopy.TINTED
 layout(location = 60) uniform vec4 starTint;
+//2026-11-12 (session 14 follow-up): x 1 while the far clouds come from the half-size image (.SKY_HALF ran), y 1 while the aurora does
+layout(location = 61) uniform vec4 halfParams;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -707,6 +713,49 @@ bool vanillaCloud(vec3 world, vec3 dir, float dist) {
 
 //The far cloud layer in front of maxDist along dir (W4's cloudOver of clouds.glsl's march, premultiplied and hazed), over colour;
 // p the pixel (session 3: the realistic style's per-pixel jitter)
+//Session 14 follow-up: a half-size texel's value at full-size pixel p, bilinear over the four nearest texels and weighed down by how far
+// each texel's view distance lies from the pixel's own (no cloud from the sky behind a hill's edge on the hill, and none of the hill's on the
+// sky); where all four lie elsewhere, the nearest in distance
+const float HALF_SKY_DEPTH_SHARPNESS = 16.0;
+//rgba16f holds up to 65504: the sky's distance (HAZE_MAX_DISTANCE) is stored as this
+const float HALF_SKY_FAR = 60000.0;
+//The half-size pass marches the aurora along two directions with the full size's samples each
+const int HALF_SKY_AURORA_STEPS = AURORA_STEPS;
+vec4 halfSkyAt(bool aurora, ivec2 p, float dist) {
+    dist = min(dist, HALF_SKY_FAR);
+    ivec2 hs = imageSize(skyHalfCloud);
+    vec2 h = (vec2(p) + 0.5)*0.5 - 0.5;
+    ivec2 b = ivec2(floor(h));
+    vec2 f = h - vec2(b);
+    vec4 sum = vec4(0.0);
+    float wsum = 0.0;
+    vec4 nearestValue = vec4(0.0);
+    float nearestGap = 1e30;
+    for (int i = 0; i < 4; i++) {
+        ivec2 o = ivec2(i & 1, i >> 1);
+        ivec2 c = clamp(b + o, ivec2(0), hs - 1);
+        float dc = imageLoad(skyHalfAurora, c).w;
+        vec4 v = aurora ? vec4(imageLoad(skyHalfAurora, c).rgb, 0.0) : imageLoad(skyHalfCloud, c);
+        float gap = abs(dc - dist)/max(dist, 1.0);
+        float w = (o.x == 1 ? f.x : 1.0 - f.x)*(o.y == 1 ? f.y : 1.0 - f.y)/(1.0 + HALF_SKY_DEPTH_SHARPNESS*gap);
+        sum += v*w;
+        wsum += w;
+        if (gap < nearestGap) {
+            nearestGap = gap;
+            nearestValue = v;
+        }
+    }
+    return wsum > 1e-4 ? sum/wsum : nearestValue;
+}
+
+//Session 14 follow-up: the aurora on a sky pixel (the half-size one with Half-resolution Weather & Sky)
+vec3 auroraScreen(vec3 dir, ivec2 p) {
+    if (halfParams.y > 0.5) {
+        return auroraParams.x > 0.0 ? halfSkyAt(true, p, HAZE_MAX_DISTANCE).rgb : vec3(0.0);
+    }
+    return auroraSky(dir, p);
+}
+
 vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) {
     if (cloudShape.w < 0.5 || !atmosphereSky(a)) {
         return colour;
@@ -715,11 +764,17 @@ vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) 
     if (!(maxDist > near)) {
         return colour;
     }
-    vec4 m = farCloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));
+    vec4 m;
+    if (halfParams.x > 0.5) {
+        //Session 14 follow-up: the half-size march (its distances already from the camera)
+        m = halfSkyAt(false, p, maxDist);
+    } else {
+        m = farCloudMarch(dir*near, dir, maxDist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));
+        m.w += near;//the march's distances are from its start
+    }
     if (!(m.z > 0.0)) {
         return colour;//no cloud in front: no haze to evaluate
     }
-    m.w += near;//the march's distances are from its start
     vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0);
     return colour*(1.0 - r.a) + r.rgb;
 }
@@ -861,7 +916,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
         if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5) {
-            return vec4((scene + auroraSky(dir, p))*underwaterExposure(), 0.0);
+            return vec4((scene + auroraScreen(dir, p))*underwaterExposure(), 0.0);
         }
         //Session 5: the round discs (the round moon replaces vanilla's square one, which vanillaMoonKept drops) and the aurora, under
         // the far clouds
@@ -870,7 +925,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
 #ifdef ATMOSPHERE_TINTS
         stars *= vanillaStarTint(a, dir, starTint);
 #endif
-        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraSky(dir, p);
+        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraScreen(dir, p);
         return vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0);
     }
     float dist = length(view);
@@ -1250,6 +1305,60 @@ vec3 particleBehindGuess(ivec2 p, ivec2 size, vec3 behind) {
     return weatherFogOver(a, applyHazeOpen(a, scene, dir, dist, amount, 1.0), dir, dist, amount);
 }
 
+#ifdef SKY_HALF_PASS
+//Session 14 follow-up (Half-resolution Weather & Sky): the far clouds and the aurora at half the size, each texel for its 2x2 block's
+// farthest pixel (the sky if any), the jitter on the half-size grid (on the full one every other pixel of it: diagonal stripes)
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 hs = imageSize(skyHalfCloud);
+    if (any(greaterThanEqual(p, hs))) {
+        return;
+    }
+    ivec2 size = imageSize(sceneOut);
+    ivec2 q = min(p*2, size - 1);
+    float best = texelFetch(mainDepth, q, 0).r;
+    for (int i = 1; i < 4; i++) {
+        ivec2 c = min(p*2 + ivec2(i & 1, i >> 1), size - 1);
+        float d = texelFetch(mainDepth, c, 0).r;
+        if (d > best) {
+            best = d;
+            q = c;
+        }
+    }
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
+    vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(q, size)));
+    vec3 view;
+    bool scene = scenePosition(q, size, view);
+    float dist = scene ? length(view) : HAZE_MAX_DISTANCE;
+    vec4 m = vec4(0.0);
+    float near = farCloudNear();
+    if (cloudShape.w >= 0.5 && atmosphereSky(a) && dist > near) {
+        m = farCloudMarch(dir*near, dir, dist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));
+        m.w += near;
+    }
+    imageStore(skyHalfCloud, p, m);
+    //The aurora as the mean of two of the block's pixels (its diagonal), each with the full size's samples and half a step of jitter apart
+    // (one direction a texel left coarse curved bands of the march's steps at 1280x720), the rays faded where finer than a texel
+    vec3 au = vec3(0.0);
+    if (!scene && auroraParams.x > 0.0 && halfParams.y > 0.5) {
+        float pixelAngle = 2.0*abs(invVanillaProj[1][1])/float(hs.y);
+        float jitter = fract(interleavedGradientNoise(vec2(p)) + auroraParams.w);
+        for (int k = 0; k < 2; k++) {
+            ivec2 c = min(p*2 + ivec2(k), size - 1);
+            vec3 d = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(c, size)));
+            float jk = fract(jitter + 0.5*float(k));
+#ifdef ATMOSPHERE_TINTS
+            au += aurora(d, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, HALF_SKY_AURORA_STEPS, jk, pixelAngle);
+#else
+            au += aurora(d, auroraParams, vec3(1.0), vec3(1.0), vec3(1.0), HALF_SKY_AURORA_STEPS, jk, pixelAngle);
+#endif
+        }
+        au *= 0.5;
+    }
+    imageStore(skyHalfAurora, p, vec4(au, min(dist, HALF_SKY_FAR)));
+}
+#else
 #ifdef SUN_OPEN_PASS
 //Session 14: the frame's sun open share, by one invocation (dispatched as one group), as compositeAt used to work it out per pixel
 void main() {
@@ -1333,5 +1442,6 @@ void main() {
     }
     imageStore(sceneOut, p, compositeAt(p, size, colour, overdrawn));
 }
+#endif
 #endif
 #endif

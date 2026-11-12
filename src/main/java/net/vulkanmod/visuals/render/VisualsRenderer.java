@@ -570,7 +570,7 @@ public final class VisualsRenderer {
                 if (changed || this.post.precipitationMapStale()) map = this.precipitation.texels();
                 values = WeatherUniforms.compute(settings, frame.rain(), frame.thunder(), frame.cameraFluid() != AtmosphereFrame.CameraFluid.NONE,
                         WeatherUniforms.unjitteredInverse(atmosphere.invVanillaProjection(), TaaJitter.appliedNdc()), atmosphere.invLodProjection(),
-                        atmosphere.invView(), atmosphere.lodValid(), height, camera.x, camera.y, camera.z, this.weatherVelocity, now,
+                        atmosphere.invView(), atmosphere.lodValid(), this.post.halfWeather() ? (height + 1) / 2 : height, camera.x, camera.y, camera.z, this.weatherVelocity, now,
                         this.precipitation.hasRain(), this.precipitation.hasSnow(), waterRain(reflection));
             }
         } catch (RuntimeException e) {

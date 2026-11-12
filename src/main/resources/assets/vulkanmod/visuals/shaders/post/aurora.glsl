@@ -59,6 +59,12 @@ const float AURORA_PERIOD = 256.0;
 const float AURORA_RAY_CELLS = 24.0;
 const float AURORA_RAY_DEPTH = 0.8;
 const float AURORA_RAY_DRIFT = 0.05;
+//2026-11-12 (session 14 follow-up, the half-resolution sky): rays finer than a pixel fold back into coarse ripples (moire at 1280x720 drawn
+// at half size), so where a pixel spans AURORA_RAY_ALIAS_LOW..HIGH ray cells or more they fade to their mean AURORA_RAY_MEAN (the light
+// they average to); only with a pixel's angle given (the half-size pass), the full-size sky is drawn as before
+const float AURORA_RAY_MEAN = 0.5;
+const float AURORA_RAY_ALIAS_LOW = 0.2;
+const float AURORA_RAY_ALIAS_HIGH = 0.4;
 //How the brightness changes along and across the arcs (a slow noise, cells of the warp): the darkest part keeps AURORA_PATCH_MIN
 const float AURORA_PATCH_MIN = 0.15;
 //The lower border's height above 1 varies by up to AURORA_BORDER_LIFT along the arc, and it is soft over AURORA_BORDER_EDGE
@@ -167,7 +173,7 @@ vec3 auroraColour(float h, float border, bool end, vec3 tintLow, vec3 tintMid, v
 }
 
 //The aurora's light along dir (see the header). 0 with params.x <= 0, at or below the horizon, and for steps < 1
-vec3 aurora(vec3 dir, vec4 params, vec3 tintLow, vec3 tintMid, vec3 tintTop, int steps, float jitter) {
+vec3 aurora(vec3 dir, vec4 params, vec3 tintLow, vec3 tintMid, vec3 tintTop, int steps, float jitter, float pixelAngle) {
     if (!(params.x > 0.0) || !(dir.y > AURORA_HORIZON_LOW) || steps < 1) {
         return vec3(0.0);
     }
@@ -192,10 +198,21 @@ vec3 aurora(vec3 dir, vec4 params, vec3 tintLow, vec3 tintMid, vec3 tintTop, int
         if (f.x < 0.001) {
             continue;
         }
-        float rays = 1.0 - AURORA_RAY_DEPTH*auroraNoise1(f.w*AURORA_RAY_CELLS + t*AURORA_RAY_DRIFT, 4u);
+        float rayNoise = auroraNoise1(f.w*AURORA_RAY_CELLS + t*AURORA_RAY_DRIFT, 4u);
+        if (pixelAngle > 0.0) {
+            //Ray cells across the pixel at this point: its angle times the distance (s, dir is a unit vector) in footprint cells along the arc
+            float cells = pixelAngle*s*AURORA_SCALE/AURORA_STRETCH*AURORA_RAY_CELLS;
+            rayNoise = mix(rayNoise, AURORA_RAY_MEAN, smoothstep(AURORA_RAY_ALIAS_LOW, AURORA_RAY_ALIAS_HIGH, cells));
+        }
+        float rays = 1.0 - AURORA_RAY_DEPTH*rayNoise;
         float bright = mix(AURORA_PATCH_MIN, 1.0, smoothstep(0.25, 0.75, f.y));
         float border = 1.0 + AURORA_BORDER_LIFT*f.z;
         sum += auroraColour(x.y, border, end, tintLow, tintMid, tintTop)*(f.x*rays*bright*exp(-s*horizontal/AURORA_EXTINCTION));
     }
     return sum*(dt*AURORA_BRIGHTNESS*params.x*fade);
+}
+
+//The aurora's light along dir at full size (no ray fading: see AURORA_RAY_ALIAS_LOW)
+vec3 aurora(vec3 dir, vec4 params, vec3 tintLow, vec3 tintMid, vec3 tintTop, int steps, float jitter) {
+    return aurora(dir, params, tintLow, tintMid, tintTop, steps, jitter, 0.0);
 }
