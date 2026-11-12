@@ -21,22 +21,6 @@ public final class VkBarriers {
         barrier(cmd, STAGES, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT, STAGES, READS_AND_WRITES);
     }
 
-    /** Compute writes are visible to later compute, indirect arguments, transfers and shaders. */
-    public static void afterCompute(VkCommandBuffer cmd) {
-        barrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, STAGES, READS_AND_WRITES);
-    }
-
-    /** Fill/update/copy writes are visible to later compute, indirect arguments, transfers and shaders. */
-    public static void afterTransfer(VkCommandBuffer cmd) {
-        barrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, STAGES, READS_AND_WRITES);
-    }
-
-    /** Draw-time shader writes (the cull raster's visibility) and indirect/vertex reads finish before later the visuals work. */
-    public static void afterGraphics(VkCommandBuffer cmd) {
-        barrier(cmd, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                VK_ACCESS_SHADER_WRITE_BIT, STAGES, READS_AND_WRITES);
-    }
-
     /**
      * Vanilla's depth, written by Reforged's main pass, is visible to compute reads (the vanilla distance map, the
      * better SSAO): Reforged's layout transition only waits for and exposes it to fragment shaders.
