@@ -15,6 +15,21 @@ import java.util.List;
  * Legakis and Dorsey 1999 (pbr.glsl).
  */
 public final class PbrMath {
+    /**
+     * 2026-11-12 (session 14 follow-up, the user: "labPBR 맵이 적은 팩에서는 PBR 꺼줘"): PbrAtlas turns PBR off when the resource packs
+     * give fewer LabPBR maps (normal and specular together) than this. The path costs the same however few sprites it lights (terrain PBR
+     * build, the composite's and the reflection's .PBR builds, the material images: +0.45 ms on an RTX 5070 at 1440, +1.5 to 4.2 ms on an
+     * AMD iGPU at 720p), and a few maps are mostly mods' own textures that end in _n or _s (CTE2: Supplementaries Squared's
+     * daub_frame_stairs_n, a texture variant, read as a normal map of 28634 sprites). A LabPBR pack brings hundreds (Embrace Pixels 2.1:
+     * 560 normal and 548 specular maps of 2688 sprites); 32 is about 1% of a vanilla atlas.
+     */
+    public static final int MIN_LABPBR_MAPS = 32;
+
+    /** Whether the packs' maps are enough for PBR to run (MIN_LABPBR_MAPS). */
+    public static boolean enoughMaps(int normalMaps, int specularMaps) {
+        return normalMaps + specularMaps >= MIN_LABPBR_MAPS;
+    }
+
     // ---- pbr_terrain.glsl (and pbr.glsl's copies) ----
     public static final float PBR_NORMAL_STEPS = 2047.0f;
     public static final float PBR_AO_STEPS = 7.0f;
