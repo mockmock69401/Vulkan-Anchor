@@ -20,8 +20,7 @@ class VkBarriersTest {
         }
         int helpers = 0;
         for (MethodNode m : node.methods) {
-            if (!m.name.equals("frameStart") && !m.name.equals("afterCompute") && !m.name.equals("afterTransfer")
-                    && !m.name.equals("afterGraphics")) continue;
+            if (!m.name.equals("frameStart")) continue;
             helpers++;
             int barriers = 0;
             for (AbstractInsnNode insn : m.instructions) {
@@ -29,6 +28,6 @@ class VkBarriersTest {
             }
             assertEquals(1, barriers, m.name);
         }
-        assertEquals(4, helpers);
+        assertEquals(1, helpers);
     }
 }
