@@ -222,6 +222,7 @@ class SceneCompositeTest {
         expected.put("COPY_TERRAIN_NORMAL", VulkanShaderMeta.Kind.IMAGE);//2026-11-10 (session 9)
         expected.put("COPY_TERRAIN_SPECULAR", VulkanShaderMeta.Kind.IMAGE);
         expected.put("COPY_SUN_OPEN", VulkanShaderMeta.Kind.STORAGE_BUFFER);//2026-11-12 (session 14)
+        expected.put("COPY_PARTICLE_TILES", VulkanShaderMeta.Kind.STORAGE_BUFFER);//2026-11-12 (session 14 follow-up)
         Set<String> want = new TreeSet<>();
         for (Map.Entry<String, VulkanShaderMeta.Kind> e : expected.entrySet()) {
             Integer binding = fields.get(e.getKey());
@@ -235,7 +236,7 @@ class SceneCompositeTest {
             have.add(b.binding() + ":" + b.kind());
         }
         assertEquals(want, have);
-        assertEquals(21, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14)");
+        assertEquals(22, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14), the particle tiles at 21 (session 14 follow-up)");
         //Every slot 0..34 with the type its writer uses: the three matrices, then vec4
         for (int loc = 0; loc <= 34; loc++) assertEquals(loc <= 2 ? "mat4" : "vec4", member(loc).type(), "location " + loc);
         //The clean writers and W4 fill every slot but the held light's (HeldLightSystem needs a device buffer: its slot is checked by value)
@@ -1665,33 +1666,51 @@ class SceneCompositeTest {
     @Test
     void theCompositeTakesTranslucentParticlesApartAfterTheWholeTileIsComposited() {
         String c = COMP.replace(String.valueOf((char) 13), "");
-        //2026-11-12 (session 14): the composite's main is the last one (postSceneCopy.SUN_OPEN's comes first)
-        int main = c.lastIndexOf("void main() {");
-        String body = c.substring(main);
-        //One pixel's composite is a function; main reaches the barrier from every invocation (no return before it)
+        //Session 14 follow-up: three mains, SUN_OPEN_PASS's, PARTICLE_PASS's, then the composite's (each in its own #ifdef branch)
+        int sun = c.indexOf("#ifdef SUN_OPEN_PASS\n//Session 14: the frame"), part = c.indexOf("#ifdef PARTICLE_PASS\n//The tile"),
+                main = c.lastIndexOf("void main() {");
+        assertTrue(sun > 0 && sun < part && part < main && c.split("void main\\(\\) \\{", -1).length - 1 == 3);
+        String particles = c.substring(part, main), body = c.substring(main);
         assertTrue(c.contains("vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {"));
-        int barrier = body.indexOf("barrier();");
-        assertTrue(barrier > 0 && barrier == body.lastIndexOf("barrier();") && !body.substring(0, barrier).contains("return"),
-                "one barrier, reached by every invocation");
-        assertEquals(1, body.split("imageStore\\(sceneOut", -1).length - 1, "main stores once");
-        assertFalse(c.substring(0, main).contains("imageStore(sceneOut"), "compositeAt returns its colour");
-        assertTrue(c.contains("shared vec4 tileShown[COMPOSITE_TILE];") && c.contains("layout(local_size_x = 8, local_size_y = 8) in;")
-                && c.contains("const uint COMPOSITE_TILE = 64u;"));
-        //The particle's own colour is its albedo times vanilla's lightmap, at the levels its fragment left
+        assertFalse(c.substring(0, sun).contains("imageStore(sceneOut"), "compositeAt returns its colour");
+        //The composite: one pixel each, no tile and no barrier; the particle's own colour (albedo times vanilla's lightmap) composited and
+        // its tile flagged
+        assertFalse(body.contains("barrier()") || body.contains("tileShown"), "the composite keeps no tile");
         assertTrue(c.contains("own = albedo*lightmapDisplay(t.y, t.x);"));
         assertTrue(body.contains("if (overdrawn && translucentParticle(p, colour.rgb, behind, own, cover)) {"));
-        int own = body.indexOf("colour = vec4(own, 1.0);");
-        assertTrue(own > 0 && own < body.indexOf("result = compositeAt(p, size, colour, overdrawn);"), "the particle's own colour composited");
+        int own = body.indexOf("colour = vec4(own, 1.0);"), flag = body.indexOf("particleTile[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x] = 1u;");
+        assertTrue(own > 0 && flag > own && flag < body.indexOf("imageStore(sceneOut, p, compositeAt(p, size, colour, overdrawn));"));
         assertEquals(1, body.split("compositeAt\\(", -1).length - 1, "one composite per pixel");
-        assertTrue(body.contains("tileShown[here] = vec4(result.rgb, inside && !overdrawn ? 1.0 : 0.0);"));
+        assertTrue(c.contains("layout(binding = 21, std430) restrict buffer ParticleTiles { uint particleTile[]; };"));
+        //The particles' pass: only flagged tiles (the whole group returns together), the same cover, the composite read back, one barrier
+        // reached by every invocation of a flagged tile, the background as before, written in place
+        assertTrue(c.contains("#ifdef PARTICLE_PASS\n//Session 14 follow-up: the translucent particles' pass reads the composite back"));
+        assertTrue(c.contains("layout(binding = 0, rgba16f) uniform restrict image2D sceneOut;\n#else\nlayout(binding = 0, rgba16f) uniform writeonly restrict image2D sceneOut;"));
+        int pmain = particles.indexOf("void main() {");
+        assertTrue(particles.indexOf("if (particleTile[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x] == 0u) {", pmain) == particles.indexOf("{", pmain) + 6);
+        int barrier = particles.indexOf("barrier();");
+        assertTrue(barrier > 0 && barrier == particles.lastIndexOf("barrier();"));
+        assertFalse(particles.substring(particles.indexOf("ivec2 p =", pmain), barrier).contains("return"), "no return before the barrier after the tile's");
+        assertTrue(particles.contains("shared vec4 tileShown[COMPOSITE_TILE];") && c.contains("layout(local_size_x = 8, local_size_y = 8) in;")
+                && c.contains("const uint COMPOSITE_TILE = 64u;"));
+        assertTrue(particles.contains("if (!(overdrawn && translucentParticle(p, colour.rgb, behind, own, cover))) {"));
+        assertTrue(particles.contains("result = imageLoad(sceneOut, p);"));
+        assertTrue(particles.contains("tileShown[here] = vec4(result.rgb, inside && !overdrawn ? 1.0 : 0.0);"));
+        assertTrue(particles.contains("if (!inside || !(cover < PARTICLE_COVER_OPAQUE)) {"));
         //The background behind a particle: the tile pixels nothing was drawn over, by their colour before the particles, and the guess
         // (vanilla's colour hazed and fogged as the composite does, or the sky) at a small weight: no step where a tile has none
-        assertTrue(body.contains("vec3 sum = particleBehindGuess(p, size, behind)*PARTICLE_GUESS_WEIGHT;"));
-        assertTrue(body.contains("float w = exp(-dot(d, d)/(PARTICLE_BEHIND_MATCH*PARTICLE_BEHIND_MATCH));"));
-        assertTrue(body.contains("result.rgb = mix(sum/weight, result.rgb, cover);"));
+        assertTrue(particles.contains("vec3 sum = particleBehindGuess(p, size, behind)*PARTICLE_GUESS_WEIGHT;"));
+        assertTrue(particles.contains("float w = exp(-dot(d, d)/(PARTICLE_BEHIND_MATCH*PARTICLE_BEHIND_MATCH));"));
+        assertTrue(particles.contains("result.rgb = mix(sum/weight, result.rgb, cover);"));
+        assertEquals(1, particles.split("imageStore\\(sceneOut", -1).length - 1);
         assertTrue(c.contains("return weatherFogOver(a, applyHazeOpen(a, scene, dir, dist, amount, 1.0), dir, dist, amount);"));
         //The rain fog is one function, for the composite and the guess
         assertTrue(c.contains("lit = weatherFogOver(a, lit, dir, dist, amount);"));
+        //The builds and their dispatch: cleared flags before the composite, the pass right after it with the same groups
+        for (String name : List.of("postSceneCopy.PARTICLES", "postSceneCopy.TINTED.PARTICLES")) {
+            var d = net.vulkanmod.visuals.vk.shader.ShaderCatalog.visuals().get(name).defines();
+            assertTrue(d.containsKey("PARTICLE_PASS") && d.containsKey("ATMOSPHERE_TINTS") == name.contains("TINTED"), name);
+        }
     }
 
     // ---- the mirror ----

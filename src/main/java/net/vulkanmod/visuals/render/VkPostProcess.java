@@ -77,6 +77,8 @@ public final class VkPostProcess {
     COPY_TERRAIN_NORMAL = 18, COPY_TERRAIN_SPECULAR = 19, REFLECTION_TERRAIN_NORMAL = 10,
     //2026-11-12 (session 14): the copy reads the frame's sun open share at 20 (postSceneCopy.SUN_OPEN writes it)
     COPY_SUN_OPEN = 20,
+    //Session 14 follow-up: the copy flags its tiles with translucent particles at 21, which postSceneCopy.PARTICLES reads
+    COPY_PARTICLE_TILES = 21,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -138,6 +140,13 @@ public final class VkPostProcess {
      */
     private final VkComputeProgram copySunOpen;
     private final VkGpuBuffer sunOpenBuffer;
+    /**
+     * 2026-11-12 (session 14 follow-up): postSceneCopy.PARTICLES and .TINTED.PARTICLES lay the translucent particles over their tile's
+     * background after the composite, in the tiles it flagged in particleTiles (a uint per 8x8 workgroup, ensureSize); the composite did it
+     * in the same pass until then, and its tile and barrier cost every pixel 0.7 ms (11% of the composite) on an AMD iGPU at 1280x720.
+     */
+    private final VkComputeProgram copyParticles, copyTintedParticles;
+    private VkGpuBuffer particleTiles;
     private boolean pbrOn;
     private String reflectionUsed = "";
     //Volumetric light pass (2026-10-15): light shafts through the sun's cascades, into the shaft image
@@ -274,6 +283,8 @@ public final class VkPostProcess {
         this.copyPbr = variant("postSceneCopy.PBR", copy);
         this.copyTintedPbr = variant("postSceneCopy.TINTED.PBR", copy);
         this.copySunOpen = variant("postSceneCopy.SUN_OPEN", copy);
+        this.copyParticles = variant("postSceneCopy.PARTICLES", copy);
+        this.copyTintedParticles = variant("postSceneCopy.TINTED.PARTICLES", copy);
         this.sunOpenBuffer = sunOpenBuffer;
         this.reflectionPbr = variant("postReflection.PBR", reflection);
         this.reflectionLeanPbr = variant("postReflection.LEAN.PBR", reflection);
@@ -386,7 +397,12 @@ public final class VkPostProcess {
         if (this.scene != null && this.width == width && this.height == height) return;
         if (this.scene != null) {
             VkImage2D[] old = this.images();
-            this.deferred.retire(() -> destroy(old), VkFrames.serial());
+            VkGpuBuffer oldTiles = this.particleTiles;
+            this.deferred.retire(() -> {
+                destroy(old);
+                if (oldTiles != null) oldTiles.free();
+            }, VkFrames.serial());
+            this.particleTiles = null;
             this.scene = null;
             this.sceneLit = null;
             this.bloom = null;
@@ -430,6 +446,8 @@ public final class VkPostProcess {
         this.sunImage = sunImage;
         this.plantSunImage = plantSunImage;
         this.weatherImage = weatherImage;
+        //Session 14 follow-up: a flag per composite workgroup (the copy's dispatch, groups(width) x groups(height))
+        this.particleTiles = VkGpuBuffer.device(4L * groups(width) * groups(height), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         this.width = width;
         this.height = height;
         this.ao.ensureSize(width, height, this.deferred);
@@ -600,8 +618,14 @@ public final class VkPostProcess {
                 .sampledView(COPY_COLOUR_AFTER, this.colourAfterView != 0 ? this.colourAfterView : mainColourView, this.nearest)
                 .sampledView(COPY_BEFORE_TRANSLUCENT, depths.beforeTranslucent(), this.nearest)
                 .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular())
-                .storage(COPY_SUN_OPEN, this.sunOpenBuffer);
+                .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
+        //Session 14 follow-up: no tile flagged yet (the composite flags its tiles with translucent particles), after the last frame's
+        // .PARTICLES pass read them
+        memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, VK_PIPELINE_STAGE_TRANSFER_BIT, 0);
+        vkCmdFillBuffer(cmd, this.particleTiles.handle(), 0, VK_WHOLE_SIZE, 0);
+        memoryBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
         //Session 14: the frame's sun open share first (one group), made visible to the composite's reads
         if (this.copySunOpen != null) {
             this.copySunOpen.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null, 1, 1, 1);
@@ -620,6 +644,16 @@ public final class VkPostProcess {
         }
         copyProgram.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
                 groups(this.width), groups(this.height), 1);
+        //Session 14 follow-up: the translucent particles over their tiles' background, in place, with the composite's colours (tinted or not:
+        // the tinted builds' tints are exactly 1 at the default colours); same groups, so the same tiles
+        boolean tinted = copyProgram == this.copyTinted || copyProgram == this.copyTintedPbr;
+        VkComputeProgram particles = tinted && this.copyTintedParticles != null ? this.copyTintedParticles : this.copyParticles;
+        if (particles != null) {
+            memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+            particles.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
+                    groups(this.width), groups(this.height), 1);
+        }
         toRead(cmd, copyTarget);
         VkGpuTimer.mark(cmd, "post.reflection");
         this.computeReflection(cmd, depths, data, ready, lodLight, light.terrainLight(), light.terrainNormal());
@@ -822,6 +856,15 @@ public final class VkPostProcess {
                 groups(dst.width), groups(dst.height), 1);
     }
 
+    /** Session 14 follow-up: a global memory barrier (particleTiles, and the composite's image between the composite and .PARTICLES). */
+    private static void memoryBarrier(VkCommandBuffer cmd, int srcStage, int srcAccess, int dstStage, int dstAccess) {
+        try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
+            org.lwjgl.vulkan.VkMemoryBarrier.Buffer b = org.lwjgl.vulkan.VkMemoryBarrier.calloc(1, stack).sType$Default().srcAccessMask(srcAccess)
+                    .dstAccessMask(dstAccess);
+            vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, b, null, null);
+        }
+    }
+
     /** Session 14: a write to a buffer (sunOpenBuffer) becomes readable by the next compute step. */
     private static void bufferBarrier(VkCommandBuffer cmd, int srcStage, int srcAccess) {
         try (org.lwjgl.system.MemoryStack stack = org.lwjgl.system.MemoryStack.stackPush()) {
@@ -932,6 +975,9 @@ public final class VkPostProcess {
         if (this.copyTinted != null) this.copyTinted.free();
         if (this.copySunOpen != null) this.copySunOpen.free();
         this.sunOpenBuffer.free();
+        if (this.copyParticles != null) this.copyParticles.free();
+        if (this.copyTintedParticles != null) this.copyTintedParticles.free();
+        if (this.particleTiles != null) this.particleTiles.free();
         this.prefilter.free();
         this.down.free();
         this.up.free();

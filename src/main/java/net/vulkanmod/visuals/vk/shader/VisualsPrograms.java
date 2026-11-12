@@ -39,6 +39,10 @@ final class VisualsPrograms {
         add(c, "postSceneCopy.TINTED", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", ""), c.compute("post/scene_copy.comp"));
         //Session 14: the frame's sun open share (SUN_OPEN_PASS: one invocation into the composite's buffer at 20), before the composite
         add(c, "postSceneCopy.SUN_OPEN", defs("USE_ZERO_ONE_DEPTH", "", "SUN_OPEN_PASS", ""), c.compute("post/scene_copy.comp"));
+        //Session 14 follow-up: the translucent particles over their tiles' background (PARTICLE_PASS), after the composite, in the tiles it
+        // flagged (binding 21), with the plain or the picked colours as the composite ran
+        add(c, "postSceneCopy.PARTICLES", defs("USE_ZERO_ONE_DEPTH", "", "PARTICLE_PASS", ""), c.compute("post/scene_copy.comp"));
+        add(c, "postSceneCopy.TINTED.PARTICLES", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", "", "PARTICLE_PASS", ""), c.compute("post/scene_copy.comp"));
         add(c, "postReflection", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/reflection.comp"));
         //Session 7: the reflection without the aurora and the realistic clouds, for the frames that draw neither (VkPostProcess)
         add(c, "postReflection.LEAN", defs("USE_ZERO_ONE_DEPTH", "", "REFLECT_LEAN", ""), c.compute("post/reflection.comp"));
