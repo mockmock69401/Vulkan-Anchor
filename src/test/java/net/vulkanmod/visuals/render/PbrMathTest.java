@@ -160,22 +160,31 @@ class PbrMathTest {
         for (int g : new int[]{0, 10, 60, 229, 230, 237, 255}) {
             for (int r : new int[]{120, 200, 255}) {
                 PbrMath.Material m = PbrMath.material(light, n, PbrMath.packSpecular(r, g, 0, 255, light));
+                float[] albedo = {0.75f, 0.6f, 0.25f};
                 for (float film : new float[]{0, 1}) {
-                    float mark = PbrMath.mark(m, film);
+                    float mark = PbrMath.mark(m, film, albedo);
                     assertTrue(PbrMath.isMark(mark) && mark < -4.5f, "below every other mark");
                     assertTrue(mark >= -2048 && mark == Math.rint(mark), "an integer half floats hold exactly");
                     float[] u = PbrMath.unmark(mark);
                     assertEquals(Math.round(r / 255f * 15) / 15f, u[0], 1e-6);
-                    assertEquals(PbrMath.f0Code(m), (int) u[1]);
+                    assertEquals(PbrMath.f0Code(m, albedo), (int) u[1]);
                     assertEquals(film, u[2]);
                 }
-                float[] u = PbrMath.unmark(PbrMath.mark(m, 0));
-                float[] f0 = PbrMath.codeF0((int) u[1], new float[]{0.9f, 0.5f, 0.1f});
+                float[] u = PbrMath.unmark(PbrMath.mark(m, 0, albedo));
+                float[] f0 = PbrMath.codeF0((int) u[1], new float[]{1f, 0.6f, 0.1f});
                 if (m.metal() < 0) assertEquals(m.f0(), f0[0], 0.03f, "a dielectric's F0 within its sqrt step");
                 else if (m.metal() < 8) assertArrayEquals(PbrMath.PBR_METAL_F0[m.metal()], f0);
-                else assertArrayEquals(new float[]{0.9f, 0.5f, 0.1f}, f0, "the albedo's tint");
+                else assertArrayEquals(PbrMath.f0(m, albedo), new float[]{f0[0], f0[0] * 0.6f, f0[0] * 0.1f}, 0.06f, "the albedo's own F0 in linear units, within a sqrt step (session 16)");
             }
         }
+        //Session 16: an albedo metal is never a perfect mirror: its F0 is its linear albedo, and the brightest albedo still fits a half float
+        PbrMath.Material albedoMetal = PbrMath.material(light, n, PbrMath.packSpecular(220, 255, 0, 255, light));
+        float grey = PostMath.displayToLinear(0.5f);
+        assertArrayEquals(new float[]{grey, grey, grey}, PbrMath.f0(albedoMetal, new float[]{0.5f, 0.5f, 0.5f}), 1e-6f);
+        assertTrue(grey < 0.25f, "a mid grey texture is a dim mirror, not a perfect one");
+        assertEquals(-(PbrMath.PBR_MARK_BASE + 15 + 16f * (PbrMath.PBR_CODE_METAL_ALBEDO + PbrMath.PBR_ALBEDO_F0_STEPS) + PbrMath.PBR_MARK_FILM),
+                PbrMath.mark(PbrMath.material(light, n, PbrMath.packSpecular(255, 255, 0, 255, light)), 1, new float[]{1, 1, 1}));
+        assertTrue(PbrMath.mark(PbrMath.material(light, n, PbrMath.packSpecular(255, 255, 0, 255, light)), 1, new float[]{1, 1, 1}) >= -2048);
         assertFalse(PbrMath.isMark(BlockReflectionMath.METAL_MARK) || PbrMath.isMark(-0.5f) || PbrMath.isMark(1));
         assertEquals(0f, PbrMath.reflectivity(PbrMath.PBR_REFLECT_SMOOTH_MIN, 0.04f, 1), "fades in from the threshold");
         assertEquals(0.04f, PbrMath.reflectivity(1, 0.04f, 1), 1e-6, "F0 head on");

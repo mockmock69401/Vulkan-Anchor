@@ -55,11 +55,13 @@ public final class PbrMath {
     public static final float PBR_MARK_BASE = 8.0f;
     public static final float PBR_MARK_LIMIT = -7.5f;
     public static final float PBR_SMOOTH_CODES = 15.0f;
-    public static final float PBR_MARK_FILM = 512.0f;
+    public static final float PBR_MARK_FILM = 1024.0f;
     public static final float PBR_FILM_FLAT = 0.5f;
     public static final int PBR_F0_CODES = 22;
     public static final int PBR_CODE_METAL_FIRST = 23;
     public static final int PBR_CODE_METAL_ALBEDO = 31;
+    /** Session 16: an albedo metal's mark carries its F0's brightest channel in this many sqrt steps (codes 31..38). */
+    public static final int PBR_ALBEDO_F0_STEPS = 7;
     /** LabPBR's predefined metals 230..237 (iron, gold, aluminium, chrome, copper, lead, platinum, silver): F0 from LabPBR's n and k. */
     public static final float[][] PBR_METAL_F0 = {{0.5312f, 0.5124f, 0.4958f}, {0.9442f, 0.7761f, 0.3734f}, {0.9123f, 0.9139f, 0.9197f},
             {0.5556f, 0.5545f, 0.5548f}, {0.9260f, 0.7209f, 0.5042f}, {0.6325f, 0.6259f, 0.6415f}, {0.6788f, 0.6424f, 0.5884f},
@@ -192,9 +194,11 @@ public final class PbrMath {
         return Math.max(r * r, PBR_ALPHA_MIN);
     }
 
-    public static float[] f0(Material m, float[] tint) {
+    /** pbrF0: albedo is the texture's colour (display values); an albedo metal's F0 is it in linear units (session 16). */
+    public static float[] f0(Material m, float[] albedo) {
         if (m.metal() < 0) return new float[]{m.f0(), m.f0(), m.f0()};
-        return m.metal() < 8 ? PBR_METAL_F0[m.metal()].clone() : tint.clone();
+        return m.metal() < 8 ? PBR_METAL_F0[m.metal()].clone()
+                : new float[]{PostMath.displayToLinear(clamp01(albedo[0])), PostMath.displayToLinear(clamp01(albedo[1])), PostMath.displayToLinear(clamp01(albedo[2]))};
     }
 
     public static float fresnel(float f0, float cosTheta) {
@@ -228,13 +232,17 @@ public final class PbrMath {
         return m.smoothness() >= PBR_REFLECT_SMOOTH_MIN;
     }
 
-    public static int f0Code(Material m) {
-        if (m.metal() >= 0) return m.metal() < 8 ? PBR_CODE_METAL_FIRST + m.metal() : PBR_CODE_METAL_ALBEDO;
+    public static int f0Code(Material m, float[] albedo) {
+        if (m.metal() >= 0) {
+            if (m.metal() < 8) return PBR_CODE_METAL_FIRST + m.metal();
+            float b = PostMath.displayToLinear(clamp01(Math.max(albedo[0], Math.max(albedo[1], albedo[2]))));
+            return PBR_CODE_METAL_ALBEDO + Math.round((float) Math.sqrt(b) * PBR_ALBEDO_F0_STEPS);
+        }
         return Math.round((float) Math.sqrt(clamp01(m.f0() / PBR_F0_MAX)) * PBR_F0_CODES);
     }
 
-    public static float mark(Material m, float film) {
-        return -(PBR_MARK_BASE + Math.round(clamp01(m.smoothness()) * PBR_SMOOTH_CODES) + 16f * f0Code(m) + (film >= PBR_FILM_FLAT ? PBR_MARK_FILM : 0));
+    public static float mark(Material m, float film, float[] albedo) {
+        return -(PBR_MARK_BASE + Math.round(clamp01(m.smoothness()) * PBR_SMOOTH_CODES) + 16f * f0Code(m, albedo) + (film >= PBR_FILM_FLAT ? PBR_MARK_FILM : 0));
     }
 
     public static boolean isMark(float mark) {
@@ -251,7 +259,10 @@ public final class PbrMath {
     }
 
     public static float[] codeF0(int code, float[] tint) {
-        if (code >= PBR_CODE_METAL_ALBEDO) return tint.clone();
+        if (code >= PBR_CODE_METAL_ALBEDO) {
+            float q = Math.min(code - PBR_CODE_METAL_ALBEDO, PBR_ALBEDO_F0_STEPS) / (float) PBR_ALBEDO_F0_STEPS;
+            return new float[]{tint[0] * q * q, tint[1] * q * q, tint[2] * q * q};
+        }
         if (code >= PBR_CODE_METAL_FIRST) return PBR_METAL_F0[code - PBR_CODE_METAL_FIRST].clone();
         float q = code / (float) PBR_F0_CODES;
         float f = q * q * PBR_F0_MAX;

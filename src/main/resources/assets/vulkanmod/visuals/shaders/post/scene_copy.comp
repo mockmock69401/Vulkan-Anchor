@@ -1173,7 +1173,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     }
     if (pbr && mat.specular && !emissive && mat.emission <= 0.0) {
         smoothClass = 0;
-        vec3 f0 = pbrF0(mat, metalTint(albedo));
+        vec3 f0 = pbrF0(mat, albedo);
         float gate = skyGate(clamp(skyT/15.0, 0.0, 1.0));
         vec3 sunLit = lightSun.rgb*(clamp(lightShade.w, 0.0, 1.0)*clamp(lt.w, 0.0, 1.0)*gate);
         vec3 moonLit = moonLightColour.rgb*(MOON_HIGHLIGHT*max(moonLightColour.w, 0.0)*gate);
@@ -1183,7 +1183,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         lit += pbrHighlight(mat, f0, -dir, a.sun.xyz, sunLit) + pbrHighlight(mat, f0, -dir, -a.sun.xyz, moonLit);
         if (mirrors) {
-            pbrMarkValue = pbrMark(mat, pbrFilm);
+            pbrMarkValue = pbrMark(mat, pbrFilm, albedo);
         }
     }
 #endif
