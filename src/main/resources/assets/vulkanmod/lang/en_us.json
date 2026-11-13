@@ -131,6 +131,8 @@
   "vulkanmod.visuals.underwater_visibility.tooltip": "How far you can see under water. 100 is the default; higher makes the water clearer, lower makes it murkier. Looking up, the surface shows the sky through a rippling window",
   "vulkanmod.visuals.foliage_wind": "Foliage Wind",
   "vulkanmod.visuals.foliage_wind.tooltip": "Grass, flowers and leaves sway in the wind, with the water ripples' speed (faster in rain); 0 holds them still",
+  "vulkanmod.visuals.hanging_sway": "Hanging Sway",
+  "vulkanmod.visuals.hanging_sway.tooltip": "Hanging lanterns, chains and hanging plants (weeping and cave vines, hanging roots) swing in the wind about what they hang from, further in rain. A column fixed at its foot stays still. Percent of the default swing; 0: still",
   "vulkanmod.visuals.far_clouds": "Far Clouds",
   "vulkanmod.visuals.far_clouds.tooltip": "Draws the clouds out to the far view distance with rounded edges and shading, and mirrors them on water; off restores vanilla's clouds",
   "vulkanmod.visuals.cloud_style": "Cloud Style",

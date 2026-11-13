@@ -215,7 +215,9 @@ public final class VisualsOptionLayout {
                             percent("water_ripple_density", RIPPLE_DENSITY_MIN, RIPPLE_DENSITY_MAX, Impact.NONE),
                             percent("underwater_visibility", UNDERWATER_VISIBILITY_MIN, UNDERWATER_VISIBILITY_MAX, Impact.NONE))),
                     new Block("wind", List.of(
-                            percent("foliage_wind", STRENGTH_MAX))))),
+                            percent("foliage_wind", STRENGTH_MAX),
+                            //2026-11-13 (session 20): hanging lanterns, chains and hanging plants swing (0: still)
+                            percent("hanging_sway", STRENGTH_MAX))))),
             //2026-11-11 (shader roadmap session 13, the user: "every vanilla effect that looks pixel-shaped ... type, size, amount and colour"):
             // a block per particle group (VanillaParticles.Group): type (vanilla / realistic), size and amount; the colours are on the colours page
             new Page("particles", particleBlocks()),
@@ -362,6 +364,7 @@ public final class VisualsOptionLayout {
             case "water_ripple_density" -> c.waterRippleDensity;
             case "underwater_visibility" -> c.underwaterVisibility;
             case "foliage_wind" -> c.foliageWind;
+            case "hanging_sway" -> c.hangingSway;
             default -> {
                 ParticleEffect.Target effect = ParticleEffect.byItemKey(item.key());
                 if (effect != null) yield effect.effect().get(c, effect.part());
@@ -449,6 +452,7 @@ public final class VisualsOptionLayout {
             case "water_ripple_density" -> c.waterRippleDensity = v;
             case "underwater_visibility" -> c.underwaterVisibility = v;
             case "foliage_wind" -> c.foliageWind = v;
+            case "hanging_sway" -> c.hangingSway = v;
             default -> {
                 ParticleEffect.Target effect = ParticleEffect.byItemKey(item.key());
                 if (effect != null) {

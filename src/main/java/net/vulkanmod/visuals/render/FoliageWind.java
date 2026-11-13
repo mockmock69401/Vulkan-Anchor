@@ -31,11 +31,18 @@ public final class FoliageWind {
     public static final float[] LEAF_FADE = {16, 40}, PLANT_FADE = {32, 64};
     /** Full rain bends further by this share. */
     public static final float RAIN_GAIN = 0.6f;
+    /**
+     * Session 20: the hanging blocks' swing (blocks sideways per block below their anchor) at setting 100 in clear weather, and their own
+     * swing's angular speed (radians per second; a pendulum about a block and a half long). Rain swings them further by RAIN_GAIN too.
+     */
+    public static final float HANG_AMPLITUDE = 0.11f, HANG_OMEGA = 2.6f;
     /** The longest step (seconds) taken as flow, as RippleClock's. */
     public static final double MAX_STEP = RippleMath.MAX_STEP;
 
     private static final MappedBuffer PHASE = new MappedBuffer(4 * 4);
     private static final MappedBuffer PARAMS = new MappedBuffer(4 * 4);
+    private static final MappedBuffer HANG = new MappedBuffer(4 * 4);
+    private static double hangPhase;
     private static final double[] phase = new double[4];
     private static double last = Double.NaN;
 
@@ -68,15 +75,36 @@ public final class FoliageWind {
      * the ripples' speed factor, the setting and rain. The camera is read when the terrain's uniforms are written (params).
      */
     public static synchronized void update(double seconds, float speedFactor, float setting, float rain) {
+        update(seconds, speedFactor, setting, rain, 0);
+    }
+
+    /** As update, with the hanging blocks' setting (0..2, 1 = 100). */
+    public static synchronized void update(double seconds, float speedFactor, float setting, float rain, float hangSetting) {
         double dt = seconds - last;
         last = seconds;
         if (dt > 0 && dt <= MAX_STEP) {
             for (int i = 0; i < 4; i++) phase[i] = wrapAngle(phase[i] + OMEGA[i] * speedFactor * dt);
+            hangPhase = wrapAngle(hangPhase + HANG_OMEGA * dt);
         }
+        HANG.putFloat(0, hangAmplitude(hangSetting, rain));
+        HANG.putFloat(4, (float) hangPhase);
         float[] a = amplitudes(setting, rain, true);
         for (int i = 0; i < 4; i++) PHASE.putFloat(i * 4, (float) phase[i]);
         PARAMS.putFloat(8, a[0]);
         PARAMS.putFloat(12, a[1]);
+    }
+
+    /** The hanging blocks' swing for a setting (0..2, 1 = 100) and the rain level; 0 when off. */
+    public static float hangAmplitude(float setting, float rain) {
+        float s = setting > 0 && Float.isFinite(setting) ? setting : 0;
+        float r = rain > 0 ? Math.min(rain, 1) : 0;
+        return HANG_AMPLITUDE * s * (1 + RAIN_GAIN * r);
+    }
+
+    /** The terrain's WindHang: the hanging blocks' swing (0 while the post-processing is off) and their own phase. */
+    public static MappedBuffer hang() {
+        if (!VisualsConfig.get().enabled) HANG.putFloat(0, 0);
+        return HANG;
     }
 
     public static MappedBuffer phase() {

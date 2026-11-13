@@ -352,6 +352,11 @@ public class VisualsConfig {
     public int underwaterVisibility = 100;
     /** 2026-10-21: how far plants and leaves sway in the wind (FoliageWind). */
     public int foliageWind = 100;
+    /**
+     * 2026-11-13 (session 20, the user after AstraLex: "바람에 흔들리는 식물(잔디, 꽃, 랜턴 등)"): hanging lanterns, chains and hanging plants
+     * swing in the wind about what they hang from (FoliageMarker.HANGING, terrain.vsh hangOffset): percent, 0 = still.
+     */
+    public int hangingSway = 100;
     public boolean farClouds = true;
     /** 2026-11-09 (session 3): the far clouds' style (CloudMath.STYLE_VANILLA: vanilla's cell shape, STYLE_REALISTIC: cumulus and cirrus; session 11: STYLE_ANIME, cel-shaded pillows), the realistic clouds' coverage (percent, 100 = default) and quality (0..2 low, medium, high). */
     public int cloudStyle = 0;

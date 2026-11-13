@@ -54,6 +54,8 @@
   "vulkanmod.visuals.underwater_visibility.tooltip": "물속에서 얼마나 멀리 보이는지. 100이 기본값이고, 높이면 물이 맑아지고 낮추면 탁해집니다. 위를 올려다보면 수면에 일렁이는 창으로 하늘이 보입니다",
   "vulkanmod.visuals.foliage_wind": "식물 바람",
   "vulkanmod.visuals.foliage_wind.tooltip": "풀, 꽃, 나뭇잎이 바람에 흔들립니다. 물결 속도를 따르고 비가 오면 빨라집니다. 0이면 멈춥니다",
+  "vulkanmod.visuals.hanging_sway": "매달린 블록 흔들림",
+  "vulkanmod.visuals.hanging_sway.tooltip": "매달린 랜턴, 사슬, 늘어진 식물(늘어진 덩굴, 동굴 덩굴, 매달린 뿌리)이 매달린 곳을 중심으로 바람에 흔들리고, 비가 오면 더 크게 흔들립니다. 아래쪽이 바닥에 닿은 줄은 움직이지 않습니다. 기본 흔들림의 퍼센트이며 0이면 움직이지 않습니다",
   "vulkanmod.visuals.far_clouds": "먼 구름",
   "vulkanmod.visuals.far_clouds.tooltip": "구름을 먼 시야 거리까지 둥근 가장자리와 음영으로 그리고 물에도 비춥니다. 끄면 바닐라 구름으로 돌아갑니다",
   "vulkanmod.visuals.cloud_style": "구름 스타일",

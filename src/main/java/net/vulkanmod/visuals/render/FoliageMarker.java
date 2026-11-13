@@ -2,9 +2,16 @@ package net.vulkanmod.visuals.render;
 
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BushBlock;
+import net.minecraft.world.level.block.ChainBlock;
+import net.minecraft.world.level.block.LanternBlock;
+import net.minecraft.world.level.block.MangrovePropaguleBlock;
 import net.minecraft.world.level.block.WaterlilyBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -82,8 +89,21 @@ public final class FoliageMarker {
      * 1), the top of a double plant's upper half SWAY_HIGH (height 2); leaves sway as a whole block. The base stays ALPHA (height 0).
      */
     public static final float SWAY_ALPHA = 250.25f / 255f, SWAY_HIGH_ALPHA = 249.25f / 255f, LEAF_ALPHA = 248.25f / 255f;
-    /** The block kinds the wind moves: none, a plant (its lower half), a double plant's upper half, leaves. */
-    public static final int STILL = 0, PLANT = 1, PLANT_UPPER = 2, LEAVES = 3;
+    /**
+     * The block kinds the wind moves: none, a plant (its lower half), a double plant's upper half, leaves; 2026-11-13 (session 20) a block
+     * hanging from what is above it (a hanging lantern, a chain, a hanging plant), which swings about its anchor.
+     */
+    public static final int STILL = 0, PLANT = 1, PLANT_UPPER = 2, LEAVES = 3, HANGING = 4;
+    /**
+     * Session 20 (the user after AstraLex: "바람에 흔들리는 식물(잔디, 꽃, 랜턴 등)"): a hanging block's vertex carries how far it hangs below
+     * its anchor (the first block above its hanging column) in HANG_STEP blocks, up to HANG_LEVELS - 1 steps, and the mark it had
+     * (HANG_MARKS: none, the plant mark, a light source's, a metal block's): HANG_BASE + mark index x HANG_LEVELS + steps. terrain.vsh
+     * turns it back into the mark and swings the vertex by its depth. A column pinned at its foot (a chain down to the floor) or with
+     * nothing above it stays still; at most HANG_REACH blocks are looked at above and below.
+     */
+    public static final int HANG_BASE = 144, HANG_LEVELS = 24, HANG_REACH = 12;
+    public static final float HANG_STEP = 0.25f;
+    static final float[] HANG_MARKS = {1.0f, 254.25f / 255f, 253.25f / 255f, 246.25f / 255f};
     /** A plant vertex this far above its block's base (blocks) is above the base. */
     public static final float BASE_MARGIN = 0.01f;
     /** Whether the block the chunk build thread is drawing emits light (set as BlockRenderer.renderBatched starts). */
@@ -92,8 +112,8 @@ public final class FoliageMarker {
     private static final ThreadLocal<boolean[]> ORE = ThreadLocal.withInitial(() -> new boolean[1]);
     /** The smooth kind of the block the chunk build thread is drawing. */
     private static final ThreadLocal<int[]> SMOOTH = ThreadLocal.withInitial(() -> new int[1]);
-    /** The wind kind of the block the chunk build thread is drawing. */
-    private static final ThreadLocal<int[]> SWAY = ThreadLocal.withInitial(() -> new int[1]);
+    /** The wind kind of the block the chunk build thread is drawing, and for a hanging one how many hanging blocks are above it. */
+    private static final ThreadLocal<int[]> SWAY = ThreadLocal.withInitial(() -> new int[2]);
 
     private FoliageMarker() {
     }
@@ -160,7 +180,70 @@ public final class FoliageMarker {
     }
 
     public static void setSway(int kind) {
-        SWAY.get()[0] = kind;
+        setSway(kind, 0);
+    }
+
+    /** kind and, for HANGING, the hanging blocks above this one in its column. */
+    public static void setSway(int kind, int above) {
+        int[] s = SWAY.get();
+        s[0] = kind;
+        s[1] = above;
+    }
+
+    /** Session 20: whether a block hangs from the one above it: a hanging lantern, a vertical chain, a hanging plant or propagule. */
+    public static boolean hangs(BlockState state) {
+        Block b = state.getBlock();
+        if (b instanceof LanternBlock) return state.getValue(LanternBlock.HANGING);
+        if (b instanceof ChainBlock) return state.getValue(ChainBlock.AXIS) == Direction.Axis.Y;
+        if (b instanceof MangrovePropaguleBlock) return state.getValue(MangrovePropaguleBlock.HANGING);
+        return b == Blocks.WEEPING_VINES || b == Blocks.WEEPING_VINES_PLANT || b == Blocks.CAVE_VINES || b == Blocks.CAVE_VINES_PLANT
+                || b == Blocks.HANGING_ROOTS;
+    }
+
+    /**
+     * Session 20: for a hanging block at pos, how many hanging blocks are above it in its column; -1 when the column does not swing: no
+     * anchor within HANG_REACH (nothing above it, or the column is longer), or its foot rests on a block that stops movement.
+     */
+    public static int hangingAbove(BlockGetter level, BlockPos pos) {
+        BlockPos.MutableBlockPos p = pos.mutable();
+        int above = 0;
+        while (true) {
+            p.move(Direction.UP);
+            BlockState s = level.getBlockState(p);
+            if (!hangs(s)) {
+                if (s.isAir()) return -1;
+                break;
+            }
+            if (++above > HANG_REACH) return -1;
+        }
+        p.set(pos);
+        for (int below = 0; ; below++) {
+            p.move(Direction.DOWN);
+            BlockState s = level.getBlockState(p);
+            if (!hangs(s)) return s.blocksMotion() ? -1 : above;
+            if (below >= HANG_REACH) return -1;
+        }
+    }
+
+    /** Sets the wind kind of the block at pos for this thread (swayKind; a hanging one HANGING with its depth, or STILL unless it swings). */
+    public static void setSwayAt(BlockGetter level, BlockPos pos, BlockState state) {
+        if (!hangs(state)) {
+            setSway(swayKind(state), 0);
+            return;
+        }
+        int above = hangingAbove(level, pos);
+        setSway(above < 0 ? STILL : HANGING, Math.max(above, 0));
+    }
+
+    /** The hanging vertex mark for a mark (markedAlpha's) and depth below the anchor (blocks); mark itself when it is none of HANG_MARKS. */
+    public static float hangAlpha(float mark, float depth) {
+        int kind = -1;
+        for (int i = 0; i < HANG_MARKS.length; i++) {
+            if (mark == HANG_MARKS[i]) kind = i;
+        }
+        if (kind < 0) return mark;
+        int steps = Math.max(0, Math.min(HANG_LEVELS - 1, Math.round(depth / HANG_STEP)));
+        return (HANG_BASE + kind * HANG_LEVELS + steps + 0.25f) / 255f;
     }
 
     /**
@@ -168,6 +251,12 @@ public final class FoliageMarker {
      * model's coordinate). A plant's vertex gets its height mark, a leaf's LEAF_ALPHA; light sources and anything else keep mark.
      */
     public static float swayAlpha(float mark, int kind, float y) {
+        return swayAlpha(mark, kind, y, 0);
+    }
+
+    /** As swayAlpha, with the hanging blocks above for HANGING: the vertex hangs hangingAbove + 1 - y blocks below its anchor. */
+    public static float swayAlpha(float mark, int kind, float y, int hangingAbove) {
+        if (kind == HANGING) return hangAlpha(mark, hangingAbove + 1 - Math.max(0, Math.min(1, y)));
         if (mark == ALPHA && (kind == PLANT || kind == PLANT_UPPER)) {
             boolean above = y > BASE_MARGIN;
             if (kind == PLANT) return above ? SWAY_ALPHA : ALPHA;
@@ -178,6 +267,7 @@ public final class FoliageMarker {
 
     /** swayAlpha for the block this thread is drawing. */
     public static float vertexAlpha(Object quad, float y) {
-        return swayAlpha(markedAlpha(quad, 1.0f), SWAY.get()[0], y);
+        int[] s = SWAY.get();
+        return swayAlpha(markedAlpha(quad, 1.0f), s[0], y, s[1]);
     }
 }
