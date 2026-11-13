@@ -201,10 +201,18 @@ vec3 worldToView(vec3 w, vec3 east, vec3 up) {
 const vec3 FACE_NORMALS[7] = vec3[7](vec3(0.0, 1.0, 0.0), vec3(0.0, -1.0, 0.0), vec3(0.0, 1.0, 0.0), vec3(0.0, 0.0, -1.0),
         vec3(0.0, 0.0, 1.0), vec3(-1.0, 0.0, 0.0), vec3(1.0, 0.0, 0.0));
 
-//An LOD pixel's view-space normal from its lodLight texel
+//An LOD pixel's view-space normal from its lodLight texel (the face in bits 8-10)
 vec3 lodFaceNormal(uint packed, vec3 east, vec3 up) {
-    uint face = (packed >> 8u) & 0xFFu;
+    uint face = (packed >> 8u) & 7u;
     return worldToView(FACE_NORMALS[face <= 6u ? face : 0u], east, up);
+}
+
+//2026-11-13 (session 17): lodLight's bit 11 is set where DH drew water (dh/terrain.vert: DH's WATER material); an LOD translucent without
+// it is ice, glass or slime
+const uint LOD_WATER_BIT = 2048u;
+
+bool lodWater(uint packed) {
+    return (packed & LOD_WATER_BIT) != 0u;
 }
 
 //Blocks are axis aligned: a normal close to an axis is that axis (stable across the face, no depth noise)

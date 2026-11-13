@@ -205,8 +205,18 @@ public final class LightingMath {
 
     /** The world normal of a lodLight texel: its high byte is the face index + 1 (boundary 3.1), 0 or out of range gives NO_FACE_NORMAL. */
     public static float[] lodFaceNormal(int packed) {
-        int face = (packed >>> 8) & 0xFF;
+        int face = (packed >>> 8) & 7;
         return (face >= 1 && face <= 6 ? FACES[face - 1] : NO_FACE_NORMAL).clone();
+    }
+
+    /**
+     * 2026-11-13 (session 17): lodLight's water bit, above the face's three bits. DH's terrain.vert sets it for DH's WATER material
+     * (DhVertexFormat.lightAttachment); lighting.comp's lodWater.
+     */
+    public static final int LOD_WATER_BIT = 1 << 11;
+
+    public static boolean lodWater(int packed) {
+        return (packed & LOD_WATER_BIT) != 0;
     }
 
     /** The same in view space from world east and up in view space (south is east x up, as the shader rebuilds it). */
@@ -309,7 +319,7 @@ public final class LightingMath {
 
     /**
      * The pass's classification of one pixel at GL uv (u, v): viewpos.glsl's scenePositionFrom, then the translucent tests of main()
-     * (vanilla copies, the B4 LOD water match, LOD translucents as water). normalView is the normal the pass would use (rebuilt and
+     * (vanilla copies, the B4 LOD water match, LOD translucents as water where lodLight says so). normalView is the normal the pass would use (rebuilt and
      * snapped for vanilla pixels). LOD inputs are read only with lodValid, the copies only with copiesValid.
      */
     public static Surface classify(float u, float v, Depths d, Matrix4fc invVanilla, Matrix4fc invLod, boolean lodValid, boolean copiesValid,
@@ -320,6 +330,17 @@ public final class LightingMath {
     /** 2026-11-09: as above with the terrain's albedo image value at the pixel (albedo), read when marksValid (depthParams.w). */
     public static Surface classify(float u, float v, Depths d, Matrix4fc invVanilla, Matrix4fc invLod, boolean lodValid, boolean copiesValid,
                                    float cameraYFrac, Vector3fc upView, Vector3fc normalView, float pixelBlocks, boolean marksValid, int albedo) {
+        return classify(u, v, d, invVanilla, invLod, lodValid, copiesValid, cameraYFrac, upView, normalView, pixelBlocks, marksValid, albedo,
+                LOD_WATER_BIT);
+    }
+
+    /**
+     * 2026-11-13 (session 17): as above with the lodLight texel at the pixel (lodLight): an LOD translucent is water only with its
+     * LOD_WATER_BIT (DH's WATER material), any other (DH's ice, glass, slime) not. The overloads above pass a water texel.
+     */
+    public static Surface classify(float u, float v, Depths d, Matrix4fc invVanilla, Matrix4fc invLod, boolean lodValid, boolean copiesValid,
+                                   float cameraYFrac, Vector3fc upView, Vector3fc normalView, float pixelBlocks, boolean marksValid, int albedo,
+                                   int lodLight) {
         if (d.main() == FAR) return new Surface(true, false, SKY_DISTANCE, 0);
         Vector3f view = viewPosition(invVanilla, u, v, d.main());
         boolean fromLod = false;
@@ -373,7 +394,8 @@ public final class LightingMath {
         float kind = 0;
         if (fromLod) {
             if (d.lod() < d.lodOpaque()) {
-                kind = kindLength(d.lodOpaque() == FAR ? -1 : viewPosition(invLod, u, v, d.lodOpaque()).length(), view.length());
+                float lodLength = kindLength(d.lodOpaque() == FAR ? -1 : viewPosition(invLod, u, v, d.lodOpaque()).length(), view.length());
+                kind = lodWater(lodLight) ? lodLength : -lodLength;
             }
         } else if (vanillaTranslucent) {
             kind = vanillaKind(vanillaLength, view, normalView, upView, cameraYFrac, vanillaHeightStep, vanillaStride <= KIND_STRIDE_MAX, vanillaMark);

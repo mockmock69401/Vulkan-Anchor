@@ -39,6 +39,12 @@ layout(location = 1) out vec3 cameraOffset;//the vertex relative to the camera
 layout(location = 2) flat out uint vertexLight;//sky light in the low nibble, block light in the high one; the face index plus one above (0: none)
 layout(location = 3) flat out float discardDistance;
 
+//2026-11-13 (session 17, the user: ice vanished in DH's range): DH's material id for water (EDhApiBlockMaterial.WATER) sets
+// LOD_WATER_BIT in the light attachment, above the face's three bits; the lighting pass calls an LOD translucent water only with it
+// (ice, packed and blue ice, stained glass and slime have other ids)
+const uint DH_WATER_MATERIAL = 12u;
+const uint LOD_WATER_BIT = 2048u;
+
 void main() {
     uint meta = vPosition.w;
     vec3 pos = vec3(vPosition.xyz) + modelOffset.xyz;
@@ -55,8 +61,8 @@ void main() {
 
     uint lights = meta & 0xFFu;
     vertexColour = vec4(texelFetch(lightMap, ivec2(lights >> 4u, lights & 15u), 0).rgb, 1.0)*colour;
-    //2026-10-19: the face above the light, for the lighting pass's LOD normal (DhVertexFormat.lightAttachment)
-    vertexLight = lights | ((vFace.y < 6u ? vFace.y + 1u : 0u) << 8u);
+    //2026-10-19: the face above the light, for the lighting pass's LOD normal (DhVertexFormat.lightAttachment); 2026-11-13: the water bit
+    vertexLight = lights | ((vFace.y < 6u ? vFace.y + 1u : 0u) << 8u) | (vFace.x == DH_WATER_MATERIAL ? LOD_WATER_BIT : 0u);
     cameraOffset = pos;
     discardDistance = params.y;
     gl_Position = dhViewProjection*vec4(pos, 1.0);

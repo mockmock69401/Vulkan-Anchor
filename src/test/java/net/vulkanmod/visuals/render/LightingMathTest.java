@@ -240,11 +240,12 @@ class LightingMathTest {
         assertEquals(7, table.size());
         assertArrayEquals(LightingMath.NO_FACE_NORMAL, table.get(0), 0f);
         for (int face = 0; face < 6; face++) assertArrayEquals(expected[face], table.get(face + 1), 0f);
-        assertTrue(GLSL.contains("uint face = (packed >> 8u) & 0xFFu;"));
+        assertTrue(GLSL.contains("uint face = (packed >> 8u) & 7u;"), "the face's three bits (bit 11: LOD water, FarIceTest)");
         assertTrue(GLSL.contains("return worldToView(FACE_NORMALS[face <= 6u ? face : 0u], east, up);"));
         assertTrue(GLSL.contains("return east*w.x + up*w.y + cross(east, up)*w.z;"), "south is east x up");
         //The pass uses the shared helpers (the composite calls the same ones)
-        assertTrue(COMP.contains("n = lodFaceNormal(texelFetch(lodLight, lt, 0).r, eastView.xyz, upView.xyz);"));
+        assertTrue(COMP.contains("uint lodPacked = texelFetch(lodLight, lt, 0).r;"));
+        assertTrue(COMP.contains("n = lodFaceNormal(lodPacked, eastView.xyz, upView.xyz);"));
         assertTrue(COMP.contains("n = snapNormal(depthNormal(mainDepth, invVanillaProj, p, fullSize, view), eastView.xyz, upView.xyz);"));
         assertFalse(COMP.contains("vec3 depthNormal("), "defined once, in lighting.glsl");
     }
@@ -597,7 +598,7 @@ class LightingMathTest {
     void everyShaderConstantEqualsTheMirrorsField() throws Exception {
         int found = 0;
         for (String text : new String[]{COMP, GLSL}) {
-            Matcher m = Pattern.compile("(?m)^\\s*const\\s+(float|int)\\s+(\\w+)\\s*=\\s*([-+0-9.eE]+)\\s*;").matcher(text);
+            Matcher m = Pattern.compile("(?m)^\\s*const\\s+(float|int|uint)\\s+(\\w+)\\s*=\\s*([-+0-9.eE]+)u?\\s*;").matcher(text);
             while (m.find()) {
                 Field f = LightingMath.class.getField(m.group(2));
                 double want = Double.parseDouble(m.group(3));
@@ -608,7 +609,7 @@ class LightingMathTest {
         assertTrue(found >= 33, "constants found: " + found);
         for (Field f : LightingMath.class.getFields()) {
             if (!Modifier.isStatic(f.getModifiers()) || (f.getType() != float.class && f.getType() != int.class)) continue;
-            Pattern p = Pattern.compile("const\\s+(float|int)\\s+" + f.getName() + "\\b");
+            Pattern p = Pattern.compile("const\\s+(float|int|uint)\\s+" + f.getName() + "\\b");
             assertTrue(p.matcher(COMP).find() || p.matcher(GLSL).find(), f.getName() + " missing in the shaders");
         }
     }

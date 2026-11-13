@@ -76,7 +76,8 @@ class DhLightTest {
         String frag = resource("assets/vulkanmod/visuals/shaders/dh/terrain.frag");
         assertTrue(vert.contains("uint lights = meta & 0xFFu;"), "terrain.vert takes the low byte");
         assertTrue(vert.contains("layout(location = 2) in uvec2 vFace;"), "terrain.vert reads the material and normal bytes");
-        assertTrue(vert.contains("vertexLight = lights | ((vFace.y < 6u ? vFace.y + 1u : 0u) << 8u);"), "and packs the face above the light");
+        assertTrue(vert.contains("vertexLight = lights | ((vFace.y < 6u ? vFace.y + 1u : 0u) << 8u) | (vFace.x == DH_WATER_MATERIAL ? LOD_WATER_BIT : 0u);"),
+                "and packs the face above the light, and the water bit (FarIceTest)");
         assertTrue(frag.contains("layout(location = 1) out uint fragLight;"), "terrain.frag has the integer light output");
         assertTrue(frag.contains("fragLight = vertexLight;"), "terrain.frag writes it unchanged");
     }
