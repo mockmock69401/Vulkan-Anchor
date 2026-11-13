@@ -20,7 +20,7 @@ import static org.lwjgl.vulkan.VK10.VK_FORMAT_R8G8_UINT;
  * bytes 14-15 u16 texture     DH's texture tile id (0: untextured)
  * </pre>
  * The Java side is a mirror of terrain.vert's decoding for the tests; the shader reads the position/meta and colour words, and the
- * material and normal bytes (for the LOD light attachment's face, 2026-10-19).
+ * material and normal bytes (for the LOD light attachment's face, 2026-10-19, and its water bit, 2026-11-13).
  * DH's own shader moves the corners along x and z by a hundredth of a block (and leaves y alone) to close the seams between quads.
  */
 public final class DhVertexFormat {
@@ -34,6 +34,10 @@ public final class DhVertexFormat {
             new int[]{POSITION_OFFSET, COLOUR_OFFSET, MATERIAL_OFFSET});
     /** DH's face indices: down, up, north, south, west, east. */
     public static final int FACES = 6;
+    /** DH's block material id for water (EDhApiBlockMaterial.WATER: liquids and water itself; ice, glass and slime are others). */
+    public static final int MATERIAL_WATER = 12;
+    /** The LOD light attachment's water bit, above the light byte and the face (index + 1 in bits 8-10). */
+    public static final int LIGHT_WATER_BIT = 1 << 11;
 
     private DhVertexFormat() {
     }
@@ -82,6 +86,14 @@ public final class DhVertexFormat {
     public static int lightAttachment(int meta, int normalIndex) {
         int face = normalIndex >= 0 && normalIndex < FACES ? normalIndex + 1 : 0;
         return lightAttachment(meta) | face << 8;
+    }
+
+    /**
+     * 2026-11-13 (session 17: far ice in DH's range was drawn as water): as above, and LIGHT_WATER_BIT where the material is DH's WATER
+     * (MATERIAL_WATER), the bit the lighting pass tells LOD water from LOD ice, glass and slime by (terrain.vert's vertexLight).
+     */
+    public static int lightAttachment(int meta, int normalIndex, int material) {
+        return lightAttachment(meta, normalIndex) | (material == MATERIAL_WATER ? LIGHT_WATER_BIT : 0);
     }
 
     /** One axis's 2-bit code: bit 0 moves the corner, bit 1 makes it negative. */

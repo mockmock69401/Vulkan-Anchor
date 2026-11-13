@@ -382,12 +382,17 @@ void main() {
         vec3 n;
         if (fromLod) {
             ivec2 lt = lodTexel(p, fullSize);
-            n = lodFaceNormal(texelFetch(lodLight, lt, 0).r, eastView.xyz, upView.xyz);
+            uint lodPacked = texelFetch(lodLight, lt, 0).r;
+            n = lodFaceNormal(lodPacked, eastView.xyz, upView.xyz);
             float lod = texelFetch(lodDepth, lt, 0).r;
             float lodO = texelFetch(lodOpaque, lt, 0).r;
-            //B5: every LOD translucent is water
+            //B5: an LOD translucent is water where DH drew water (lodLight's water bit: the front translucent fragment's, written with its
+            // depth); ice, glass and slime are not. 2026-11-13 (session 17, the user: ice vanished in DH's range, "a recurring bug"): until
+            // then every LOD translucent was water, so frozen lakes and seas past the render distance took the water's look; eca8547's
+            // water marks covered the vanilla terrain only
             if (lod < lodO) {
-                kind = kindLength(lodO == FAR ? -1.0 : length(viewPosition(invLodProj, uv, lodO)), length(view));
+                float lodLength = kindLength(lodO == FAR ? -1.0 : length(viewPosition(invLodProj, uv, lodO)), length(view));
+                kind = lodWater(lodPacked) ? lodLength : -lodLength;
             }
         } else {
             n = snapNormal(depthNormal(mainDepth, invVanillaProj, p, fullSize, view), eastView.xyz, upView.xyz);
