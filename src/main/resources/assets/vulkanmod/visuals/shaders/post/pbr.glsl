@@ -274,7 +274,17 @@ vec3 pbrCodeF0(int code, vec3 tint) {
     return vec3(q*q*PBR_F0_MAX);
 }
 
+//2026-11-13 (session 16): the mirrored share's Fresnel term over a rough surface: Schlick's rise toward grazing reaches at most the
+// smoothness instead of 1 (Lagarde 2011, "Adopting a physically based shading model", seblagarde.wordpress.com: the environment's
+// Fresnel term with roughness). A rough surface's microfacets turn most of a grazing view away from the mirror direction and shadow
+// each other; the plain term mirrored the sky at 100% on every grazing face, so Faithful PBR's cobblestone, sand and ice (smoothness
+// 0.6 .. 0.66) wore a blue sky sheen, a glass look the same pack does not have under other LabPBR shaders
+vec3 pbrFresnelRough(vec3 f0, float cosTheta, float smoothness) {
+    float k = pow(1.0 - clamp(cosTheta, 0.0, 1.0), 5.0);
+    return f0 + (max(vec3(clamp(smoothness, 0.0, 1.0)), f0) - f0)*k;
+}
+
 //The share of the reflection mixed in per channel at cosTheta for a mark's smoothness and F0 (fading in over the smoothness range)
 vec3 pbrReflectivity(float smoothness, vec3 f0, float cosTheta) {
-    return pbrFresnel(f0, cosTheta)*smoothstep(PBR_REFLECT_SMOOTH_MIN, PBR_REFLECT_SMOOTH_FULL, smoothness);
+    return pbrFresnelRough(f0, cosTheta, smoothness)*smoothstep(PBR_REFLECT_SMOOTH_MIN, PBR_REFLECT_SMOOTH_FULL, smoothness);
 }

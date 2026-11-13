@@ -189,6 +189,11 @@ class PbrMathTest {
         assertEquals(0f, PbrMath.reflectivity(PbrMath.PBR_REFLECT_SMOOTH_MIN, 0.04f, 1), "fades in from the threshold");
         assertEquals(0.04f, PbrMath.reflectivity(1, 0.04f, 1), 1e-6, "F0 head on");
         assertEquals(1f, PbrMath.reflectivity(1, 0.04f, 0), 1e-6, "all at grazing");
+        //Session 16: a rough surface's grazing mirror reaches only its smoothness (Faithful PBR's cobblestone at 0.64 wore the sky)
+        assertEquals(0.64f, PbrMath.fresnelRough(0.04f, 0, 0.64f), 1e-6);
+        assertTrue(PbrMath.reflectivity(0.64f, 0.04f, 0) < 0.5f * PbrMath.fresnel(0.04f, 0));
+        assertEquals(0.04f, PbrMath.fresnelRough(0.04f, 1, 0.5f), 1e-6, "head on unchanged");
+        assertEquals(0.9f, PbrMath.fresnelRough(0.9f, 0, 0.5f), 1e-6, "never below F0");
     }
 
     @Test

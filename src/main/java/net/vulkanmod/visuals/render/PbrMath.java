@@ -269,8 +269,14 @@ public final class PbrMath {
         return new float[]{f, f, f};
     }
 
+    /** pbrFresnelRough (session 16): Schlick's term rising toward grazing only up to the smoothness (Lagarde 2011). */
+    public static float fresnelRough(float f0, float cosTheta, float smoothness) {
+        double k = Math.pow(1 - clamp01(cosTheta), 5);
+        return (float) (f0 + (Math.max(clamp01(smoothness), f0) - f0) * k);
+    }
+
     public static float reflectivity(float smoothness, float f0, float cosTheta) {
-        return fresnel(f0, cosTheta) * smoothstep(PBR_REFLECT_SMOOTH_MIN, PBR_REFLECT_SMOOTH_FULL, smoothness);
+        return fresnelRough(f0, cosTheta, smoothness) * smoothstep(PBR_REFLECT_SMOOTH_MIN, PBR_REFLECT_SMOOTH_FULL, smoothness);
     }
 
     // ---- the frame's wetness ----
