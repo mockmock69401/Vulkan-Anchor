@@ -185,6 +185,16 @@ layout(location = 61) uniform vec4 halfParams;
 //2026-11-13 (session 19), DimensionUniforms: x the End's galaxy strength (galaxy.glsl; 0 elsewhere), y the Nether's heat haze strength
 // (heat.glsl; 0 elsewhere), z the camera's world y, w the time in seconds (wrapped at HEAT_TIME_WRAP)
 layout(location = 62) uniform vec4 dimensionParams;
+//2026-11-13 (session 19), PortalLights: up to four boxes of nether portal blocks near the camera (portal.glsl): per box its low corner
+// relative to the camera (w 1 when there) and its high corner (w the portal glow strength)
+layout(location = 63) uniform vec4 portalLo0;
+layout(location = 64) uniform vec4 portalHi0;
+layout(location = 65) uniform vec4 portalLo1;
+layout(location = 66) uniform vec4 portalHi1;
+layout(location = 67) uniform vec4 portalLo2;
+layout(location = 68) uniform vec4 portalHi2;
+layout(location = 69) uniform vec4 portalLo3;
+layout(location = 70) uniform vec4 portalHi3;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -207,10 +217,36 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/galaxy.glsl>
 #import <vulkanmod:visuals/post/heat.glsl>
+#import <vulkanmod:visuals/post/portal.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
 #import <vulkanmod:visuals/post/pbr.glsl>
+
+//Session 19: the portal light's share of the block light at level block at world (camera-relative), the largest of the boxes', with that
+// box's glow strength (portal.glsl portalShare); 0 without a box
+float portalShareAt(vec3 world, float block, out float strength, out float surface) {
+    strength = 0.0;
+    surface = 0.0;
+    float best = 0.0;
+    vec4 lo[4] = vec4[4](portalLo0, portalLo1, portalLo2, portalLo3);
+    vec4 hi[4] = vec4[4](portalHi0, portalHi1, portalHi2, portalHi3);
+    for (int i = 0; i < 4; i++) {
+        if (lo[i].w < 0.5) {
+            break;
+        }
+        float d = portalDistance(world, lo[i].xyz, hi[i].xyz);
+        if (d < PORTAL_SURFACE) {
+            surface = portalGlowGain(world - lo[i].xyz, dimensionParams.w, hi[i].w);
+        }
+        float s = portalShare(world, block, lo[i].xyz, hi[i].xyz);
+        if (s > best) {
+            best = s;
+            strength = hi[i].w;
+        }
+    }
+    return best;
+}
 
 //2026-11-09 (session 5): the aurora along a sky direction dir at pixel p (aurora.glsl, AURORA_STEPS samples from a per-pixel jitter
 // that turns by the frame's phase with TAA); nothing evaluated without one (auroraParams.x 0: day, rain, off, the Nether)
@@ -992,6 +1028,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     bool hasAlbedo = pl.z > 1.5 && terrainAlbedoAt(p, albedo) && albedoMatches(albedo, colour.rgb, pl.y, pl.x);
     float sky = known ? pl.x : 15.0;
     float block = known ? pl.y : 0.0;
+    //Session 19: the portal light's share here and whether this is a portal's own surface (portalGlow > 1)
+    float portalStrength = 0.0, portalGlow = 0.0;
+    float portalLight = portalLo0.w > 0.5 && !fromLod ? portalShareAt(world, block, portalStrength, portalGlow) : 0.0;
+    bool portalOn = known && portalLight > 0.0;
 #ifdef PBR
     //Session 9: the front fragment's LabPBR material (pbr.glsl), where it is this pixel's own (its albedo matched) on terrain that is
     // not a plant, translucent or an LOD; rain on it by the sky open above (its diffuse factor: a porous one darkens)
@@ -1105,9 +1145,18 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         float be = blockExposure(waterParams.z, look);
         //2026-10-28: the block-lit light's colour and falloff (1 where nothing is block-lit)
         vec3 blockShare = (vec3(1.0) - share)*be;
+        //Session 19: near a nether portal its share of the block light turns violet and brighter (portal.glsl)
+        vec3 warm = blockLightColour.rgb;
+        if (portalOn) {
+            vec3 violet = vec3(PORTAL_R, PORTAL_G, PORTAL_B);
+            warm = mix(warm, violet*(luminance(warm)/luminance(violet)), portalLight*min(portalStrength, 1.0));
+        }
         if (known && blockLightColour.w > 0.0) {
             blockShare *= blockLightFactor((vec3(1.0) - share)*lightAll, (vec3(1.0) - share)*dark, blockOnly, lightmapLinear(15.0, 0.0), dark,
-                    blockLightColour.rgb, blockLightColour.w);
+                    warm, blockLightColour.w);
+        }
+        if (portalOn) {
+            blockShare *= 1.0 + PORTAL_LIGHT_GAIN*portalLight*portalStrength;
         }
         //What the lighting does to a white texel's light here, per channel
         vec3 perLight = share*skyFactor*tint*se + blockShare;
@@ -1155,6 +1204,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     }
     //2026-10-28: light sources glow (2026-11-08: their share that is light); an ore's specks add their own light (its albedo, or vanilla's
     // colour over vanilla's lightmap)
+    if (portalGlow > 1.0) {
+        //Session 19: a nether portal's own surface glows (bloom spreads it)
+        lit *= portalGlow;
+    }
     if (emission > 0.0) {
         lit = mix(lit, tintedGlow(scene*lightGlow(colour.rgb, glowParams.x*(emissiveFluid ? FLUID_GLOW_SCALE : 1.0))), emission);
     } else if (ore && !cloud && !fromLod && glowParams.y > 0.0) {

@@ -588,6 +588,11 @@ public final class VkPostProcess {
         this.colourAfterView = view;
     }
 
+    /** 2026-11-13 (session 19): before prepare(), the nether portals' boxes around the camera and the glow strength (PortalLights). */
+    public void preparePortals(java.util.List<PortalLights.Box> boxes, double x, double y, double z, float strength) {
+        PortalLights.write(this.copyUniforms, boxes, x, y, z, strength);
+    }
+
     /** 2026-11-13 (session 19): before prepare(), the End's galaxy and the Nether's heat haze (DimensionUniforms) for the composite. */
     public void prepareDimension(DimensionUniforms.Values dimension) {
         if (dimension.galaxy() > 0) {

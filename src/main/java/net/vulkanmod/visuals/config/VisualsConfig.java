@@ -368,10 +368,11 @@ public class VisualsConfig {
     public int auroraStrength = 100;
     /**
      * 2026-11-13 (shader roadmap session 19, after AstraLex's Nether and End): the Nether's heat haze (screen-space shimmer over lava and
-     * through its hot air) and the End's galaxy sky (a Milky Way band, nebulae and stars); percent, 100 = default, 0 = off
-     * (DimensionUniforms).
+     * through its hot air), the glow nether portals cast on what is around them, and the End's galaxy sky (a Milky Way band, nebulae and
+     * stars); percent, 100 = default, 0 = off (DimensionUniforms).
      */
     public int netherHeatHaze = 100;
+    public int portalGlow = 100;
     public int endGalaxy = 100;
     /**
      * 2026-11-11 (session 12): the night sky's stars (vanilla's, StarMath): how many (percent of vanilla's 1500 tries), their size and
