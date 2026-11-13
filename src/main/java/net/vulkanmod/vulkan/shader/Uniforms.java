@@ -58,6 +58,7 @@ public class Uniforms {
         //The visuals (2026-10-21): the terrain's wind
         vec4f_uniformMap.put("WindPhase", FoliageWind::phase);
         vec4f_uniformMap.put("WindParams", FoliageWind::params);
+        vec4f_uniformMap.put("WindHang", FoliageWind::hang);
         vec1f_uniformMap.put("LightOut", net.vulkanmod.visuals.render.TerrainLightTarget::lightOut);
         //2026-11-11 (shader roadmap session 13): the particle look groups' colour tints (particle.fsh)
         mat4f_uniformMap.put("ParticleTints", net.vulkanmod.visuals.particle.ParticleLook::tints);

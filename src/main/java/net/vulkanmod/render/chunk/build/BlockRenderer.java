@@ -81,8 +81,8 @@ public class BlockRenderer {
         FoliageMarker.setOre(blockState.is(Blocks.NETHER_QUARTZ_ORE));
         //The visuals (2026-10-29): whether it is polished or metal, for the sun's highlight and the block reflections
         FoliageMarker.setSmooth(FoliageMarker.smoothKind(blockState));
-        //The visuals (wind): whether its vertices sway, and how
-        FoliageMarker.setSway(FoliageMarker.swayKind(blockState));
+        //The visuals (wind): whether its vertices sway, and how (session 20: a hanging block by its depth below its anchor)
+        FoliageMarker.setSwayAt(resources.region, blockPos, blockState);
         this.pos = pos;
         this.blockPos = blockPos;
         this.blockState = blockState;

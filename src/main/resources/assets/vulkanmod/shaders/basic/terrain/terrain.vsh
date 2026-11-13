@@ -7,6 +7,8 @@ layout (binding = 0) uniform UniformBufferObject {
     mat4 MVP;
     vec4 WindPhase;
     vec4 WindParams;
+    //Session 20: x the hanging blocks' swing (blocks sideways per block below the anchor, 0 = still), y their own swing's phase
+    vec4 WindHang;
 };
 
 layout (push_constant) uniform pushConstant {
@@ -62,6 +64,13 @@ const vec2 WIND_DIR = vec2(0.928477, 0.371391);
 // is under a pixel and only shimmers its texture, and the waves' travel read as ripples rolling over the forest
 const vec2 WIND_LEAF_FADE = vec2(16.0, 40.0);
 const vec2 WIND_PLANT_FADE = vec2(32.0, 64.0);
+//Session 20 (FoliageMarker.HANG_*): a hanging block's vertex mark is WIND_HANG_BASE + its old mark's index x WIND_HANG_LEVELS + its depth
+// below the anchor in WIND_HANG_STEP blocks; the old marks: none, the plant mark, a light source's, a metal block's
+const int WIND_HANG_BASE = 144;
+const int WIND_HANG_LEVELS = 24;
+const int WIND_HANG_KINDS = 4;
+const float WIND_HANG_STEP = 0.25;
+const float WIND_HANG_ALPHA[4] = float[4](1.0, 254.25 / 255.0, 253.25 / 255.0, 246.25 / 255.0);
 
 //The share of the sway at a camera-relative position: 1 near, 0 past fade.y
 float windFade(vec3 rel, vec2 fade) {
@@ -107,11 +116,36 @@ vec3 windOffset(int mark, vec3 rel) {
     return vec3(0.0);
 }
 
+//Session 20: a hanging vertex depth blocks below its anchor swings as a pendulum about it: the whole column leans with the wind at its
+// centre and swings at its own pace (a phase per column), and a vertex out to the side rises a little (the arc). FoliageWind mirrors it
+vec3 hangOffset(float depth, vec3 rel) {
+    if (!(WindHang.x > 0.0) || depth <= 0.0) {
+        return vec3(0.0);
+    }
+    float near = windFade(rel, WIND_PLANT_FADE);
+    if (near <= 0.0) {
+        return vec3(0.0);
+    }
+    vec2 cell = floor(rel.xz + WindParams.xy) + 0.5;
+    vec3 f = windAt(vec3(cell.x - WindParams.x, 0.0, cell.y - WindParams.y), 0.0);
+    float seed = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
+    float own = sin(WindHang.y + 6.2831853 * seed);
+    float own2 = sin(0.83 * WindHang.y + 6.2831853 * fract(seed * 7.13));
+    vec2 lean = WIND_DIR * (f.x - 0.35 + 0.45 * own) + vec2(-WIND_DIR.y, WIND_DIR.x) * (0.6 * f.y + 0.3 * own2);
+    vec2 xz = lean * (WindHang.x * near * depth);
+    return vec3(xz.x, 0.5 * dot(xz, xz) / depth, xz.y);
+}
+
 void main() {
     const vec3 baseOffset = bitfieldExtract(ivec3(gl_InstanceIndex) >> ivec3(0, 16, 8), 0, 8);
     vec4 pos = vec4(fma(Position.xyz, POSITION_INV, ChunkOffset + baseOffset), 1.0);
     const int mark = int(Color.a * 255.0 + 0.5);
     pos.xyz += windOffset(mark, pos.xyz);
+    const int hang = mark - WIND_HANG_BASE;
+    const bool hanging = hang >= 0 && hang < WIND_HANG_LEVELS * WIND_HANG_KINDS;
+    if (hanging) {
+        pos.xyz += hangOffset(float(hang % WIND_HANG_LEVELS) * WIND_HANG_STEP, pos.xyz);
+    }
     gl_Position = MVP * pos;
 
     vertexDistance = fog_distance(pos.xyz, 0);
@@ -120,6 +154,8 @@ void main() {
         vertexColor.a = mark == WIND_LEAF ? 1.0 : WIND_PLANT_ALPHA;
     } else if (mark == WATER_MARK) {
         vertexColor.a = WATER_FLAG;
+    } else if (hanging) {
+        vertexColor.a = WIND_HANG_ALPHA[hang / WIND_HANG_LEVELS];
     }
     texCoord0 = UV0 * UV_INV;
     //As sample_lightmap2 reads the packed light: block in bits 4..7, sky in bits 12..15
