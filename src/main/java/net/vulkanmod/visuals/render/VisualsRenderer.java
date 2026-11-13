@@ -112,6 +112,8 @@ public final class VisualsRenderer {
     private final RippleClock rippleClock = new RippleClock();
     //2026-10-29: the flow clock's seconds at the last atmosphere capture (the raindrops' rings keep time with the ripples)
     private double flowSeconds;
+    /** 2026-11-13 (session 19): the nether portals around the camera (their violet light and glow). */
+    private final PortalLights portals = new PortalLights();
     /** 2026-11-09 (session 5): the aurora's climate share at the camera (CelestialUniforms.follow) and when it was last followed. */
     private float climate = Float.NaN;
     private long climateNanos;
@@ -812,6 +814,9 @@ public final class VisualsRenderer {
             this.post.prepareSky(sky(settings, level, camera, serial));
             //2026-11-13 (session 19): the End's galaxy and the Nether's heat haze
             this.post.prepareDimension(dimension(settings, level, camera));
+            //Session 19: the nether portals near the camera (their light and glow)
+            this.post.preparePortals(settings.portalGlow() > 0 ? this.portals.update(level, camera.x, camera.y, camera.z) : java.util.List.of(),
+                    camera.x, camera.y, camera.z, settings.portalGlow());
             //2026-11-10 (session 8): with the picked block light and moon colours (slots 31, 32)
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
                     atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight).tinted(settings.colours());

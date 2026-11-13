@@ -164,9 +164,10 @@ public final class VisualsOptionLayout {
                             //2026-11-12 (session 14 follow-up): the far clouds and the shader weather at half resolution (much cheaper, a little
                             // softer); on in the Potato, Low and Medium presets
                             toggle("half_res_effects", Impact.NONE, null))),
-                    //2026-11-13 (session 19): the Nether's heat haze, the End's galaxy sky
+                    //2026-11-13 (session 19): the Nether's heat haze, nether portals' glow, the End's galaxy sky
                     new Block("dimensions", List.of(
                             percent("nether_heat_haze", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW),
+                            percent("portal_glow", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW),
                             percent("end_galaxy", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW))),
                     //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns); 2026-11-11: the snow's and the rain's type,
                     // size and amount (ParticleEffect's rows; the amount costs as many drops: about 75% of the pass at 50, 110% at 200)
@@ -324,6 +325,7 @@ public final class VisualsOptionLayout {
             case "shader_weather" -> c.shaderWeather ? 1 : 0;
             case "half_res_effects" -> c.halfResEffects ? 1 : 0;
             case "nether_heat_haze" -> c.netherHeatHaze;
+            case "portal_glow" -> c.portalGlow;
             case "end_galaxy" -> c.endGalaxy;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
@@ -409,6 +411,7 @@ public final class VisualsOptionLayout {
             case "shader_weather" -> c.shaderWeather = v != 0;
             case "half_res_effects" -> c.halfResEffects = v != 0;
             case "nether_heat_haze" -> c.netherHeatHaze = v;
+            case "portal_glow" -> c.portalGlow = v;
             case "end_galaxy" -> c.endGalaxy = v;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;

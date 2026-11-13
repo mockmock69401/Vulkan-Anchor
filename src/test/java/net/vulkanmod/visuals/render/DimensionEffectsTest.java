@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -13,12 +15,14 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 2026-11-13 (shader roadmap session 19, the user: AstraLex's Nether heat, portal light and End galaxy sky): galaxy.glsl and heat.glsl
- * against their mirrors (GalaxyMath, HeatMath), DimensionUniforms' rules, and where the composite and the final colour use them.
+ * 2026-11-13 (shader roadmap session 19, the user: AstraLex's Nether heat, portal light and End galaxy sky): galaxy.glsl, heat.glsl and
+ * portal.glsl against their mirrors (GalaxyMath, HeatMath, PortalMath), DimensionUniforms' rules, PortalLights' boxes, and where the
+ * composite and the final colour use them.
  */
 class DimensionEffectsTest {
     private static final String GALAXY = ShaderFiles.read("post/galaxy.glsl");
     private static final String HEAT = ShaderFiles.read("post/heat.glsl");
+    private static final String PORTAL = ShaderFiles.read("post/portal.glsl");
     private static final String COPY = ShaderFiles.read("post/scene_copy.comp");
     private static final String FINAL = ShaderFiles.read("post/postfinal.glsl");
 
@@ -54,9 +58,11 @@ class DimensionEffectsTest {
     void everyShaderConstantEqualsItsMirrorsField() throws Exception {
         constantsMatch(GALAXY, GalaxyMath.class, 30);
         constantsMatch(HEAT, HeatMath.class, 18);
+        constantsMatch(PORTAL, PortalMath.class, 11);
         assertTrue(GALAXY.contains("0x7feb352du") && GALAXY.contains("0x846ca68bu"));
         assertTrue(GALAXY.contains("vec3 galaxy(vec3 dir, float strength, float pixelAngle, vec3 mapTexel)"));
         assertTrue(HEAT.contains("float heatAmount(float strength, float dist, float camY, float dirY, float lava)"));
+        assertTrue(PORTAL.contains("float portalShare(vec3 pos, float block, vec3 lo, vec3 hi)"));
         //The galaxy's frame: unit pole and core at right angles
         float px = GalaxyMath.GALAXY_POLE_X, py = GalaxyMath.GALAXY_POLE_Y, pz = GalaxyMath.GALAXY_POLE_Z;
         float cx = GalaxyMath.GALAXY_CORE_X, cy = GalaxyMath.GALAXY_CORE_Y, cz = GalaxyMath.GALAXY_CORE_Z;
@@ -156,6 +162,36 @@ class DimensionEffectsTest {
     }
 
     @Test
+    void thePortalOwnsTheBlockLightItCouldGiveAndNoMore() {
+        float[] lo = {0, 0, 0}, hi = {2, 3, 1};
+        //Next to it at its own level: all the portal's
+        assertEquals(1, PortalMath.portalShare(new float[]{1, 1, -1}, 10, lo, hi), 1e-6f);
+        //A torch's 14 beside it: none
+        assertEquals(0, PortalMath.portalShare(new float[]{1, 1, -1}, 14, lo, hi), 1e-6f);
+        //Past its reach and in the dark: none
+        assertEquals(0, PortalMath.portalShare(new float[]{1, 1, -12}, 1, lo, hi), 1e-6f);
+        assertEquals(0, PortalMath.portalShare(new float[]{1, 1, -1}, 0, lo, hi), 1e-6f);
+        //The surface glows brighter with the strength and never below 1
+        assertTrue(PortalMath.portalGlowGain(new float[]{0.5f, 1.5f, 0.5f}, 2, 1) > PortalMath.portalGlowGain(new float[]{0.5f, 1.5f, 0.5f}, 2, 0.2f));
+        assertEquals(1, PortalMath.portalGlowGain(new float[]{0, 0, 0}, 0, 0), 1e-6f);
+    }
+
+    @Test
+    void portalBlocksMergeIntoBoxesAndTheNearestAreKept() {
+        List<int[]> blocks = new ArrayList<>();
+        for (int y = 42; y <= 44; y++) for (int x = 100; x <= 101; x++) blocks.add(new int[]{x, y, 100});
+        blocks.add(new int[]{0, 70, 0});
+        List<PortalLights.Box> boxes = PortalLights.boxes(blocks);
+        assertEquals(2, boxes.size());
+        assertTrue(boxes.contains(new PortalLights.Box(100, 42, 100, 102, 45, 101)));
+        List<PortalLights.Box> many = new ArrayList<>();
+        for (int i = 0; i < 7; i++) many.add(new PortalLights.Box(i * 10, 0, 0, i * 10 + 1, 1, 1));
+        List<PortalLights.Box> kept = PortalLights.nearest(many, 31, 0, 0);
+        assertEquals(PortalLights.MAX_BOXES, kept.size());
+        assertEquals(new PortalLights.Box(30, 0, 0, 31, 1, 1), kept.get(0));
+    }
+
+    @Test
     void theUniformsFollowTheDimensionAndTheSettings() {
         PostProcessSettings s = settings(c -> {
         });
@@ -173,15 +209,19 @@ class DimensionEffectsTest {
         //The time wraps
         assertEquals(5, DimensionUniforms.compute(s, DimensionUniforms.Kind.HOT, 0, HeatMath.HEAT_TIME_WRAP + 5).seconds(), 1e-2f);
         assertEquals(100, new VisualsConfig().netherHeatHaze);
+        assertEquals(100, new VisualsConfig().portalGlow);
         assertEquals(100, new VisualsConfig().endGalaxy);
     }
 
     @Test
     void theCompositeAndTheFinalColourUseThem() {
         String c = COPY.replace(String.valueOf((char) 13), "");
-        assertTrue(c.contains("#import <vulkanmod:visuals/post/galaxy.glsl>") && c.contains("#import <vulkanmod:visuals/post/heat.glsl>"));
+        assertTrue(c.contains("#import <vulkanmod:visuals/post/galaxy.glsl>") && c.contains("#import <vulkanmod:visuals/post/heat.glsl>")
+                && c.contains("#import <vulkanmod:visuals/post/portal.glsl>"));
         assertTrue(c.contains("layout(location = 62) uniform vec4 dimensionParams;"));
+        assertTrue(c.contains("layout(location = 63) uniform vec4 portalLo0;") && c.contains("layout(location = 70) uniform vec4 portalHi3;"));
         assertEquals(DimensionUniforms.COPY_DIMENSION, 62);
+        assertEquals(PortalLights.PORTAL_FIRST, 63);
         //The galaxy behind the End's aurora on the no-sky sky
         assertTrue(c.contains("galaxy(dir, dimensionParams.x,") && c.contains("textureLod(galaxyMap, galaxyMapCoord(dir), 0.0).rgb")
                 && c.contains("return vec4((scene + stars + auroraScreen(dir, p))"));
