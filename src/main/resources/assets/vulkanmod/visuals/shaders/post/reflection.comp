@@ -111,6 +111,13 @@ const float REFLECT_NEAR = 0.06;
 const float REFLECT_THICK_MIN = 0.5;
 const float REFLECT_THICK_SHARE = 0.03;
 const float REFLECT_STEP_CAP = 0.25;
+//2026-11-13 (session 16; the user: a torch's flame smeared in a long streak across a smooth block): the floor for the reflections of
+// solid surfaces (blockReflection, pbrReflection). Half a block took a ray that passed up to half a block behind a torch (an eighth of
+// a block thick) for a hit on it: the flame was stretched along the rays as if half a block deep. Such a surface mirrors what stands
+// a few blocks in front of it, where the refined ray lands within a pixel's depth of a true hit; water keeps REFLECT_THICK_MIN (its
+// rays run long and low over far ground). The floor of the march under way: its caller sets it
+const float REFLECT_SOLID_THICK_MIN = 0.15;
+float reflectThickMin = REFLECT_THICK_MIN;
 //Hits fade out over this share of the screen at its edges
 const float REFLECT_EDGE_FADE = 0.05;
 //Below this reflectivity the march is skipped (the sky alone is mirrored: at 2% a missed island is invisible)
@@ -175,12 +182,12 @@ bool hitPosition(ivec2 q, ivec2 size, out vec3 view) {
 
 //How far behind a surface at depth sceneZ (view z) a coarse step whose depth changed by stepZ may lie and still count (see the consts)
 float marchThickness(float sceneZ, float stepZ) {
-    return max(REFLECT_THICK_MIN, REFLECT_THICK_SHARE*abs(sceneZ)) + min(abs(stepZ), REFLECT_STEP_CAP*abs(sceneZ));
+    return max(reflectThickMin, REFLECT_THICK_SHARE*abs(sceneZ)) + min(abs(stepZ), REFLECT_STEP_CAP*abs(sceneZ));
 }
 
 //The same after the refinement: bracketZ is the ray's depth change across the remaining bracket
 float refinedThickness(float sceneZ, float bracketZ) {
-    return max(REFLECT_THICK_MIN, REFLECT_THICK_SHARE*abs(sceneZ)) + min(abs(bracketZ), REFLECT_STEP_CAP*abs(sceneZ));
+    return max(reflectThickMin, REFLECT_THICK_SHARE*abs(sceneZ)) + min(abs(bracketZ), REFLECT_STEP_CAP*abs(sceneZ));
 }
 
 //Whether the ray at depth rayZ is behind a surface at sceneZ by less than thick (view z is negative in front of the camera)
@@ -429,6 +436,7 @@ vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
         vec3 hitColour;
         float pathLength;
         float blocked;
+        reflectThickMin = REFLECT_SOLID_THICK_MIN;
         float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
         if (w > 0.0) {
             vec3 hitWorld = world + r*pathLength;
@@ -499,6 +507,7 @@ vec3 pbrReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
         vec3 hitColour;
         float pathLength;
         float blocked;
+        reflectThickMin = REFLECT_SOLID_THICK_MIN;
         float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
         if (w > 0.0) {
             vec3 hitWorld = world + r*pathLength;

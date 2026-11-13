@@ -65,6 +65,8 @@ public final class WaterMath {
     public static final float REFLECT_STEP_POWER = 1.6f;
     public static final float REFLECT_RAY_LENGTH = 100000.0f, REFLECT_NEAR = 0.06f;
     public static final float REFLECT_THICK_MIN = 0.5f, REFLECT_THICK_SHARE = 0.03f, REFLECT_STEP_CAP = 0.25f;
+    /** Session 16: the thickness floor for solid surfaces' reflections (blockReflection, pbrReflection); water keeps REFLECT_THICK_MIN. */
+    public static final float REFLECT_SOLID_THICK_MIN = 0.15f;
     public static final float REFLECT_EDGE_FADE = 0.05f, REFLECT_MIN_MARCH = 0.025f;
     public static final float REFRACT_BLOCKS = 0.6f, REFRACT_MAX_PIXELS = 24.0f, REFRACT_SAME_DEPTH = 0.08f;
     public static final int REFLECT_CLOUD_MIN_SAMPLES = 4, REFLECT_CLOUD_MAX_SAMPLES = 12;
@@ -471,12 +473,21 @@ public final class WaterMath {
     // ---- the march's thickness (reflection.comp) ----
 
     public static float marchThickness(float sceneZ, float stepZ) {
-        return Math.max(REFLECT_THICK_MIN, REFLECT_THICK_SHARE * Math.abs(sceneZ)) + Math.min(Math.abs(stepZ), REFLECT_STEP_CAP * Math.abs(sceneZ));
+        return marchThickness(sceneZ, stepZ, REFLECT_THICK_MIN);
+    }
+
+    /** thickMin: the march's floor (reflection.comp's reflectThickMin: water's REFLECT_THICK_MIN or REFLECT_SOLID_THICK_MIN). */
+    public static float marchThickness(float sceneZ, float stepZ, float thickMin) {
+        return Math.max(thickMin, REFLECT_THICK_SHARE * Math.abs(sceneZ)) + Math.min(Math.abs(stepZ), REFLECT_STEP_CAP * Math.abs(sceneZ));
     }
 
     /** bracketZ: the ray's depth change across the bracket left after the refinement. */
     public static float refinedThickness(float sceneZ, float bracketZ) {
-        return Math.max(REFLECT_THICK_MIN, REFLECT_THICK_SHARE * Math.abs(sceneZ)) + Math.min(Math.abs(bracketZ), REFLECT_STEP_CAP * Math.abs(sceneZ));
+        return refinedThickness(sceneZ, bracketZ, REFLECT_THICK_MIN);
+    }
+
+    public static float refinedThickness(float sceneZ, float bracketZ, float thickMin) {
+        return Math.max(thickMin, REFLECT_THICK_SHARE * Math.abs(sceneZ)) + Math.min(Math.abs(bracketZ), REFLECT_STEP_CAP * Math.abs(sceneZ));
     }
 
     public static int reflectCloudSamples(float len) {
