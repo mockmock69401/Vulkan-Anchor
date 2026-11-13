@@ -4,6 +4,7 @@ import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.particle.VanillaParticles;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
+import net.vulkanmod.visuals.render.DimensionUniforms;
 import net.vulkanmod.visuals.render.PbrMath;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import net.vulkanmod.visuals.render.ShadowMath;
@@ -163,6 +164,9 @@ public final class VisualsOptionLayout {
                             //2026-11-12 (session 14 follow-up): the far clouds and the shader weather at half resolution (much cheaper, a little
                             // softer); on in the Potato, Low and Medium presets
                             toggle("half_res_effects", Impact.NONE, null))),
+                    //2026-11-13 (session 19): the End's galaxy sky
+                    new Block("dimensions", List.of(
+                            percent("end_galaxy", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW))),
                     //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns); 2026-11-11: the snow's and the rain's type,
                     // size and amount (ParticleEffect's rows; the amount costs as many drops: about 75% of the pass at 50, 110% at 200)
                     new Block(WEATHER_BLOCK, weatherItems()))),
@@ -318,6 +322,7 @@ public final class VisualsOptionLayout {
             case "star_brightness" -> c.starBrightness;
             case "shader_weather" -> c.shaderWeather ? 1 : 0;
             case "half_res_effects" -> c.halfResEffects ? 1 : 0;
+            case "end_galaxy" -> c.endGalaxy;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
@@ -401,6 +406,7 @@ public final class VisualsOptionLayout {
             case "star_brightness" -> c.starBrightness = v;
             case "shader_weather" -> c.shaderWeather = v != 0;
             case "half_res_effects" -> c.halfResEffects = v != 0;
+            case "end_galaxy" -> c.endGalaxy = v;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;

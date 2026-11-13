@@ -86,6 +86,8 @@ public final class VkPostProcess {
     COPY_SKY_HALF_CLOUD = 22, COPY_SKY_HALF_AURORA = 23,
     //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace, water.glsl moonShape), the copy at 24, the reflection at 11
     COPY_MOON_FACE = 24, REFLECTION_MOON_FACE = 11,
+    //2026-11-13 (shader roadmap session 19): the End galaxy's baked map (GalaxyMap) at 26
+    COPY_GALAXY_MAP = 26,
     //2026-11-13: the reflection reads the frame's sun open share at 12 (sunOpenBuffer, written before the composite)
     REFLECTION_SUN_OPEN = 12,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
@@ -112,6 +114,17 @@ public final class VkPostProcess {
      */
     private VkImage2D skyHalfCloud, skyHalfAurora, weatherHalf;
     private final VkComputeProgram copySkyHalf, copyTintedSkyHalf, weatherUp;
+    /** 2026-11-13 (shader roadmap session 19): the End's galaxy (DimensionUniforms) for this frame. */
+    private DimensionUniforms.Values dimension = DimensionUniforms.off();
+    /**
+     * Session 19: the End galaxy's map (GalaxyMap, 32 MB), made the first time the galaxy is wanted and its bake is done, uploaded
+     * GALAXY_ROWS rows a frame (a chunk whose frame was dropped goes again); until every chunk is up the composite draws no galaxy.
+     * The moon's face stands in for it in the bindings before.
+     */
+    private VkImage2D galaxyMap;
+    private long galaxySampler;
+    private long[] galaxyChunks;
+    private static final int GALAXY_ROWS = 256;
     private boolean halfOn, skyHalfOn;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
@@ -562,6 +575,50 @@ public final class VkPostProcess {
         this.colourAfterView = view;
     }
 
+    /** 2026-11-13 (session 19): before prepare(), the End's galaxy (DimensionUniforms) for the composite. */
+    public void prepareDimension(DimensionUniforms.Values dimension) {
+        if (dimension.galaxy() > 0) {
+            GalaxyMap.start();
+            if (!this.galaxyUploaded()) dimension = dimension.withGalaxy(0);
+        }
+        this.dimension = dimension;
+        dimension.write(this.copyUniforms);
+    }
+
+    /** Session 19: every chunk of the galaxy's map was uploaded in a frame that was not dropped. */
+    private boolean galaxyUploaded() {
+        if (this.galaxyChunks == null) return false;
+        for (long serial : this.galaxyChunks) if (serial < 0 || VkFrames.isDropped(serial)) return false;
+        return true;
+    }
+
+    /** Session 19: once the galaxy's map is baked, its image, then one chunk of rows a frame (again for a chunk in a dropped frame). */
+    private void uploadGalaxy(VkUploadStream upload) {
+        if (GalaxyMap.ready() == null) return;
+        byte[] map = GalaxyMap.ready();
+        if (this.galaxyMap == null) {
+            this.galaxyMap = VkImage2D.create(VK_FORMAT_R8G8B8A8_UNORM, GalaxyMap.WIDTH, GalaxyMap.HEIGHT, 1,
+                    VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            this.galaxySampler = VkSamplers.linearClamp();
+            this.galaxyChunks = new long[(GalaxyMap.HEIGHT + GALAXY_ROWS - 1) / GALAXY_ROWS];
+            java.util.Arrays.fill(this.galaxyChunks, -1);
+        }
+        for (int i = 0; i < this.galaxyChunks.length; i++) {
+            if (this.galaxyChunks[i] >= 0 && !VkFrames.isDropped(this.galaxyChunks[i])) continue;
+            int y = i * GALAXY_ROWS, rows = Math.min(GALAXY_ROWS, GalaxyMap.HEIGHT - y);
+            int bytes = GalaxyMap.WIDTH * rows * 4;
+            ByteBuffer pixels = MemoryUtil.memAlloc(bytes);
+            try {
+                pixels.put(map, y * GalaxyMap.WIDTH * 4, bytes).flip();
+                upload.uploadImage(this.galaxyMap, 0, 0, y, GalaxyMap.WIDTH, rows, MemoryUtil.memAddress(pixels));
+            } finally {
+                MemoryUtil.memFree(pixels);
+            }
+            this.galaxyChunks[i] = VkFrames.serial();
+            return;
+        }
+    }
+
     /** 2026-11-09 (session 5): before prepare(), the discs' shape and the aurora (CelestialUniforms) for the composite and the reflection. */
     public void prepareSky(CelestialUniforms.Values sky) {
         this.sky = sky;
@@ -619,6 +676,8 @@ public final class VkPostProcess {
             }
             this.moonFaceSerial = VkFrames.serial();
         }
+        //Session 19: the End galaxy's map, a chunk a frame while it is wanted
+        if (this.dimension.galaxy() > 0 || (GalaxyMap.ready() != null && !this.galaxyUploaded())) this.uploadGalaxy(upload);
         if (this.smaa != null) this.smaa.prepare(upload);
         clouds.write(this.copyUniforms, CloudUniforms.COPY_FIRST);
         clouds.write(this.reflectionUniforms, CloudUniforms.REFLECTION_FIRST);
@@ -693,7 +752,8 @@ public final class VkPostProcess {
                 .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular())
                 .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles)
                 .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view())
-                .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler);
+                .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler)
+                .sampled(COPY_GALAXY_MAP, this.galaxyMap != null ? this.galaxyMap : this.moonFace, this.galaxyMap != null ? this.galaxySampler : this.moonSampler);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         //Session 14 follow-up: no tile flagged yet (the composite flags its tiles with translucent particles), after the last frame's
         // .PARTICLES pass read them
@@ -1122,6 +1182,8 @@ public final class VkPostProcess {
         this.cloudMap.free();
         this.moonFace.free();
         VkSamplers.free(this.moonSampler);
+        if (this.galaxyMap != null) this.galaxyMap.free();
+        if (this.galaxySampler != 0) VkSamplers.free(this.galaxySampler);
         if (this.weather != null) this.weather.free();
         if (this.weatherRound != null) this.weatherRound.free();
         if (this.weatherUniformBuffer != null) this.weatherUniformBuffer.free();
