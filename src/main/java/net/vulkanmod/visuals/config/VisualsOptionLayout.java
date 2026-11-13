@@ -8,6 +8,7 @@ import net.vulkanmod.visuals.render.DimensionUniforms;
 import net.vulkanmod.visuals.render.PbrMath;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import net.vulkanmod.visuals.render.ShadowMath;
+import net.vulkanmod.visuals.render.SoftShadowMath;
 import net.vulkanmod.visuals.render.StarMath;
 
 import java.util.List;
@@ -189,7 +190,9 @@ public final class VisualsOptionLayout {
                             toggle("sun_shadows", Impact.HIGH, null),
                             toggle("vanilla_shadows", Impact.MEDIUM, "sun_shadows"),
                             new Item("shadow_distance", Kind.CHUNKS, ShadowMath.SHADOW_DISTANCE_MIN, ShadowMath.SHADOW_DISTANCE_MAX, Impact.HIGH, "vanilla_shadows"),
-                            toggle("entity_shadows", Impact.MEDIUM, "sun_shadows"))),
+                            toggle("entity_shadows", Impact.MEDIUM, "sun_shadows"),
+                            //2026-11-13 (session 20): the penumbra widens with the caster's height (0: sharp, as before)
+                            new Item("soft_shadows", Kind.PERCENT, 0, SoftShadowMath.STRENGTH_MAX, Impact.MEDIUM, "sun_shadows"))),
                     new Block("light", List.of(
                             toggle("per_pixel_light", Impact.LOW, null),
                             new Item("sky_light_ambient", Kind.PERCENT, 0, SKY_LIGHT_AMBIENT_MAX, Impact.NONE, "per_pixel_light"),
@@ -340,6 +343,7 @@ public final class VisualsOptionLayout {
             case "vanilla_shadows" -> c.vanillaShadows ? 1 : 0;
             case "shadow_distance" -> c.shadowDistance;
             case "entity_shadows" -> c.entityShadows ? 1 : 0;
+            case "soft_shadows" -> c.softShadows;
             case "per_pixel_light" -> c.perPixelLight ? 1 : 0;
             case "sky_light_ambient" -> c.skyLightAmbient;
             case "held_light" -> c.heldLight ? 1 : 0;
@@ -426,6 +430,7 @@ public final class VisualsOptionLayout {
             case "vanilla_shadows" -> c.vanillaShadows = v != 0;
             case "shadow_distance" -> c.shadowDistance = v;
             case "entity_shadows" -> c.entityShadows = v != 0;
+            case "soft_shadows" -> c.softShadows = v;
             case "per_pixel_light" -> c.perPixelLight = v != 0;
             case "sky_light_ambient" -> c.skyLightAmbient = v;
             case "held_light" -> c.heldLight = v != 0;
