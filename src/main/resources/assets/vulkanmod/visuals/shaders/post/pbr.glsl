@@ -79,6 +79,12 @@ const int PBR_CODE_METAL_ALBEDO = 31;
 // comes from the pixel's colour. Before, the F0 was the albedo over its brightest channel: 1 in that channel for every such metal, a
 // perfect mirror (with Faithful PBR every metal is 255: a netherite block mirrored the grass round it and vanished, gold went green)
 const int PBR_ALBEDO_F0_STEPS = 7;
+//2026-11-13 (session 16): the largest F0 a dielectric mirrors with: diamond's (index 2.42, ((n - 1)/(n + 1))^2 = 0.17), above every
+// other common dielectric (water 0.02, glass 0.04, ruby 0.08). LabPBR lets a dielectric's F0 reach 229/255; packs use the top of that
+// range for "shiny" (Bare Bones PBR: diamond 0.47, gold and iron 0.8 .. 0.9 as dielectrics), and mirrored at that share such a block
+// showed the scene in place of half its texture: tinted glass, with the torch in front of it on its face. AstraLex shows the same map
+// opaque, and Glimmer mirrors no opaque surface. The sun's highlight keeps the pack's F0 (pbrF0)
+const float PBR_MIRROR_F0_MAX = 0.17;
 //The debug view's colour for PBR reflections
 const float DEBUG_PBR_RED = 1.0;
 const float DEBUG_PBR_GREEN = 0.85;
@@ -261,7 +267,8 @@ void pbrUnmark(float mark, out float smoothness, out int code, out bool film) {
 }
 
 //F0 per channel for a reflectance code, for the mirror (the reflection pass); tint is the metal's colour (blockreflect.glsl's metalTint
-// of the lit colour: its hue, brightest channel 1), scaled for an albedo metal by the brightness its code carries (session 16)
+// of the lit colour: its hue, brightest channel 1), scaled for an albedo metal by the brightness its code carries. 2026-11-13 (session
+// 16; the user: a diamond block looked like tinted glass): a dielectric mirrors at most PBR_MIRROR_F0_MAX
 vec3 pbrCodeF0(int code, vec3 tint) {
     if (code >= PBR_CODE_METAL_ALBEDO) {
         float q = float(min(code - PBR_CODE_METAL_ALBEDO, PBR_ALBEDO_F0_STEPS))/float(PBR_ALBEDO_F0_STEPS);
@@ -271,7 +278,7 @@ vec3 pbrCodeF0(int code, vec3 tint) {
         return PBR_METAL_F0[code - PBR_CODE_METAL_FIRST];
     }
     float q = float(code)/float(PBR_F0_CODES);
-    return vec3(q*q*PBR_F0_MAX);
+    return vec3(min(q*q*PBR_F0_MAX, PBR_MIRROR_F0_MAX));
 }
 
 //2026-11-13 (session 16): the mirrored share's Fresnel term over a rough surface: Schlick's rise toward grazing reaches at most the
