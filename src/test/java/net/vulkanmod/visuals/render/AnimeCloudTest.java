@@ -43,9 +43,16 @@ class AnimeCloudTest {
             if (!Modifier.isStatic(f.getModifiers()) || !f.getName().startsWith("ANIME_") || f.getName().equals("ANIME_LIFT") || f.getName().equals("ANIME_THICKNESS")) continue;
             assertTrue(Pattern.compile("const\\s+(float|int)\\s+" + f.getName() + "\\b").matcher(text).find(), f.getName() + " missing in clouds.glsl");
         }
-        //The puffs' periods divide vanilla's 3072-block period (the offset wraps there)
-        assertEquals(0, CloudMath.PERIOD % CloudMath.ANIME_PUFF_CELL, 1e-9);
-        assertEquals(0, CloudMath.PERIOD % CloudMath.ANIME_PUFF_CELL2, 1e-9);
+        //The lattices' cells divide vanilla's 3072-block period (the offset wraps there) at every cloud size, and JITTER + MAX keeps a
+        // sphere within the 2 x 2 cells on a point's side
+        for (float size = 0.5f; size <= 2; size += 0.25f) {
+            float k = CloudMath.animeThickness(size) / CloudMath.ANIME_THICKNESS;
+            for (float base : new float[]{CloudMath.ANIME_PUFF_CELL}) {
+                double cells = CloudMath.PERIOD / CloudMath.animeCell(base, k);
+                assertEquals(Math.round(cells), cells, 1e-3, "whole cells at size " + size);
+            }
+        }
+        assertTrue(CloudMath.ANIME_PUFF_JITTER + CloudMath.ANIME_PUFF_MAX <= 1 + 1e-6f);
         //The style's dispatch: the quality after ANIME_Z; the realistic style below it; the reflection's short march
         assertTrue(text.contains("return cloudOffset.z >= 1.0 && cloudOffset.z < float(ANIME_Z);"));
         assertTrue(text.contains("int samples = a >= 2 ? ANIME_SAMPLES_HIGH : (a == 1 ? ANIME_SAMPLES_MEDIUM : ANIME_SAMPLES_LOW);"));
@@ -53,7 +60,7 @@ class AnimeCloudTest {
         assertEquals(CloudMath.ANIME_SAMPLES_MEDIUM, CloudMath.animeSamples(1));
         assertEquals(CloudMath.ANIME_SAMPLES_HIGH, CloudMath.animeSamples(2));
         String reflection = ShaderFiles.read("post/reflection.comp");
-        assertTrue(reflection.contains("animeMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES)"));
+        assertTrue(reflection.contains("animeMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, false)"));
         //Left out of the lean reflection build with the realistic march (VkPostProcess picks the lean one when Values.realistic() is false)
         int lean = reflection.indexOf("#ifndef REFLECT_LEAN"), anime = reflection.indexOf("if (cloudAnime())"), end = reflection.indexOf("#endif", lean);
         assertTrue(lean >= 0 && lean < anime && anime < end, "the anime branch sits in the non-lean part");
@@ -125,13 +132,12 @@ class AnimeCloudTest {
     }
 
     /**
-     * The pillows: wherever a cloud stands its bottom is at most ANIME_RIM of the layer and its top at least that (they meet at the
-     * outline), most of the base lies flat on the layer's floor, the tops vary, and the shape repeats every PERIOD blocks.
+     * The puffs: wherever a cloud stands its bottom and top lie in the layer, most of the base lies flat on the layer's floor (the spheres
+     * cut flat), the tops vary, and the shape repeats every PERIOD blocks.
      */
     @Test
-    void thePillowsHaveFlatBasesAndRoundedTops() {
+    void thePuffsHaveFlatBasesAndRoundedTops() {
         CloudMath.Realistic r = layer(CloudMath.REAL_COVER);
-        float rim = CloudMath.ANIME_RIM * r.thickness();
         int cloudy = 0, flat = 0;
         float lo = Float.MAX_VALUE, hi = 0;
         for (int x = 0; x < 3072; x += 7) {
@@ -139,8 +145,9 @@ class AnimeCloudTest {
                 float[] bt = CloudMath.animeShape(MAP, r, x, z);
                 if (bt[1] <= bt[0]) continue;
                 cloudy++;
-                assertTrue(bt[0] >= 0 && bt[0] <= rim + 1e-4f, "bottom " + bt[0]);
-                assertTrue(bt[1] >= rim - 1e-4f && bt[1] <= r.thickness() + 1e-4f, "top " + bt[1]);
+                assertTrue(bt[0] >= 0 && bt[0] < r.thickness() * 0.5f, "bottom " + bt[0]);
+                assertTrue(bt[1] > 0 && bt[1] <= r.thickness() + 1e-4f, "top " + bt[1]);
+                assertTrue(bt[2] >= 0 && bt[2] <= 1, "puffs " + bt[2]);
                 if (bt[0] < 0.5f) flat++;
                 lo = Math.min(lo, bt[1]);
                 hi = Math.max(hi, bt[1]);
@@ -200,32 +207,46 @@ class AnimeCloudTest {
     }
 
     /**
-     * The light is soft (no bands): it rises smoothly from ANIME_SHADOW facing away to 1 facing the light, creases are darker, the sky
-     * light dims toward the base, and the rim brightens the silhouette.
+     * The light is soft (no bands): it rises smoothly from ANIME_SHADOW facing away to 1 facing the light, it is darker toward every puff's
+     * edge and toward the base, the sky light dims toward the base, and the light at the horizon is ANIME_FLAT.
      */
     @Test
     void theLightIsSoft() {
-        float[] sun = {0.6f, 0.8f, 0}, view = {0, 1, 0};
-        float away = CloudMath.animeLight(new float[]{0, -1, 0}, 1, 1, view, sun)[0];
-        float toward = CloudMath.animeLight(sun, 1, 1, sun, sun)[0];//seen face on: no rim
-        assertEquals(CloudMath.ANIME_SHADOW, away, 1e-4f);
-        assertEquals(1f, toward, 1e-4f);
+        float[] sun = {0.6f, 0.8f, 0};
+        assertEquals(CloudMath.ANIME_SHADOW, CloudMath.animeLight(new float[]{-0.6f, -0.8f, 0}, 1, 1, sun)[0], 1e-4f);
+        assertEquals(1f, CloudMath.animeLight(sun, 1, 1, sun)[0], 1e-4f);
         //Smooth: turning the normal in small steps never jumps by more than a few percent
         float prev = Float.NaN;
         for (int i = 0; i <= 180; i++) {
             double a = Math.toRadians(i);
             float[] n = {(float) Math.cos(a) * 0.6f - (float) Math.sin(a) * 0.8f, (float) Math.cos(a) * 0.8f + (float) Math.sin(a) * 0.6f, 0};
-            float v = CloudMath.animeLight(n, 1, 1, view, sun)[0];
+            float v = CloudMath.animeLight(n, 1, 1, sun)[0];
             if (!Float.isNaN(prev)) assertTrue(Math.abs(v - prev) < 0.04f, "step at " + i + ": " + prev + " -> " + v);
             prev = v;
         }
-        assertEquals(1 - CloudMath.ANIME_CREASE_SHADE, CloudMath.animeLight(sun, 0, 1, sun, sun)[0], 1e-4f, "a crease is shaded");
-        assertEquals(CloudMath.ANIME_AMBIENT_LOW, CloudMath.animeLight(sun, 1, 0, view, sun)[1], 1e-4f, "the base gets less sky light");
-        assertEquals(1f, CloudMath.animeLight(sun, 1, 1, view, sun)[1], 1e-4f);
-        float[] side = {0, 0, 1};
-        float rim = CloudMath.animeLight(side, 1, 1, new float[]{1, 0, 0}, sun)[0] - CloudMath.animeLight(side, 1, 1, new float[]{0, 0, -1}, sun)[0];
-        assertTrue(rim > 0.1f && rim <= CloudMath.ANIME_RIM_GAIN + 1e-4f, "rim " + rim);
-        assertEquals(CloudMath.ANIME_FLAT, CloudMath.animeLight(new float[]{0, -1, 0}, 1, 1, view, new float[]{1, 0, 0})[0], 1e-4f, "the light at the horizon");
+        assertEquals(1 - CloudMath.ANIME_CREASE_SHADE, CloudMath.animeLight(sun, 0, 1, sun)[0], 1e-4f, "a puff's edge is shaded");
+        assertEquals(CloudMath.ANIME_LOW_LIT, CloudMath.animeLight(sun, 1, 0, sun)[0], 1e-4f, "the base is darker");
+        assertEquals(CloudMath.ANIME_AMBIENT_LOW, CloudMath.animeLight(sun, 1, 0, sun)[1], 1e-4f, "the base gets less sky light");
+        assertEquals(1f, CloudMath.animeLight(sun, 1, 1, sun)[1], 1e-4f);
+        assertEquals(CloudMath.ANIME_FLAT, CloudMath.animeLight(new float[]{0, -1, 0}, 1, 1, new float[]{1, 0, 0})[0], 1e-4f, "the light at the horizon");
+    }
+
+    /** The normal points straight down at a column's bottom and up (the top's) at its top: the flat base shades evenly. */
+    @Test
+    void theBaseFacesDown() {
+        CloudMath.Realistic r = layer(CloudMath.REAL_COVER);
+        int checked = 0;
+        for (int x = 0; x < 3072 && checked < 200; x += 37) {
+            for (int z = 0; z < 3072 && checked < 200; z += 41) {
+                float[] bt = CloudMath.animeShape(MAP, r, r.offsetX() + x, r.offsetZ() + z);
+                if (!(bt[1] - bt[0] > 10)) continue;
+                float[] down = CloudMath.animeNormal(MAP, r, x, r.base() + bt[0], z), up = CloudMath.animeNormal(MAP, r, x, r.base() + bt[1], z);
+                assertArrayEquals(new float[]{0, -1, 0}, down, 1e-4f);
+                assertTrue(up[1] > 0, "the top faces up: " + up[1]);
+                checked++;
+            }
+        }
+        assertTrue(checked > 50, "columns " + checked);
     }
 
     /**
@@ -253,7 +274,7 @@ class AnimeCloudTest {
                 }
             }
             float at = m[3] / CloudMath.ANIME_HAZE;//the distance is the haze's share of it
-            if (fine >= 0 && at >= fine - 1 && at < fine + 3 * CloudMath.ANIME_SOFT + 6) near++;
+            if (fine >= 0 && at >= fine - 1 && at < fine + 3 * CloudMath.ANIME_SOFT_BASE + 6) near++;
         }
         assertTrue(hits > 40, "hits " + hits);
         assertTrue(solid > 0.5 * hits, "mostly opaque: " + solid + " of " + hits);
