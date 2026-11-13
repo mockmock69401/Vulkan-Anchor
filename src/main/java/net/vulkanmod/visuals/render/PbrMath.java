@@ -62,6 +62,8 @@ public final class PbrMath {
     public static final int PBR_CODE_METAL_ALBEDO = 31;
     /** Session 16: an albedo metal's mark carries its F0's brightest channel in this many sqrt steps (codes 31..38). */
     public static final int PBR_ALBEDO_F0_STEPS = 7;
+    /** Session 16: the largest F0 a dielectric mirrors with (diamond's); the highlight keeps the pack's. */
+    public static final float PBR_MIRROR_F0_MAX = 0.17f;
     /** LabPBR's predefined metals 230..237 (iron, gold, aluminium, chrome, copper, lead, platinum, silver): F0 from LabPBR's n and k. */
     public static final float[][] PBR_METAL_F0 = {{0.5312f, 0.5124f, 0.4958f}, {0.9442f, 0.7761f, 0.3734f}, {0.9123f, 0.9139f, 0.9197f},
             {0.5556f, 0.5545f, 0.5548f}, {0.9260f, 0.7209f, 0.5042f}, {0.6325f, 0.6259f, 0.6415f}, {0.6788f, 0.6424f, 0.5884f},
@@ -265,7 +267,7 @@ public final class PbrMath {
         }
         if (code >= PBR_CODE_METAL_FIRST) return PBR_METAL_F0[code - PBR_CODE_METAL_FIRST].clone();
         float q = code / (float) PBR_F0_CODES;
-        float f = q * q * PBR_F0_MAX;
+        float f = Math.min(q * q * PBR_F0_MAX, PBR_MIRROR_F0_MAX);
         return new float[]{f, f, f};
     }
 

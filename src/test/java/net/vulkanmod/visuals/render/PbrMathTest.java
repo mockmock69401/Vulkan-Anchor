@@ -172,11 +172,16 @@ class PbrMathTest {
                 }
                 float[] u = PbrMath.unmark(PbrMath.mark(m, 0, albedo));
                 float[] f0 = PbrMath.codeF0((int) u[1], new float[]{1f, 0.6f, 0.1f});
-                if (m.metal() < 0) assertEquals(m.f0(), f0[0], 0.03f, "a dielectric's F0 within its sqrt step");
+                if (m.metal() < 0) assertEquals(Math.min(m.f0(), PbrMath.PBR_MIRROR_F0_MAX), f0[0], 0.03f, "a dielectric's F0 within its sqrt step, at most diamond's");
                 else if (m.metal() < 8) assertArrayEquals(PbrMath.PBR_METAL_F0[m.metal()], f0);
                 else assertArrayEquals(PbrMath.f0(m, albedo), new float[]{f0[0], f0[0] * 0.6f, f0[0] * 0.1f}, 0.06f, "the albedo's own F0 in linear units, within a sqrt step (session 16)");
             }
         }
+        //Session 16: a dielectric mirrors at most like diamond (Bare Bones PBR's diamond at 0.47 looked like glass); the highlight keeps 0.47
+        PbrMath.Material shiny = PbrMath.material(light, n, PbrMath.packSpecular(235, 120, 0, 255, light));
+        assertEquals(PbrMath.PBR_MIRROR_F0_MAX, PbrMath.codeF0(PbrMath.f0Code(shiny, new float[3]), new float[3])[0], 1e-6);
+        assertEquals(120 / 255f, PbrMath.f0(shiny, new float[3])[0], 1e-6);
+        assertEquals(0.17f, (float) Math.pow((2.42 - 1) / (2.42 + 1), 2), 0.005f, "diamond's F0");
         //Session 16: an albedo metal is never a perfect mirror: its F0 is its linear albedo, and the brightest albedo still fits a half float
         PbrMath.Material albedoMetal = PbrMath.material(light, n, PbrMath.packSpecular(220, 255, 0, 255, light));
         float grey = PostMath.displayToLinear(0.5f);
