@@ -2,6 +2,7 @@ package net.vulkanmod.visuals.config;
 
 import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.particle.VanillaParticles;
+import net.vulkanmod.visuals.render.CausticMath;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.DimensionUniforms;
@@ -213,7 +214,9 @@ public final class VisualsOptionLayout {
                             percent("water_ripples", STRENGTH_MAX),
                             percent("water_ripple_speed", RIPPLE_SPEED_MAX),
                             percent("water_ripple_density", RIPPLE_DENSITY_MIN, RIPPLE_DENSITY_MAX, Impact.NONE),
-                            percent("underwater_visibility", UNDERWATER_VISIBILITY_MIN, UNDERWATER_VISIBILITY_MAX, Impact.NONE))),
+                            percent("underwater_visibility", UNDERWATER_VISIBILITY_MIN, UNDERWATER_VISIBILITY_MAX, Impact.NONE),
+                            //2026-11-13 (session 20): the sunlight the ripples focus on the floor under water (0: off)
+                            percent("caustics", 0, CausticMath.STRENGTH_MAX, Impact.NONE))),
                     new Block("wind", List.of(
                             percent("foliage_wind", STRENGTH_MAX),
                             //2026-11-13 (session 20): hanging lanterns, chains and hanging plants swing (0: still)
@@ -363,6 +366,7 @@ public final class VisualsOptionLayout {
             case "water_ripple_speed" -> c.waterRippleSpeed;
             case "water_ripple_density" -> c.waterRippleDensity;
             case "underwater_visibility" -> c.underwaterVisibility;
+            case "caustics" -> c.caustics;
             case "foliage_wind" -> c.foliageWind;
             case "hanging_sway" -> c.hangingSway;
             default -> {
@@ -451,6 +455,7 @@ public final class VisualsOptionLayout {
             case "water_ripple_speed" -> c.waterRippleSpeed = v;
             case "water_ripple_density" -> c.waterRippleDensity = v;
             case "underwater_visibility" -> c.underwaterVisibility = v;
+            case "caustics" -> c.caustics = v;
             case "foliage_wind" -> c.foliageWind = v;
             case "hanging_sway" -> c.hangingSway = v;
             default -> {

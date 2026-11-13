@@ -350,6 +350,11 @@ public class VisualsConfig {
     public int waterRippleDensity = 100;
     /** 2026-11-09 (session 2b): how far one sees under water, percent (100 = underwater.glsl's extinction; 200 halves it). */
     public int underwaterVisibility = 100;
+    /**
+     * 2026-11-13 (session 20, the user after AstraLex: "수중에서의 빛 굴절"): sunlight focused by the rippled surface onto what lies under water,
+     * seen from under the water or through it (caustics.glsl, CausticMath): percent, 0 = off.
+     */
+    public int caustics = 100;
     /** 2026-10-21: how far plants and leaves sway in the wind (FoliageWind). */
     public int foliageWind = 100;
     /**
