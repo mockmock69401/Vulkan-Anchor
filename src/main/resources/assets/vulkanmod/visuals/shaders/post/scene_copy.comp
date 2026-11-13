@@ -78,7 +78,10 @@ layout(binding = 22, rgba16f) uniform restrict image2D skyHalfCloud;
 layout(binding = 23, rgba16f) uniform restrict image2D skyHalfAurora;
 //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace: albedo and slopes with their mips, water.glsl moonShape)
 layout(binding = 24) uniform sampler2D moonFace;
-//2026-11-13 (shader roadmap session 19): the End galaxy's band and nebulae, baked once (GalaxyMap, galaxy.glsl galaxyMapCoord's layout); read while dimensionParams.x > 0
+//2026-11-13 (shader roadmap session 19): .HEAT writes, at a quarter of the size, the Nether's heat haze (heat.glsl): rg the offset the final
+// colour reads the scene at (uv units), b the heat; the final pass reads it while its heatParams.x is 1
+layout(binding = 25, rgba16f) uniform restrict image2D heatField;
+//Session 19: the End galaxy's band and nebulae, baked once (GalaxyMap, galaxy.glsl galaxyMapCoord's layout); read while dimensionParams.x > 0
 layout(binding = 26) uniform sampler2D galaxyMap;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
@@ -179,7 +182,8 @@ layout(location = 59) uniform vec4 glowTint;
 layout(location = 60) uniform vec4 starTint;
 //2026-11-12 (session 14 follow-up): x 1 while the far clouds come from the half-size image (.SKY_HALF ran), y 1 while the aurora does
 layout(location = 61) uniform vec4 halfParams;
-//2026-11-13 (session 19), DimensionUniforms: x the End's galaxy strength (galaxy.glsl; 0 elsewhere); y, z, w unused
+//2026-11-13 (session 19), DimensionUniforms: x the End's galaxy strength (galaxy.glsl; 0 elsewhere), y the Nether's heat haze strength
+// (heat.glsl; 0 elsewhere), z the camera's world y, w the time in seconds (wrapped at HEAT_TIME_WRAP)
 layout(location = 62) uniform vec4 dimensionParams;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
@@ -202,6 +206,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/galaxy.glsl>
+#import <vulkanmod:visuals/post/heat.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
@@ -1371,6 +1376,44 @@ void main() {
     imageStore(skyHalfAurora, p, vec4(au, min(dist, HALF_SKY_FAR)));
 }
 #else
+#ifdef HEAT_PASS
+//Session 19: the Nether's heat haze at a quarter of the size (heat.glsl): each texel for the pixel at its top-left corner; the texel's offset
+// is dropped where it would read a nearer surface than its own (no near edge smeared over the shimmering far view)
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 hs = imageSize(heatField);
+    if (any(greaterThanEqual(p, hs))) {
+        return;
+    }
+    ivec2 size = imageSize(sceneOut);
+    ivec2 q = min(p*4, size - 1);
+    vec3 view;
+    float dist = scenePosition(q, size, view) ? length(view) : HEAT_SKY_DISTANCE;
+    vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(q, size)));
+    //The lava below on screen: the nearest lava pixel (FoliageMarker.EMISSIVE_FLUID_ALPHA) in HEAT_LAVA_TAPS rows below, and its distance
+    float lava = 0.0;
+    float stride = HEAT_LAVA_REACH*float(size.y)/float(HEAT_LAVA_TAPS);
+    for (int k = 0; k <= HEAT_LAVA_TAPS; k++) {
+        ivec2 c = ivec2(q.x, min(q.y + int(float(k)*stride), size.y - 1));
+        if (alphaCode(texelFetch(mainColour, c, 0).a) == EMISSIVE_FLUID_ALPHA_CODE) {
+            vec3 lv;
+            float ld = scenePosition(c, size, lv) ? length(lv) : HEAT_SKY_DISTANCE;
+            lava = heatLavaWeight(float(k)/float(HEAT_LAVA_TAPS), dist, ld);
+            break;
+        }
+    }
+    float heat = heatAmount(dimensionParams.y, dist, dimensionParams.z, dir.y, lava);
+    vec2 offset = vec2(0.0);
+    if (heat > 0.0) {
+        vec2 px = heatOffsetPixels(dir, dimensionParams.w, heat, float(size.y));
+        ivec2 t = clamp(q + ivec2(round(px)), ivec2(0), size - 1);
+        vec3 tv;
+        float td = scenePosition(t, size, tv) ? length(tv) : HEAT_SKY_DISTANCE;
+        offset = td < dist*HEAT_NEARER_KEEP ? vec2(0.0) : px/vec2(size);
+    }
+    imageStore(heatField, p, vec4(offset, heat, 0.0));
+}
+#else
 #ifdef SUN_OPEN_PASS
 //Session 14: the frame's sun open share, by one invocation (dispatched as one group), as compositeAt used to work it out per pixel
 void main() {
@@ -1454,6 +1497,7 @@ void main() {
     }
     imageStore(sceneOut, p, compositeAt(p, size, colour, overdrawn));
 }
+#endif
 #endif
 #endif
 #endif

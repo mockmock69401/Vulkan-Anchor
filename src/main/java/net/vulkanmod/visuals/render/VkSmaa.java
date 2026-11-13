@@ -33,6 +33,8 @@ final class VkSmaa {
     static final int METRICS = 0, PARAMS = 1;
     // post_ldr.comp: post_final's samplers at 0..2, the output image at 3; the SMAA passes: output image at 0, inputs from 1
     private static final int LDR_OUT = 3, OUT = 0, IN0 = 1, IN1 = 2, IN2 = 3;
+    /** 2026-11-13 (shader roadmap session 19): post_ldr.comp reads the heat haze's offsets here (postfinal.glsl heatTex). */
+    private static final int LDR_HEAT = 4;
     private static final int COMPUTE_AND_FRAGMENT = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     private final VkComputeProgram ldr, edges, weights, blend;
@@ -165,13 +167,15 @@ final class VkSmaa {
      * Outside a render pass, after the post-process compute (scene, bloom and shafts readable): the final colour into an image
      * (readable), which TAA (TAA pass, 2026-10-15) and the SMAA passes take.
      */
-    VkImage2D finalColour(VkCommandBuffer cmd, PostUniforms.Values values, VkImage2D scene, VkImage2D bloom, VkImage2D shafts, long nearest, long linear) {
+    VkImage2D finalColour(VkCommandBuffer cmd, PostUniforms.Values values, VkImage2D scene, VkImage2D bloom, VkImage2D shafts, VkImage2D heat,
+                          boolean heatOn, long nearest, long linear) {
         this.allocate();
         VkGpuTimer.mark(cmd, "smaa.final");
         values.write(this.ldrUniforms);
+        values.writeHeat(this.ldrUniforms, heatOn);
         toWrite(cmd, this.ldrImage);
         this.ldr.dispatchWithPush(cmd, new VkBindings().sampled(0, scene, nearest).sampled(1, bloom, linear).sampled(2, shafts, linear)
-                .storageImage(LDR_OUT, this.ldrImage.view()), this.ldrUniforms.buffer(), groups(this.width), groups(this.height), 1);
+                .sampled(LDR_HEAT, heat, linear).storageImage(LDR_OUT, this.ldrImage.view()), this.ldrUniforms.buffer(), groups(this.width), groups(this.height), 1);
         toRead(cmd, this.ldrImage);
         return this.ldrImage;
     }

@@ -10,6 +10,10 @@ layout(location = 1) uniform vec4 shaftParams;//shaft colour (scaled by the sett
 layout(location = 2) uniform vec4 warmParams;//warm tint, saturation
 layout(location = 3) uniform vec4 coolParams;//cool tint, contrast - 1
 layout(location = 4) uniform vec4 screenParams;//1 / width, 1 / height, vignette strength, unused
+//2026-11-13 (shader roadmap session 19): the Nether's heat haze (scene_copy.comp .HEAT, heat.glsl): rg the offset (uv units) the scene and
+// the bloom are read at, read while heatParams.x is 1 (bound always)
+layout(binding = 4) uniform sampler2D heatTex;
+layout(location = 5) uniform vec4 heatParams;
 
 //Just under one 8-bit step peak to peak: values already on the 8-bit grid stay where they are
 const float DITHER = 0.0039137257;
@@ -30,9 +34,29 @@ vec3 nonNegative(vec3 c) {
     return mix(max(c, vec3(0.0)), vec3(0.0), isnan(c));
 }
 
+//Session 19: the scene at pixel position q (pixel centres at + 0.5), bilinear between its four texels (the scene is bound nearest)
+vec3 sceneBilinear(vec2 q) {
+    ivec2 last = textureSize(sceneTex, 0) - 1;
+    vec2 f = q - 0.5;
+    ivec2 i = ivec2(floor(f));
+    vec2 t = f - vec2(i);
+    vec3 a = texelFetch(sceneTex, clamp(i, ivec2(0), last), 0).rgb;
+    vec3 b = texelFetch(sceneTex, clamp(i + ivec2(1, 0), ivec2(0), last), 0).rgb;
+    vec3 c = texelFetch(sceneTex, clamp(i + ivec2(0, 1), ivec2(0), last), 0).rgb;
+    vec3 d = texelFetch(sceneTex, clamp(i + ivec2(1, 1), ivec2(0), last), 0).rgb;
+    return mix(mix(a, b, t.x), mix(c, d, t.x), t.y);
+}
+
 vec4 finalColour(vec2 fragCoord) {
-    vec3 c = nonNegative(texelFetch(sceneTex, ivec2(fragCoord), 0).rgb);
     vec2 uv = fragCoord*screenParams.xy;
+    vec3 c;
+    if (heatParams.x > 0.5) {
+        //Session 19: the heat haze reads the scene and the bloom a little away
+        uv += texture(heatTex, uv).rg;
+        c = nonNegative(sceneBilinear(uv/screenParams.xy));
+    } else {
+        c = nonNegative(texelFetch(sceneTex, ivec2(fragCoord), 0).rgb);
+    }
     //Bloom mixed over the scene (an energy-keeping lerp, as in Jimenez 2014), then the light shafts added
     if (exposureParams.z > 0.0) {
         c = mix(c, nonNegative(texture(bloomTex, uv).rgb)*exposureParams.w, exposureParams.z);

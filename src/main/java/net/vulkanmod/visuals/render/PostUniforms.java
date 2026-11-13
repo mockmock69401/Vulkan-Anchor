@@ -17,6 +17,8 @@ public final class PostUniforms {
     public static final int BLOOM_PARAMS = 0;
     /** The final pass's locations. */
     static final int EXPOSURE = 0, SHAFTS = 1, WARM = 2, COOL = 3, SCREEN = 4;
+    /** 2026-11-13 (shader roadmap session 19): x 1 while the final colour reads the scene through the heat haze's offsets (postfinal.glsl heatParams). */
+    static final int HEAT = 5;
 
     public record Values(int width, int height, float exposure, float toneKnee, float bloomMix, float bloomNorm, float[] shaft,
                          boolean shaftsOn, float[] warm, float[] cool, float saturation, float contrast, float vignette) {
@@ -26,11 +28,17 @@ public final class PostUniforms {
             w.putVec4(WARM, this.warm[0], this.warm[1], this.warm[2], this.saturation);
             w.putVec4(COOL, this.cool[0], this.cool[1], this.cool[2], this.contrast - 1);
             w.putVec4(SCREEN, 1f / Math.max(1, this.width), 1f / Math.max(1, this.height), this.vignette, 0);
+            writeHeat(w, false);
         }
 
         /** 2026-11-09 (session 6): after write, post_final.frag's screen slot with w 1 when it blends the weather overlay (0 as write leaves it). */
         public void writeWeather(LooseUniformWriter w, boolean weather) {
             w.putVec4(SCREEN, 1f / Math.max(1, this.width), 1f / Math.max(1, this.height), this.vignette, weather ? 1 : 0);
+        }
+
+        /** Session 19: after write, the heat slot: x 1 while the heat haze's offsets are read (DimensionUniforms, the composite's .HEAT). */
+        public void writeHeat(LooseUniformWriter w, boolean heat) {
+            if (w.has(HEAT)) w.putVec4(HEAT, heat ? 1 : 0, 0, 0, 0);
         }
     }
 
