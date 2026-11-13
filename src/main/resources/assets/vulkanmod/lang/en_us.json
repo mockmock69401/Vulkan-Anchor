@@ -334,6 +334,8 @@
   "vulkanmod.visuals.water_ripple_density.tooltip": "How close together the ripples are. 100 is the default; higher makes shorter, finer waves, lower makes long, smooth swells. The waves keep their steepness either way",
   "vulkanmod.visuals.underwater_visibility": "Underwater Visibility",
   "vulkanmod.visuals.underwater_visibility.tooltip": "How far you can see under water. 100 is the default; higher makes the water clearer, lower makes it murkier. Looking up, the surface shows the sky through a rippling window",
+  "vulkanmod.visuals.caustics": "Caustics",
+  "vulkanmod.visuals.caustics.tooltip": "Sunlight focused by the rippling surface into a moving web of light on the sand and stones under the water, seen from under the water and through it from above. Percent of the default strength; 0: off",
   "vulkanmod.visuals.foliage_wind": "Foliage Wind",
   "vulkanmod.visuals.foliage_wind.tooltip": "Grass, flowers and leaves sway in the wind, with the water ripples' speed (faster in rain); 0 holds them still",
   "vulkanmod.visuals.hanging_sway": "Hanging Sway",

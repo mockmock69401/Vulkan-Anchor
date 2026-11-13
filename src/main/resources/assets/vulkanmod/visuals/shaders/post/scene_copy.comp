@@ -195,6 +195,9 @@ layout(location = 67) uniform vec4 portalLo2;
 layout(location = 68) uniform vec4 portalHi2;
 layout(location = 69) uniform vec4 portalLo3;
 layout(location = 70) uniform vec4 portalHi3;
+//2026-11-13 (session 20, CausticMath): x the caustics' strength (0 = off), y the clock (seconds, wrapped at CAUSTIC_TIME_PERIOD), zw the
+// camera's x, z wrapped at CAUSTIC_PERIOD
+layout(location = 71) uniform vec4 causticParams;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -219,6 +222,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/heat.glsl>
 #import <vulkanmod:visuals/post/portal.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
+#import <vulkanmod:visuals/post/caustics.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
 #import <vulkanmod:visuals/post/pbr.glsl>
@@ -1185,6 +1189,24 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
             lit = pbrWetColour(lit, pbrDiffuse);
         }
 #endif
+        //Session 20: caustics (caustics.glsl) on what lies under water and gets the sun: the floor seen through the surface from above (its
+        // depth below the surface along the view), or with the camera under an open surface whatever lies below that surface's height
+        if (causticParams.x > 0.0 && sunPart > 0.0 && !fromLod) {
+            float under = -1.0;
+            vec3 bed = world;
+            if (water) {
+                if (kind < CAUSTIC_BEHIND_MAX && dir.y < 0.0) {
+                    bed = world + dir*kind;
+                    under = -dir.y*kind;
+                }
+            } else if (kind == 0.0 && cameraUnderwater() && underwaterParams.x > 0.0 && world.y < underwaterParams.x) {
+                under = underwaterParams.x - world.y;
+            }
+            if (under > 0.0) {
+                float footprint = length(bed)*2.0*abs(invVanillaProj[1][1])/float(size.y);
+                lit *= causticLight(bed, under, a.sun.xyz, causticParams.y, causticParams.zw, footprint, sunPart, causticParams.x);
+            }
+        }
         if (exposureMode(ATMOSPHERE_NO_SKY)) {
             lit *= looked(NO_SKY_EXPOSURE, look);
         }

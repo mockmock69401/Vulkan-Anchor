@@ -491,6 +491,8 @@ public final class VisualsRenderer {
             //2026-10-21: the plants' wind keeps time with the ripples
             FoliageWind.update(flow, RippleMath.speedFactor(rain, rippleSpeed), VisualsConfig.get().foliageWind / 100f, rain,
                     VisualsConfig.get().hangingSway / 100f);
+            //Session 20: the caustics keep time with the ripples' flow
+            CausticMath.setClock(flow);
             if (FrameRecorder.ON) FrameRecorder.set(FrameRecorder.WIND_PHASE, (long) (FoliageWind.phase0() * 1e6));
             Matrix4fc lodProjection = this.lod != null && this.lod.projection() != null ? this.lod.projection() : projection;
             return AtmosphereFrame.of(VkFrames.serial(), projection, lodProjection, modelView, cameraY, level.getSeaLevel(),

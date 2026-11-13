@@ -708,6 +708,11 @@ public final class VkPostProcess {
         this.halfOn = VisualsConfig.get().halfResEffects;
         this.skyHalfOn = this.halfOn && this.copySkyHalf != null;
         if (this.copyUniforms.has(COPY_HALF_SLOT)) this.copyUniforms.putVec4(COPY_HALF_SLOT, this.skyHalfOn ? 1 : 0, this.skyHalfOn && HALF_AURORA ? 1 : 0, 0, 0);
+        //Session 20: Caustics (CausticMath; strength 0 = off)
+        if (this.copyUniforms.has(CausticMath.SLOT)) {
+            float[] caustic = CausticMath.params(VisualsConfig.get().caustics);
+            this.copyUniforms.putVec4(CausticMath.SLOT, caustic[0], caustic[1], caustic[2], caustic[3]);
+        }
         if (this.copyUniformBuffer != null) upload.upload(this.copyUniformBuffer, 0, this.copyUniforms.buffer());
         lighting.writeLighting(this.lightingUniforms, light.terrain());
         shadow.write(this.lightingUniforms);
