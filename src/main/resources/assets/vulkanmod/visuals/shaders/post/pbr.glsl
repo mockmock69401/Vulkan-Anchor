@@ -9,10 +9,11 @@
 // stored, porosity 0..15 or scattering 16..31 in 5 bits, the emission in 5).
 //
 // THE MARK. A PBR pixel that mirrors (its smoothness, wet or not, at least PBR_REFLECT_SMOOTH_MIN, with the PBR reflections on) carries
-// -(PBR_MARK_BASE + its smoothness in 0..15 + 16 x its reflectance code + 512 under a film of rain water) in the composite's alpha: below
-// every other mark (water +1, glass -0.5, polished -2, metal -4), exact in half floats (at most 1031). The code is 0..22 a dielectric's
-// F0 (sqrt steps up to 0.9), 23..30 LabPBR's predefined metals 230..237, 31 a metal coloured by its albedo. Under a film the reflection
-// takes the face's own normal: the water's surface is flat over the texture's bumps (a bumpy one sparkled noisily in the rain).
+// -(PBR_MARK_BASE + its smoothness in 0..15 + 16 x its reflectance code + 1024 under a film of rain water) in the composite's alpha: below
+// every other mark (water +1, glass -0.5, polished -2, metal -4), exact in half floats (at most 1655). The code is 0..22 a dielectric's
+// F0 (sqrt steps up to 0.9), 23..30 LabPBR's predefined metals 230..237, 31..38 a metal coloured by its albedo (its F0's brightness;
+// session 16, which moved the film from 512 to 1024 to make room). Under a film the reflection takes the face's own normal: the
+// water's surface is flat over the texture's bumps (a bumpy one sparkled noisily in the rain).
 //
 // Literature: GGX (Walter et al. 2007, as blockreflect.glsl), Schlick 1994's Fresnel term, the predefined metals' F0 from LabPBR's n
 // and k at normal incidence ((n - 1)^2 + k^2)/((n + 1)^2 + k^2); wet materials after Lagarde 2013 ("Water drop 2b: Dynamic rain and its
@@ -68,11 +69,16 @@ const float PBR_EMISSION_GAIN = 1.0;
 const float PBR_MARK_BASE = 8.0;
 const float PBR_MARK_LIMIT = -7.5;
 const float PBR_SMOOTH_CODES = 15.0;
-const float PBR_MARK_FILM = 512.0;
+const float PBR_MARK_FILM = 1024.0;
 const float PBR_FILM_FLAT = 0.5;
 const int PBR_F0_CODES = 22;
 const int PBR_CODE_METAL_FIRST = 23;
 const int PBR_CODE_METAL_ALBEDO = 31;
+//2026-11-13 (session 16): a metal coloured by its albedo (LabPBR 255) takes its albedo, in linear units, as its F0 (as LabPBR defines it
+// and as Glimmer does). Its mark carries that F0's brightest channel in PBR_ALBEDO_F0_STEPS + 1 sqrt steps (codes 31..38); the hue
+// comes from the pixel's colour. Before, the F0 was the albedo over its brightest channel: 1 in that channel for every such metal, a
+// perfect mirror (with Faithful PBR every metal is 255: a netherite block mirrored the grass round it and vanished, gold went green)
+const int PBR_ALBEDO_F0_STEPS = 7;
 //The debug view's colour for PBR reflections
 const float DEBUG_PBR_RED = 1.0;
 const float DEBUG_PBR_GREEN = 0.85;
@@ -172,12 +178,13 @@ float pbrAlpha(float smoothness) {
     return max(r*r, PBR_ALPHA_MIN);
 }
 
-//F0 per channel: a dielectric's grey, a predefined metal's, or the albedo's tint (blockreflect.glsl's metalTint) for metal 8
-vec3 pbrF0(PbrMaterial m, vec3 tint) {
+//F0 per channel: a dielectric's grey, a predefined metal's, or for metal 8 the albedo (the texture's colour, display values) in linear
+// units (postmath.glsl's displayToLinear)
+vec3 pbrF0(PbrMaterial m, vec3 albedo) {
     if (m.metal < 0) {
         return vec3(m.f0);
     }
-    return m.metal < 8 ? PBR_METAL_F0[m.metal] : tint;
+    return m.metal < 8 ? PBR_METAL_F0[m.metal] : displayToLinear(clamp(albedo, vec3(0.0), vec3(1.0)));
 }
 
 vec3 pbrFresnel(vec3 f0, float cosTheta) {
@@ -221,16 +228,20 @@ bool pbrReflects(PbrMaterial m) {
     return m.smoothness >= PBR_REFLECT_SMOOTH_MIN;
 }
 
-//The reflectance code (see THE MARK)
-int pbrF0Code(PbrMaterial m) {
+//The reflectance code (see THE MARK); albedo as pbrF0's
+int pbrF0Code(PbrMaterial m, vec3 albedo) {
     if (m.metal >= 0) {
-        return m.metal < 8 ? PBR_CODE_METAL_FIRST + m.metal : PBR_CODE_METAL_ALBEDO;
+        if (m.metal < 8) {
+            return PBR_CODE_METAL_FIRST + m.metal;
+        }
+        float b = displayToLinear(clamp(max(albedo.r, max(albedo.g, albedo.b)), 0.0, 1.0));
+        return PBR_CODE_METAL_ALBEDO + int(round(sqrt(b)*float(PBR_ALBEDO_F0_STEPS)));
     }
     return int(round(sqrt(clamp(m.f0/PBR_F0_MAX, 0.0, 1.0))*float(PBR_F0_CODES)));
 }
 
-float pbrMark(PbrMaterial m, float film) {
-    return -(PBR_MARK_BASE + round(clamp(m.smoothness, 0.0, 1.0)*PBR_SMOOTH_CODES) + 16.0*float(pbrF0Code(m))
+float pbrMark(PbrMaterial m, float film, vec3 albedo) {
+    return -(PBR_MARK_BASE + round(clamp(m.smoothness, 0.0, 1.0)*PBR_SMOOTH_CODES) + 16.0*float(pbrF0Code(m, albedo))
             + (film >= PBR_FILM_FLAT ? PBR_MARK_FILM : 0.0));
 }
 
@@ -249,10 +260,12 @@ void pbrUnmark(float mark, out float smoothness, out int code, out bool film) {
     smoothness = clamp((m - 16.0*float(code))/PBR_SMOOTH_CODES, 0.0, 1.0);
 }
 
-//F0 per channel for a reflectance code; tint is the metal's colour (blockreflect.glsl's metalTint of the lit colour)
+//F0 per channel for a reflectance code, for the mirror (the reflection pass); tint is the metal's colour (blockreflect.glsl's metalTint
+// of the lit colour: its hue, brightest channel 1), scaled for an albedo metal by the brightness its code carries (session 16)
 vec3 pbrCodeF0(int code, vec3 tint) {
     if (code >= PBR_CODE_METAL_ALBEDO) {
-        return tint;
+        float q = float(min(code - PBR_CODE_METAL_ALBEDO, PBR_ALBEDO_F0_STEPS))/float(PBR_ALBEDO_F0_STEPS);
+        return tint*(q*q);
     }
     if (code >= PBR_CODE_METAL_FIRST) {
         return PBR_METAL_F0[code - PBR_CODE_METAL_FIRST];
