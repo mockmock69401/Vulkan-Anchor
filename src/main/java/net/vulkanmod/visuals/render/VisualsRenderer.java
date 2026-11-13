@@ -531,6 +531,17 @@ public final class VisualsRenderer {
         }
     }
 
+    /** 2026-11-13 (session 19): the End's galaxy for this frame (DimensionUniforms); none in a modded level that fails. */
+    private DimensionUniforms.Values dimension(PostProcessSettings settings, ClientLevel level) {
+        try {
+            DimensionUniforms.Kind kind = level.effects().skyType() == DimensionSpecialEffects.SkyType.END ? DimensionUniforms.Kind.END
+                    : DimensionUniforms.Kind.OTHER;
+            return DimensionUniforms.compute(settings, kind);
+        } catch (RuntimeException e) {
+            return DimensionUniforms.off();
+        }
+    }
+
     /**
      * 2026-11-09 (session 6): the shader weather's values for this frame (WeatherUniforms) and its precipitation map around the camera,
      * given to the post-process before the upload commit. The camera's velocity is followed every frame (the streaks lean with it); the map
@@ -799,6 +810,8 @@ public final class VisualsRenderer {
             }
             this.post.prepareUnderwater(UnderwaterUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, surfaceUp, skyAccess, copies));
             this.post.prepareSky(sky(settings, level, camera, serial));
+            //2026-11-13 (session 19): the End's galaxy
+            this.post.prepareDimension(dimension(settings, level));
             //2026-11-10 (session 8): with the picked block light and moon colours (slots 31, 32)
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
                     atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight).tinted(settings.colours());

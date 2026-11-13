@@ -367,6 +367,11 @@ public class VisualsConfig {
     public int aurora = 2;
     public int auroraStrength = 100;
     /**
+     * 2026-11-13 (shader roadmap session 19, after AstraLex's End): the End's galaxy sky (a Milky Way band, nebulae and stars); percent,
+     * 100 = default, 0 = off (DimensionUniforms).
+     */
+    public int endGalaxy = 100;
+    /**
      * 2026-11-11 (session 12): the night sky's stars (vanilla's, StarMath): how many (percent of vanilla's 1500 tries), their size and
      * their brightness (percent, 100 = vanilla's exactly).
      */

@@ -78,6 +78,8 @@ layout(binding = 22, rgba16f) uniform restrict image2D skyHalfCloud;
 layout(binding = 23, rgba16f) uniform restrict image2D skyHalfAurora;
 //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace: albedo and slopes with their mips, water.glsl moonShape)
 layout(binding = 24) uniform sampler2D moonFace;
+//2026-11-13 (shader roadmap session 19): the End galaxy's band and nebulae, baked once (GalaxyMap, galaxy.glsl galaxyMapCoord's layout); read while dimensionParams.x > 0
+layout(binding = 26) uniform sampler2D galaxyMap;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -177,6 +179,8 @@ layout(location = 59) uniform vec4 glowTint;
 layout(location = 60) uniform vec4 starTint;
 //2026-11-12 (session 14 follow-up): x 1 while the far clouds come from the half-size image (.SKY_HALF ran), y 1 while the aurora does
 layout(location = 61) uniform vec4 halfParams;
+//2026-11-13 (session 19), DimensionUniforms: x the End's galaxy strength (galaxy.glsl; 0 elsewhere); y, z, w unused
+layout(location = 62) uniform vec4 dimensionParams;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -197,6 +201,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/water.glsl>
 #import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>
+#import <vulkanmod:visuals/post/galaxy.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
@@ -920,7 +925,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
         if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5) {
-            return vec4((scene + auroraScreen(dir, p))*underwaterExposure(), 0.0);
+            //Session 19: the End's galaxy behind its aurora (dimensionParams.x 0 elsewhere: nothing evaluated)
+            vec3 stars = dimensionParams.x > 0.0 ? galaxy(dir, dimensionParams.x, 2.0*abs(invVanillaProj[1][1])/float(size.y),
+                    textureLod(galaxyMap, galaxyMapCoord(dir), 0.0).rgb) : vec3(0.0);
+            return vec4((scene + stars + auroraScreen(dir, p))*underwaterExposure(), 0.0);
         }
         //Session 5: the round discs (the round moon replaces vanilla's square one, which vanillaMoonKept drops) and the aurora, under
         // the far clouds
