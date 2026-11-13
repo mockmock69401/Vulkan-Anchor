@@ -58,23 +58,6 @@ public final class ParticleLookMath {
         return (encoded >>> PARTICLE_GROUP_SHIFT) & 0xF;
     }
 
-    /** Realistic quads carry the particle's seed (0..SEED_COUNT-1) in u: u = seed * 2 + corner (0 or 1); particle.vsh takes them apart. */
-    public static final int SEED_COUNT = 1024;
-
-    public static float seedU(int seed, int corner) {
-        return Math.floorMod(seed, SEED_COUNT) * 2f + corner;
-    }
-
-    /** particle.vsh: the seed of u (any corner). */
-    public static int seedOf(float u) {
-        return (int) Math.floor(u * 0.5f + 0.25f);
-    }
-
-    /** particle.vsh: the corner of u (0 or 1). */
-    public static float cornerOf(float u) {
-        return u - 2f * seedOf(u);
-    }
-
     /**
      * How many particles one spawn makes at amount percent: amount / 100 whole, the rest by chance (r in [0, 1)). 0 drops the original;
      * 1 is vanilla.
@@ -93,20 +76,25 @@ public final class ParticleLookMath {
     }
 
     /**
-     * The realistic quad's half size: the shape is drawn so it covers about the area the sprite covered (the share of the sprite's texels
-     * drawn, alpha-weighted: smoke's frames shrink as it fades, so does its puff): half size x sqrt(coverage / the shape's share of its
-     * quad, SHAPE_AREA), bounded by MIN_GROWTH and MAX_GROWTH.
+     * 2026-11-13 (session 13 follow-up, the user: "the realistic particles look low-effort: use real images, as the moon does"): the
+     * realistic quad's half size. Each shape is an image tile of the particle atlas (ParticleSprites) drawn at SHAPE_SCALE times the
+     * vanilla quad (the images leave transparent room around them: a flame is a tall narrow tongue in its square tile, a glow a soft
+     * dot); a smoke puff also follows the share of its vanilla frame drawn (coverage, alpha-weighted: smoke's frames shrink as it fades,
+     * so does the puff), sqrt(coverage / PUFF_COVER) bounded by MIN_GROWTH and MAX_GROWTH.
      */
-    public static final float MAX_GROWTH = 1.8f, MIN_GROWTH = 0.35f;
-    /** Each shape's share of its quad (particle.fsh realisticShape: pi r^2 / 4 for its radius r), by VanillaParticles.Shape ordinal. */
-    public static final float[] SHAPE_AREA = {1f, 0.45f, 0.3f, 0.24f, 0.28f, 0.28f, 0.16f, 0.2f, 0.33f, 0.12f};
-    /** The share assumed for a shape not in SHAPE_AREA. */
-    public static final float SHAPE_COVER = 0.3f;
+    public static final float MAX_GROWTH = 1.6f, MIN_GROWTH = 0.35f;
+    /** Each shape's scale on the vanilla quad, by VanillaParticles.Shape ordinal (tuned in game against the vanilla sprites). */
+    public static final float[] SHAPE_SCALE = {1f, 1.25f, 1.35f, 1.8f, 1.15f, 1.0f, 1.6f, 1.3f, 1.0f, 1.8f};
+    /** A vanilla smoke frame's coverage at which the puff has its SHAPE_SCALE size (about the largest frame's). */
+    public static final float PUFF_COVER = 0.35f;
+    /** The coverage assumed when a sprite cannot be read. */
+    public static final float SHAPE_COVER = PUFF_COVER;
 
     public static float realisticSize(float halfSize, float coverage, int shape) {
-        if (!(coverage > 0)) return halfSize;
-        float area = shape > 0 && shape < SHAPE_AREA.length ? SHAPE_AREA[shape] : SHAPE_COVER;
-        float g = (float) Math.sqrt(coverage / area);
-        return halfSize * Math.max(MIN_GROWTH, Math.min(MAX_GROWTH, g));
+        float scale = shape > 0 && shape < SHAPE_SCALE.length ? SHAPE_SCALE[shape] : 1f;
+        if (shape == 1 && coverage > 0) {
+            scale *= Math.max(MIN_GROWTH, Math.min(MAX_GROWTH, (float) Math.sqrt(coverage / PUFF_COVER)));
+        }
+        return halfSize * scale;
     }
 }

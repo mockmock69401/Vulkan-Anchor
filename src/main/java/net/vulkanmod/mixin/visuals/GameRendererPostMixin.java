@@ -23,6 +23,8 @@ public abstract class GameRendererPostMixin {
             Visuals.postProcess();
         } finally {
             DeferredWeather.replay();
+            //2026-11-13 (session 13 follow-up): the realistic particles' images, over the finished picture
+            net.vulkanmod.visuals.particle.DeferredParticles.replay();
         }
     }
 }

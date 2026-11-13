@@ -74,12 +74,46 @@ class ParticleLookTest {
     }
 
     @Test
-    void seedAndCornerComeBack() {
-        for (int seed : new int[]{0, 1, 511, 1023, 1024, -7, Integer.MAX_VALUE}) {
-            for (int corner = 0; corner <= 1; corner++) {
-                float u = ParticleLookMath.seedU(seed, corner);
-                assertEquals(Math.floorMod(seed, ParticleLookMath.SEED_COUNT), ParticleLookMath.seedOf(u));
-                assertEquals(corner, ParticleLookMath.cornerOf(u), 0f);
+    void spritesStayInTheAtlas() {
+        for (VanillaParticles.Shape shape : VanillaParticles.Shape.values()) {
+            if (shape == VanillaParticles.Shape.SPRITE) continue;
+            for (int seed : new int[]{0, 1, 17, -5, Integer.MAX_VALUE, Integer.MIN_VALUE}) {
+                for (float age = 0; age < 200; age += 0.37f) {
+                    int tile = ParticleSprites.tile(shape.ordinal(), seed, age);
+                    assertTrue(tile >= 0 && tile < ParticleSprites.COLS * ParticleSprites.ATLAS_HEIGHT / ParticleSprites.TILE, shape + " " + tile);
+                    float[] uv = ParticleSprites.uv(tile);
+                    assertTrue(uv[0] >= 0 && uv[1] <= 1 && uv[2] >= 0 && uv[3] <= 1 && uv[0] < uv[1] && uv[2] < uv[3]);
+                }
+            }
+        }
+        //The flame plays its flipbook (rows 0..3) as the particle ages, and loops
+        int flame = VanillaParticles.Shape.FLAME.ordinal();
+        java.util.Set<Integer> frames = new java.util.HashSet<>();
+        for (float age = 0; age < 20f * ParticleSprites.FLAME_FRAMES / ParticleSprites.FLAME_FPS; age += 0.25f) frames.add(ParticleSprites.tile(flame, 3, age));
+        assertEquals(ParticleSprites.FLAME_FRAMES, frames.size());
+        assertTrue(frames.stream().allMatch(t -> t < ParticleSprites.FLAME_FRAMES));
+        //Light is added; smoke, drops and petals cover
+        assertTrue(ParticleSprites.additive(flame));
+        assertTrue(ParticleSprites.additive(VanillaParticles.Shape.ORB.ordinal()));
+        assertFalse(ParticleSprites.additive(VanillaParticles.Shape.PUFF.ordinal()));
+        assertFalse(ParticleSprites.additive(VanillaParticles.Shape.DROP.ordinal()));
+        assertFalse(ParticleSprites.additive(0));
+    }
+
+    @Test
+    void theAtlasIsBakedAtItsSize() throws Exception {
+        try (var in = ParticleLookTest.class.getResourceAsStream("/assets/vulkanmod/visuals/textures/particles/particle_atlas.png")) {
+            assertNotNull(in, "particle_atlas.png");
+            java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(in);
+            assertEquals(ParticleSprites.ATLAS_WIDTH, image.getWidth());
+            assertEquals(ParticleSprites.ATLAS_HEIGHT, image.getHeight());
+            //Every tile has something in it, and its border (the bake's padding) is clear
+            for (int t = 0; t < ParticleSprites.COLS * ParticleSprites.ATLAS_HEIGHT / ParticleSprites.TILE; t++) {
+                int x0 = t % ParticleSprites.COLS * ParticleSprites.TILE, y0 = t / ParticleSprites.COLS * ParticleSprites.TILE;
+                long alpha = 0;
+                for (int y = 0; y < ParticleSprites.TILE; y += 2) for (int x = 0; x < ParticleSprites.TILE; x += 2) alpha += image.getRGB(x0 + x, y0 + y) >>> 24;
+                assertTrue(alpha > 0, "tile " + t);
+                assertEquals(0, image.getRGB(x0, y0) >>> 24, "tile " + t + " corner");
             }
         }
     }
@@ -110,12 +144,15 @@ class ParticleLookTest {
         assertEquals(0.25f, ParticleLookMath.sizeScale(5), 0f);
         assertEquals(3f, ParticleLookMath.sizeScale(900), 0f);
         //A sprite that covers as much as its shape keeps its size; a sparse frame shrinks, a full one grows (bounded)
-        int puff = VanillaParticles.Shape.PUFF.ordinal();
-        assertEquals(0.2f, ParticleLookMath.realisticSize(0.2f, ParticleLookMath.SHAPE_AREA[puff], puff), 1e-6f);
-        assertTrue(ParticleLookMath.realisticSize(0.2f, 0.1f, puff) < 0.2f);
-        assertTrue(ParticleLookMath.realisticSize(0.2f, 0.9f, puff) > 0.2f);
-        assertEquals(0.2f * ParticleLookMath.MIN_GROWTH, ParticleLookMath.realisticSize(0.2f, 0.001f, puff), 1e-6f);
-        assertEquals(0.2f, ParticleLookMath.realisticSize(0.2f, 0f, puff), 0f);
-        assertEquals(VanillaParticles.Shape.values().length, ParticleLookMath.SHAPE_AREA.length);
+        int puff = VanillaParticles.Shape.PUFF.ordinal(), flame = VanillaParticles.Shape.FLAME.ordinal();
+        float p = ParticleLookMath.SHAPE_SCALE[puff];
+        assertEquals(0.2f * p, ParticleLookMath.realisticSize(0.2f, ParticleLookMath.PUFF_COVER, puff), 1e-6f);
+        assertTrue(ParticleLookMath.realisticSize(0.2f, 0.1f, puff) < 0.2f * p);
+        assertTrue(ParticleLookMath.realisticSize(0.2f, 0.9f, puff) > 0.2f * p);
+        assertEquals(0.2f * p * ParticleLookMath.MIN_GROWTH, ParticleLookMath.realisticSize(0.2f, 0.001f, puff), 1e-6f);
+        assertEquals(0.2f * p, ParticleLookMath.realisticSize(0.2f, 0f, puff), 1e-6f);
+        //Other shapes: a fixed scale, whatever the frame covers
+        assertEquals(0.2f * ParticleLookMath.SHAPE_SCALE[flame], ParticleLookMath.realisticSize(0.2f, 0.05f, flame), 1e-6f);
+        assertEquals(VanillaParticles.Shape.values().length, ParticleLookMath.SHAPE_SCALE.length);
     }
 }
