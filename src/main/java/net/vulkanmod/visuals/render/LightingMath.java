@@ -431,4 +431,10 @@ public final class LightingMath {
         float y = cameraYFrac + view.dot(upView);
         return heightStep <= BOUNDARY_STEP_MAX && Math.abs(y - (float) Math.floor(y + 0.5f)) <= BOUNDARY_TOLERANCE ? -length : length;
     }
+
+    /** Session 20 (Soft Shadows): lighting.comp's soft lookup (SoftShadowMath), its taps and the golden angle of their Vogel disc. */
+    public static final int SOFT_SEARCH_TAPS = SoftShadowMath.SEARCH_TAPS, SOFT_FILTER_TAPS = SoftShadowMath.FILTER_TAPS;
+    public static final float GOLDEN_ANGLE = 2.39996323f, TWO_PI = 6.2831853f;
+    /** The soft filter is the sharp lookup while its half width is under this many of the map's texels. */
+    public static final float SOFT_MIN_TEXELS = 1.0f;
 }

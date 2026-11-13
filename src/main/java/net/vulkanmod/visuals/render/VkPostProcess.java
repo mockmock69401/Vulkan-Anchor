@@ -713,6 +713,11 @@ public final class VkPostProcess {
         shadow.write(this.lightingUniforms);
         shadow.writeSteps(this.lightingUniforms);
         shadow.writeClose(this.lightingUniforms);
+        //Session 20: Soft Shadows (SoftShadowMath; 0 = the sharp lookups)
+        if (this.lightingUniforms.has(SoftShadowMath.SLOT)) {
+            float[] soft = SoftShadowMath.params(VisualsConfig.get().softShadows, VkFrames.serial());
+            this.lightingUniforms.putVec4(SoftShadowMath.SLOT, soft[0], soft[1], soft[2], 0);
+        }
         if (this.lightingUniformBuffer != null) upload.upload(this.lightingUniformBuffer, 0, this.lightingUniforms.buffer());
         reflection.write(this.reflectionUniforms);
         this.sky.writeReflection(this.reflectionUniforms);

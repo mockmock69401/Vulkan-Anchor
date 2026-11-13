@@ -131,6 +131,8 @@
   "vulkanmod.visuals.vanilla_shadows.tooltip": "가까운 태양 그림자에 주변 바닐라 지형도 포함해 풀·꽃·잎이 제 모양의 그림자를 드리웁니다 (태양 그림자 필요)",
   "vulkanmod.visuals.entity_shadows": "엔티티 그림자",
   "vulkanmod.visuals.entity_shadows.tooltip": "32블록 안의 몹·플레이어·떨어진 아이템이 태양 그림자를 드리웁니다(모델 상자 모양 그대로). 몹이 많으면 프레임이 듭니다",
+  "vulkanmod.visuals.soft_shadows": "부드러운 그림자",
+  "vulkanmod.visuals.soft_shadows.tooltip": "그림자를 드리우는 물체가 땅에서 높을수록 그림자 가장자리가 부드럽게 퍼집니다. 기둥이 바닥에 닿는 곳은 선명하고, 나뭇잎 아래에는 부드럽게 번진 빛이 떨어집니다. 기본 부드러움의 퍼센트이며 0이면 모든 그림자가 선명합니다. 포테이토·낮음 프리셋에서 꺼짐",
   "vulkanmod.visuals.shadow_distance": "그림자 거리",
   "vulkanmod.visuals.shadow_distance.tooltip": "주변 바닐라 지형이 선명한 태양 그림자를 드리우는 거리입니다. 그 너머는 거친 먼 그림자(또는 LOD 그림자)가 맡습니다. 늘릴수록 해가 움직일 때 프레임이 더 듭니다",
   "vulkanmod.visuals.sky_light_ambient": "햇빛 닿는 곳의 하늘빛",

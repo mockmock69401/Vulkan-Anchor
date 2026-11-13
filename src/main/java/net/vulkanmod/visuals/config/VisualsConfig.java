@@ -57,8 +57,12 @@ public class VisualsConfig {
      * 18 (2026-11-13): the palettes also set the tone block (exposure, tone mapping, contrast, warm sun / cool shade; ColourPresets.LOOK_KEYS);
      * a file on a palette with those still at their old defaults takes the palette's and stays on it (ColourPresets.moveNewLooks, with the
      * moonlight for a file older than 16); any other file keeps its values.
+     * 19 (2026-11-13, session 20): Soft Shadows (softShadows), which the presets set; a file on a level takes that level's value and stays
+     * on it, any other file the default.
      */
-    private static final int REVISION = 18;
+    private static final int REVISION = 19;
+    /** Session 20: the first revision with Soft Shadows. */
+    static final int SOFT_SHADOWS_REVISION = 19;
     /** 2026-11-13: the first revision whose palettes set the tone block. */
     static final int TONE_LOOK_REVISION = 18;
     /** Session 14 follow-up: the first revision with Half-resolution Weather & Sky. */
@@ -156,6 +160,10 @@ public class VisualsConfig {
         //Session 14 follow-up: likewise a level saved before Half-resolution Weather & Sky existed (Potato, Low, Medium turn it on)
         if (fileRevision < HALF_RES_REVISION && VisualsPresets.isLevel(c.preset)) {
             VisualsOptionLayout.set(c, VisualsOptionLayout.item("half_res_effects"), VisualsPresets.value("half_res_effects", c.preset));
+        }
+        //Session 20: likewise a level saved before Soft Shadows existed
+        if (fileRevision < SOFT_SHADOWS_REVISION && VisualsPresets.isLevel(c.preset)) {
+            VisualsOptionLayout.set(c, VisualsOptionLayout.item("soft_shadows"), VisualsPresets.value("soft_shadows", c.preset));
         }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
@@ -413,6 +421,12 @@ public class VisualsConfig {
     public int shadowDistance = 4;
     /** 2026-10-29: mobs, players and items cast sun shadows (VkEntityShadows). */
     public boolean entityShadows = true;
+    /**
+     * 2026-11-13 (session 20, the user after AstraLex: "나뭇잎 등 오브젝트의 그림자가 부드럽게 퍼져"): shadows soften with the caster's height
+     * above the ground (percentage-closer soft shadows in lighting.comp, SoftShadowMath): percent of the default spread, 0 = the sharp
+     * shadows as before.
+     */
+    public int softShadows = 100;
     public int skyLightAmbient = 100;
     public boolean perPixelLight = true;
     public int lightColour = 70;

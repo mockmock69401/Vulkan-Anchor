@@ -417,6 +417,8 @@
   "vulkanmod.visuals.vanilla_shadows.tooltip": "The near sun shadows also take the vanilla terrain around you: grass, flowers and leaves cast their own shape (with Sun Shadows)",
   "vulkanmod.visuals.entity_shadows": "Entity Shadows",
   "vulkanmod.visuals.entity_shadows.tooltip": "Mobs, players and dropped items within 32 blocks cast sun shadows (as whole model boxes); costs frame rate in crowds",
+  "vulkanmod.visuals.soft_shadows": "Soft Shadows",
+  "vulkanmod.visuals.soft_shadows.tooltip": "Shadows soften the higher their caster stands above the ground: sharp where a post meets the floor, a soft spread of light under a leaf canopy. Percent of the default softness; 0: sharp shadows everywhere. Off in the Potato and Low presets",
   "vulkanmod.visuals.shadow_distance": "Shadow Distance",
   "vulkanmod.visuals.shadow_distance.tooltip": "How far around you the vanilla terrain casts sharp sun shadows; farther out the coarser far shadows (or the LOD shadows) take over. Each step costs frame rate when the sun moves",
   "vulkanmod.visuals.sky_light_ambient": "Sunlit Sky Light",
