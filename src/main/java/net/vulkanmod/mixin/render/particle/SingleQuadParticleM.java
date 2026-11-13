@@ -19,6 +19,8 @@ import net.vulkanmod.mixin.visuals.TextureSheetParticleAccessor;
 import net.vulkanmod.visuals.particle.ParticleEffectTag;
 import net.vulkanmod.visuals.particle.ParticleLook;
 import net.vulkanmod.visuals.particle.ParticleLookMath;
+import net.vulkanmod.visuals.particle.DeferredParticles;
+import net.vulkanmod.visuals.particle.ParticleSprites;
 import net.vulkanmod.render.chunk.RenderSection;
 import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.vulkan.VRenderSystem;
@@ -112,17 +114,24 @@ public abstract class SingleQuadParticleM extends Particle {
         int light = this.getLightColor(f);
         float r = this.rCol, g = this.gCol, b = this.bCol;
         if (shape != 0) {
-            //A realistic shape: no texels; u carries the seed, the colour is the sprite's mean (ParticleLookMath, particle.vsh)
+            //2026-11-13: a realistic particle draws its image (ParticleSprites) after the post-process (DeferredParticles), in the colour of
+            // its vanilla sprite's mean; recorded here instead of drawn
             int seed = System.identityHashCode(this);
-            u0 = ParticleLookMath.seedU(seed, 0);
-            u1 = ParticleLookMath.seedU(seed, 1);
-            v0 = 0f;
-            v1 = 1f;
-            r *= stats[0];
-            g *= stats[1];
-            b *= stats[2];
+            int tile = ParticleSprites.tile(shape, seed, this.age + f);
+            float[] uv = ParticleSprites.uv(tile);
+            boolean mirror = ParticleSprites.mirrored(shape, seed);
+            float[] corners = new float[12];
+            for (int k = 0; k < 4; k++) {
+                corners[k * 3] = vector3fs[k].x();
+                corners[k * 3 + 1] = vector3fs[k].y();
+                corners[k * 3 + 2] = vector3fs[k].z();
+            }
+            int colour = ColorUtil.RGBA.pack(r * stats[0], g * stats[1], b * stats[2], this.alpha);
+            DeferredParticles.add(corners, mirror ? uv[1] : uv[0], mirror ? uv[0] : uv[1], uv[2], uv[3], colour,
+                    ParticleLookMath.light(light, shape, tintGroup), ParticleSprites.additive(shape));
+            return;
         }
-        if (shape != 0 || tintGroup != 0) light = ParticleLookMath.light(light, shape, tintGroup);
+        if (tintGroup != 0) light = ParticleLookMath.light(light, 0, tintGroup);
 
         ExtendedVertexBuilder vertexBuilder = ExtendedVertexBuilder.of(vertexConsumer);
         if (vertexBuilder == null) {
