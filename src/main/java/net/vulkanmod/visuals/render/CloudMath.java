@@ -379,19 +379,21 @@ public final class CloudMath {
         return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
     }
 
-    // ---- Session 11 (2026-11-10): the anime style. clouds.glsl's anime part mirrored (change both together) ----
+    // ---- Session 11 (2026-11-10, redone in session 18): the anime style. clouds.glsl's anime part mirrored (change both together) ----
 
     /** clouds.glsl's ANIME_* constants (see there). */
-    public static final float ANIME_RIM = 0.15f, ANIME_EDGE = 0.35f, ANIME_BASE_EDGE = 0.12f, ANIME_TOP_MIN = 0.55f, ANIME_TOWER = 0.35f;
-    public static final float ANIME_PUFF_CELL = 48, ANIME_PUFF_CELL2 = 16, ANIME_PUFF_DETAIL = 0.3f, ANIME_PUFF = 0.6f, ANIME_SCALLOP = 0.22f, ANIME_CREASE = 0.5f;
-    public static final float ANIME_STEP = 3, ANIME_NORMAL_STEP = 6, ANIME_NORMAL_LOW = 0.2f, ANIME_NORMAL_HIGH = 0.8f;
-    public static final int ANIME_SAMPLES_LOW = 24, ANIME_SAMPLES_MEDIUM = 40, ANIME_SAMPLES_HIGH = 64, ANIME_SAMPLES_MIN = 12;
-    public static final float ANIME_SOFT = 6, ANIME_DENSITY = 0.3f;
+    public static final float ANIME_PUFF_CELL = 104, ANIME_PUFF_JITTER = 0.12f, ANIME_PUFF_MIN = 0.6f, ANIME_PUFF_MAX = 0.88f, ANIME_PUFF_SHRINK = 0.6f;
+    public static final float ANIME_PUFF_LOW = 0.15f, ANIME_PUFF_HIGH = 0.55f, ANIME_PUFF_TALL = 1, ANIME_PUFF_PROFILE = 0.8f, ANIME_PUFF_BLEND = 0.35f;
+    public static final float ANIME_EDGE = 0.5f, ANIME_TOWER = 0.35f;
+    public static final float ANIME_STEP = 6, ANIME_NORMAL_STEP = 12;
+    public static final int ANIME_SAMPLES_LOW = 16, ANIME_SAMPLES_MEDIUM = 28, ANIME_SAMPLES_HIGH = 44, ANIME_SAMPLES_MIN = 10;
+    public static final float ANIME_SOFT = 30, ANIME_SOFT_BASE = 60, ANIME_DENSITY = 0.12f;
     public static final float ANIME_FADE_NEAR = 500, ANIME_FADE_FAR = 1800, ANIME_FADE_SHRINK = 24, ANIME_HAZE = 0.5f;
-    public static final float ANIME_WRAP = 0.5f, ANIME_SHADE_FROM = 0.1f, ANIME_SHADE_TO = 0.75f, ANIME_SHADOW = 0.15f, ANIME_FLAT = 0.6f;
-    public static final float ANIME_CREASE_SHADE = 0.45f, ANIME_AMBIENT_LOW = 0.5f, ANIME_RIM_GAIN = 0.6f, ANIME_RIM_POWER = 3, ANIME_RIM_BACK = 0.3f;
+    public static final float ANIME_WRAP = 0.8f, ANIME_SHADE_FROM = 0, ANIME_SHADE_TO = 1, ANIME_SHADOW = 0.4f, ANIME_FLAT = 0.6f;
+    public static final float ANIME_CREASE_SHADE = 0.25f, ANIME_LOW_LIT = 0.65f, ANIME_LOW_REACH = 0.6f, ANIME_AMBIENT_LOW = 0.6f;
+    public static final float ANIME_SILVER = 0.15f, ANIME_SILVER_G = 0.5f;
     /** CPU side: the anime layer's base ANIME_LIFT above vanilla's, ANIME_THICKNESS thick at cloud size 100% (scaled as realThickness). */
-    public static final float ANIME_LIFT = 32, ANIME_THICKNESS = 80;
+    public static final float ANIME_LIFT = 32, ANIME_THICKNESS = 140;
 
     /** The anime layer's thickness at a cloud size (fraction): ANIME_THICKNESS at 1. */
     public static float animeThickness(float size) {
@@ -403,35 +405,25 @@ public final class CloudMath {
         return q >= 2 ? ANIME_SAMPLES_HIGH : q == 1 ? ANIME_SAMPLES_MEDIUM : ANIME_SAMPLES_LOW;
     }
 
-    /** animeNoise: 2D value noise 0..1 at (x, z) lattice units on layer y of the 3D lattice, repeating every n cells. */
-    static float animeNoise(float x, float y, float z, float n) {
-        float ix = (float) Math.floor(x), iz = (float) Math.floor(z);
-        float fx = x - ix, fz = z - iz;
-        float ux = fx * fx * (3 - 2 * fx), uz = fz * fz * (3 - 2 * fz);
-        return mix(mix(corner(ix, y, iz, n), corner(ix + 1, y, iz, n), ux), mix(corner(ix, y, iz + 1, n), corner(ix + 1, y, iz + 1, n), ux), uz);
+    /** animeCell: a lattice's cell in blocks, base x k (the layer's thickness over ANIME_THICKNESS), whole cells to the PERIOD. */
+    public static float animeCell(float base, float k) {
+        return (float) (PERIOD / Math.max(1, Math.round(PERIOD / (base * k))));
     }
 
-    /** animeWeather: cloudMap's channel c at (mx, mz) as noise() but with smoothstep weights: the shading showed bilinear's creases along the texel edges. */
-    public static float animeWeather(byte[] map, float mx, float mz, int c) {
-        float ux = mx / CLOUD_CELL - 0.5f, uz = mz / CLOUD_CELL - 0.5f;
-        int ix = (int) Math.floor(ux), iz = (int) Math.floor(uz);
-        float fx = ux - ix, fz = uz - iz;
-        fx = fx * fx * (3 - 2 * fx);
-        fz = fz * fz * (3 - 2 * fz);
-        return mix(mix(channel(map, ix, iz, c), channel(map, ix + 1, iz, c), fx), mix(channel(map, ix, iz + 1, c), channel(map, ix + 1, iz + 1, c), fx), fz);
+    /** animeHash: the 32-bit hash of lattice cell (x, z) on layer y, x and z wrapped into n cells (realCorner's, unscaled). */
+    static int animeHash(int x, int y, int z, int n) {
+        int h = (Math.floorMod(x, n) * REAL_PRIME_X) ^ (y * REAL_PRIME_Y) ^ (Math.floorMod(z, n) * REAL_PRIME_Z);
+        h ^= h >>> 16;
+        h *= 0x7feb352d;
+        h ^= h >>> 15;
+        h *= 0x846ca68b;
+        h ^= h >>> 16;
+        return h;
     }
 
-    /** animePuffs: 0..1 at map position (mx, mz), billows |2n - 1| of two octaves: rounded puffs, 0 along the creases between them. */
-    public static float animePuffs(float mx, float mz) {
-        float p = animeBillow(animeNoise(mx / ANIME_PUFF_CELL, 0, mz / ANIME_PUFF_CELL, MAP * CLOUD_CELL / ANIME_PUFF_CELL));
-        float q = animeBillow(animeNoise(mx / ANIME_PUFF_CELL2, 1, mz / ANIME_PUFF_CELL2, MAP * CLOUD_CELL / ANIME_PUFF_CELL2));
-        return mix(p, q, ANIME_PUFF_DETAIL);
-    }
-
-    /** animeBillow: |2n - 1| softened over ANIME_CREASE (the creases between puffs rounded), still 0..1. */
-    static float animeBillow(float n) {
-        float x = 2 * n - 1, c = ANIME_CREASE;
-        return ((float) Math.sqrt(x * x + c * c) - c) / ((float) Math.sqrt(1 + c * c) - c);
+    /** A lattice cell's sphere centre along one axis in cells, from 8 bits of its hash: up to ANIME_PUFF_JITTER off the cell's middle. */
+    private static float centre(int c, int h) {
+        return c + 0.5f + ANIME_PUFF_JITTER * ((h & 0xFF) / 127.5f - 1);
     }
 
     /** animeShape: (bottom, top, puffs) above the layer's base in blocks at map position (mx, mz); top below bottom where no cloud stands. */
@@ -440,30 +432,52 @@ public final class CloudMath {
     }
 
     /**
-     * animeShape for a sample h blocks above the base (negative: none): (0, -1, 0) as soon as the weather alone proves h outside (above
-     * the highest top or below the lowest bottom any puff could give), before the puffs are evaluated. Inside or not, the same answer.
+     * animeShape for a sample h blocks above the base (negative: none): the puffs (rounded domes on a lattice, blended where they meet) in
+     * the column at (mx, mz), (bottom, top, puffs) with puffs how near the column is to a puff's middle (1) from every puff's edge (0);
+     * (0, -1, 0) where no puff reaches. Above the highest top any puff could give: none, before the lattice.
      */
     public static float[] animeShape(byte[] map, Realistic r, float mx, float mz, float h) {
         float[] none = {0, -1, 0};
         float f = Math.min(r.cover, 1);
         if (!(f > 0)) return none;
-        float s = (animeWeather(map, mx, mz, 1) - 1 + f) / f;
-        if (s <= 0) return none;
-        float tower = noise(map, mx, mz, 3);
-        float rim = ANIME_RIM * r.thickness;
-        float towerTop = r.thickness * mix(1 - ANIME_TOWER, 1, tower);
-        if (h >= 0) {
-            float most = rim + (towerTop * mix(ANIME_TOP_MIN, 1, Math.min(s, 1)) - rim) * (float) Math.sqrt(Math.min(s / ANIME_EDGE, 1));
-            float least = rim * (1 - (float) Math.sqrt(Math.min(s / ANIME_BASE_EDGE, 1)));
-            if (h >= most || h <= least) return none;
+        float k = r.thickness / ANIME_THICKNESS;
+        float cell = animeCell(ANIME_PUFF_CELL, k);
+        if (h >= 0 && h >= Math.min(((ANIME_PUFF_HIGH + ANIME_PUFF_TALL) * ANIME_PUFF_MAX + 0.75f * ANIME_PUFF_BLEND) * cell, r.thickness)) return none;
+        int n = (int) Math.round(PERIOD / cell);
+        float ux = mx / cell, uz = mz / cell;
+        int ix = (int) Math.floor(ux), iz = (int) Math.floor(uz);
+        int ox = ux - ix < 0.5f ? -1 : 0, oz = uz - iz < 0.5f ? -1 : 0;
+        float bottom = 0, top = -1, puffs = 0;
+        for (int b = 0; b < 2; b++) {
+            for (int a = 0; a < 2; a++) {
+                int cx = ix + ox + a, cz = iz + oz + b;
+                int hash = animeHash(cx, 0, cz, n);
+                float px = centre(cx, hash), pz = centre(cz, hash >>> 8);
+                int tx = (int) Math.floor(px * cell / CLOUD_CELL), tz = (int) Math.floor(pz * cell / CLOUD_CELL);
+                float s = (channel(map, tx, tz, 1) - 1 + f) / f;
+                if (s <= 0) continue;
+                float rad = cell * mix(ANIME_PUFF_MIN, ANIME_PUFF_MAX, ((hash >>> 16) & 0xFF) / 255f) * mix(ANIME_PUFF_SHRINK, 1, Math.min(s / ANIME_EDGE, 1));
+                float dx = (ux - px) * cell, dz = (uz - pz) * cell;
+                float q2 = rad * rad - dx * dx - dz * dz;
+                if (q2 <= 0) continue;
+                float lift = mix(1 - ANIME_TOWER, 1, channel(map, tx, tz, 3));
+                float q = rad * (float) Math.pow(q2 / (rad * rad), ANIME_PUFF_PROFILE), cy = rad * mix(ANIME_PUFF_LOW, ANIME_PUFF_HIGH, Math.min(s, 1)) * lift;
+                float lo = Math.max(cy - q * ANIME_PUFF_TALL, 0), hi = cy + q * ANIME_PUFF_TALL;
+                puffs = Math.max(puffs, q / rad);
+                if (top < bottom) {
+                    bottom = lo;
+                    top = hi;
+                } else {
+                    //A smooth union (polynomial smooth max and min over ANIME_PUFF_BLEND cells): no crease where two puffs meet
+                    float kb = ANIME_PUFF_BLEND * cell;
+                    float ht = Math.max(kb - Math.abs(top - hi), 0) / kb, hb = Math.max(kb - Math.abs(bottom - lo), 0) / kb;
+                    top = Math.max(top, hi) + ht * ht * kb * 0.25f;
+                    bottom = Math.max(Math.min(bottom, lo) - hb * hb * kb * 0.25f, 0);
+                }
+            }
         }
-        float p = animePuffs(mx, mz);
-        float sp = s - ANIME_SCALLOP * (1 - p);
-        if (sp <= 0) return none;
-        float high = towerTop * mix(ANIME_TOP_MIN, 1, Math.min(sp, 1));
-        float top = rim + (high - rim) * (float) Math.sqrt(Math.min(sp / ANIME_EDGE, 1)) * (1 - ANIME_PUFF + ANIME_PUFF * p);
-        float bottom = rim * (1 - (float) Math.sqrt(Math.min(sp / ANIME_BASE_EDGE, 1)));
-        return new float[]{bottom, top, p};
+        if (!(top > bottom)) return none;
+        return new float[]{bottom, Math.min(top, r.thickness), puffs};
     }
 
     /** True where camera-relative (x, y, z) is inside an anime cloud. */
@@ -476,21 +490,20 @@ public final class CloudMath {
         float h = y - r.base;
         if (!(h > 0 && h < r.thickness)) return 0;
         float[] bt = animeShape(map, r, r.offsetX + x, r.offsetZ + z, h);
-        return Math.max(Math.min(h - bt[0], bt[1] - h), 0);
+        return Math.max(Math.min((h - bt[0]) * (ANIME_SOFT / ANIME_SOFT_BASE), bt[1] - h), 0);
     }
 
     /**
-     * animeNormal: the cloud surface's unit normal at camera-relative (x, y, z): the bottom's and the top's normals (their heights
-     * ANIME_NORMAL_STEP blocks either side) mixed by the height in the column, from the bottom's below ANIME_NORMAL_LOW of it to the
-     * top's above ANIME_NORMAL_HIGH (a hard switch at the middle drew a seam along the sides).
+     * animeNormal: the cloud surface's unit normal at camera-relative (x, y, z): straight down at the column's bottom turning smoothly to the
+     * top's normal (from its heights ANIME_NORMAL_STEP blocks either side) at its top (the flat base's cut rims drew bright arcs).
      */
     public static float[] animeNormal(byte[] map, Realistic r, float x, float y, float z) {
         float mx = r.offsetX + x, mz = r.offsetZ + z, e = ANIME_NORMAL_STEP;
         float[] c = animeShape(map, r, mx, mz), px = animeShape(map, r, mx + e, mz), nx = animeShape(map, r, mx - e, mz),
                 pz = animeShape(map, r, mx, mz + e), nz = animeShape(map, r, mx, mz - e);
-        float w = smoothstep(ANIME_NORMAL_LOW, ANIME_NORMAL_HIGH, clamp01((y - r.base - c[0]) / Math.max(c[1] - c[0], 1e-3f)));
-        float[] top = unit(new float[]{-(px[1] - nx[1]), 2 * e, -(pz[1] - nz[1])}), bottom = unit(new float[]{px[0] - nx[0], -2 * e, pz[0] - nz[0]});
-        return unit(new float[]{mix(bottom[0], top[0], w), mix(bottom[1], top[1], w), mix(bottom[2], top[2], w)});
+        float w = smoothstep(0, 1, clamp01((y - r.base - c[0]) / Math.max(c[1] - c[0], 1e-3f)));
+        float[] top = unit(new float[]{-(px[1] - nx[1]), 2 * e, -(pz[1] - nz[1])});
+        return unit(new float[]{top[0] * w, mix(-1, top[1], w), top[2] * w});
     }
 
     private static float[] unit(float[] v) {
@@ -499,18 +512,16 @@ public final class CloudMath {
     }
 
     /**
-     * animeLight: (sunlit weight, sky-lit weight) of a cloud point with normal n, puffs p (0 in a crease) at height hc (0 base, 1 top of
-     * its column), seen along dir and lit from lightDir: soft wrapped light, shaded in the creases, the sky light dimmer toward the base,
-     * and a soft rim where the surface turns from the view (brighter toward the sun).
+     * animeLight: (sunlit weight, sky-lit weight) of a cloud point with normal n, puffs p (0 at every puff's edge) at height hc (0 the
+     * layer's base, 1 its top), lit from lightDir: soft wrapped light, darker where puffs meet and toward the base, the sky light dimmer
+     * toward the base.
      */
-    public static float[] animeLight(float[] n, float p, float hc, float[] dir, float[] lightDir) {
+    public static float[] animeLight(float[] n, float p, float hc, float[] lightDir) {
         float level = smoothstep(0, CLOUD_SHADE_LEVEL, Math.abs(lightDir[1]));
         float x = (dot3(n, lightDir) + ANIME_WRAP) / (1 + ANIME_WRAP);
         float lit = mix(ANIME_SHADOW, 1, smoothstep(ANIME_SHADE_FROM, ANIME_SHADE_TO, x));
-        lit *= mix(1 - ANIME_CREASE_SHADE, 1, smoothstep(0, 0.5f, p));
-        float edge = 1 - Math.abs(dot3(n, dir));
-        float rim = (float) Math.pow(Math.max(edge, 0), ANIME_RIM_POWER) * ANIME_RIM_GAIN * mix(ANIME_RIM_BACK, 1, 0.5f + 0.5f * dot3(dir, lightDir));
-        return new float[]{mix(ANIME_FLAT, lit, level) + rim, mix(ANIME_AMBIENT_LOW, 1, clamp01(hc))};
+        lit *= mix(1 - ANIME_CREASE_SHADE, 1, smoothstep(0, 0.5f, p)) * mix(ANIME_LOW_LIT, 1, smoothstep(0, ANIME_LOW_REACH, hc));
+        return new float[]{mix(ANIME_FLAT, lit, level), mix(ANIME_AMBIENT_LOW, 1, clamp01(hc))};
     }
 
     /** animeFade: the anime clouds' opacity at horizontal distance d from the camera: 1 to ANIME_FADE_NEAR, 0 from ANIME_FADE_FAR (into the haze). */
@@ -549,10 +560,13 @@ public final class CloudMath {
         float t = tsum / wsum;
         float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
         float[] c = animeShape(map, r, r.offsetX + px, r.offsetZ + pz);
-        float hc = c[1] > c[0] ? (py - r.base - c[0]) / (c[1] - c[0]) : 0.5f;
-        float[] l = animeLight(animeNormal(map, r, px, py, pz), c[1] > c[0] ? c[2] : 1, hc, dir, lightDir);
+        float hc = clamp01((py - r.base) / r.thickness);
+        float[] l = animeLight(animeNormal(map, r, px, py, pz), c[1] > c[0] ? c[2] : 1, hc, lightDir);
         float cov = 1 - trans;
-        return new float[]{cov * l[0], cov * l[1], cov, t * ANIME_HAZE};
+        //The silver lining: thin cloud (low coverage) toward the light glows with its forward scattering
+        float level = smoothstep(0, CLOUD_SHADE_LEVEL, Math.abs(lightDir[1]));
+        float silver = ANIME_SILVER * (1 - cov) * hg(dot3(dir, lightDir), ANIME_SILVER_G * level);
+        return new float[]{cov * (l[0] + silver), cov * l[1], cov, t * ANIME_HAZE};
     }
 
     // ---- the noise map (CPU only): cloudMap's g, b, a channels ----

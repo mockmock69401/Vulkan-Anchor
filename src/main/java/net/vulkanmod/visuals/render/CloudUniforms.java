@@ -30,8 +30,11 @@ public final class CloudUniforms {
      * straight up (AtmosphereMath.skyColour: blue by day, violet at dusk, grey in rain, dark at night).
      */
     public static final float REAL_LIGHT = 0.6f, REAL_AMBIENT = 0.85f;
-    /** Session 11: the anime style's light, as REAL_LIGHT and REAL_AMBIENT (the cel bands give the sunlit weight 0.2 in shadow to 1.3 at the top). */
-    public static final float ANIME_LIGHT = 1.0f, ANIME_AMBIENT = 1.0f, ANIME_BOOST_LUMA = 0.8f, ANIME_BOOST_MAX = 3;
+    /**
+     * Session 11: the anime style's light, as REAL_LIGHT and REAL_AMBIENT (animeLight gives the sunlit weight 0.26 in the shade at the base
+     * to 1 at a sunlit top). Session 18: 1.15 (AstraLex's clear-sky tops were brighter than ours by about that much against the same sky).
+     */
+    public static final float ANIME_LIGHT = 1.15f, ANIME_AMBIENT = 1.0f, ANIME_BOOST_LUMA = 0.8f, ANIME_BOOST_MAX = 3;
     /** Session 3: rain and thunder raise the cumulus' share of the sky by these fractions of itself (a rainy sky is overcast). */
     public static final float REAL_RAIN = 0.8f, REAL_THUNDER = 0.3f;
     /** Session 3: the jitter phase advances by the golden ratio's fraction a frame (TAA spreads the samples); kept under REAL_PHASE_MAX so the quality's whole part stays. */
