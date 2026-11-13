@@ -8,9 +8,9 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Session 20: Soft Shadows (revision 19), which the presets set, in files saved before it existed. */
+/** Session 20: Soft Shadows (revision 19) and Wet Ground (revision 20), which the presets set, in files saved before they existed. */
 class Session20PresetsTest {
-    private static final String[][] SETTINGS = {{"soft_shadows", "softShadows", "18"}};
+    private static final String[][] SETTINGS = {{"soft_shadows", "softShadows", "18"}, {"wet_ground", "wetGround", "19"}};
 
     @Test
     void eachLevelSetsThemAndIsStillDetected() {

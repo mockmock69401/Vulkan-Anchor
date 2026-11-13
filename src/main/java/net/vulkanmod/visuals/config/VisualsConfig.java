@@ -59,10 +59,13 @@ public class VisualsConfig {
      * moonlight for a file older than 16); any other file keeps its values.
      * 19 (2026-11-13, session 20): Soft Shadows (softShadows), which the presets set; a file on a level takes that level's value and stays
      * on it, any other file the default.
+     * 20 (2026-11-14, session 20): Wet Ground (wetGround), which the presets set; likewise.
      */
-    private static final int REVISION = 19;
+    private static final int REVISION = 20;
     /** Session 20: the first revision with Soft Shadows. */
     static final int SOFT_SHADOWS_REVISION = 19;
+    /** Session 20: the first revision with Wet Ground. */
+    static final int WET_GROUND_REVISION = 20;
     /** 2026-11-13: the first revision whose palettes set the tone block. */
     static final int TONE_LOOK_REVISION = 18;
     /** Session 14 follow-up: the first revision with Half-resolution Weather & Sky. */
@@ -164,6 +167,9 @@ public class VisualsConfig {
         //Session 20: likewise a level saved before Soft Shadows existed
         if (fileRevision < SOFT_SHADOWS_REVISION && VisualsPresets.isLevel(c.preset)) {
             VisualsOptionLayout.set(c, VisualsOptionLayout.item("soft_shadows"), VisualsPresets.value("soft_shadows", c.preset));
+        }
+        if (fileRevision < WET_GROUND_REVISION && VisualsPresets.isLevel(c.preset)) {
+            VisualsOptionLayout.set(c, VisualsOptionLayout.item("wet_ground"), VisualsPresets.value("wet_ground", c.preset));
         }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
@@ -355,6 +361,11 @@ public class VisualsConfig {
      * seen from under the water or through it (caustics.glsl, CausticMath): percent, 0 = off.
      */
     public int caustics = 100;
+    /**
+     * 2026-11-13 (session 20, the user after AstraLex: "SSR ... 비 온 뒤 젖은 지면의 반사"): rain-wet ground without a PBR pack, darker with a
+     * film of water and puddles that mirror the scene (wetground.glsl, WetGroundMath): percent, 0 = off.
+     */
+    public int wetGround = 100;
     /** 2026-10-21: how far plants and leaves sway in the wind (FoliageWind). */
     public int foliageWind = 100;
     /**

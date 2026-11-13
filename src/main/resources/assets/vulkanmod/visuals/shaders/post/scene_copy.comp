@@ -198,6 +198,8 @@ layout(location = 70) uniform vec4 portalHi3;
 //2026-11-13 (session 20, CausticMath): x the caustics' strength (0 = off), y the clock (seconds, wrapped at CAUSTIC_TIME_PERIOD), zw the
 // camera's x, z wrapped at CAUSTIC_PERIOD
 layout(location = 71) uniform vec4 causticParams;
+//2026-11-13 (session 20, WetGroundMath): x the wet ground's strength (0 = off), zw the camera's x, z wrapped at WET_PUDDLE_PERIOD
+layout(location = 72) uniform vec4 wetParams;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -223,6 +225,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/portal.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/caustics.glsl>
+#import <vulkanmod:visuals/post/wetground.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
 #import <vulkanmod:visuals/post/pbr.glsl>
@@ -1045,6 +1048,20 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     float pbrFilm = 0.0;
     float pbrDiffuse = pbr ? pbrWet(mat, pbrWetAt(pbrParams.x, sky), normalWorld, pbrFilm) : 1.0;
 #endif
+    //Session 20: rain-wet ground where no LabPBR material takes the rain (wetground.glsl): how wet (PBR's wetness by the open sky), and
+    // how much of it lies under a puddle
+    float wetGround = 0.0;
+    float wetPuddleShare = 0.0;
+    if (wetParams.x > 0.0 && pbrParams.x > 0.0 && passRan && !plant && !emissive && !cloud && !fromLod && kind == 0.0
+            && dot(normalWorld, normalWorld) > 0.25) {
+        wetGround = wetGroundAt(pbrParams.x, sky, wetParams.x);
+#ifdef PBR
+        if (pbr && mat.specular) {
+            wetGround = 0.0;
+        }
+#endif
+        wetPuddleShare = wetPuddle(world.xz + wetParams.zw, normalWorld, wetGround, wetParams.x);
+    }
     float skyT = sky;
     float blockT = block;
     if (water && !fromLod) {
@@ -1189,6 +1206,9 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
             lit = pbrWetColour(lit, pbrDiffuse);
         }
 #endif
+        if (wetGround > 0.0) {
+            lit = wetGroundColour(lit, wetGround, wetPuddleShare);
+        }
         //Session 20: caustics (caustics.glsl) on what lies under water and gets the sun: the floor seen through the surface from above (its
         // depth below the surface along the view), or with the camera under an open surface whatever lies below that surface's height
         if (causticParams.x > 0.0 && sunPart > 0.0 && !fromLod) {
@@ -1314,15 +1334,17 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     // particles, splashes, ripples) keeps no mark (overdrawn, from main), so it stays as drawn instead of being mirrored over
     //2026-11-09 (session 2b): from inside water, through the water (or the surface's window)
     vec3 shown = lit*underwaterExposure();
+    //Session 20: what the wet ground mirrors (its mark; polished, metal and PBR marks keep theirs)
+    float wetMark = wetGround > 0.0 ? wetGroundMark(wetShare(wetGround, wetPuddleShare, normalWorld)) : 0.0;
     if (cameraUnderwater()) {
         shown = underwaterView(p, size, dir, dist, false, shown);
     }
 #ifdef PBR
     return vec4(shown, passRan && !cloud && !overdrawn
-            ? (kind != 0.0 ? reflectionMark(kind) : (pbrMarkValue < 0.0 ? pbrMarkValue : blockReflectionMark(smoothClass, glowParams.z))) : 0.0);
+            ? (kind != 0.0 ? reflectionMark(kind) : (pbrMarkValue < 0.0 ? pbrMarkValue : wetOr(blockReflectionMark(smoothClass, glowParams.z), wetMark))) : 0.0);
 #else
     return vec4(shown,
-            passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0);
+            passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : wetOr(blockReflectionMark(smoothClass, glowParams.z), wetMark)) : 0.0);
 #endif
 }
 

@@ -319,7 +319,7 @@ class SceneCompositeTest {
         assertEquals(1, count(COMP, "lightingAt("), "one read of lightTex/sunTex");
         assertEquals(1, count(COMP, "texelFetch(plantSunTex"));
         assertFalse(COMP.contains("texelFetch(lightTex") || COMP.contains("texelFetch(sunTex"), "only through W5's lightingAt");
-        assertTrue(COMP.contains("passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : blockReflectionMark(smoothClass, glowParams.z)) : 0.0"),
+        assertTrue(COMP.contains("passRan && !cloud && !overdrawn ? (kind != 0.0 ? reflectionMark(kind) : wetOr(blockReflectionMark(smoothClass, glowParams.z), wetMark)) : 0.0"),
                 "alpha 0 without the pass");
     }
 

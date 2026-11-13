@@ -63,6 +63,9 @@ public final class VisualsPresets {
         v.put("pbr_parallax", new int[]{0, 0, 0, 0, 1});
         //water: reflections (0.65 ms over open water)
         v.put("water_reflections", new int[]{0, 100, 100, 100, 100});
+        //session 20: wet ground (in the rain and while it dries: the puddles' march in the reflection pass; 2026-11-14 at 1280x720 on the
+        // AMD iGPU +6.8 ms in full rain at 100, +2.7 ms at 50; at 2560x1440 on the RTX +0.85 ms)
+        v.put("wet_ground", new int[]{0, 0, 50, 100, 100});
         VALUES = Collections.unmodifiableMap(v);
     }
 
