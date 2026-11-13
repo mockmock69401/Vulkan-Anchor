@@ -118,6 +118,8 @@
   "vulkanmod.visuals.water_reflections.tooltip": "Calm water mirrors the sky, the land and ships, more strongly toward the horizon; ice reflects faintly",
   "vulkanmod.visuals.block_reflections": "Block Reflections",
   "vulkanmod.visuals.block_reflections.tooltip": "Polished stone, quartz, glazed terracotta, ice and gem blocks, and metal blocks: Highlights gives them the sun's and the moon's shine; Reflections also mirrors the sky and the scene on them, softly, metal in its own colour",
+  "vulkanmod.visuals.wet_ground": "Wet Ground",
+  "vulkanmod.visuals.wet_ground.tooltip": "While it rains, ground under the open sky gets darker and wet, with a thin sheen of water, and puddles gather on flat ground that mirror the sky and the scene, ringed by the raindrops. They shrink and dry for a while after the rain. Works without a PBR resource pack (with one, its own materials get wet). Percent of the default strength (Potato and Low: off, Medium: 50); 0: off",
   "vulkanmod.visuals.block_reflections.0": "Off",
   "vulkanmod.visuals.block_reflections.1": "Highlights",
   "vulkanmod.visuals.block_reflections.2": "Reflections",

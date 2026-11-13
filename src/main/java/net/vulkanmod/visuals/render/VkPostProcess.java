@@ -713,6 +713,11 @@ public final class VkPostProcess {
             float[] caustic = CausticMath.params(VisualsConfig.get().caustics);
             this.copyUniforms.putVec4(CausticMath.SLOT, caustic[0], caustic[1], caustic[2], caustic[3]);
         }
+        //Session 20: rain-wet ground (WetGroundMath; strength 0 = off)
+        if (this.copyUniforms.has(WetGroundMath.SLOT)) {
+            float[] wet = WetGroundMath.params(VisualsConfig.get().wetGround);
+            this.copyUniforms.putVec4(WetGroundMath.SLOT, wet[0], wet[1], wet[2], wet[3]);
+        }
         if (this.copyUniformBuffer != null) upload.upload(this.copyUniformBuffer, 0, this.copyUniforms.buffer());
         lighting.writeLighting(this.lightingUniforms, light.terrain());
         shadow.write(this.lightingUniforms);

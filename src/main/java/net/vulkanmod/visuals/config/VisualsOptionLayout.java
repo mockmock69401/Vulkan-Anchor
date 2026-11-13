@@ -4,6 +4,7 @@ import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.particle.VanillaParticles;
 import net.vulkanmod.visuals.render.CausticMath;
 import net.vulkanmod.visuals.render.CelestialUniforms;
+import net.vulkanmod.visuals.render.WetGroundMath;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.DimensionUniforms;
 import net.vulkanmod.visuals.render.PbrMath;
@@ -211,6 +212,8 @@ public final class VisualsOptionLayout {
                             percent("water_depth", STRENGTH_MAX),
                             percent("water_reflections", 0, STRENGTH_MAX, Impact.MEDIUM),
                             new Item("block_reflections", Kind.CHOICE, 0, BLOCK_REFLECTIONS_MAX, Impact.MEDIUM, null),
+                            //2026-11-13 (session 20): rain-wet ground and its puddles' reflections (0: off)
+                            percent("wet_ground", 0, WetGroundMath.STRENGTH_MAX, Impact.MEDIUM),
                             percent("water_ripples", STRENGTH_MAX),
                             percent("water_ripple_speed", RIPPLE_SPEED_MAX),
                             percent("water_ripple_density", RIPPLE_DENSITY_MIN, RIPPLE_DENSITY_MAX, Impact.NONE),
@@ -367,6 +370,7 @@ public final class VisualsOptionLayout {
             case "water_ripple_density" -> c.waterRippleDensity;
             case "underwater_visibility" -> c.underwaterVisibility;
             case "caustics" -> c.caustics;
+            case "wet_ground" -> c.wetGround;
             case "foliage_wind" -> c.foliageWind;
             case "hanging_sway" -> c.hangingSway;
             default -> {
@@ -456,6 +460,7 @@ public final class VisualsOptionLayout {
             case "water_ripple_density" -> c.waterRippleDensity = v;
             case "underwater_visibility" -> c.underwaterVisibility = v;
             case "caustics" -> c.caustics = v;
+            case "wet_ground" -> c.wetGround = v;
             case "foliage_wind" -> c.foliageWind = v;
             case "hanging_sway" -> c.hangingSway = v;
             default -> {

@@ -89,6 +89,7 @@ layout(location = 34) uniform vec4 auroraTintTop;
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
+#import <vulkanmod:visuals/post/wetground.glsl>
 #import <vulkanmod:visuals/post/pbr.glsl>
 
 //2026-11-10 (session 7): built twice (VisualsPrograms): postReflection.LEAN defines REFLECT_LEAN and leaves out the aurora and the
@@ -519,6 +520,78 @@ vec3 pbrReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
 }
 #endif
 
+//2026-11-13 (session 20): a rain-wet pixel (wetground.glsl's mark: its mirror share): its snapped depth normal, on a puddle ringed by
+// the rain as the water is while it rains, the sky (and on a puddle the scene by the march) mixed in by water's Fresnel term times the
+// share. Where the ground does not see the sky and the march finds nothing it stays as it was
+vec3 wetReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
+    vec3 view;
+    bool fromLod;
+    if (!scenePositionFrom(p, size, view, fromLod) || fromLod) {
+        return own;
+    }
+    float share = wetShareOf(mark);
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
+    mat3 toWorld = mat3(invView);
+    mat3 toView = transpose(toWorld);
+    vec3 world = toWorld*view;
+    float dist = length(view);
+    vec3 d = world/max(dist, 0.000001);
+    vec3 nGeom = normalize(toWorld*snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), toView*vec3(1.0, 0.0, 0.0), toView*vec3(0.0, 1.0, 0.0)));
+    float cosGeom = -dot(d, nGeom);
+    if (!(cosGeom > 0.0)) {
+        return own;
+    }
+    //A film mirrors a share of a few percent seen from above: below WET_REFLECT_MIN the pixel stays as it is (the film covers most of the
+    // ground in the rain: evaluating its sky everywhere cost 1.1 ms at 1440p)
+    bool puddle = share >= WET_MARCH_SHARE;
+    if (!puddle && reflectivity(share, cosGeom) < WET_REFLECT_MIN) {
+        return own;
+    }
+    vec3 pl = pixelLight(p, size, world, nGeom);
+    bool known = pl.z > 0.5;
+    float skyAccess = known ? skyVisibility(pl.x) : clamp(reflectParams.z, 0.0, 1.0);
+    vec3 n = nGeom;
+    float rainShine = 0.0;
+    if (puddle && nGeom.y > WET_PUDDLE_UP && rainParams.y > 0.0) {
+        float bpp = dist*2.0/(abs(proj[1][1])*float(size.y));
+        float footprint = bpp/max(cosGeom, RIPPLE_MIN_COS);
+        vec2 drops = rainRippleSlope(world.xz + rippleOffsetsA.xy, rainParams.x, rainParams.y*skyAccess, footprint);
+        n = normalize(n + vec3(-drops.x, 0.0, -drops.y)*n.y);
+        rainShine = rainRippleShine(drops)*share;
+    }
+    float f = reflectivity(share, -dot(d, n));
+    vec3 r = reflect(d, n);
+    float rise = dot(r, nGeom);
+    if (rise < REFLECT_MIN_UP) {
+        r = normalize(r + nGeom*(REFLECT_MIN_UP - rise));
+    }
+    float amount = hazeAmount(a, known ? skyShare(pl.x) : 1.0, false);
+    //The film mirrors the sky's colour alone; a puddle the sun's glow where the sun reaches it, and the clouds
+    vec3 sky = skyColour(a, r);
+    if (puddle) {
+        sky += sunGlow(a, r)*sunVisibilityAt(p, size, dist, toView*nGeom);
+    }
+    if (puddle && cloudShape.w > 0.5 && atmosphereSky(a)) {
+        float jitter = interleavedGradientNoise(vec2(p));
+        vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, jitter), r, 1.0);
+        sky = sky*(1.0 - cloud.a) + cloud.rgb;
+    }
+    vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+    if (puddle && f >= REFLECT_MIN_MARCH) {
+        vec3 hitColour;
+        float pathLength;
+        float blocked;
+        float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
+        if (w > 0.0) {
+            vec3 hitWorld = world + r*pathLength;
+            float extra = max(dist + pathLength - length(hitWorld), 0.0);
+            reflection = mix(reflection, applyHaze(a, hitColour, r, extra, amount), w);
+        }
+    }
+    return mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine;
+}
+
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(sceneOut);
@@ -542,6 +615,12 @@ void main() {
         return;
     }
 #endif
+    //Session 20: rain-wet ground (wetground.glsl), before the block classes (its marks lie below the metal's)
+    if (isWetMark(mark)) {
+        imageStore(sceneOut, p, vec4(reflectParams.w > 0.5 ? vec3(DEBUG_WET_RED, DEBUG_WET_GREEN, DEBUG_WET_BLUE)
+                : wetReflection(p, size, lit.rgb, mark), 1.0));
+        return;
+    }
     if (reflectParams.w > 0.5) {
         vec3 debug = blockReflectClass(mark) > 0 ? vec3(DEBUG_SMOOTH_RED, DEBUG_SMOOTH_GREEN, DEBUG_SMOOTH_BLUE)
                 : (mark > 0.0 ? vec3(DEBUG_WATER_RED, DEBUG_WATER_GREEN, DEBUG_WATER_BLUE) : vec3(DEBUG_GLASS_RED, DEBUG_GLASS_GREEN, DEBUG_GLASS_BLUE));

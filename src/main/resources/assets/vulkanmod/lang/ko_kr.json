@@ -41,6 +41,8 @@
   "vulkanmod.visuals.water_reflections.tooltip": "잔잔한 물에 하늘·지형·배가 비치고 수평선 쪽일수록 강해집니다. 얼음은 희미하게 반사합니다",
   "vulkanmod.visuals.block_reflections": "블록 반사",
   "vulkanmod.visuals.block_reflections.tooltip": "광택 돌·석영·유약 테라코타·얼음·보석 블록과 금속 블록: 하이라이트는 해와 달빛의 반짝임을, 반사는 여기에 하늘과 주변 풍경을 부드럽게 비춥니다(금속은 제 색으로)",
+  "vulkanmod.visuals.wet_ground": "젖은 지면",
+  "vulkanmod.visuals.wet_ground.tooltip": "비가 오면 하늘이 열린 땅이 어둡게 젖고 얇은 물막이 비치며, 평평한 곳에는 하늘과 주변 풍경을 비추는 웅덩이가 고이고 빗방울 물결이 퍼집니다. 비가 그치면 한동안 웅덩이가 줄어들며 마릅니다. PBR 리소스팩 없이도 동작합니다(있으면 그 재질이 젖습니다). 기본 세기의 퍼센트이며 0이면 끕니다(감자·낮음: 끔, 중간: 50)",
   "vulkanmod.visuals.block_reflections.0": "끄기",
   "vulkanmod.visuals.block_reflections.1": "하이라이트",
   "vulkanmod.visuals.block_reflections.2": "반사",
