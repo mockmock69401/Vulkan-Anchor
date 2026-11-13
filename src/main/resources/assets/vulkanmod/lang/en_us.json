@@ -381,6 +381,8 @@
   "vulkanmod.visuals.star_size.tooltip": "How big each star is. 100 is vanilla's size",
   "vulkanmod.visuals.star_brightness": "Star Brightness",
   "vulkanmod.visuals.star_brightness.tooltip": "How bright the stars are. 100 is vanilla's brightness, 200 twice the light. They still fade at dawn and dusk, in rain and behind clouds",
+  "vulkanmod.visuals.nether_heat_haze": "Nether Heat Haze",
+  "vulkanmod.visuals.nether_heat_haze.tooltip": "The air of the Nether shimmers: far views ripple through the hot air, most over lava seas, lava lakes and lava falls. Your hand and the HUD stay still. 100 is the default, 200 twice as strong, 0 off",
   "vulkanmod.visuals.end_galaxy": "End Galaxy Sky",
   "vulkanmod.visuals.end_galaxy.tooltip": "The End's sky shows a galaxy: a Milky Way band with a bright core and dark dust lanes, faint nebulae and many stars, behind the End's auroras. 100 is the default, 200 twice as bright, 0 off",
   "vulkanmod.visuals.shader_weather": "Shader Weather",

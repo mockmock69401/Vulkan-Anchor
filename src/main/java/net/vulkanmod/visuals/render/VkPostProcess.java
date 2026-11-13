@@ -86,7 +86,9 @@ public final class VkPostProcess {
     COPY_SKY_HALF_CLOUD = 22, COPY_SKY_HALF_AURORA = 23,
     //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace, water.glsl moonShape), the copy at 24, the reflection at 11
     COPY_MOON_FACE = 24, REFLECTION_MOON_FACE = 11,
-    //2026-11-13 (shader roadmap session 19): the End galaxy's baked map (GalaxyMap) at 26
+    //2026-11-13 (shader roadmap session 19): .HEAT writes the heat haze's offsets at 25; the final colour reads them at 4
+    COPY_HEAT = 25, FINAL_HEAT = 4,
+    //Session 19: the End galaxy's baked map (GalaxyMap) at 26
     COPY_GALAXY_MAP = 26,
     //2026-11-13: the reflection reads the frame's sun open share at 12 (sunOpenBuffer, written before the composite)
     REFLECTION_SUN_OPEN = 12,
@@ -114,7 +116,13 @@ public final class VkPostProcess {
      */
     private VkImage2D skyHalfCloud, skyHalfAurora, weatherHalf;
     private final VkComputeProgram copySkyHalf, copyTintedSkyHalf, weatherUp;
-    /** 2026-11-13 (shader roadmap session 19): the End's galaxy (DimensionUniforms) for this frame. */
+    /**
+     * 2026-11-13 (shader roadmap session 19): the Nether's heat haze: postSceneCopy.HEAT writes, at a quarter of the size, the offsets the final
+     * colour reads the scene at (heat.glsl) while DimensionUniforms gives it a strength; bound always (not read otherwise).
+     */
+    private VkImage2D heatImage;
+    private final VkComputeProgram copyHeat;
+    private boolean heatDrawn;
     private DimensionUniforms.Values dimension = DimensionUniforms.off();
     /**
      * Session 19: the End galaxy's map (GalaxyMap, 32 MB), made the first time the galaxy is wanted and its bake is done, uploaded
@@ -332,6 +340,7 @@ public final class VkPostProcess {
         this.copyTintedPbr = variant("postSceneCopy.TINTED.PBR", copy);
         this.copySunOpen = variant("postSceneCopy.SUN_OPEN", copy);
         this.copySkyHalf = variant("postSceneCopy.SKY_HALF", copy);
+        this.copyHeat = variant("postSceneCopy.HEAT", copy);
         this.copyTintedSkyHalf = variant("postSceneCopy.TINTED.SKY_HALF", copy);
         this.copyParticles = variant("postSceneCopy.PARTICLES", copy);
         this.copyTintedParticles = variant("postSceneCopy.TINTED.PARTICLES", copy);
@@ -459,6 +468,7 @@ public final class VkPostProcess {
             this.weatherHalf = null;
             this.skyHalfCloud = null;
             this.skyHalfAurora = null;
+            this.heatImage = null;
             this.scene = null;
             this.sceneLit = null;
             this.bloom = null;
@@ -473,7 +483,7 @@ public final class VkPostProcess {
         int[][] sizes = PostMath.bloomSizes(width, height);
         VkImage2D[] bloom = new VkImage2D[sizes.length];
         VkImage2D scene = null, sceneLit = null, shaftMaskImage = null, shaftImage = null, lightImage = null, lightBlurImage = null, sunImage = null, plantSunImage = null, weatherImage = null;
-        VkImage2D weatherHalf = null, skyHalfCloud = null, skyHalfAurora = null;
+        VkImage2D weatherHalf = null, skyHalfCloud = null, skyHalfAurora = null, heatImage = null;
         try {
             int usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
             scene = VkImage2D.create(SCENE_FORMAT, width, height, 1, usage);
@@ -493,9 +503,11 @@ public final class VkPostProcess {
             weatherHalf = VkImage2D.create(WEATHER_FORMAT, (width + 1) / 2, (height + 1) / 2, 1, usage);
             skyHalfCloud = VkImage2D.create(SKY_HALF_FORMAT, (width + 1) / 2, (height + 1) / 2, 1, usage);
             skyHalfAurora = VkImage2D.create(SKY_HALF_FORMAT, (width + 1) / 2, (height + 1) / 2, 1, usage);
+            //Session 19: the heat haze's offsets, at a quarter of the size (bound always)
+            heatImage = VkImage2D.create(SKY_HALF_FORMAT, (width + 3) / 4, (height + 3) / 4, 1, usage);
         } catch (RuntimeException e) {
             destroy(concat(new VkImage2D[]{scene, sceneLit, shaftMaskImage, shaftImage, lightImage, lightBlurImage, sunImage, plantSunImage, weatherImage,
-                    weatherHalf, skyHalfCloud, skyHalfAurora}, bloom));
+                    weatherHalf, skyHalfCloud, skyHalfAurora, heatImage}, bloom));
             throw e;
         }
         this.scene = scene;
@@ -511,6 +523,7 @@ public final class VkPostProcess {
         this.weatherHalf = weatherHalf;
         this.skyHalfCloud = skyHalfCloud;
         this.skyHalfAurora = skyHalfAurora;
+        this.heatImage = heatImage;
         //Session 14 follow-up: a flag per composite workgroup (the copy's dispatch, groups(width) x groups(height))
         this.particleTiles = VkGpuBuffer.device(4L * groups(width) * groups(height), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
         this.width = width;
@@ -523,7 +536,7 @@ public final class VkPostProcess {
 
     private VkImage2D[] images() {
         return concat(new VkImage2D[]{this.scene, this.sceneLit, this.shaftMaskImage, this.shaftImage, this.lightImage, this.lightBlurImage, this.sunImage, this.plantSunImage, this.weatherImage,
-                this.weatherHalf, this.skyHalfCloud, this.skyHalfAurora}, this.bloom);
+                this.weatherHalf, this.skyHalfCloud, this.skyHalfAurora, this.heatImage}, this.bloom);
     }
 
     private static VkImage2D[] concat(VkImage2D[] fixed, VkImage2D[] rest) {
@@ -575,7 +588,7 @@ public final class VkPostProcess {
         this.colourAfterView = view;
     }
 
-    /** 2026-11-13 (session 19): before prepare(), the End's galaxy (DimensionUniforms) for the composite. */
+    /** 2026-11-13 (session 19): before prepare(), the End's galaxy and the Nether's heat haze (DimensionUniforms) for the composite. */
     public void prepareDimension(DimensionUniforms.Values dimension) {
         if (dimension.galaxy() > 0) {
             GalaxyMap.start();
@@ -752,7 +765,7 @@ public final class VkPostProcess {
                 .storageImage(COPY_TERRAIN_NORMAL, light.terrainNormal()).storageImage(COPY_TERRAIN_SPECULAR, light.terrainSpecular())
                 .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles)
                 .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view())
-                .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler)
+                .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler).storageImage(COPY_HEAT, this.heatImage.view())
                 .sampled(COPY_GALAXY_MAP, this.galaxyMap != null ? this.galaxyMap : this.moonFace, this.galaxyMap != null ? this.galaxySampler : this.moonSampler);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         //Session 14 follow-up: no tile flagged yet (the composite flags its tiles with translucent particles), after the last frame's
@@ -763,6 +776,9 @@ public final class VkPostProcess {
         this.skyHalfCloud.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
         this.skyHalfAurora.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
+        //Session 19: the heat haze's offsets (bound to every composite build as a storage image, then read by the final colour)
+        this.heatImage.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT);
         if (this.skyHalfOn) {
             VkComputeProgram skyHalf = this.copyTintedOn && this.copyTintedSkyHalf != null ? this.copyTintedSkyHalf : this.copySkyHalf;
@@ -802,6 +818,16 @@ public final class VkPostProcess {
                     groups(this.width), groups(this.height), 1);
         }
         toRead(cmd, copyTarget);
+        //Session 19: the Nether's heat haze's offsets (reads the main colour's marks and the depth only); the image is read by the final
+        // colour only while they were written this frame, but always bound, so it is kept in the read layout
+        this.heatDrawn = false;
+        if (this.copyHeat != null && this.dimension.heatOn()) {
+            VkGpuTimer.mark(cmd, "post.heat");
+            this.copyHeat.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
+                    groups(this.heatImage.width), groups(this.heatImage.height), 1);
+            this.heatDrawn = true;
+        }
+        toRead(cmd, this.heatImage);
         VkGpuTimer.mark(cmd, "post.reflection");
         this.computeReflection(cmd, depths, data, ready, lodLight, light.terrainLight(), light.terrainNormal());
         VkGpuTimer.mark(cmd, "post.bloom");
@@ -1092,7 +1118,8 @@ public final class VkPostProcess {
         if (!smaaOn && !taaOn) return;
         try {
             //TAA pass (2026-10-15): the final colour, then TAA, then SMAA when chosen, then the blit
-            VkImage2D image = this.smaa.finalColour(cmd, values, this.scene, this.bloom[0], this.shaftImage, this.nearest, this.linear);
+            VkImage2D image = this.smaa.finalColour(cmd, values, this.scene, this.bloom[0], this.shaftImage, this.heatImage, this.heatDrawn,
+                    this.nearest, this.linear);
             if (taaOn) {
                 try {
                     image = this.taa.compute(cmd, image, this.lastDepths.main(), this.lastDepths.lod(), this.lastDepths.beforeTranslucent(),
@@ -1122,8 +1149,10 @@ public final class VkPostProcess {
         values.write(this.finalUniforms);
         //2026-11-09 (session 6): screenParams.w 1 blends the weather overlay (0: as before, the overlay is bound but not read)
         values.writeWeather(this.finalUniforms, this.weatherDrawn);
+        values.writeHeat(this.finalUniforms, this.heatDrawn);
         VkBindings bindings = new VkBindings().sampled(FINAL_SCENE, this.scene, this.nearest).sampled(FINAL_BLOOM, this.bloom[0], this.linear)
-                .sampled(FINAL_SHAFTS, this.shaftImage, this.linear).sampled(FINAL_WEATHER, this.weatherImage, this.nearest);
+                .sampled(FINAL_SHAFTS, this.shaftImage, this.linear).sampled(FINAL_WEATHER, this.weatherImage, this.nearest)
+                .sampled(FINAL_HEAT, this.heatImage, this.linear);
         this.finalDraw.bind(cmd, VkContext.boundRenderPassHandle(), VkContext.boundRenderPassKey(), bindings, this.finalUniforms);
         vkCmdDraw(cmd, 4, 1, 0, 0);
     }
@@ -1150,7 +1179,7 @@ public final class VkPostProcess {
         this.sunOpenBuffer.free();
         if (this.copyParticles != null) this.copyParticles.free();
         if (this.copyTintedParticles != null) this.copyTintedParticles.free();
-        for (VkComputeProgram p : new VkComputeProgram[]{this.copySkyHalf, this.copyTintedSkyHalf, this.weatherUp}) {
+        for (VkComputeProgram p : new VkComputeProgram[]{this.copySkyHalf, this.copyTintedSkyHalf, this.weatherUp, this.copyHeat}) {
             if (p != null) p.free();
         }
         if (this.particleTiles != null) this.particleTiles.free();

@@ -76,7 +76,7 @@ float galaxyHash(ivec3 i) {
     return float(h & 0xFFFFu)/65535.0;
 }
 
-//3D value noise 0..1 at x (lattice units, smoothstep fade)
+//3D value noise 0..1 at x (lattice units, smoothstep fade; heat.glsl's too)
 float galaxyNoise(vec3 x) {
     vec3 i = floor(x);
     vec3 f = x - i;

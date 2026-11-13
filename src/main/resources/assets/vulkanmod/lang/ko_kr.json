@@ -95,6 +95,8 @@
   "vulkanmod.visuals.star_size.tooltip": "별 하나하나의 크기. 100이 바닐라 크기입니다",
   "vulkanmod.visuals.star_brightness": "별 밝기",
   "vulkanmod.visuals.star_brightness.tooltip": "별의 밝기. 100이 바닐라 밝기, 200이면 빛이 두 배입니다. 새벽·해 질 녘, 비, 구름 뒤에서는 지금처럼 흐려지거나 가려집니다",
+  "vulkanmod.visuals.nether_heat_haze": "네더 열기 아지랑이",
+  "vulkanmod.visuals.nether_heat_haze.tooltip": "네더의 뜨거운 공기가 일렁입니다. 멀리 보이는 곳이 열기로 흔들리며, 용암 바다·용암 호수·용암 폭포 위에서 가장 강합니다. 손과 HUD는 흔들리지 않습니다. 100이 기본값, 200이면 두 배, 0이면 끔",
   "vulkanmod.visuals.end_galaxy": "엔드 은하수 하늘",
   "vulkanmod.visuals.end_galaxy.tooltip": "엔드 하늘에 은하가 보입니다. 밝은 중심과 어두운 먼지띠가 있는 은하수 띠, 옅은 성운, 수많은 별이 엔드 오로라 뒤에 그려집니다. 100이 기본값, 200이면 두 배로 밝게, 0이면 끔",
   "vulkanmod.visuals.shader_weather": "셰이더 날씨",

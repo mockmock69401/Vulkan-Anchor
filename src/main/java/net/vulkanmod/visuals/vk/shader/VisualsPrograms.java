@@ -43,6 +43,8 @@ final class VisualsPrograms {
         // colours (the aurora's tints) as the composite runs
         add(c, "postSceneCopy.SKY_HALF", defs("USE_ZERO_ONE_DEPTH", "", "SKY_HALF_PASS", ""), c.compute("post/scene_copy.comp"));
         add(c, "postSceneCopy.TINTED.SKY_HALF", defs("USE_ZERO_ONE_DEPTH", "", "ATMOSPHERE_TINTS", "", "SKY_HALF_PASS", ""), c.compute("post/scene_copy.comp"));
+        //2026-11-13 (shader roadmap session 19): the Nether's heat haze's offsets at a quarter of the size (heat.glsl)
+        add(c, "postSceneCopy.HEAT", defs("USE_ZERO_ONE_DEPTH", "", "HEAT_PASS", ""), c.compute("post/scene_copy.comp"));
         //Session 14 follow-up: the translucent particles over their tiles' background (PARTICLE_PASS), after the composite, in the tiles it
         // flagged (binding 21), with the plain or the picked colours as the composite ran
         add(c, "postSceneCopy.PARTICLES", defs("USE_ZERO_ONE_DEPTH", "", "PARTICLE_PASS", ""), c.compute("post/scene_copy.comp"));

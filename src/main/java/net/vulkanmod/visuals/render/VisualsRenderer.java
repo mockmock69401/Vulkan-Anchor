@@ -531,12 +531,12 @@ public final class VisualsRenderer {
         }
     }
 
-    /** 2026-11-13 (session 19): the End's galaxy for this frame (DimensionUniforms); none in a modded level that fails. */
-    private DimensionUniforms.Values dimension(PostProcessSettings settings, ClientLevel level) {
+    /** 2026-11-13 (session 19): the End's galaxy and the Nether's heat haze for this frame (DimensionUniforms); none in a modded level that fails. */
+    private DimensionUniforms.Values dimension(PostProcessSettings settings, ClientLevel level, Vec3 camera) {
         try {
             DimensionUniforms.Kind kind = level.effects().skyType() == DimensionSpecialEffects.SkyType.END ? DimensionUniforms.Kind.END
-                    : DimensionUniforms.Kind.OTHER;
-            return DimensionUniforms.compute(settings, kind);
+                    : level.dimensionType().ultraWarm() ? DimensionUniforms.Kind.HOT : DimensionUniforms.Kind.OTHER;
+            return DimensionUniforms.compute(settings, kind, camera.y, this.flowSeconds);
         } catch (RuntimeException e) {
             return DimensionUniforms.off();
         }
@@ -810,8 +810,8 @@ public final class VisualsRenderer {
             }
             this.post.prepareUnderwater(UnderwaterUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, surfaceUp, skyAccess, copies));
             this.post.prepareSky(sky(settings, level, camera, serial));
-            //2026-11-13 (session 19): the End's galaxy
-            this.post.prepareDimension(dimension(settings, level));
+            //2026-11-13 (session 19): the End's galaxy and the Nether's heat haze
+            this.post.prepareDimension(dimension(settings, level, camera));
             //2026-11-10 (session 8): with the picked block light and moon colours (slots 31, 32)
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
                     atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight).tinted(settings.colours());

@@ -13,12 +13,14 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * 2026-11-13 (shader roadmap session 19, the user: AstraLex's Nether heat, portal light and End galaxy sky): galaxy.glsl against its
- * mirror (GalaxyMath), DimensionUniforms' rules, and where the composite uses them.
+ * 2026-11-13 (shader roadmap session 19, the user: AstraLex's Nether heat, portal light and End galaxy sky): galaxy.glsl and heat.glsl
+ * against their mirrors (GalaxyMath, HeatMath), DimensionUniforms' rules, and where the composite and the final colour use them.
  */
 class DimensionEffectsTest {
     private static final String GALAXY = ShaderFiles.read("post/galaxy.glsl");
+    private static final String HEAT = ShaderFiles.read("post/heat.glsl");
     private static final String COPY = ShaderFiles.read("post/scene_copy.comp");
+    private static final String FINAL = ShaderFiles.read("post/postfinal.glsl");
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
         VisualsConfig c = new VisualsConfig();
@@ -51,8 +53,10 @@ class DimensionEffectsTest {
     @Test
     void everyShaderConstantEqualsItsMirrorsField() throws Exception {
         constantsMatch(GALAXY, GalaxyMath.class, 30);
+        constantsMatch(HEAT, HeatMath.class, 18);
         assertTrue(GALAXY.contains("0x7feb352du") && GALAXY.contains("0x846ca68bu"));
         assertTrue(GALAXY.contains("vec3 galaxy(vec3 dir, float strength, float pixelAngle, vec3 mapTexel)"));
+        assertTrue(HEAT.contains("float heatAmount(float strength, float dist, float camY, float dirY, float lava)"));
         //The galaxy's frame: unit pole and core at right angles
         float px = GalaxyMath.GALAXY_POLE_X, py = GalaxyMath.GALAXY_POLE_Y, pz = GalaxyMath.GALAXY_POLE_Z;
         float cx = GalaxyMath.GALAXY_CORE_X, cy = GalaxyMath.GALAXY_CORE_Y, cz = GalaxyMath.GALAXY_CORE_Z;
@@ -60,7 +64,7 @@ class DimensionEffectsTest {
         assertEquals(1, cx * cx + cy * cy + cz * cz, 1e-3);
         assertEquals(0, px * cx + py * cy + pz * cz, 1e-3);
         //The literature named where it is used
-        assertTrue(GALAXY.contains("Mellinger 2009"));
+        assertTrue(GALAXY.contains("Mellinger 2009") && HEAT.contains("Hecht"));
     }
 
     @Test
@@ -130,26 +134,60 @@ class DimensionEffectsTest {
     }
 
     @Test
+    void theHeatGrowsWithDistanceAndNearLavaAndNeverNearTheCamera() {
+        assertEquals(0, HeatMath.heatAmount(0, 100, 60, 0, 1));
+        //Nothing right at the camera (no shimmer on what is close)
+        assertEquals(0, HeatMath.heatAmount(1, HeatMath.HEAT_NEAR, 60, 0, 0), 1e-6f);
+        float near = HeatMath.heatAmount(1, 20, 70, 0, 0), far = HeatMath.heatAmount(1, 120, 70, 0, 0);
+        assertTrue(far > near && near > 0);
+        //Over the lava sea it is hotter than high up
+        assertTrue(HeatMath.heatAmount(1, 80, 34, 0, 0) > HeatMath.heatAmount(1, 80, 100, 0, 0));
+        //Lava right below on screen adds heat; a nearer pixel than the lava takes none of it
+        assertTrue(HeatMath.heatAmount(1, 40, 90, 0, HeatMath.heatLavaWeight(0.2f, 40, 40)) > HeatMath.heatAmount(1, 40, 90, 0, 0));
+        assertEquals(0, HeatMath.heatLavaWeight(0, 10, 40), 1e-6f);
+        assertTrue(HeatMath.heatAmount(2, 300, 32, 0, 1) <= 2 * HeatMath.HEAT_MAX + 1e-6f);
+        //The offset scales with the heat and the screen height, and stays within its reach
+        float[] a = HeatMath.heatOffsetPixels(dir(10, 5), 3, 1, 1440), b = HeatMath.heatOffsetPixels(dir(10, 5), 3, 0.5f, 720);
+        assertEquals(a[0] / 4, b[0], 1e-4f);
+        for (float t = 0; t < 20; t += 0.7f) {
+            float[] o = HeatMath.heatOffsetPixels(dir(t * 13, 2), t, 1, 1440);
+            assertTrue(Math.abs(o[0]) <= HeatMath.HEAT_PIXELS + 1e-4f && Math.abs(o[1]) <= HeatMath.HEAT_PIXELS + 1e-4f);
+        }
+    }
+
+    @Test
     void theUniformsFollowTheDimensionAndTheSettings() {
         PostProcessSettings s = settings(c -> {
         });
-        assertEquals(1, DimensionUniforms.compute(s, DimensionUniforms.Kind.END).galaxy(), 1e-6f);
-        assertEquals(0, DimensionUniforms.compute(s, DimensionUniforms.Kind.OTHER).galaxy());
-        assertEquals(1.5f, DimensionUniforms.compute(settings(c -> c.endGalaxy = 150), DimensionUniforms.Kind.END).galaxy(), 1e-6f);
-        assertEquals(0, DimensionUniforms.compute(settings(c -> c.endGalaxy = 0), DimensionUniforms.Kind.END).galaxy());
-        assertEquals(0, DimensionUniforms.compute(settings(c -> c.enabled = false), DimensionUniforms.Kind.END).galaxy());
+        DimensionUniforms.Values end = DimensionUniforms.compute(s, DimensionUniforms.Kind.END, 70, 12.5);
+        assertEquals(1, end.galaxy(), 1e-6f);
+        assertFalse(end.heatOn());
+        DimensionUniforms.Values hot = DimensionUniforms.compute(settings(c -> c.netherHeatHaze = 150), DimensionUniforms.Kind.HOT, 40, 12.5);
+        assertEquals(0, hot.galaxy());
+        assertEquals(1.5f, hot.heat(), 1e-6f);
+        assertTrue(hot.heatOn());
+        assertEquals(40, hot.cameraY());
+        assertFalse(DimensionUniforms.compute(s, DimensionUniforms.Kind.OTHER, 70, 1).heatOn());
+        assertEquals(0, DimensionUniforms.compute(settings(c -> c.endGalaxy = 0), DimensionUniforms.Kind.END, 70, 1).galaxy());
+        assertEquals(0, DimensionUniforms.compute(settings(c -> c.enabled = false), DimensionUniforms.Kind.END, 70, 1).galaxy());
+        //The time wraps
+        assertEquals(5, DimensionUniforms.compute(s, DimensionUniforms.Kind.HOT, 0, HeatMath.HEAT_TIME_WRAP + 5).seconds(), 1e-2f);
+        assertEquals(100, new VisualsConfig().netherHeatHaze);
         assertEquals(100, new VisualsConfig().endGalaxy);
     }
 
     @Test
-    void theCompositeDrawsTheGalaxy() {
+    void theCompositeAndTheFinalColourUseThem() {
         String c = COPY.replace(String.valueOf((char) 13), "");
-        assertTrue(c.contains("#import <vulkanmod:visuals/post/galaxy.glsl>"));
+        assertTrue(c.contains("#import <vulkanmod:visuals/post/galaxy.glsl>") && c.contains("#import <vulkanmod:visuals/post/heat.glsl>"));
         assertTrue(c.contains("layout(location = 62) uniform vec4 dimensionParams;"));
         assertEquals(DimensionUniforms.COPY_DIMENSION, 62);
         //The galaxy behind the End's aurora on the no-sky sky
         assertTrue(c.contains("galaxy(dir, dimensionParams.x,") && c.contains("textureLod(galaxyMap, galaxyMapCoord(dir), 0.0).rgb")
                 && c.contains("return vec4((scene + stars + auroraScreen(dir, p))"));
         assertTrue(c.contains("layout(binding = 26) uniform sampler2D galaxyMap;"));
+        assertTrue(c.contains("layout(binding = 25, rgba16f) uniform restrict image2D heatField;"));
+        assertTrue(FINAL.contains("layout(binding = 4) uniform sampler2D heatTex;") && FINAL.contains("layout(location = 5) uniform vec4 heatParams;"));
+        assertTrue(FINAL.contains("uv += texture(heatTex, uv).rg;"));
     }
 }

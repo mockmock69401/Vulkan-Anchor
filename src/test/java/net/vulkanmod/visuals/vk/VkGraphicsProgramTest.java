@@ -74,7 +74,8 @@ class VkGraphicsProgramTest {
     @Test
     void theFinalDrawsKeepTheirLooseUniformsInTheFragmentStage() {
         //2026-11-09 (session 6): with the weather overlay (postFinal 3, postBlit 1)
-        assertEquals(new TreeSet<>(Set.of("2:0 SAMPLER F", "2:1 SAMPLER F", "2:2 SAMPLER F", "2:3 SAMPLER F")), merged("postFinal"));
+        //2026-11-13 (session 19): with the heat haze's offsets (postFinal 4)
+        assertEquals(new TreeSet<>(Set.of("2:0 SAMPLER F", "2:1 SAMPLER F", "2:2 SAMPLER F", "2:3 SAMPLER F", "2:4 SAMPLER F")), merged("postFinal"));
         assertEquals(new TreeSet<>(Set.of("2:0 SAMPLER F", "2:1 SAMPLER F")), merged("postBlit"));
         assertEquals(VK_SHADER_STAGE_FRAGMENT_BIT, VkGraphicsProgram.looseUniformStage(metas("postFinal")[0], metas("postFinal")[1]));
         assertEquals(VK_SHADER_STAGE_FRAGMENT_BIT, VkGraphicsProgram.looseUniformStage(metas("postBlit")[0], metas("postBlit")[1]));
