@@ -74,22 +74,32 @@ public final class ColourPresets {
      * never set the same setting. The distance haze, the rain's fog and the fog height stay the player's. 2026-11-12 (the user: "check
      * whether there is a night brightness setting, and have the colour presets include it"): the moonlight, the night's brightness.
      */
-    public static final String[] LOOK_KEYS = {"bloom_strength", "saturation", "fog_strength", "moonlight"};
+    public static final String[] LOOK_KEYS = {"bloom_strength", "saturation", "fog_strength", "moonlight", "exposure", "tone_strength", "contrast",
+            "grade_strength"};
     /**
      * Each palette's LOOK_KEYS values, one row per level (DEFAULT is VisualsConfig's defaults; tested). 2026-11-11 (the user, after trying
      * them): Realistic's fog 110 -> 40, Anime 70 / 120 / 70 -> 35 / 110 / 80, Horror's bloom 20 -> 15. 2026-11-12, the moonlight: Default
      * the setting's default; Realistic a little darker (a real moonlit night); Cinematic brighter (film's day-for-night); Anime brighter
      * still (the bright blue-violet nights of cel-shaded games); Horror almost dark (its almost black night).
+     *
+     * <p>2026-11-13 (the user: "contrast, exposure, tone mapping and warm sunlight in the colour presets too"): the image page's tone block.
+     * Default the settings' defaults (no warm/cool grade). Realistic a camera's neutral rendering with a light warm-sun, cool-shade split
+     * (daylight photographs: sunlit areas warm, shade lit by the blue sky). Cinematic the teal-and-orange grade at its strongest, a little
+     * more contrast and a touch darker (the films' low-key exposure). Anime brighter, a softer tone curve (cel shading keeps colours flat and
+     * bright rather than rolling the highlights off) and a little warm/cool split. Horror darker with hard contrast (deep shadows) and no warm
+     * grade (its sickly, cold daylight).
      */
     private static final int[][] LOOK = {
-            {45, 94, 100, 50},
-            {30, 94, 40, 40},
-            {60, 85, 125, 60},
-            {35, 110, 80, 70},
-            {15, 60, 200, 15},
+            {45, 94, 100, 50, 100, 100, 100, 0},
+            {30, 94, 40, 40, 100, 100, 100, 20},
+            {60, 85, 125, 60, 95, 100, 110, 70},
+            {35, 110, 80, 70, 110, 70, 105, 25},
+            {15, 60, 200, 15, 85, 100, 120, 0},
     };
     /** The moonlight's value before the palettes set it (VisualsConfig's default): an older file on a palette with it takes the palette's. */
     static final int MOONLIGHT_BEFORE_16 = 50;
+    /** 2026-11-13: the tone block's values before the palettes set them (VisualsConfig's defaults), by key; see moveNewLooks. */
+    static final java.util.Map<String, Integer> TONE_BEFORE_18 = java.util.Map.of("exposure", 100, "tone_strength", 100, "contrast", 100, "grade_strength", 0);
     /** The rows revisions 9 and 10 saved, without the moonlight (VisualsConfig.read moves a file still exactly on one of them to LOOK's row). */
     static final int[][] LOOK_BEFORE_11 = {
             {45, 94, 100},
@@ -204,13 +214,26 @@ public final class ColourPresets {
      * with the moonlight still at its old default, takes the palette's moonlight and stays on it; a moonlight the player changed is kept.
      */
     static boolean moveOldMoonlight(VisualsConfig c) {
+        return moveNewLooks(c, java.util.Map.of("moonlight", MOONLIGHT_BEFORE_16));
+    }
+
+    /**
+     * A file saved before the palettes set some look settings (before: each such key's value back then, the setting's old default), on a
+     * palette whose colours and other look settings are all the palette's, takes the palette's values for them and stays on it. Each of
+     * those keys must still be at its old value (or already the palette's): one the player changed keeps the file as it is (it then shows
+     * Custom). Used for the moonlight (revision 16) and the tone block (revision 18), together for a file older than both. Returns whether
+     * it moved the file.
+     */
+    static boolean moveNewLooks(VisualsConfig c, java.util.Map<String, Integer> before) {
         int level = c.colourPreset;
-        if (!isLevel(level) || c.moonlight != MOONLIGHT_BEFORE_16) return false;
+        if (!isLevel(level) || before.isEmpty()) return false;
         for (Colour colour : Colour.values()) if (c.colour(colour) != value(colour, level)) return false;
         for (int i = 0; i < LOOK_KEYS.length; i++) {
-            if (!LOOK_KEYS[i].equals("moonlight") && VisualsOptionLayout.get(c, VisualsOptionLayout.item(LOOK_KEYS[i])) != LOOK[level][i]) return false;
+            int v = VisualsOptionLayout.get(c, VisualsOptionLayout.item(LOOK_KEYS[i]));
+            Integer old = before.get(LOOK_KEYS[i]);
+            if (v != LOOK[level][i] && (old == null || v != old)) return false;
         }
-        c.moonlight = look("moonlight", level);
+        for (String key : before.keySet()) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), look(key, level));
         return true;
     }
 

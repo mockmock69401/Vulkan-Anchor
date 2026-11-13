@@ -54,8 +54,13 @@ public class VisualsConfig {
      * default takes the palette's and stays on it (ColourPresets.moveOldMoonlight); any other file keeps its moonlight.
      * 17 (2026-11-12, session 14 follow-up): Half-resolution Weather & Sky (halfResEffects), which the presets set (on at Potato, Low and
      * Medium); a file on a level takes that level's value and stays on it, any other file keeps it off (as before).
+     * 18 (2026-11-13): the palettes also set the tone block (exposure, tone mapping, contrast, warm sun / cool shade; ColourPresets.LOOK_KEYS);
+     * a file on a palette with those still at their old defaults takes the palette's and stays on it (ColourPresets.moveNewLooks, with the
+     * moonlight for a file older than 16); any other file keeps its values.
      */
-    private static final int REVISION = 17;
+    private static final int REVISION = 18;
+    /** 2026-11-13: the first revision whose palettes set the tone block. */
+    static final int TONE_LOOK_REVISION = 18;
     /** Session 14 follow-up: the first revision with Half-resolution Weather & Sky. */
     static final int HALF_RES_REVISION = 17;
     /** 2026-11-12: the first revision whose palettes set the moonlight. */
@@ -168,7 +173,12 @@ public class VisualsConfig {
         }
         if (fileRevision >= FIRST_LOOK_REVISION && fileRevision < PALETTE_LOOK_REVISION) ColourPresets.moveOldLook(c);
         //2026-11-12: a file on a palette before the palettes set the moonlight takes the palette's (first: the Anime check reads it)
-        if (fileRevision < MOONLIGHT_REVISION) ColourPresets.moveOldMoonlight(c);
+        //2026-11-13: likewise the tone block (exposure, tone mapping, contrast, warm sun / cool shade); one move for a file older than both
+        if (fileRevision < TONE_LOOK_REVISION) {
+            java.util.Map<String, Integer> before = new java.util.HashMap<>(ColourPresets.TONE_BEFORE_18);
+            if (fileRevision < MOONLIGHT_REVISION) before.put("moonlight", ColourPresets.MOONLIGHT_BEFORE_16);
+            ColourPresets.moveNewLooks(c, before);
+        }
         //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
         if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
                 && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_ANIME

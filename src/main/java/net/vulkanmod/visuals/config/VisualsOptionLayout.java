@@ -103,17 +103,22 @@ public final class VisualsOptionLayout {
     private static final Item BLOOM = percent("bloom_strength", 0, STRENGTH_MAX, Impact.LOW);
     private static final Item FOG = percent("fog_strength", 0, FOG_STRENGTH_MAX, Impact.NONE);
     private static final Item MOONLIGHT = percent("moonlight", STRENGTH_MAX);
+    //2026-11-13: the image page's tone block, which the palettes set too
+    private static final Item EXPOSURE = percent("exposure", EXPOSURE_MIN, EXPOSURE_MAX, Impact.NONE);
+    private static final Item TONE = percent("tone_strength", STRENGTH_MAX);
+    private static final Item CONTRAST = percent("contrast", CONTRAST_MIN, CONTRAST_MAX, Impact.NONE);
+    private static final Item GRADE = percent("grade_strength", STRENGTH_MAX);
 
     public static final List<Page> PAGES = List.of(
             new Page("image", List.of(
                     new Block(GENERAL, List.of(new Item(PRESET, Kind.CHOICE, VisualsPresets.POTATO, VisualsPresets.CUSTOM, Impact.NONE, null))),
                     new Block("post", List.of(toggle(ENABLED, Impact.MEDIUM, null))),
                     new Block("tone", List.of(
-                            percent("exposure", EXPOSURE_MIN, EXPOSURE_MAX, Impact.NONE),
-                            percent("tone_strength", STRENGTH_MAX),
-                            percent("contrast", CONTRAST_MIN, CONTRAST_MAX, Impact.NONE),
+                            EXPOSURE,
+                            TONE,
+                            CONTRAST,
                             SATURATION,
-                            percent("grade_strength", STRENGTH_MAX))),
+                            GRADE)),
                     new Block("effects", List.of(
                             BLOOM,
                             percent("vignette_strength", STRENGTH_MAX),
@@ -218,7 +223,7 @@ public final class VisualsOptionLayout {
                             //2026-11-11 (session 12): the stars
                             colour(Colour.STARS, null))),
                     //Session 8 follow-up: what a palette sets besides the colours (also on the image and atmosphere pages)
-                    new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG, MOONLIGHT)),
+                    new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG, MOONLIGHT, EXPOSURE, TONE, CONTRAST, GRADE)),
                     new Block("colours_air", List.of(
                             colour(Colour.FOG, null),
                             colour(Colour.OVERCAST, null),

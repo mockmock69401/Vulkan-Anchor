@@ -275,6 +275,52 @@ class ColourPresetsTest {
         assertEquals(ColourPresets.MOONLIGHT_BEFORE_16, VisualsConfig.read(f).moonlight);
     }
 
+    /**
+     * 2026-11-13: the palettes set the tone block too (exposure, tone mapping, contrast, warm sun / cool shade): Cinematic has the strongest
+     * grade, Horror the hardest contrast and the darkest exposure. A file saved before (revision 17, or 15 with the moonlight too) on a
+     * palette with those still at their defaults takes the palette's and stays on it; one the player changed is kept.
+     */
+    @Test
+    void thePalettesSetTheToneBlock(@TempDir Path dir) throws Exception {
+        String[] tone = {"exposure", "tone_strength", "contrast", "grade_strength"};
+        for (String key : tone) assertTrue(java.util.List.of(ColourPresets.LOOK_KEYS).contains(key), key);
+        assertTrue(ColourPresets.look("grade_strength", ColourPresets.CINEMATIC) > ColourPresets.look("grade_strength", ColourPresets.ANIME));
+        assertTrue(ColourPresets.look("contrast", ColourPresets.HORROR) > ColourPresets.look("contrast", ColourPresets.CINEMATIC));
+        assertTrue(ColourPresets.look("exposure", ColourPresets.HORROR) < ColourPresets.look("exposure", ColourPresets.DEFAULT));
+        VisualsConfig c = new VisualsConfig();
+        ColourPresets.apply(c, ColourPresets.CINEMATIC);
+        assertEquals(ColourPresets.look("contrast", ColourPresets.CINEMATIC), c.contrast);
+        c.gradeStrength = 10;
+        assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c));
+        Path f = dir.resolve("old.json");
+        for (int revision : new int[]{17, 15}) {
+            for (int palette = 0; palette < ColourPresets.LEVELS; palette++) {
+                VisualsConfig old = new VisualsConfig();
+                ColourPresets.apply(old, palette);
+                for (String key : tone) VisualsOptionLayout.set(old, VisualsOptionLayout.item(key), ColourPresets.TONE_BEFORE_18.get(key));
+                if (revision < 16) old.moonlight = ColourPresets.MOONLIGHT_BEFORE_16;
+                old.write(f);
+                Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": " + revision));
+                VisualsConfig read = VisualsConfig.read(f);
+                for (String key : tone) {
+                    assertEquals(ColourPresets.look(key, palette), VisualsOptionLayout.get(read, VisualsOptionLayout.item(key)), key + ", palette " + palette + ", revision " + revision);
+                }
+                assertEquals(ColourPresets.look("moonlight", palette), read.moonlight, "palette " + palette + ", revision " + revision);
+                assertEquals(palette, read.colourPreset, "palette " + palette + ", revision " + revision);
+            }
+        }
+        VisualsConfig tuned = new VisualsConfig();
+        ColourPresets.apply(tuned, ColourPresets.HORROR);
+        tuned.exposure = 100;
+        tuned.contrast = 130;
+        tuned.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 17"));
+        VisualsConfig kept = VisualsConfig.read(f);
+        assertEquals(130, kept.contrast);
+        assertEquals(100, kept.exposure);
+        assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
+    }
+
     /** Session 8 follow-up: the look block on the colours page holds the same settings as their own pages, with its label. */
     @Test
     void theColoursPageShowsThePalettesLookSettings() throws Exception {

@@ -53,7 +53,7 @@ class HalfResEffectsTest {
 
     @Test
     void theUpsampleWeighsTexelsByTheirDistance() {
-        assertEquals(17, VisualsConfig.currentRevision());
+        assertTrue(VisualsConfig.currentRevision() >= VisualsConfig.HALF_RES_REVISION);
         assertEquals(0.25f, SceneCompositeMath.halfSkyWeight(0.25f, 100, 100), 1e-6f, "same distance: bilinear");
         assertTrue(SceneCompositeMath.halfSkyWeight(0.25f, 1e6f, 40) < 0.25f / 1000, "the sky behind a hill's edge barely counts on the hill");
         assertEquals(0.25f, SceneCompositeMath.halfSkyWeight(0.25f, 1e6f, 1e6f), 1e-6f, "the sky: both held as HALF_SKY_FAR");

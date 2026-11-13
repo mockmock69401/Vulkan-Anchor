@@ -29,7 +29,7 @@ class VisualsConfigTest {
              "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "pbr": false, "pbrNormalStrength": 150,
              "pbrReflections": true, "pbrParallax": true, "colourSunlight": 16744512, "colourShadeLight": 8438015, "cloudStyle": 2, "sunSize": 70, "moonSize": 150, "snowType": 1, "snowSize": 150, "snowAmount": 60,
              "rainType": 2, "rainSize": 80, "rainAmount": 140, "starCount": 250, "starSize": 60, "starBrightness": 180, "starType": 1,
-             "particleSmokeType": 1, "particleSmokeSize": 150, "particleFlamesAmount": 50, "particleMagicBrightness": 160, "colourParticleDrips": 4227327, "halfResEffects": true, "revision": 17}
+             "particleSmokeType": 1, "particleSmokeSize": 150, "particleFlamesAmount": 50, "particleMagicBrightness": 160, "colourParticleDrips": 4227327, "halfResEffects": true, "revision": 18}
             """;
 
     private static List<Field> settingFields() {
@@ -137,11 +137,12 @@ class VisualsConfigTest {
         assertEquals(VisualsConfig.currentRevision(), missing.revision);
 
         Path partial = dir.resolve("partial.json");
-        Files.writeString(partial, "{\"exposure\": 150}");
+        //2026-11-13: not a palette setting (the tone block now is, and a changed one shows the palette as Custom)
+        Files.writeString(partial, "{\"vignetteStrength\": 150}");
         VisualsConfig p = VisualsConfig.read(partial);
-        assertEquals(150, p.exposure);
+        assertEquals(150, p.vignetteStrength);
         assertEquals(VisualsConfig.currentRevision(), p.revision);
-        p.exposure = defaults.exposure;
+        p.vignetteStrength = defaults.vignetteStrength;
         //session 4: a file without the preset field is Custom (VisualsPresetsTest)
         assertEquals(VisualsPresets.CUSTOM, p.preset);
         p.preset = defaults.preset;
@@ -182,7 +183,7 @@ class VisualsConfigTest {
     @Test
     void writeThenReadIsEqualAndLightDebugIsNotWritten(@TempDir Path dir) throws Exception {
         VisualsConfig c = new VisualsConfig();
-        c.exposure = 123;
+        c.vignetteStrength = 123;//2026-11-13: not a palette setting (exposure now is)
         c.farClouds = false;
         c.fogHeight = 77;
         c.antiAliasing = 4;
@@ -197,9 +198,9 @@ class VisualsConfigTest {
         c.lightDebug = 0;
         assertSameValues(c, back);
         //2026-10-30 (audit): saved through a temporary file moved over the old one, which leaves nothing behind
-        c.exposure = 140;
+        c.vignetteStrength = 140;
         c.write(file);
-        assertEquals(140, VisualsConfig.read(file).exposure);
+        assertEquals(140, VisualsConfig.read(file).vignetteStrength);
         assertFalse(Files.exists(file.resolveSibling("c.json.tmp")));
     }
 
