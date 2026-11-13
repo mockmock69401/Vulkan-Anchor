@@ -578,6 +578,21 @@ class WaterTest {
         assertTrue(COMP.contains("return scenePosition(q, size, view);"), "the hit takes the ray origin's precise LOD read-back");
     }
 
+    /** Session 16 (the user: a torch's flame smeared across a smooth block): a solid surface's ray passing a torch's width behind it misses. */
+    @Test
+    void aSolidSurfacesRayPassingBehindATorchMissesIt() {
+        //The torch 3 blocks away, an eighth of a block thick; the refined ray 0.3 blocks behind its front, a tight bracket
+        float torch = -3, ray = -3.3f, bracket = -0.02f;
+        assertTrue(Math.abs(ray - torch) < WaterMath.refinedThickness(torch, bracket), "water's floor takes it (the smear)");
+        assertFalse(Math.abs(ray - torch) < WaterMath.refinedThickness(torch, bracket, WaterMath.REFLECT_SOLID_THICK_MIN), "a solid surface's does not");
+        assertTrue(Math.abs(-3.05f - torch) < WaterMath.refinedThickness(torch, bracket, WaterMath.REFLECT_SOLID_THICK_MIN), "a true hit stays");
+        //Far away the depth share still rules (a pixel spans more)
+        assertEquals(WaterMath.refinedThickness(-100, 0), WaterMath.refinedThickness(-100, 0, WaterMath.REFLECT_SOLID_THICK_MIN), 1e-6);
+        //Both solid callers set the floor before their march; the water's march keeps the default
+        assertEquals(2, COMP.split("reflectThickMin = REFLECT_SOLID_THICK_MIN;", -1).length - 1);
+        assertTrue(COMP.contains("float reflectThickMin = REFLECT_THICK_MIN;"));
+    }
+
     @Test
     void theCloudReflectionTakesMoreSamplesOverLongerSpans() {
         int prev = 0;
