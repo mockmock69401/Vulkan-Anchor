@@ -26,7 +26,7 @@ public class DrawUtil {
     public static void fastBlit() {
         GraphicsPipeline blitPipeline = PipelineManager.getFastBlitPipeline();
 
-        RenderSystem.disableCull();
+        net.vulkanmod.vulkan.VRenderSystem.disableCull();
 
         Renderer renderer = Renderer.getInstance();
         renderer.bindGraphicsPipeline(blitPipeline);
@@ -35,7 +35,7 @@ public class DrawUtil {
         VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
         VK11.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-        RenderSystem.enableCull();
+        net.vulkanmod.vulkan.VRenderSystem.enableCull();
     }
 
     public static void defualtBlit() {

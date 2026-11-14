@@ -21,6 +21,7 @@ public final class RenderStateSnapshot {
     private final int depthFunc;
     private final int colorMask;
     private final boolean cull;
+    private final boolean glCull;
     private final int cullFace;
     private final int frontFace;
     private final int polygonMode;
@@ -43,6 +44,7 @@ public final class RenderStateSnapshot {
         this.depthFunc = VRenderSystem.depthFun;
         this.colorMask = VRenderSystem.getColorMask();
         this.cull = VRenderSystem.cull;
+        this.glCull = VRenderSystem.glCull;
         this.cullFace = VRenderSystem.cullFace;
         this.frontFace = VRenderSystem.frontFace;
         this.polygonMode = VRenderSystem.polygonMode;
@@ -59,6 +61,7 @@ public final class RenderStateSnapshot {
         VRenderSystem.depthFun = depthFunc;
         VRenderSystem.colorMask = colorMask;
         VRenderSystem.cull = cull;
+        VRenderSystem.glCull = glCull;
         VRenderSystem.cullFace = cullFace;
         VRenderSystem.frontFace = frontFace;
         VRenderSystem.polygonMode = polygonMode;

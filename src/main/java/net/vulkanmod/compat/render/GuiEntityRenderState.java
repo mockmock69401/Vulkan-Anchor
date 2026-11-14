@@ -42,7 +42,7 @@ public final class GuiEntityRenderState {
         RenderSystem.depthMask(true);
         RenderSystem.enableBlend();
         RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
-        RenderSystem.disableCull();
+        VRenderSystem.disableCull();
         VRenderSystem.setPolygonModeGL(GL11.GL_FILL);
     }
 

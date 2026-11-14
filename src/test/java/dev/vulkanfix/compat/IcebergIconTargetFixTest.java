@@ -62,6 +62,21 @@ class IcebergIconTargetFixTest {
         assertEquals(List.of("<init>"), value(inject, "method"));
     }
 
+    @Test
+    void iconBufferKeepsGlMemoryLayout() throws Exception {
+        //2026-11-14 (session 21): Iceberg samples the icon with a CPU texture's UVs; top-down rows drew it upside down
+        ClassNode node = new ClassNode();
+        try (InputStream in = getClass().getClassLoader()
+                .getResourceAsStream("dev/vulkanfix/mixin/iceberg/CustomItemRendererMixin.class")) {
+            assertNotNull(in, "mixin class not compiled");
+            new ClassReader(in).accept(node, 0);
+        }
+        boolean registers = node.methods.stream().flatMap(m -> java.util.stream.StreamSupport.stream(m.instructions.spliterator(), false))
+                .anyMatch(i -> i instanceof org.objectweb.asm.tree.MethodInsnNode call
+                        && call.owner.equals("dev/vulkanfix/compat/GlMemoryLayoutFramebuffers") && call.name.equals("register"));
+        assertTrue(registers, "the icon buffer must be registered in GlMemoryLayoutFramebuffers");
+    }
+
     private static AnnotationNode annotation(List<AnnotationNode> list, String desc) {
         return list == null ? null : list.stream().filter(a -> a.desc.equals(desc)).findFirst().orElse(null);
     }

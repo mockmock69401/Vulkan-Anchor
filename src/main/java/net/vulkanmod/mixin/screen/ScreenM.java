@@ -27,7 +27,7 @@ public class ScreenM {
         //2026-11-05 (the user: Pufferfish's Skills lost its effect icons): depth writes rest on, as in vanilla's GUI state. The mod draws
         // the icons at z 1 before their frames at z 0 and relies on the icons' depth to keep the frames off them
         RenderSystem.depthMask(true);
-        RenderSystem.disableCull();
+        net.vulkanmod.vulkan.VRenderSystem.disableCull();//VulkanMod's own boundary: the GL cull state (glCull) stays as the game left it
         RenderSystem.enableBlend();
         RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
 

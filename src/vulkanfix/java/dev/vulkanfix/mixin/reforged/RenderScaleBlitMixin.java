@@ -22,12 +22,12 @@ public abstract class RenderScaleBlitMixin {
     @Inject(method = "blitRenderScaleToScreen()V", at = @At("HEAD"), cancellable = true, remap = false)
     private static void vulkanfix$blitUpright(CallbackInfo ci) {
         GraphicsPipeline pipeline = PipelineManager.getRenderScaleBlitPipeline();
-        RenderSystem.disableCull();
+        net.vulkanmod.vulkan.VRenderSystem.disableCull();
         Renderer renderer = Renderer.getInstance();
         renderer.bindGraphicsPipeline(pipeline);
         renderer.uploadAndBindUBOs(pipeline);
         VK11.vkCmdDraw(Renderer.getCommandBuffer(), 3, 1, 0, 0);
-        RenderSystem.enableCull();
+        net.vulkanmod.vulkan.VRenderSystem.enableCull();
         ci.cancel();
     }
 }
