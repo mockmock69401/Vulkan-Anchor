@@ -70,6 +70,48 @@ class HangingSwayTest {
     }
 
     @Test
+    void theClockWrapsWithoutAJump() {
+        //each swing makes whole cycles in the period, so the swing at the period's end is the one at its start
+        for (int x = -3; x <= 3; x++) {
+            float[] c = FoliageWind.hangColumn(x, 7);
+            assertEquals(Math.round(c[0]), c[0]);
+            assertEquals(Math.round(c[1]), c[1]);
+            float[] end = FoliageWind.hangSwing(c, 1f - 1e-6f), start = FoliageWind.hangSwing(c, 0);
+            assertEquals(start[0], end[0], 1e-3);
+            assertEquals(start[1], end[1], 1e-3);
+        }
+        assertEquals(0.5, FoliageWind.wrapTime(120.5), 1e-9);
+        assertEquals(119.5, FoliageWind.wrapTime(-0.5), 1e-9);
+        //a step of a frame moves a swing by little anywhere in the period
+        float[] c = FoliageWind.hangColumn(11, -4);
+        float step = (float) (1 / 60.0 / FoliageWind.HANG_TIME_PERIOD);
+        for (float t = 0; t < 1; t += 0.013f) {
+            float[] a = FoliageWind.hangSwing(c, t), b = FoliageWind.hangSwing(c, t + step);
+            assertTrue(Math.abs(a[0] - b[0]) < 0.06 && Math.abs(a[1] - b[1]) < 0.06, "t " + t);
+        }
+    }
+
+    @Test
+    void neighboursSwingApartAndTheCameraWrapLeavesThem() {
+        java.util.Set<Float> cycles = new java.util.HashSet<>();
+        java.util.Set<Float> sizes = new java.util.HashSet<>();
+        for (int x = 0; x < 13; x++) {
+            float[] c = FoliageWind.hangColumn(x, -2);
+            assertTrue(c[0] >= FoliageWind.HANG_CYCLES && c[0] < FoliageWind.HANG_CYCLES + FoliageWind.HANG_CYCLES_SPAN);
+            assertTrue(c[1] >= FoliageWind.HANG_CROSS_CYCLES && c[1] < FoliageWind.HANG_CROSS_CYCLES + FoliageWind.HANG_CROSS_SPAN);
+            assertTrue(c[5] >= FoliageWind.HANG_SIZE && c[5] <= FoliageWind.HANG_SIZE + FoliageWind.HANG_SIZE_SPAN);
+            cycles.add(c[0]);
+            sizes.add(Math.round(c[5] * 20) / 20f);
+            assertArrayEquals(c, FoliageWind.hangColumn(x + FoliageWind.HANG_WRAP, -2 - 2 * FoliageWind.HANG_WRAP));
+        }
+        assertTrue(cycles.size() >= 8, "a row of 13 has paces " + cycles);
+        assertTrue(sizes.size() >= 5, "and sizes " + sizes);
+        //the periods cover 2 .. 3 s a swing
+        assertEquals(3.0, FoliageWind.HANG_TIME_PERIOD / FoliageWind.HANG_CYCLES, 1e-9);
+        assertEquals(2.0, FoliageWind.HANG_TIME_PERIOD / (FoliageWind.HANG_CYCLES + FoliageWind.HANG_CYCLES_SPAN - 1), 1e-9);
+    }
+
+    @Test
     void theShaderMirrorsTheMarks() throws IOException {
         String s = Files.readString(VSH);
         assertTrue(s.contains("const int WIND_HANG_BASE = " + FoliageMarker.HANG_BASE + ";"));
@@ -81,5 +123,16 @@ class HangingSwayTest {
         assertEquals(FoliageMarker.ALPHA, FoliageMarker.HANG_MARKS[1]);
         assertEquals(FoliageMarker.EMISSIVE_ALPHA, FoliageMarker.HANG_MARKS[2]);
         assertEquals(FoliageMarker.METAL_ALPHA, FoliageMarker.HANG_MARKS[3]);
+        //the follow-up's columns
+        assertTrue(s.contains("const int WIND_HANG_WRAP = " + FoliageWind.HANG_WRAP + ", WIND_HANG_REACH = 480;"));
+        assertEquals(0, 480 % FoliageWind.HANG_WRAP);
+        assertTrue(s.contains("const float WIND_HANG_CYCLES = " + FoliageWind.HANG_CYCLES + ".0, WIND_HANG_CYCLES_SPAN = " + FoliageWind.HANG_CYCLES_SPAN
+                + ".0, WIND_HANG_CROSS_CYCLES = " + FoliageWind.HANG_CROSS_CYCLES + ".0, WIND_HANG_CROSS_SPAN = " + FoliageWind.HANG_CROSS_SPAN + ".0;"));
+        assertTrue(s.contains("const float WIND_HANG_SIZE = " + FoliageWind.HANG_SIZE + ", WIND_HANG_SIZE_SPAN = " + FoliageWind.HANG_SIZE_SPAN + ";"));
+        assertTrue(s.contains("uint state = column.x * 73856093u ^ column.y * 19349663u;"));
+        assertTrue(s.contains("state = state * 747796405u + 2891336453u;"));
+        assertTrue(s.contains("uint w = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;"));
+        assertTrue(s.contains("float own = sin(6.2831853 * (fract(cycles * WindHang.y) + phase));"));
+        assertEquals(FoliageWind.PERIOD, FoliageWind.HANG_WRAP, 1e-9);
     }
 }

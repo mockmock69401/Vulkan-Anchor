@@ -32,17 +32,26 @@ public final class FoliageWind {
     /** Full rain bends further by this share. */
     public static final float RAIN_GAIN = 0.6f;
     /**
-     * Session 20: the hanging blocks' swing (blocks sideways per block below their anchor) at setting 100 in clear weather, and their own
-     * swing's angular speed (radians per second; a pendulum about a block and a half long). Rain swings them further by RAIN_GAIN too.
+     * Session 20: the hanging blocks' swing (blocks sideways per block below their anchor) at setting 100 in clear weather. Rain swings
+     * them further by RAIN_GAIN too.
      */
-    public static final float HANG_AMPLITUDE = 0.11f, HANG_OMEGA = 2.6f;
+    public static final float HANG_AMPLITUDE = 0.11f;
+    /**
+     * Session 20 follow-up: the hanging blocks' clock wraps at this many seconds (WindHang.y, 0..1), and each column swings a whole number
+     * of times in it (terrain.vsh hangOffset, hangColumn): HANG_CYCLES + 0 .. HANG_CYCLES_SPAN - 1 times along its swing and
+     * HANG_CROSS_CYCLES + 0 .. HANG_CROSS_SPAN - 1 across it (2.0 .. 3.0 s and 2.6 .. 4.1 s a swing), scaled by HANG_SIZE + 0 ..
+     * HANG_SIZE_SPAN. The columns are told apart by their block wrapped at HANG_WRAP (the wind's period).
+     */
+    public static final double HANG_TIME_PERIOD = 120;
+    public static final int HANG_CYCLES = 40, HANG_CYCLES_SPAN = 21, HANG_CROSS_CYCLES = 29, HANG_CROSS_SPAN = 17, HANG_WRAP = 240;
+    public static final float HANG_SIZE = 0.7f, HANG_SIZE_SPAN = 0.6f;
     /** The longest step (seconds) taken as flow, as RippleClock's. */
     public static final double MAX_STEP = RippleMath.MAX_STEP;
 
     private static final MappedBuffer PHASE = new MappedBuffer(4 * 4);
     private static final MappedBuffer PARAMS = new MappedBuffer(4 * 4);
     private static final MappedBuffer HANG = new MappedBuffer(4 * 4);
-    private static double hangPhase;
+    private static double hangTime;
     private static final double[] phase = new double[4];
     private static double last = Double.NaN;
 
@@ -84,14 +93,52 @@ public final class FoliageWind {
         last = seconds;
         if (dt > 0 && dt <= MAX_STEP) {
             for (int i = 0; i < 4; i++) phase[i] = wrapAngle(phase[i] + OMEGA[i] * speedFactor * dt);
-            hangPhase = wrapAngle(hangPhase + HANG_OMEGA * dt);
+            hangTime = wrapTime(hangTime + dt);
         }
         HANG.putFloat(0, hangAmplitude(hangSetting, rain));
-        HANG.putFloat(4, (float) hangPhase);
+        HANG.putFloat(4, (float) (hangTime / HANG_TIME_PERIOD));
         float[] a = amplitudes(setting, rain, true);
         for (int i = 0; i < 4; i++) PHASE.putFloat(i * 4, (float) phase[i]);
         PARAMS.putFloat(8, a[0]);
         PARAMS.putFloat(12, a[1]);
+    }
+
+    /** Session 20 follow-up: t wrapped into [0, HANG_TIME_PERIOD). */
+    static double wrapTime(double t) {
+        double w = t - HANG_TIME_PERIOD * Math.floor(t / HANG_TIME_PERIOD);
+        return Double.isFinite(w) && w >= 0 && w < HANG_TIME_PERIOD ? w : 0;
+    }
+
+    /** terrain.vsh's hangRandom: the PCG hash's next number of a column (0..1); state[0] advances. */
+    static float hangRandom(int[] state) {
+        state[0] = state[0] * 747796405 + (int) 2891336453L;
+        int s = state[0];
+        int w = ((s >>> ((s >>> 28) + 4)) ^ s) * 277803737;
+        w = (w >>> 22) ^ w;
+        return (w >>> 8) / 16777216f;
+    }
+
+    /**
+     * Session 20 follow-up, as terrain.vsh's hangOffset: the column at block x, z (wrapped at HANG_WRAP): {swings along, swings across
+     * (per HANG_TIME_PERIOD), the swing's phase and the cross swing's (0..1), the swing's direction (radians), its size}.
+     */
+    public static float[] hangColumn(int x, int z) {
+        int cx = Math.floorMod(x, HANG_WRAP), cz = Math.floorMod(z, HANG_WRAP);
+        int[] state = {cx * 73856093 ^ cz * 19349663};
+        float cycles = HANG_CYCLES + (float) Math.floor(hangRandom(state) * HANG_CYCLES_SPAN);
+        float cross = HANG_CROSS_CYCLES + (float) Math.floor(hangRandom(state) * HANG_CROSS_SPAN);
+        float phase = hangRandom(state);
+        float crossPhase = hangRandom(state);
+        float turn = 6.2831853f * hangRandom(state);
+        float size = HANG_SIZE + HANG_SIZE_SPAN * hangRandom(state);
+        return new float[]{cycles, cross, phase, crossPhase, turn, size};
+    }
+
+    /** A column's own swing {along, across} (-1..1) at clock c (WindHang.y, 0..1), as terrain.vsh. */
+    public static float[] hangSwing(float[] column, float c) {
+        double a = column[0] * (double) c, b = column[1] * (double) c;
+        return new float[]{(float) Math.sin(2 * Math.PI * (a - Math.floor(a) + column[2])),
+                (float) Math.sin(2 * Math.PI * (b - Math.floor(b) + column[3]))};
     }
 
     /** The hanging blocks' swing for a setting (0..2, 1 = 100) and the rain level; 0 when off. */
@@ -101,7 +148,7 @@ public final class FoliageWind {
         return HANG_AMPLITUDE * s * (1 + RAIN_GAIN * r);
     }
 
-    /** The terrain's WindHang: the hanging blocks' swing (0 while the post-processing is off) and their own phase. */
+    /** The terrain's WindHang: the hanging blocks' swing (0 while the post-processing is off) and their clock (0..1). */
     public static MappedBuffer hang() {
         if (!VisualsConfig.get().enabled) HANG.putFloat(0, 0);
         return HANG;
