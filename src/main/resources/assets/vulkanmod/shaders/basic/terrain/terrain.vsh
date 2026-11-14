@@ -7,7 +7,8 @@ layout (binding = 0) uniform UniformBufferObject {
     mat4 MVP;
     vec4 WindPhase;
     vec4 WindParams;
-    //Session 20: x the hanging blocks' swing (blocks sideways per block below the anchor, 0 = still), y their own swing's phase
+    //Session 20: x the hanging blocks' swing (blocks sideways per block below the anchor, 0 = still), y their clock (0..1 over
+    // FoliageWind.HANG_TIME_PERIOD)
     vec4 WindHang;
 };
 
@@ -116,8 +117,26 @@ vec3 windOffset(int mark, vec3 rel) {
     return vec3(0.0);
 }
 
+//Session 20 follow-up (the user: "쇠사슬과 랜턴의 움직임이 중간에 뚝 끊기는 부분이 있어. 또 여러 개가 같이 달려있는 경우 흔들리는 모양이
+// 같아보여서 부자연스러워"): each hanging column draws its own swing from its block (FoliageWind.hangColumn mirrors it): how many swings
+// and cross swings it makes in WindHang.y's period (whole numbers, so the clock's wrap is seamless; 2.0 .. 3.0 s and 2.6 .. 4.1 s a
+// swing), their phases, the direction it swings in and its size. The block is wrapped at WIND_HANG_WRAP, so the camera's wrap
+// (WindParams) leaves it; a swaying block lies within 64 blocks of the camera, so adding WIND_HANG_REACH keeps its x, z positive.
+const int WIND_HANG_WRAP = 240, WIND_HANG_REACH = 480;
+const float WIND_HANG_CYCLES = 40.0, WIND_HANG_CYCLES_SPAN = 21.0, WIND_HANG_CROSS_CYCLES = 29.0, WIND_HANG_CROSS_SPAN = 17.0;
+const float WIND_HANG_SIZE = 0.7, WIND_HANG_SIZE_SPAN = 0.6;
+
+//The PCG hash (Jarzynski and Olano 2020, "Hash Functions for GPU Rendering"): a column's next number, 0..1
+float hangRandom(inout uint state) {
+    state = state * 747796405u + 2891336453u;
+    uint w = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    w = (w >> 22u) ^ w;
+    return float(w >> 8u) / 16777216.0;
+}
+
 //Session 20: a hanging vertex depth blocks below its anchor swings as a pendulum about it: the whole column leans with the wind at its
-// centre and swings at its own pace (a phase per column), and a vertex out to the side rises a little (the arc). FoliageWind mirrors it
+// centre and swings at its own pace, and a vertex out to the side rises a little (the arc). Every vertex of a column (its chains and
+// its lantern) reads the same block, so the column moves as one
 vec3 hangOffset(float depth, vec3 rel) {
     if (!(WindHang.x > 0.0) || depth <= 0.0) {
         return vec3(0.0);
@@ -126,13 +145,22 @@ vec3 hangOffset(float depth, vec3 rel) {
     if (near <= 0.0) {
         return vec3(0.0);
     }
-    vec2 cell = floor(rel.xz + WindParams.xy) + 0.5;
-    vec3 f = windAt(vec3(cell.x - WindParams.x, 0.0, cell.y - WindParams.y), 0.0);
-    float seed = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
-    float own = sin(WindHang.y + 6.2831853 * seed);
-    float own2 = sin(0.83 * WindHang.y + 6.2831853 * fract(seed * 7.13));
-    vec2 lean = WIND_DIR * (f.x - 0.35 + 0.45 * own) + vec2(-WIND_DIR.y, WIND_DIR.x) * (0.6 * f.y + 0.3 * own2);
-    vec2 xz = lean * (WindHang.x * near * depth);
+    vec2 cell = floor(rel.xz + WindParams.xy);
+    vec3 f = windAt(vec3(cell.x + 0.5 - WindParams.x, 0.0, cell.y + 0.5 - WindParams.y), 0.0);
+    uvec2 column = uvec2(ivec2(cell) + WIND_HANG_REACH) % uint(WIND_HANG_WRAP);
+    uint state = column.x * 73856093u ^ column.y * 19349663u;
+    float cycles = WIND_HANG_CYCLES + floor(hangRandom(state) * WIND_HANG_CYCLES_SPAN);
+    float crossCycles = WIND_HANG_CROSS_CYCLES + floor(hangRandom(state) * WIND_HANG_CROSS_SPAN);
+    float phase = hangRandom(state);
+    float crossPhase = hangRandom(state);
+    float turn = 6.2831853 * hangRandom(state);
+    float size = WIND_HANG_SIZE + WIND_HANG_SIZE_SPAN * hangRandom(state);
+    float own = sin(6.2831853 * (fract(cycles * WindHang.y) + phase));
+    float own2 = sin(6.2831853 * (fract(crossCycles * WindHang.y) + crossPhase));
+    vec2 along = vec2(cos(turn), sin(turn));
+    vec2 lean = WIND_DIR * (f.x - 0.35) + vec2(-WIND_DIR.y, WIND_DIR.x) * (0.6 * f.y) + along * (0.45 * own)
+            + vec2(-along.y, along.x) * (0.3 * own2);
+    vec2 xz = lean * (WindHang.x * size * near * depth);
     return vec3(xz.x, 0.5 * dot(xz, xz) / depth, xz.y);
 }
 
