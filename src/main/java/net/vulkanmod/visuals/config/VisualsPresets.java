@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.config;
 
+import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 
 import java.util.Collections;
@@ -86,7 +87,17 @@ public final class VisualsPresets {
      * when it is set and counts it as the level's own cloud style. The cloud quality, which the presets still set, sets its cost.
      */
     public static boolean keepsLook(String key, int value) {
-        return key.equals("cloud_style") && value == CloudMath.STYLE_ANIME;
+        return keepsLook(key, value, k -> Integer.MIN_VALUE);
+    }
+
+    /**
+     * 2026-11-14: as keepsLook, and the auroras off while the colour palette is Horror (it turns them off; ColourPresets.aurora). values
+     * gives a setting's value by key (the colour palette's, VisualsOptionLayout.COLOUR_PRESET), or Integer.MIN_VALUE for one it does not know.
+     */
+    public static boolean keepsLook(String key, int value, ToIntFunction<String> values) {
+        if (key.equals("cloud_style") && value == CloudMath.STYLE_ANIME) return true;
+        return key.equals(ColourPresets.AURORA_KEY) && value == CelestialUniforms.AURORA_OFF
+                && values.applyAsInt(VisualsOptionLayout.COLOUR_PRESET) == ColourPresets.HORROR;
     }
 
     /** Sets every preset setting to level's value (keepsLook: the anime clouds stay) and the preset to level; Custom (or anything else) only records Custom. */
@@ -97,7 +108,7 @@ public final class VisualsPresets {
         }
         for (Map.Entry<String, int[]> e : VALUES.entrySet()) {
             VisualsOptionLayout.Item item = VisualsOptionLayout.item(e.getKey());
-            if (keepsLook(e.getKey(), VisualsOptionLayout.get(c, item))) continue;
+            if (keepsLook(e.getKey(), VisualsOptionLayout.get(c, item), key -> VisualsOptionLayout.get(c, VisualsOptionLayout.item(key)))) continue;
             VisualsOptionLayout.set(c, item, e.getValue()[level]);
         }
         c.preset = level;
@@ -111,7 +122,7 @@ public final class VisualsPresets {
         if (!isLevel(level)) return false;
         for (Map.Entry<String, int[]> e : VALUES.entrySet()) {
             int have = values.applyAsInt(e.getKey());
-            if (have != Integer.MIN_VALUE && have != e.getValue()[level] && !keepsLook(e.getKey(), have)) return false;
+            if (have != Integer.MIN_VALUE && have != e.getValue()[level] && !keepsLook(e.getKey(), have, values)) return false;
         }
         return true;
     }
