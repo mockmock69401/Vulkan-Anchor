@@ -183,7 +183,8 @@
     "visuals.ParticleTagMixin",
     "visuals.ParticleEngineLookMixin",
     "visuals.TextureSheetParticleAccessor",
-    "visuals.SpriteContentsAccessor"
+    "visuals.SpriteContentsAccessor",
+    "visuals.CameraStepSmoothMixin"
   ],
   "injectors": {
     "defaultRequire": 1

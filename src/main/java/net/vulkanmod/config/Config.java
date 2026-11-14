@@ -40,6 +40,9 @@ public class Config {
     public boolean textAntialiasing = true;
     /** The top-left FPS overlay: FpsOverlay.OFF, SIMPLE, BASIC or DETAILED. */
     public int fpsOverlay = 0;
+    /** 2026-11-14 (session 22): the camera eases to a new height after a step up or down (StepSmoothing), and how slowly (percent). */
+    public boolean smoothSteps = true;
+    public int stepSmoothing = net.vulkanmod.visuals.camera.StepSmoothMath.STRENGTH_DEFAULT;
 
     public void write() {
 
