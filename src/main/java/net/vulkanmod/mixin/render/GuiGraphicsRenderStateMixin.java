@@ -72,7 +72,7 @@ public class GuiGraphicsRenderStateMixin {
         RenderSystem.colorMask(true, true, true, true);
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(true);
-        RenderSystem.disableCull();
+        net.vulkanmod.vulkan.VRenderSystem.disableCull();
         RenderSystem.enableBlend();
         RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
     }
@@ -83,7 +83,8 @@ public class GuiGraphicsRenderStateMixin {
         RenderSystem.colorMask(true, true, true, true);
         RenderSystem.enableDepthTest();
         RenderSystem.depthMask(true);
-        RenderSystem.enableCull();
+        //2026-11-14 (session 21): culling as the game and mods last set it, as GL has it here (GuiItemRenderState.prepare)
+        net.vulkanmod.vulkan.VRenderSystem.cull = net.vulkanmod.vulkan.VRenderSystem.glCull;
         RenderSystem.enableBlend();
         RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
     }

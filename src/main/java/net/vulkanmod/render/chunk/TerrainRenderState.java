@@ -14,7 +14,7 @@ public final class TerrainRenderState {
         RenderSystem.colorMask(true, true, true, true);
         RenderSystem.enableDepthTest();
         RenderSystem.depthMask(true);
-        RenderSystem.enableCull();
+        VRenderSystem.enableCull();
         RenderSystem.disableBlend();
         VRenderSystem.depthFunc(GL11.GL_LEQUAL);
         VRenderSystem.setPolygonModeGL(GL11.GL_FILL);

@@ -980,7 +980,7 @@ public final class GlFunctionRegistry {
             switch (argI(args, 0)) {
                 case GL_DEPTH_TEST -> VRenderSystem.enableDepthTest();
                 case GL_STENCIL_TEST -> VRenderSystem.enableStencilTest();
-                case GL_CULL_FACE -> VRenderSystem.enableCull();
+                case GL_CULL_FACE -> VRenderSystem.enableCullGl();
                 case GL_BLEND -> VRenderSystem.enableBlend();
                 case GL_SCISSOR_TEST -> Renderer.setScissorEnabled(true);
                 default -> {
@@ -991,7 +991,7 @@ public final class GlFunctionRegistry {
             switch (argI(args, 0)) {
                 case GL_DEPTH_TEST -> VRenderSystem.disableDepthTest();
                 case GL_STENCIL_TEST -> VRenderSystem.disableStencilTest();
-                case GL_CULL_FACE -> VRenderSystem.disableCull();
+                case GL_CULL_FACE -> VRenderSystem.disableCullGl();
                 case GL_BLEND -> VRenderSystem.disableBlend();
                 case GL_SCISSOR_TEST -> Renderer.setScissorEnabled(false);
                 default -> {

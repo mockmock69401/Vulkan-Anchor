@@ -31,7 +31,7 @@ public class ScreenM {
         RenderSystem.colorMask(true, true, true, true);
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(true);
-        RenderSystem.disableCull();
+        net.vulkanmod.vulkan.VRenderSystem.disableCull();//VulkanMod's own boundary: the GL cull state (glCull) stays as the game left it
         RenderSystem.enableBlend();
         RenderSystem.blendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, GL11.GL_ONE, GL11.GL_ZERO);
 
@@ -63,7 +63,7 @@ public class ScreenM {
         RenderSystem.disableBlend();
         RenderSystem.disableDepthTest();
         RenderSystem.depthMask(false);
-        RenderSystem.disableCull();
+        net.vulkanmod.vulkan.VRenderSystem.disableCull();
         Renderer.resetScissor();
     }
 

@@ -27,8 +27,8 @@ public final class MaterialCullState {
         try {
 
             if ((drawState & REPAIRED_CULL) != 0) {
-                if ((previous & ENTRY_CULL) != 0) RenderSystem.enableCull();
-                else RenderSystem.disableCull();
+                if ((previous & ENTRY_CULL) != 0) VRenderSystem.enableCull();
+                else VRenderSystem.disableCull();
             }
         } finally {
             drawState = previous & (MODEL_DRAW | REPAIRED_CULL);
@@ -37,9 +37,12 @@ public final class MaterialCullState {
 
     public static void setupCull(Runnable originalSetup) {
         if ((drawState & MODEL_DRAW) != 0) {
-            if (!VRenderSystem.cull) {
+            //2026-11-14 (session 21): only culling VulkanMod's own state changes left off (glCull still on, as GL has it). A GL call turning
+            //it off is kept: Iceberg does, to draw Advancement Plaques' icons, whose front face its transform winds clockwise (repaired, the
+            //icon showed its dark back face)
+            if (!VRenderSystem.cull && VRenderSystem.glCull) {
                 RenderSystem.assertOnRenderThread();
-                RenderSystem.enableCull();
+                VRenderSystem.enableCull();
                 drawState |= REPAIRED_CULL;
             }
         } else originalSetup.run();

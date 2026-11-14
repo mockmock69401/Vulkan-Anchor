@@ -77,7 +77,7 @@ public class GL32M {
     public static void glDisable(@NativeType("GLenum") int target) {
         switch (target) {
             case GL11.GL_DEPTH_TEST -> VRenderSystem.disableDepthTest();
-            case GL11.GL_CULL_FACE -> VRenderSystem.disableCull();
+            case GL11.GL_CULL_FACE -> VRenderSystem.disableCullGl();
             case GL11.GL_BLEND -> VRenderSystem.disableBlend();
             case GL11.GL_STENCIL_TEST -> VRenderSystem.disableStencilTest();
             default -> {}

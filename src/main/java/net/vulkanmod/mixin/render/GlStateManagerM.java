@@ -79,12 +79,12 @@ public class GlStateManagerM {
 
     @Overwrite(remap = false)
     public static void _enableCull() {
-        VRenderSystem.enableCull();
+        VRenderSystem.enableCullGl();
     }
 
     @Overwrite(remap = false)
     public static void _disableCull() {
-        VRenderSystem.disableCull();
+        VRenderSystem.disableCullGl();
     }
 
     @Overwrite(remap = false)

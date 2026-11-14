@@ -36,7 +36,7 @@ public class DrawUtil {
     }
 
     private static void blit(GraphicsPipeline blitPipeline) {
-        RenderSystem.disableCull();
+        VRenderSystem.disableCull();
         VRenderSystem.setPrimitiveTopologyGL(GL11.GL_TRIANGLES);
 
         Renderer renderer = Renderer.getInstance();
@@ -47,7 +47,7 @@ public class DrawUtil {
         Renderer.recordRasterWrite();
         VK11.vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-        RenderSystem.enableCull();
+        net.vulkanmod.vulkan.VRenderSystem.enableCull();
     }
 
     public static void defualtBlit() {

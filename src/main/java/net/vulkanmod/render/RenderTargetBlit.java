@@ -164,7 +164,7 @@ public final class RenderTargetBlit {
                     return;
                 }
                 try (NativeState ignored = new NativeState(units)) {
-                    RenderSystem.disableCull();
+                    VRenderSystem.disableCull();
                     VRenderSystem.setPrimitiveTopology(state.mode());
                     Renderer renderer = Renderer.getInstance();
                     renderer.bindGraphicsPipeline(pipeline);
@@ -228,8 +228,7 @@ public final class RenderTargetBlit {
             catch (RuntimeException | Error cleanup) { failure = cleanup; }
             VRenderSystem.topology = this.previousTopology;
             try {
-                if (this.previousCull) RenderSystem.enableCull();
-                else RenderSystem.disableCull();
+                VRenderSystem.cull = this.previousCull;
             } catch (RuntimeException | Error cleanup) { failure = merge(failure, cleanup); }
             try { this.renderer.restoreGraphicsPipeline(this.previousPipeline); }
             catch (RuntimeException | Error cleanup) { failure = merge(failure, cleanup); }

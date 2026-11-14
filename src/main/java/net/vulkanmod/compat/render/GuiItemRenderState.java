@@ -57,11 +57,15 @@ public final class GuiItemRenderState {
         if (isTooltipOverlayActive()) {
             RenderSystem.disableDepthTest();
             RenderSystem.depthMask(true);
-            RenderSystem.disableCull();
+            VRenderSystem.disableCull();
         } else {
             RenderSystem.enableDepthTest();
             RenderSystem.depthMask(true);
-            RenderSystem.enableCull();
+            //2026-11-14 (session 21): face culling as the game and mods last set it, as GL has it here (no RenderType turns it on), not
+            //always on: VulkanMod's own framebuffer binds leave it off, but Iceberg turns it off on purpose to draw Advancement Plaques'
+            //icons with a transform that winds the item's front face clockwise. Forced on, that drew the dark back face, or nothing under
+            //ModernFix's faster item rendering (which draws only the front face).
+            VRenderSystem.cull = VRenderSystem.glCull;
         }
 
         RenderSystem.enableBlend();

@@ -157,7 +157,7 @@ public class GL11M {
         switch (target) {
             case GL11.GL_DEPTH_TEST -> VRenderSystem.enableDepthTest();
             case GL11.GL_STENCIL_TEST -> VRenderSystem.enableStencilTest();
-            case GL11.GL_CULL_FACE -> VRenderSystem.enableCull();
+            case GL11.GL_CULL_FACE -> VRenderSystem.enableCullGl();
             case GL11.GL_BLEND -> VRenderSystem.enableBlend();
             case GL11.GL_SCISSOR_TEST -> Renderer.setScissorEnabled(true);
             default -> {}
@@ -169,7 +169,7 @@ public class GL11M {
         switch (target) {
             case GL11.GL_DEPTH_TEST -> VRenderSystem.disableDepthTest();
             case GL11.GL_STENCIL_TEST -> VRenderSystem.disableStencilTest();
-            case GL11.GL_CULL_FACE -> VRenderSystem.disableCull();
+            case GL11.GL_CULL_FACE -> VRenderSystem.disableCullGl();
             case GL11.GL_BLEND -> VRenderSystem.disableBlend();
             case GL11.GL_SCISSOR_TEST -> Renderer.setScissorEnabled(false);
             default -> {}

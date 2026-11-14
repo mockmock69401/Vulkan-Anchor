@@ -366,7 +366,7 @@ public class WorldRenderer {
 
         if (!Initializer.CONFIG.backFaceCulling
                 || terrainRenderType == TerrainRenderType.TRANSLUCENT) {
-            RenderSystem.disableCull();
+            VRenderSystem.disableCull();
         }
 
         this.sortTranslucentSections(camX, camY, camZ);

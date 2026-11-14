@@ -47,6 +47,12 @@ public abstract class VRenderSystem {
     public static int colorMask = PipelineState.ColorMask.getColorMask(true, true, true, true);
 
     public static boolean cull = true;
+    /**
+     * 2026-11-14 (session 21): GL_CULL_FACE as the game and mods set it (RenderSystem, GlStateManager and GL11 calls, through
+     * enableCullGl/disableCullGl). VulkanMod's own passes switch {@link #cull} without it: binding a framebuffer turns culling off, where
+     * GL keeps it. GUI item draws take this one back (GuiItemRenderState).
+     */
+    public static boolean glCull = true;
 
     public static boolean logicOp = false;
     public static int logicOpFun = 0;
@@ -306,6 +312,18 @@ public abstract class VRenderSystem {
 
     public static void disableCull() {
         cull = false;
+    }
+
+    /** A GL call turning GL_CULL_FACE on (see {@link #glCull}). */
+    public static void enableCullGl() {
+        cull = true;
+        glCull = true;
+    }
+
+    /** A GL call turning GL_CULL_FACE off (see {@link #glCull}). */
+    public static void disableCullGl() {
+        cull = false;
+        glCull = false;
     }
 
     public static void depthFunc(int depthFun) {

@@ -209,13 +209,13 @@ public abstract class RenderSystemMixin {
     @Overwrite(remap = false)
     public static void enableCull() {
         assertOnRenderThread();
-        VRenderSystem.enableCull();
+        VRenderSystem.enableCullGl();
     }
 
     @Overwrite(remap = false)
     public static void disableCull() {
         assertOnRenderThread();
-        VRenderSystem.disableCull();
+        VRenderSystem.disableCullGl();
     }
 
     @Overwrite(remap = false)
