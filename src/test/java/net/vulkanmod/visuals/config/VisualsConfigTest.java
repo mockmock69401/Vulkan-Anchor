@@ -29,7 +29,7 @@ class VisualsConfigTest {
              "taa": true, "dhLods": true, "dhShadows": true, "preset": 5, "colourSunset": 16724838, "pbr": false, "pbrNormalStrength": 150,
              "pbrReflections": true, "pbrParallax": true, "colourSunlight": 16744512, "colourShadeLight": 8438015, "cloudStyle": 2, "sunSize": 70, "moonSize": 150, "snowType": 1, "snowSize": 150, "snowAmount": 60,
              "rainType": 2, "rainSize": 80, "rainAmount": 140, "starCount": 250, "starSize": 60, "starBrightness": 180, "starType": 1,
-             "particleSmokeType": 1, "particleSmokeSize": 150, "particleFlamesAmount": 50, "particleMagicBrightness": 160, "colourParticleDrips": 4227327, "halfResEffects": true, "softShadows": 60, "wetGround": 40, "revision": 20}
+             "particleSmokeType": 1, "particleSmokeSize": 150, "particleFlamesAmount": 50, "particleMagicBrightness": 160, "colourParticleDrips": 4227327, "halfResEffects": true, "softShadows": 60, "wetGround": 40, "revision": 21}
             """;
 
     private static List<Field> settingFields() {
@@ -53,7 +53,7 @@ class VisualsConfigTest {
 
     /** Final fix R3: the look the screen checks were tuned with (the player's settings); every other percentage is 100. */
     private static final java.util.Map<String, Integer> TUNED_DEFAULTS = java.util.Map.of("saturation", 94, "grade_strength", 0,
-            "bloom_strength", 45, "sun_glow", 50, "sunset_light", 50, "light_shafts", 50, "moonlight", 50, "light_colour", 70,
+            "bloom_strength", 35, "fog_strength", 35, "sun_glow", 50, "sunset_light", 50, "light_shafts", 50, "moonlight", 50, "light_colour", 70,
             "block_light_colour", 70);
 
     @Test

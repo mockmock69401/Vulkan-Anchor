@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.config;
 
+import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
@@ -88,8 +89,21 @@ public final class ColourPresets {
      * more contrast and a touch darker (the films' low-key exposure). Anime brighter, a softer tone curve (cel shading keeps colours flat and
      * bright rather than rolling the highlights off) and a little warm/cool split. Horror darker with hard contrast (deep shadows) and no warm
      * grade (its sickly, cold daylight).
+     *
+     * <p>2026-11-14 (the user: "the Anime preset looks a little overdone: saturation 105%, fog 30%"; "in the other presets bloom and fog
+     * are too high too: bring both down to about 30-40%"): Anime 110 / 80 -> 105 / 30; Default's bloom and fog 45 / 100 -> 35 / 35
+     * (VisualsConfig's defaults with it), Cinematic's 60 / 125 -> 40 / 40, Horror's fog 200 -> 40 (its bloom, 15, was already lower);
+     * Realistic's 30 / 40 were already in range.
      */
     private static final int[][] LOOK = {
+            {35, 94, 35, 50, 100, 100, 100, 0},
+            {30, 94, 40, 40, 100, 100, 100, 20},
+            {40, 85, 40, 60, 95, 100, 110, 70},
+            {35, 105, 30, 70, 110, 70, 105, 25},
+            {15, 60, 40, 15, 85, 100, 120, 0},
+    };
+    /** The rows revisions 18 to 20 saved (VisualsConfig.read moves a file still on one of them to LOOK's row; moveOldRows). */
+    static final int[][] LOOK_BEFORE_21 = {
             {45, 94, 100, 50, 100, 100, 100, 0},
             {30, 94, 40, 40, 100, 100, 100, 20},
             {60, 85, 125, 60, 95, 100, 110, 70},
@@ -143,24 +157,42 @@ public final class ColourPresets {
         return style;
     }
 
+    /**
+     * 2026-11-14 (the user: "in the Horror preset, turn the aurora off automatically"): the aurora mode is the second performance setting
+     * a palette touches. HORROR turns the auroras off (and shows only while they are off); another palette takes them back on to the
+     * performance preset's mode when they are off and the preset is a level, so going Horror and back restores the sky it had (under a
+     * Custom preset the player's off is kept: nothing says it was Horror's). The performance presets keep the auroras off while the
+     * palette is Horror (VisualsPresets.keepsLook).
+     */
+    public static final String AURORA_KEY = "aurora";
+
+    /** The aurora mode choosing palette level leaves, from the current mode and performance preset. */
+    public static int aurora(int level, int mode, int preset) {
+        if (level == HORROR) return CelestialUniforms.AURORA_OFF;
+        if (isLevel(level) && mode == CelestialUniforms.AURORA_OFF && VisualsPresets.isLevel(preset)) return VisualsPresets.value(AURORA_KEY, preset);
+        return mode;
+    }
+
     public static boolean isLookKey(String key) {
         for (String k : LOOK_KEYS) if (k.equals(key)) return true;
         return false;
     }
 
-    /** Sets every colour and look setting to the palette's, and the cloud style (cloudStyle); CUSTOM (or anything else) changes nothing. Records the choice. */
+    /** Sets every colour and look setting to the palette's, the cloud style (cloudStyle) and the aurora mode (aurora); CUSTOM (or anything else) changes nothing. Records the choice. */
     public static void apply(VisualsConfig c, int level) {
         if (isLevel(level)) {
             for (Colour colour : Colour.values()) c.setColour(colour, value(colour, level));
             for (String key : LOOK_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), look(key, level));
             c.cloudStyle = cloudStyle(level, c.cloudStyle, c.preset);
+            c.aurora = aurora(level, c.aurora, c.preset);
         }
         c.colourPreset = isLevel(level) ? level : CUSTOM;
     }
 
     /**
      * The palette the colours and look settings are all on (the first, so DEFAULT before the others), or CUSTOM. looks gives a look
-     * setting's value by key, and the cloud style's (CLOUD_KEY): ANIME also needs the anime clouds.
+     * setting's value by key, and the cloud style's (CLOUD_KEY) and aurora mode's (AURORA_KEY): ANIME also needs the anime clouds, HORROR
+     * the auroras off.
      */
     public static int detect(ToIntFunction<Colour> colours, ToIntFunction<String> looks) {
         for (int level = 0; level < LEVELS; level++) {
@@ -173,6 +205,7 @@ public final class ColourPresets {
             }
             for (int i = 0; all && i < LOOK_KEYS.length; i++) all = looks.applyAsInt(LOOK_KEYS[i]) == LOOK[level][i];
             if (all && level == ANIME) all = looks.applyAsInt(CLOUD_KEY) == CloudMath.STYLE_ANIME;
+            if (all && level == HORROR) all = looks.applyAsInt(AURORA_KEY) == CelestialUniforms.AURORA_OFF;
             if (all) return level;
         }
         return CUSTOM;
@@ -234,6 +267,25 @@ public final class ColourPresets {
             if (v != LOOK[level][i] && (old == null || v != old)) return false;
         }
         for (String key : before.keySet()) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), look(key, level));
+        return true;
+    }
+
+    /**
+     * 2026-11-14: a file saved before the look rows changed (before: the rows it saved, LOOK_BEFORE_21), on a palette whose colours are all
+     * the palette's and whose every look setting is still that row's (or already the new one's; alsoBefore: older settings' old defaults,
+     * for a file saved before the palettes set them), takes the palette's new row and stays on it: the player chose the palette, not those
+     * numbers. A look setting the player changed keeps the file as it is. Returns whether it moved the file.
+     */
+    static boolean moveOldRows(VisualsConfig c, int[][] before, java.util.Map<String, Integer> alsoBefore) {
+        int level = c.colourPreset;
+        if (!isLevel(level)) return false;
+        for (Colour colour : Colour.values()) if (c.colour(colour) != value(colour, level)) return false;
+        for (int i = 0; i < LOOK_KEYS.length; i++) {
+            int v = VisualsOptionLayout.get(c, VisualsOptionLayout.item(LOOK_KEYS[i]));
+            Integer also = alsoBefore.get(LOOK_KEYS[i]);
+            if (v != LOOK[level][i] && v != before[level][i] && (also == null || v != also)) return false;
+        }
+        for (int i = 0; i < LOOK_KEYS.length; i++) VisualsOptionLayout.set(c, VisualsOptionLayout.item(LOOK_KEYS[i]), LOOK[level][i]);
         return true;
     }
 

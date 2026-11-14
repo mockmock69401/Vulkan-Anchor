@@ -163,7 +163,7 @@ public final class VisualsSettingsPage {
                     for (String key : VisualsPresets.VALUES.keySet()) {
                         Option<?> o = byKey.get(key);
                         //Session 11: the anime clouds are a look the levels keep (VisualsPresets.keepsLook)
-                        if (o != null && !VisualsPresets.keepsLook(key, intValue(o))) show(o, VisualsOptionLayout.item(key), VisualsPresets.value(key, level));
+                        if (o != null && !VisualsPresets.keepsLook(key, intValue(o), k -> byKey.containsKey(k) ? intValue(byKey.get(k)) : Integer.MIN_VALUE)) show(o, VisualsOptionLayout.item(key), VisualsPresets.value(key, level));
                     }
                 } finally {
                     linking[0] = false;
@@ -186,7 +186,7 @@ public final class VisualsSettingsPage {
             Option<?> o = byKey.get(key);
             if (o == null) continue;
             boolean refreshes = o instanceof SwitchOption || o instanceof CyclingOption;
-            boolean palette = key.equals(ColourPresets.CLOUD_KEY);
+            boolean palette = key.equals(ColourPresets.CLOUD_KEY) || key.equals(ColourPresets.AURORA_KEY);
             o.setOnChange(() -> {
                 follow.run();
                 if (palette) paletteFollow.run();
@@ -223,6 +223,12 @@ public final class VisualsSettingsPage {
                 if (clouds != null) {
                     int style = ColourPresets.cloudStyle(level, intValue(clouds), performance == null ? VisualsPresets.CUSTOM : intValue(performance));
                     if (style != intValue(clouds)) show(clouds, VisualsOptionLayout.item(ColourPresets.CLOUD_KEY), style);
+                }
+                //2026-11-14: Horror shows the auroras off; another palette takes them back to the performance preset's mode
+                Option<?> aurora = byKey.get(ColourPresets.AURORA_KEY);
+                if (aurora != null) {
+                    int mode = ColourPresets.aurora(level, intValue(aurora), performance == null ? VisualsPresets.CUSTOM : intValue(performance));
+                    if (mode != intValue(aurora)) show(aurora, VisualsOptionLayout.item(ColourPresets.AURORA_KEY), mode);
                 }
             } finally {
                 linking[0] = false;

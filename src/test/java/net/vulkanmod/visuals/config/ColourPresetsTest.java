@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.config;
 
+import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
@@ -318,6 +319,90 @@ class ColourPresetsTest {
         VisualsConfig kept = VisualsConfig.read(f);
         assertEquals(130, kept.contrast);
         assertEquals(100, kept.exposure);
+        assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
+    }
+
+    /**
+     * 2026-11-14 (the user): Anime's saturation 105 and fog 30; every other palette's bloom and fog at most 40; Horror turns the auroras
+     * off, the performance presets keep them off on it, and another palette takes them back to the preset's mode. A file on an old row
+     * takes the new one (Horror also the auroras off) and stays on its palette; a tuned one keeps its values.
+     */
+    @Test
+    void thePalettesTrimBloomAndFogAndHorrorTurnsTheAurorasOff(@TempDir Path tmp) throws Exception {
+        assertEquals(105, ColourPresets.look("saturation", ColourPresets.ANIME));
+        assertEquals(30, ColourPresets.look("fog_strength", ColourPresets.ANIME));
+        for (int level = 0; level < ColourPresets.LEVELS; level++) {
+            assertTrue(ColourPresets.look("bloom_strength", level) <= 40, "bloom, palette " + level);
+            assertTrue(ColourPresets.look("fog_strength", level) <= 40, "fog, palette " + level);
+        }
+
+        VisualsConfig c = new VisualsConfig();
+        VisualsPresets.apply(c, VisualsPresets.HIGH);
+        int highAurora = VisualsPresets.value(ColourPresets.AURORA_KEY, VisualsPresets.HIGH);
+        assertNotEquals(CelestialUniforms.AURORA_OFF, highAurora);
+        ColourPresets.apply(c, ColourPresets.HORROR);
+        assertEquals(CelestialUniforms.AURORA_OFF, c.aurora);
+        assertEquals(ColourPresets.HORROR, ColourPresets.detect(c));
+        assertEquals(VisualsPresets.HIGH, VisualsPresets.detect(c), "the preset keeps Horror's auroras off");
+        VisualsPresets.apply(c, VisualsPresets.ULTRA);
+        assertEquals(CelestialUniforms.AURORA_OFF, c.aurora, "a preset keeps them off on Horror");
+        assertEquals(ColourPresets.HORROR, ColourPresets.detect(c));
+        c.aurora = VisualsPresets.value(ColourPresets.AURORA_KEY, VisualsPresets.ULTRA);
+        assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c), "Horror needs the auroras off");
+        ColourPresets.apply(c, ColourPresets.HORROR);
+        ColourPresets.apply(c, ColourPresets.REALISTIC);
+        assertEquals(VisualsPresets.value(ColourPresets.AURORA_KEY, VisualsPresets.ULTRA), c.aurora, "leaving Horror restores the preset's");
+        VisualsConfig potato = new VisualsConfig();
+        VisualsPresets.apply(potato, VisualsPresets.POTATO);
+        ColourPresets.apply(potato, ColourPresets.ANIME);
+        assertEquals(VisualsPresets.value(ColourPresets.AURORA_KEY, VisualsPresets.POTATO), potato.aurora);
+        VisualsConfig custom = new VisualsConfig();
+        custom.preset = VisualsPresets.CUSTOM;
+        custom.aurora = CelestialUniforms.AURORA_OFF;
+        ColourPresets.apply(custom, ColourPresets.CINEMATIC);
+        assertEquals(CelestialUniforms.AURORA_OFF, custom.aurora, "under Custom the player's off stays");
+        VisualsConfig plain = new VisualsConfig();
+        plain.aurora = CelestialUniforms.AURORA_OFF;
+        assertFalse(VisualsPresets.keepsLook(ColourPresets.AURORA_KEY, CelestialUniforms.AURORA_OFF,
+                key -> VisualsOptionLayout.get(plain, VisualsOptionLayout.item(key))), "off is kept only on Horror");
+
+        Path f = tmp.resolve("old.json");
+        for (int revision : new int[]{20, 17, 15}) {
+            for (int palette = 0; palette < ColourPresets.LEVELS; palette++) {
+                VisualsConfig old = new VisualsConfig();
+                VisualsPresets.apply(old, VisualsPresets.HIGH);
+                ColourPresets.apply(old, palette);
+                for (int i = 0; i < ColourPresets.LOOK_KEYS.length; i++) {
+                    VisualsOptionLayout.set(old, VisualsOptionLayout.item(ColourPresets.LOOK_KEYS[i]), ColourPresets.LOOK_BEFORE_21[palette][i]);
+                }
+                if (revision < 18) {
+                    for (var e : ColourPresets.TONE_BEFORE_18.entrySet()) VisualsOptionLayout.set(old, VisualsOptionLayout.item(e.getKey()), e.getValue());
+                }
+                if (revision < 16) old.moonlight = ColourPresets.MOONLIGHT_BEFORE_16;
+                old.aurora = highAurora;
+                old.colourPreset = palette;
+                old.preset = VisualsPresets.HIGH;
+                old.write(f);
+                Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": " + revision));
+                VisualsConfig read = VisualsConfig.read(f);
+                String at = "palette " + palette + ", revision " + revision;
+                for (String key : ColourPresets.LOOK_KEYS) {
+                    assertEquals(ColourPresets.look(key, palette), VisualsOptionLayout.get(read, VisualsOptionLayout.item(key)), key + ", " + at);
+                }
+                assertEquals(palette == ColourPresets.HORROR ? CelestialUniforms.AURORA_OFF : highAurora, read.aurora, at);
+                assertEquals(palette, read.colourPreset, at);
+                assertEquals(VisualsPresets.HIGH, read.preset, at);
+            }
+        }
+        VisualsConfig tuned = new VisualsConfig();
+        ColourPresets.apply(tuned, ColourPresets.CINEMATIC);
+        tuned.bloomStrength = 60;
+        tuned.fogStrength = 90;
+        tuned.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 20"));
+        VisualsConfig kept = VisualsConfig.read(f);
+        assertEquals(60, kept.bloomStrength);
+        assertEquals(90, kept.fogStrength);
         assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
     }
 

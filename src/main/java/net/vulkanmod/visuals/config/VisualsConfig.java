@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
@@ -60,8 +61,13 @@ public class VisualsConfig {
      * 19 (2026-11-13, session 20): Soft Shadows (softShadows), which the presets set; a file on a level takes that level's value and stays
      * on it, any other file the default.
      * 20 (2026-11-14, session 20): Wet Ground (wetGround), which the presets set; likewise.
+     * 21 (2026-11-14): the palettes' bloom, saturation and fog changed (ColourPresets.LOOK; Default's with VisualsConfig's defaults), and
+     * Horror turns the auroras off; a file still on a palette's old row takes the new one and stays on it (ColourPresets.moveOldRows), a
+     * file on Horror turns the auroras off and stays on it; any other file keeps its values.
      */
-    private static final int REVISION = 20;
+    private static final int REVISION = 21;
+    /** 2026-11-14: the first revision with the trimmed palette rows and Horror's auroras off. */
+    static final int PALETTE_TRIM_REVISION = 21;
     /** Session 20: the first revision with Soft Shadows. */
     static final int SOFT_SHADOWS_REVISION = 19;
     /** Session 20: the first revision with Wet Ground. */
@@ -188,6 +194,14 @@ public class VisualsConfig {
         if (fileRevision >= FIRST_LOOK_REVISION && fileRevision < PALETTE_LOOK_REVISION) ColourPresets.moveOldLook(c);
         //2026-11-12: a file on a palette before the palettes set the moonlight takes the palette's (first: the Anime check reads it)
         //2026-11-13: likewise the tone block (exposure, tone mapping, contrast, warm sun / cool shade); one move for a file older than both
+        //2026-11-14: a file still on a palette's old row (with the moonlight and tone block at their old defaults, for a file older than
+        // the palettes setting them) takes the new row; first, so the moves below see it
+        if (fileRevision < PALETTE_TRIM_REVISION) {
+            java.util.Map<String, Integer> also = new java.util.HashMap<>();
+            if (fileRevision < TONE_LOOK_REVISION) also.putAll(ColourPresets.TONE_BEFORE_18);
+            if (fileRevision < MOONLIGHT_REVISION) also.put("moonlight", ColourPresets.MOONLIGHT_BEFORE_16);
+            ColourPresets.moveOldRows(c, ColourPresets.LOOK_BEFORE_21, also);
+        }
         if (fileRevision < TONE_LOOK_REVISION) {
             java.util.Map<String, Integer> before = new java.util.HashMap<>(ColourPresets.TONE_BEFORE_18);
             if (fileRevision < MOONLIGHT_REVISION) before.put("moonlight", ColourPresets.MOONLIGHT_BEFORE_16);
@@ -198,6 +212,12 @@ public class VisualsConfig {
                 && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_ANIME
                 : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
             c.cloudStyle = CloudMath.STYLE_ANIME;
+        }
+        //2026-11-14: a file on Horror before it turned the auroras off turns them off (and stays on the palette)
+        if (fileRevision < PALETTE_TRIM_REVISION && c.colourPreset == ColourPresets.HORROR
+                && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.AURORA_KEY) ? CelestialUniforms.AURORA_OFF
+                : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.HORROR) {
+            c.aurora = CelestialUniforms.AURORA_OFF;
         }
         c.colourPreset = ColourPresets.validated(c);
         if (c.revision < REVISION) c.revision = REVISION;
@@ -331,9 +351,9 @@ public class VisualsConfig {
     public int contrast = 100;
     public int saturation = 94;//2026-10-23: the user's default (was 107); saved settings keep their value
     public int gradeStrength = 0;
-    public int bloomStrength = 45;//2026-10-25: the user's default (was 60; 40, 12 before 2026-10-22); saved settings keep their value
+    public int bloomStrength = 35;//2026-11-14: with the Default palette's row (was 45; 60, 40, 12 before); saved settings keep their value
     public int vignetteStrength = 100;
-    public int fogStrength = 100;
+    public int fogStrength = 35;//2026-11-14: with the Default palette's row (was 100)
     /** Blocks of height fog scale: the fog hugs valleys and water. */
     public int fogHeight = 40;
     /** 2026-10-28: how thick the fog of rain and thunderstorms is (AtmosphereUniforms.weatherFog); 0 is the clear-weather fog. */

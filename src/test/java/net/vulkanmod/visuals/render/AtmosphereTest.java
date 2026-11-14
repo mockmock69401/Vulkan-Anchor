@@ -28,7 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** W4: the sky, the haze, the light colours, the shafts and the uniform blocks (AtmosphereMath mirrors atmosphere.glsl). */
 class AtmosphereTest {
     private static final long SERIAL = 11;
-    private static final PostProcessSettings SETTINGS = PostProcessSettings.from(new VisualsConfig());
+    /** The haze model at full fog strength (2026-11-14: the default is now the Default palette's 35%; these tests check the model). */
+    private static final PostProcessSettings SETTINGS = settings(c -> {
+    });
     private static final Matrix4f PROJ = new Matrix4f().perspective((float) Math.toRadians(70), 16f / 9f, 0.05f, 1000f);
     private static final float NOON = 0, MIDNIGHT = 0.5f;
     /** Sun height 0.05 (sin of about 2.9 degrees) in the west (-x): the sunset of S2. */
@@ -59,6 +61,7 @@ class AtmosphereTest {
 
     private static PostProcessSettings settings(java.util.function.Consumer<VisualsConfig> edit) {
         VisualsConfig c = new VisualsConfig();
+        c.fogStrength = 100;
         edit.accept(c);
         return PostProcessSettings.from(c);
     }
