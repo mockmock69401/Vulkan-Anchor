@@ -19,6 +19,7 @@ import net.vulkanmod.config.video.WindowMode;
 import net.vulkanmod.render.chunk.build.light.LightMode;
 import net.vulkanmod.render.optimization.AdaptiveChunkUploadBudget;
 import net.vulkanmod.vulkan.Renderer;
+import net.vulkanmod.visuals.camera.StepSmoothMath;
 import net.vulkanmod.vulkan.device.DeviceManager;
 
 import java.util.ArrayList;
@@ -133,6 +134,20 @@ public abstract class Options {
             RefreshRate.updateActiveState();
         });
 
+        //2026-11-14 (session 22): step smoothing next to the view bobbing; the strength greys out with the switch off
+        var smoothSteps = new SwitchOption(Component.translatable("vulkanmod.options.smoothSteps"),
+                value -> config.smoothSteps = value,
+                () -> config.smoothSteps)
+                .setTooltip(Component.translatable("vulkanmod.options.smoothSteps.tooltip"));
+        var stepSmoothing = new RangeOption(Component.translatable("vulkanmod.options.stepSmoothing"),
+                StepSmoothMath.STRENGTH_MIN, StepSmoothMath.STRENGTH_MAX, 10,
+                value -> Component.nullToEmpty(value + "%"),
+                value -> config.stepSmoothing = value,
+                () -> config.stepSmoothing)
+                .setTooltip(Component.translatable("vulkanmod.options.stepSmoothing.tooltip"));
+        stepSmoothing.setActivationFn(smoothSteps::getNewValue);
+        smoothSteps.setOnChange(stepSmoothing::updateActiveState);
+
         return new OptionBlock[]{
                 new OptionBlock("", new Option<?>[]{
                         windowModeOption,
@@ -185,6 +200,8 @@ public abstract class Options {
                                  (value) -> minecraftOptions.bobView().set(value),
                                  () -> minecraftOptions.bobView().get())
                                 .setTooltip(Component.translatable("vulkanmod.options.viewBobbing.tooltip")),
+                        smoothSteps,
+                        stepSmoothing,
                         new CyclingOption<>(Component.translatable("options.attackIndicator"),
                                 AttackIndicatorStatus.values(),
                                  value -> minecraftOptions.attackIndicator().set(value),

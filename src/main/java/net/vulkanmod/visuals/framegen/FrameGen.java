@@ -228,7 +228,9 @@ public final class FrameGen {
         if (e == null) return;
         Camera c = mc.gameRenderer.getMainCamera();
         float eye = e.getEyeHeight();
-        sample = new CameraSample(System.nanoTime(), mc.getTimer().getGameTimeDeltaPartialTick(true), e.xo, e.yo + eye, e.zo, e.getX(), e.getY() + eye, e.getZ(),
+        //session 22: the eye path with the step smoothing's offset at the tick's ends (StepSmoothing; 0 for other entities)
+        double step0 = net.vulkanmod.visuals.camera.StepSmoothing.offsetAt(e, 0f), step1 = net.vulkanmod.visuals.camera.StepSmoothing.offsetAt(e, 1f);
+        sample = new CameraSample(System.nanoTime(), mc.getTimer().getGameTimeDeltaPartialTick(true), e.xo, e.yo + eye + step0, e.zo, e.getX(), e.getY() + eye + step1, e.getZ(),
                 camX, camY, camZ, c.getYRot(), c.getXRot());
     }
 
