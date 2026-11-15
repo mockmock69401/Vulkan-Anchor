@@ -177,6 +177,12 @@ public class MinecraftMixin {
         }
     }
 
+    //2026-11-15 (session 23): loading goes on while the window is minimized (MinimizedLoading)
+    @Inject(method = "runTick", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;noRender:Z", opcode = Opcodes.GETFIELD, ordinal = 0))
+    private void vulkanmod$loadWhileMinimized(boolean tick, CallbackInfo ci) {
+        net.vulkanmod.vulkan.MinimizedLoading.advance((Minecraft) (Object) this);
+    }
+
     @Redirect(method = "setScreen", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;noRender:Z", opcode = Opcodes.PUTFIELD))
     private void keepVar(Minecraft instance, boolean value) { }
 

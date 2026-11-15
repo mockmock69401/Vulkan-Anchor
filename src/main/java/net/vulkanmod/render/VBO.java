@@ -349,6 +349,8 @@ public class VBO implements SubLevelShadowCasters.Drawable {
 
     public void drawWithShader(Matrix4f MV, Matrix4f P, ShaderInstance shader) {
         if (!hasGeometry() || shader == null) return;
+        //Session 23: frames skipped (a minimized window; MinimizedLoading still runs the loading screen's logic)
+        if (Renderer.skipRendering) return;
         RenderSystem.assertOnRenderThread();
         if (!shader.getVertexFormat().equals(this.format) && net.vulkanmod.compat.RuntimeOptions.diagnosticsEnabled()) {
             net.vulkanmod.Initializer.LOGGER.warn("Vertex format mismatch for shader {}", shader.getName());
@@ -388,6 +390,7 @@ public class VBO implements SubLevelShadowCasters.Drawable {
 
     public void drawWithShader(Matrix4f MV, Matrix4f P, GraphicsPipeline pipeline) {
         if (!hasGeometry() || pipeline == null) return;
+        if (Renderer.skipRendering) return;
         RenderSystem.assertOnRenderThread();
         saveMatrices(null);
         Throwable failure = null;
@@ -491,7 +494,7 @@ public class VBO implements SubLevelShadowCasters.Drawable {
     }
 
     public void draw() {
-        if (hasGeometry()) {
+        if (hasGeometry() && !Renderer.skipRendering) {
             RenderSystem.assertOnRenderThread();
 
             Renderer renderer = Renderer.getInstance();

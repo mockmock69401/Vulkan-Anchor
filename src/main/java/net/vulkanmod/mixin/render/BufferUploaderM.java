@@ -60,6 +60,8 @@ public class BufferUploaderM {
         try (meshData) {
             MeshData.DrawState parameters = meshData.drawState();
             if (parameters.vertexCount() <= 0) return;
+            //Frames skipped (a minimized window): nothing to draw into (MinimizedLoading still runs the loading screen's logic)
+            if (Renderer.skipRendering) return;
             Renderer renderer = Renderer.getInstance();
             Pipeline pipeline = renderer.getBoundPipeline();
             var scope = SublevelRenderScope.current().orElse(null);
