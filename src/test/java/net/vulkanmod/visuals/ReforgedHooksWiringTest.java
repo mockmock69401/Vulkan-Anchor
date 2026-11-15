@@ -39,8 +39,13 @@ class ReforgedHooksWiringTest {
 
     @Test
     void eachBlockNotesItsEmissionFirst() throws Exception {
+        //Session 23: the marks moved to setMarks, which renderFrapi (a FRAPI model through vanilla's block renderer) calls too
+        List<String> marks = calls(BLOCK, "setMarks");
+        assertTrue(inOrder(marks, List.of("BlockState.getLightEmission", "FoliageMarker.setEmissive")), marks.toString());
         List<String> c = calls(BLOCK, "renderBatched");
-        assertTrue(inOrder(c, List.of("BlockState.getLightEmission", "FoliageMarker.setEmissive", "BlockRenderer.tessellateBlock")), c.toString());
+        assertTrue(inOrder(c, List.of("BlockRenderer.setMarks", "BlockRenderer.tessellateBlock")), c.toString());
+        List<String> frapi = calls(BLOCK, "renderFrapi");
+        assertTrue(inOrder(frapi, List.of("BlockRenderer.setMarks", "BlockRenderDispatcher.renderBatched")), frapi.toString());
     }
 
     /** 2026-10-15: a full mesh upload of the current section releases its held light change. */

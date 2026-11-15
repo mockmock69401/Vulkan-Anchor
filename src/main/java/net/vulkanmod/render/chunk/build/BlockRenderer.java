@@ -1,5 +1,6 @@
 package net.vulkanmod.render.chunk.build;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import it.unimi.dsi.fastutil.objects.Object2ByteLinkedOpenHashMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.color.block.BlockColors;
@@ -81,8 +82,31 @@ public class BlockRenderer {
         return model.getRenderTypes(blockState, randomSource, modelData);
     }
 
-    public void renderBatched(BlockState blockState, BlockPos blockPos, Vector3f pos, TerrainBufferBuilder bufferBuilder,
-                              BakedModel model, ModelData modelData, RenderType renderType) {
+    private final TerrainVertexConsumer vanillaSink = new TerrainVertexConsumer();
+    private final PoseStack vanillaPose = new PoseStack();
+
+    /** Whether the model draws through a FRAPI renderer, so renderFrapi instead of renderBatched (FrapiModels). */
+    public static boolean drawsThroughRenderer(BakedModel model) {
+        return FrapiModels.needsRenderer(model);
+    }
+
+    /**
+     * Session 23: a FRAPI model (FrapiModels) through vanilla's block renderer, where the FRAPI renderer draws it (Continuity's textures
+     * among them), into this section's buffer through TerrainVertexConsumer, with the same visuals marks as renderBatched. Vanilla's
+     * renderer places the block (its model offset included) under the pose, here the block's place in the section.
+     */
+    public void renderFrapi(BlockState blockState, BlockPos blockPos, Vector3f pos, TerrainBufferBuilder bufferBuilder,
+                            BakedModel model, ModelData modelData, RenderType renderType) {
+        setMarks(blockState, blockPos);
+        PoseStack pose = this.vanillaPose;
+        pose.setIdentity();
+        pose.translate(pos.x(), pos.y(), pos.z());
+        randomSource.setSeed(blockState.getSeed(blockPos));
+        Minecraft.getInstance().getBlockRenderer().renderBatched(blockState, blockPos, resources.region, pose,
+                this.vanillaSink.begin(bufferBuilder, pos.y()), true, randomSource, modelData, renderType);
+    }
+
+    private void setMarks(BlockState blockState, BlockPos blockPos) {
         //The visuals (glow pass): whether this block emits light, for its quads' mark
         FoliageMarker.setEmissive(blockState.getLightEmission() > 0);
         //The visuals (2026-10-28): whether it is nether quartz ore, whose specks glow (2026-10-29, the user: the other ores' glow looked
@@ -92,6 +116,12 @@ public class BlockRenderer {
         FoliageMarker.setSmooth(FoliageMarker.smoothKind(blockState));
         //The visuals (wind): whether its vertices sway, and how (session 20: a hanging block by its depth below its anchor)
         FoliageMarker.setSwayAt(resources.region, blockPos, blockState);
+    }
+
+    public void renderBatched(BlockState blockState, BlockPos blockPos, Vector3f pos, TerrainBufferBuilder bufferBuilder,
+                              BakedModel model, ModelData modelData, RenderType renderType) {
+        //The visuals' marks (glow, ore, smooth, sway) for this block's quads
+        setMarks(blockState, blockPos);
         this.pos = pos;
         this.blockPos = blockPos;
         this.blockState = blockState;
