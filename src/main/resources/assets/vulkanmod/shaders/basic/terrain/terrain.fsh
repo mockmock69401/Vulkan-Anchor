@@ -37,6 +37,8 @@ layout(location = 1) in vec4 vertexColor;
 layout(location = 2) in vec2 texCoord0;
 layout(location = 3) in vec2 lightLevels;
 layout(location = 4) in vec3 albedoTint;
+//Session 23 (terrain.vsh): a solid-layer block's fragment, whose texture alpha vanilla ignores
+layout(location = 6) flat in int terrainOpaque;
 #ifdef TERRAIN_PBR
 layout(location = 5) in vec3 relPos;
 #endif
@@ -51,6 +53,9 @@ void main() {
 #else
     vec4 texel = texture(Sampler0, texCoord0);
 #endif
+    if (terrainOpaque != 0) {
+        texel.a = 1.0;
+    }
     vec4 color = texel * vertexColor;
     //Water (terrain.vsh's WATER_FLAG in the vertex alpha): its texture at WaterAlpha of its opacity
     if (vertexColor.a > 1.5) {

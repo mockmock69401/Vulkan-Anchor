@@ -34,6 +34,9 @@ public class TerrainBufferBuilder {
     private boolean indexOnly;
 
     protected VertexBuilder vertexBuilder;
+    /** The compressed vertex's last 4 bytes (CustomVertexFormat's UV2, unused before) carry the terrain flags (see setOpaque). */
+    private final boolean flagged;
+    private int flags;
 
     public TerrainBufferBuilder(int size) {
         this.bufferPtr = ALLOCATOR.malloc(size);
@@ -42,6 +45,21 @@ public class TerrainBufferBuilder {
         this.format = PipelineManager.TERRAIN_VERTEX_FORMAT;
         this.vertexBuilder = PipelineManager.TERRAIN_VERTEX_FORMAT == CustomVertexFormat.COMPRESSED_TERRAIN
                 ? new VertexBuilder.CompressedVertexBuilder() : new VertexBuilder.DefaultVertexBuilder();
+        this.flagged = this.vertexBuilder instanceof VertexBuilder.CompressedVertexBuilder;
+    }
+
+    /** The flag bit in UV2.x (terrain.vsh, shadow/vanilla.vert). */
+    public static final int TERRAIN_OPAQUE_FLAG = 1;
+
+    /**
+     * 2026-11-15 (session 23, Conquest's coal ore): the vertices that follow are a solid-layer block's. Vanilla draws the solid layer
+     * without an alpha test or blending, so a texture's alpha means nothing there; we draw the solid layer in the cutout pass
+     * (uniqueOpaqueLayer, BuildTask's compaction), where it cut holes (Conquest Reforged's coal ore, Faithful's netherite) and leaked
+     * into the scene's mark codes (alpha 245 / 246 read as polished / metal: the ore's specks mirrored the sky). terrain.vsh passes the
+     * flag on and the terrain fragment shaders take such texels as opaque.
+     */
+    public void setOpaque(boolean opaque) {
+        this.flags = opaque ? TERRAIN_OPAQUE_FLAG : 0;
     }
 
     public void ensureCapacity() {
@@ -205,6 +223,7 @@ public class TerrainBufferBuilder {
     public void vertex(float x, float y, float z, int color, float u, float v, int light, int packedNormal) {
         final long ptr = this.bufferPtr + this.nextElementByte;
         this.vertexBuilder.vertex(ptr, x, y, z, color, u, v, light, packedNormal);
+        if (this.flagged) MemoryUtil.memPutInt(ptr + 16, this.flags);
         this.endVertex();
     }
 

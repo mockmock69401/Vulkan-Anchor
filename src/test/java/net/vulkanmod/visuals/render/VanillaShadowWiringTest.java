@@ -68,10 +68,13 @@ class VanillaShadowWiringTest {
         assertTrue(draw.contains("VkGraphicsProgram.pushConstants"), "the area's offset per area");
     }
 
-    /** Gate G7o: VulkanMod's COMPRESSED_TERRAIN is 20 bytes (short4, ubyte4, ushort2, short2); the attributes sit at 0, 8 and 12. */
+    /**
+     * Gate G7o: VulkanMod's COMPRESSED_TERRAIN is 20 bytes (short4, ubyte4, ushort2, short2); the attributes sit at 0, 8 and 12, and
+     * (session 23) the terrain flags in short2 at 16.
+     */
     @Test
     void theVertexLayoutIsVulkanModsCompressedTerrain() {
         assertEquals(20, VkVanillaShadows.TERRAIN.stride());
-        assertArrayEquals(new int[]{0, 8, 12}, VkVanillaShadows.TERRAIN.offsets());
+        assertArrayEquals(new int[]{0, 8, 12, 16}, VkVanillaShadows.TERRAIN.offsets());
     }
 }
