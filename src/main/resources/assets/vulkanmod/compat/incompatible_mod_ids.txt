@@ -8,6 +8,9 @@ embeddium
 rubidium
 xenon
 embeddiumplus
+# Rubidium Extra (rubidium-extra-*.jar) declares embeddium_extra; TexTrue's Embeddium Options also ships on its own
+embeddium_extra
+textrues_embeddium_options
 chloride
 flerovium
 sodiumextra

@@ -119,6 +119,9 @@ class IncompatibleModDisablerTest {
         List<String> ids = List.of(CompatMods.loadLines("/assets/vulkanmod/compat/incompatible_mod_ids.txt"));
 
         assertTrue(ids.containsAll(List.of("embeddium", "oculus", "sodiumoptionsapi", "colorwheel", "iris_search")), ids.toString());
+        // rubidium-extra-*.jar declares embeddium_extra (Conquest the Kingdom's Throne ships it)
+        assertTrue(ids.contains("embeddium_extra"), ids.toString());
+        assertFalse(ids.contains("rubidium-extra"));
         assertTrue(ids.containsAll(List.of("modernui", "acceleratedrendering", "particle_core", "modpackupdatechecker")), ids.toString());
         // Jar names, not ids: these would never match a mod
         assertFalse(ids.contains("irissearch"));
