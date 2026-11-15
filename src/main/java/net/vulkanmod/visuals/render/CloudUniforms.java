@@ -115,6 +115,9 @@ public final class CloudUniforms {
         v[16] = day ? sun.x : -sun.x;
         v[17] = day ? sun.y : -sun.y;
         v[18] = day ? sun.z : -sun.z;
+        //2026-11-15 (session 25): CloudLight.light.w the desert's clearing of the far clouds (clouds.glsl cloudColour; 0: all kept)
+        float clear = BiomeSky.cloudClear();
+        v[19] = clear;
         float lodDistance = lodSections * CloudMath.LOD_BLOCKS_PER_SECTION;
         boolean on = settings.enabled() && settings.farClouds() && layer && cloudMapReady && lodDistance > 0 && Float.isFinite(lodDistance);
         if (on) {
@@ -129,14 +132,14 @@ public final class CloudUniforms {
                 v[1] = CloudMath.realThickness(settings.cloudSize());
                 float phase = settings.taa() ? (float) ((serial * (double) REAL_PHASE_STEP) % 1.0) : 0;
                 v[6] = 1 + Math.max(0, Math.min(2, settings.cloudQuality())) + Math.max(0, Math.min(REAL_PHASE_MAX, phase));
-                v[7] = realCover(settings.cloudCoverage(), frame.rain(), frame.thunder());
+                v[7] = realCover(settings.cloudCoverage(), frame.rain(), frame.thunder()) * (1 - clear);
             } else if (anime) {
                 //Session 11: the anime layer, its quality after CloudMath.ANIME_Z, the same jitter phase and coverage
                 v[0] += CloudMath.ANIME_LIFT;
                 v[1] = CloudMath.animeThickness(settings.cloudSize());
                 float phase = settings.taa() ? (float) ((serial * (double) REAL_PHASE_STEP) % 1.0) : 0;
                 v[6] = CloudMath.ANIME_Z + Math.max(0, Math.min(2, settings.cloudQuality())) + Math.max(0, Math.min(REAL_PHASE_MAX, phase));
-                v[7] = realCover(settings.cloudCoverage(), frame.rain(), frame.thunder());
+                v[7] = realCover(settings.cloudCoverage(), frame.rain(), frame.thunder()) * (1 - clear);
             }
         }
         return new Values(on, v);

@@ -2,6 +2,7 @@ package net.vulkanmod.visuals.config;
 
 import net.vulkanmod.visuals.fsr.FsrSettings;
 import net.vulkanmod.visuals.particle.VanillaParticles;
+import net.vulkanmod.visuals.render.BiomeSkyMath;
 import net.vulkanmod.visuals.render.CausticMath;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.WetGroundMath;
@@ -164,6 +165,9 @@ public final class VisualsOptionLayout {
                             new Item("star_count", Kind.PERCENT, 0, StarMath.COUNT_MAX, Impact.NONE, null),
                             new Item("star_size", Kind.PERCENT, StarMath.SIZE_MIN, StarMath.SIZE_MAX, Impact.NONE, null),
                             new Item("star_brightness", Kind.PERCENT, 0, StarMath.BRIGHTNESS_MAX, Impact.NONE, null),
+                            //2026-11-15 (session 25): a desert's darker, deeper night sky and brighter stars; its cloudless sky
+                            percent("desert_night", 0, BiomeSkyMath.NIGHT_MAX, Impact.NONE),
+                            percent("desert_clouds", 0, BiomeSkyMath.CLEAR_MAX, Impact.NONE),
                             //2026-11-12 (session 14 follow-up): the far clouds and the shader weather at half resolution (much cheaper, a little
                             // softer); on in the Potato, Low and Medium presets
                             toggle("half_res_effects", Impact.NONE, null))),
@@ -333,6 +337,8 @@ public final class VisualsOptionLayout {
             case "star_count" -> c.starCount;
             case "star_size" -> c.starSize;
             case "star_brightness" -> c.starBrightness;
+            case "desert_night" -> c.desertNight;
+            case "desert_clouds" -> c.desertClouds;
             case "shader_weather" -> c.shaderWeather ? 1 : 0;
             case "half_res_effects" -> c.halfResEffects ? 1 : 0;
             case "nether_heat_haze" -> c.netherHeatHaze;
@@ -423,6 +429,8 @@ public final class VisualsOptionLayout {
             case "star_count" -> c.starCount = v;
             case "star_size" -> c.starSize = v;
             case "star_brightness" -> c.starBrightness = v;
+            case "desert_night" -> c.desertNight = v;
+            case "desert_clouds" -> c.desertClouds = v;
             case "shader_weather" -> c.shaderWeather = v != 0;
             case "half_res_effects" -> c.halfResEffects = v != 0;
             case "nether_heat_haze" -> c.netherHeatHaze = v;
