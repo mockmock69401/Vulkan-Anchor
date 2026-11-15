@@ -174,6 +174,8 @@ public class BuildTask extends ChunkTask {
                             ModelData modelData = getModelData(blockPos, blockState, model);
                             randomSource.setSeed(blockState.getSeed(blockPos));
                             ChunkRenderTypeSet renderTypes = model.getRenderTypes(blockState, randomSource, modelData);
+                            //Session 23: a FRAPI model (Continuity's) draws through vanilla's block renderer, once (it emits all its quads)
+                            boolean frapi = BlockRenderer.drawsThroughRenderer(model);
 
                             for (RenderType chunkRenderType : renderTypes) {
                                 if (this.worldLayers.isGhost(chunkRenderType)) {
@@ -197,6 +199,11 @@ public class BuildTask extends ChunkTask {
                                 bufferBuilder.setOpaque(TerrainRenderType.get(chunkRenderType) == TerrainRenderType.SOLID);
 
                                 pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
+                                if (frapi) {
+                                    blockRenderer.renderFrapi(blockState, blockPos, pos, bufferBuilder, model, modelData, chunkRenderType);
+                                    bufferBuilder.setOpaque(false);
+                                    break;
+                                }
                                 blockRenderer.renderBlock(blockState, blockPos, pos, bufferBuilder, model, modelData, chunkRenderType);
                                 bufferBuilder.setOpaque(false);
                             }
