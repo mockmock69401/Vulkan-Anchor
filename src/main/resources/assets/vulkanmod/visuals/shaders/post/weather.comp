@@ -40,6 +40,11 @@ layout(location = 15) uniform vec4 splashParams;
 layout(location = 16) uniform vec4 waterRain;
 //2026-11-11, WeatherUniforms: each kind's type and size (weather.glsl's style: x rain's type, y snow's, z rain's size, w snow's)
 layout(location = 17) uniform vec4 weatherStyle;
+//2026-11-15 (session 25), WeatherUniforms: the sandstorm and the blizzard (weather.glsl weatherPixel's storm, sand and drift), the sand's tint
+layout(location = 18) uniform vec4 stormParams;
+layout(location = 19) uniform vec4 sandMotion;
+layout(location = 20) uniform vec4 stormDrift;
+layout(location = 21) uniform vec4 sandTint;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -89,6 +94,18 @@ vec3 weatherLight(vec3 rel, bool snow) {
     return light*(snow ? snowTint.rgb : rainTint.rgb);
 }
 
+//2026-11-15 (session 25): a sand grain (and the dust) lit as a drop, in the sand's tint (no lift: sand is not white)
+vec3 weatherSandLight(vec3 rel) {
+    vec2 l = vec2(0.0, 15.0);
+    if (lightCamera.w > 0.0) {
+        int b = weatherLightByte(ivec3(lightCamera.xyz) + ivec3(floor(lightFrac.xyz + rel)));
+        if (b >= 0) {
+            l = vec2(float(b >> 4), float(b & 15));
+        }
+    }
+    return texture(lightmapTex, (clamp(l, 0.0, 15.0) + 0.5)/16.0).rgb*sandTint.rgb;
+}
+
 //2026-11-10: the rings' drops (rainripple.glsl needs water.glsl's hash and ripple period)
 #import <vulkanmod:visuals/post/water.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
@@ -122,7 +139,8 @@ void main() {
     bool scene = scenePosition(q, qs, view);
     float sceneDist = scene ? length(view) : 1e30;
     vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(q, qs)));
-    vec4 acc = weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion, weatherStyle);
+    vec4 acc = weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion, weatherStyle, stormParams, sandMotion,
+            stormDrift);
     //2026-11-10: the splashes on the ground behind the drops
     if (scene && acc.a <= WEATHER_OPAQUE) {
         vec3 rel = mat3(invView)*view;

@@ -50,8 +50,10 @@ final class LevelPrecipitation implements PrecipitationMap.Columns {
 
     @Override
     public PrecipitationMap.Climate climate(int x, int y, int z) {
-        Biome biome = this.level.getBiome(this.pos.set(x, y, z)).value();
-        if (!biome.hasPrecipitation()) return PrecipitationMap.Climate.NONE;
+        net.minecraft.core.Holder<Biome> holder = this.level.getBiome(this.pos.set(x, y, z));
+        Biome biome = holder.value();
+        //2026-11-15 (session 25): a dry desert column takes the dust flag (a sandstorm blows sand over it)
+        if (!biome.hasPrecipitation()) return BiomeSky.isDesert(holder) ? PrecipitationMap.Climate.DUST : PrecipitationMap.Climate.NONE;
         boolean low = biome.getPrecipitationAt(this.pos.set(x, WeatherMath.WEATHER_TEMPERATURE_Y, z)) == Biome.Precipitation.SNOW;
         int line = PrecipitationMap.snowLine(h -> biome.getPrecipitationAt(this.pos.set(x, h, z)) == Biome.Precipitation.SNOW);
         return new PrecipitationMap.Climate(true, low, line);

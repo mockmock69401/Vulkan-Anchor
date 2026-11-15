@@ -21,6 +21,18 @@ import org.joml.Matrix4f;
 public final class WeatherUniforms {
     public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, INV_VIEW = 2, DEPTH_PARAMS = 3, WEATHER_FIRST = 4, CAMERA = 8, FRAC = 9,
             PARAMS = 10, RAIN = 11, SNOW = 12, RAIN_TINT = 13, SNOW_TINT = 14, SPLASH = 15, WATER = 16, STYLE = 17;
+    /** 2026-11-15 (session 25): the sandstorm and the blizzard: weatherPixel's storm, sand and drift, and the sand's tint. */
+    public static final int STORM = 18, SAND = 19, DRIFT = 20, SAND_TINT = 21;
+    /** The storm's time (stormParams.w) wraps here: the veils' noise repeats at WEATHER_WRAP cells after 0.15 per second. */
+    public static final double STORM_TIME_WRAP = WeatherMath.WEATHER_WRAP / 0.15;
+
+    /**
+     * 2026-11-15 (session 25): this frame's storm (StormMath): sand and blizzard strengths 0..2, the wind (x, z blocks per second), the snow's
+     * and the sand's drift (x, z blocks, wrapped at WEATHER_WRAP), and whether the map holds a desert column near the camera.
+     */
+    public record Storm(float sand, float blizzard, float[] wind, float[] snowDrift, float[] sandDrift, boolean dustNear) {
+        public static final Storm NONE = new Storm(0, 0, new float[2], new float[2], new float[2], false);
+    }
     /** Fall speeds (blocks per second): vanilla's rain texture falls about this fast, its snow a little over a block a second. */
     public static final float RAIN_FALL = 14.0f, SNOW_FALL = 1.5f;
     /**
@@ -42,7 +54,7 @@ public final class WeatherUniforms {
 
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f invView, boolean lodValid, float[] camera,
                          float[] frac, float[] params, float[] rain, float[] snow, float[] splash, float[] water, float[] rainTint, float[] snowTint,
-                         float[] style) {
+                         float[] style, float[] storm) {
         public void write(LooseUniformWriter w) {
             if (!this.on) return;
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection);
@@ -60,6 +72,12 @@ public final class WeatherUniforms {
             w.putVec4(SPLASH, this.splash[0], 0, 0, 0);
             w.putVec4(WATER, this.water[0], this.water[1], this.water[2], this.water[3]);
             w.putVec4(STYLE, this.style[0], this.style[1], this.style[2], this.style[3]);
+            //Session 25: the storm's four vec4 (all 0 without one: nothing drawn, the drift 0)
+            float[] s = this.storm != null ? this.storm : new float[16];
+            w.putVec4(STORM, s[0], s[1], s[2], s[3]);
+            w.putVec4(SAND, s[4], s[5], s[6], s[7]);
+            w.putVec4(DRIFT, s[8], s[9], s[10], s[11]);
+            w.putVec4(SAND_TINT, s[12], s[13], s[14], s[15]);
         }
 
         /** 2026-11-11: both kinds round (slot 17's types): VkPostProcess dispatches postWeather.ROUND, the pixel sprites compiled out. */
@@ -72,7 +90,7 @@ public final class WeatherUniforms {
     }
 
     public static Values off() {
-        return new Values(false, null, null, null, false, null, null, null, null, null, null, null, null, null, null);
+        return new Values(false, null, null, null, false, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /** Whether the shader draws the weather this frame instead of vanilla (the setting on, the post-process on, a frame to draw). */
@@ -90,12 +108,21 @@ public final class WeatherUniforms {
     public static Values compute(PostProcessSettings s, float rain, float thunder, boolean inFluid, Matrix4f invVanillaProjection, Matrix4f invLodProjection,
                                  Matrix4f invView, boolean lodValid, int height, double x, double y, double z, float[] velocity, double seconds,
                                  boolean rainNear, boolean snowNear, float[] water) {
+        return compute(s, rain, thunder, inFluid, invVanillaProjection, invLodProjection, invView, lodValid, height, x, y, z, velocity, seconds, rainNear,
+                snowNear, water, Storm.NONE);
+    }
+
+    /** Session 25: with this frame's storm (Storm.NONE: as before). */
+    public static Values compute(PostProcessSettings s, float rain, float thunder, boolean inFluid, Matrix4f invVanillaProjection, Matrix4f invLodProjection,
+                                 Matrix4f invView, boolean lodValid, int height, double x, double y, double z, float[] velocity, double seconds,
+                                 boolean rainNear, boolean snowNear, float[] water, Storm storm) {
+        if (storm == null) storm = Storm.NONE;
         if (!wanted(s) || !(rain > 0) || inFluid || invVanillaProjection == null || invView == null || height <= 0) return off();
         float r = Math.min(rain, 1), th = Float.isFinite(thunder) ? Math.max(0, Math.min(thunder, 1)) : 0;
         ParticleStyles p = s.particles();
         float boost = r * (1 + THUNDER_EXTRA * th);
         float[] params = {rainNear ? Math.min(1, RAIN_SHARE * p.amount(ParticleEffect.RAIN) * boost) : 0,
-                snowNear ? Math.min(1, SNOW_SHARE * p.amount(ParticleEffect.SNOW) * boost) : 0,
+                snowNear ? Math.min(1, SNOW_SHARE * p.amount(ParticleEffect.SNOW) * boost * (1 + StormMath.SNOW_EXTRA * Math.max(0, storm.blizzard()))) : 0,
                 COVERAGE_BASE + (1 - COVERAGE_BASE) * r, (float) wrap(seconds * SWAY_RATE, SWAY_WRAP)};
         double bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
         float[] camera = {Math.floorMod((long) bx, WeatherMath.WEATHER_WRAP), (float) by, Math.floorMod((long) bz, WeatherMath.WEATHER_WRAP), (float) y};
@@ -103,11 +130,44 @@ public final class WeatherUniforms {
         float pixelAngle = 2 * Math.abs(invVanillaProjection.m11()) / height;
         float[] frac = {(float) (x - bx), (float) (y - by), (float) (z - bz), pixelAngle};
         float[] v = velocity != null && velocity.length == 3 ? velocity : new float[3];
+        //Session 25: a blizzard blows the flakes with the wind (their motion relative to the camera), drawn over a longer exposure
+        float b = Math.max(0, Math.min(1, storm.blizzard()));
+        float[] wind = storm.wind() != null && storm.wind().length >= 2 ? storm.wind() : new float[2];
+        float[] snowV = b > 0 ? new float[]{v[0] - wind[0] * b, v[1], v[2] - wind[1] * b} : v;
+        float snowExposure = SNOW_EXPOSURE + (StormMath.SNOW_STORM_EXPOSURE - SNOW_EXPOSURE) * b;
         return new Values(true, invVanillaProjection, invLodProjection != null ? invLodProjection : invVanillaProjection, invView, lodValid, camera, frac,
-                params, motion(RAIN_FALL, v, WeatherMath.RAIN_PERIOD, seconds, EXPOSURE), motion(SNOW_FALL, v, WeatherMath.SNOW_PERIOD, seconds, SNOW_EXPOSURE),
+                params, motion(RAIN_FALL, v, WeatherMath.RAIN_PERIOD, seconds, EXPOSURE), motion(SNOW_FALL, snowV, WeatherMath.SNOW_PERIOD, seconds, snowExposure),
                 new float[]{(float) wrap(seconds, (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP), 0, 0, 0},
                 water != null && water.length == 4 ? water : new float[4], brightened(s.colours().tint(ShaderColours.Colour.RAIN), p.brightness(ParticleEffect.RAIN)),
-                brightened(s.colours().tint(ShaderColours.Colour.SNOW), p.brightness(ParticleEffect.SNOW)), style(p));
+                brightened(s.colours().tint(ShaderColours.Colour.SNOW), p.brightness(ParticleEffect.SNOW)), style(p), storm(storm, v, seconds));
+    }
+
+    /**
+     * Session 25: slots 18..21 as 16 floats: storm (x the sand grains' share of cells: SAND_SHARE x the sandstorm while a desert column is
+     * near, y the dust veils' strength, z the snow veils', w the time wrapped at STORM_TIME_WRAP), sand (xyz the grains' half streak: the wind
+     * less the camera's velocity over SAND_EXPOSURE), drift (xy the snow's, zw the sand's) and the sand's colour (StormMath.SAND_COLOUR).
+     */
+    static float[] storm(Storm storm, float[] velocity, double seconds) {
+        float[] o = new float[16];
+        float sand = Math.max(0, storm.sand()), blizzard = Math.max(0, storm.blizzard());
+        if (!(sand > 0) && !(blizzard > 0)) return o;
+        float[] wind = storm.wind() != null && storm.wind().length >= 2 ? storm.wind() : new float[2];
+        o[0] = storm.dustNear() ? Math.min(1, StormMath.SAND_SHARE * sand) : 0;
+        o[1] = sand;
+        o[2] = blizzard;
+        o[3] = (float) wrap(seconds, STORM_TIME_WRAP);
+        float k = StormMath.SAND_EXPOSURE / 2;
+        o[4] = (wind[0] - velocity[0]) * k;
+        o[5] = -velocity[1] * k;
+        o[6] = (wind[1] - velocity[2]) * k;
+        float[] sd = storm.snowDrift() != null && storm.snowDrift().length >= 2 ? storm.snowDrift() : new float[2];
+        float[] dd = storm.sandDrift() != null && storm.sandDrift().length >= 2 ? storm.sandDrift() : new float[2];
+        o[8] = sd[0];
+        o[9] = sd[1];
+        o[10] = dd[0];
+        o[11] = dd[1];
+        System.arraycopy(StormMath.SAND_COLOUR, 0, o, 12, 3);
+        return o;
     }
 
     /** 2026-11-11: a kind's colour tint times its brightness setting (the drops, and the rain's splashes and crowns; 1 leaves it exact). */

@@ -3,6 +3,7 @@
 // rainripple.glsl (2026-11-10: weatherImpact shares the rings' drops) and defines, BEFORE importing this:
 //   uint weatherMapAt(ivec2 texel)        the precipitation map's packed column (PrecipitationMap; texel = world column & WEATHER_MAP_MASK)
 //   vec3 weatherLight(vec3 rel, bool snow) the colour (display values) of a drop at rel (blocks from the camera)
+//   vec3 weatherSandLight(vec3 rel)       2026-11-15 (session 25): the colour of a sand grain (and the dust veils) at rel
 // WeatherMath.java mirrors every const and function here: change both together (WeatherTest compares them). WeatherUniforms writes the
 // parameters.
 //
@@ -120,6 +121,31 @@ const float IMPACT_ALPHA = 0.7;
 const float IMPACT_END = 10.0;
 const float IMPACT_FADE = 4.0;
 const int WEATHER_FLAG_WATER = 134217728;
+//2026-11-15 (session 25, the user: a sandstorm in a desert's thunderstorm, a much stronger blizzard over snow; StormMath): the map flags
+// desert columns (WEATHER_FLAG_DUST). Each kind's frame drifts with the wind (weatherWalk's drift, blocks wrapped at WEATHER_WRAP: the cells
+// hash modulo it, so the wrap draws the same drops). Sand: grains in cells SAND_PERIOD times as tall as wide (one per drop, storm.x of the
+// cells), bobbing SAND_BOB, SAND_RADIUS wide at SAND_ALPHA, drawn as the streak of their motion relative to the camera (thin and level: the
+// wind's), over desert columns only, thinning out above the ground (the share kept h blocks up is exp(-h / SAND_HEIGHT)). Veils
+// (stormVeil): gusts of blown dust or snow, a value noise of STORM_VEIL_SCALE per block drifting with the wind, sampled at STORM_VEIL_SAMPLES distances
+// from STORM_VEIL_NEAR growing by STORM_VEIL_GROWTH, each covering at most STORM_VEIL_ALPHA x the storm (thicker near the ground: STORM_VEIL_HEIGHT), above
+// STORM_VEIL_EDGE of the noise
+const int WEATHER_FLAG_DUST = 268435456;
+const float SAND_PERIOD = 0.5;
+const float SAND_RADIUS = 0.006;
+const float SAND_ALPHA = 0.5;
+const float SAND_HEIGHT = 3.0;
+const float SAND_BOB = 0.08;
+//The sand's walk: its first SAND_LAYERS layers only (farther grains are lost in the dust), one grain a cell, and no farther than where the
+// ray has climbed SAND_TOP blocks above the camera (the grains thin out with the height)
+const int SAND_LAYERS = 2;
+const float SAND_TOP = 8.0;
+const float STORM_VEIL_SCALE = 0.06;
+const float STORM_VEIL_ALPHA = 0.45;
+const float STORM_VEIL_HEIGHT = 12.0;
+const float STORM_VEIL_EDGE = 0.35;
+const int STORM_VEIL_SAMPLES = 4;
+const float STORM_VEIL_NEAR = 2.5;
+const float STORM_VEIL_GROWTH = 2.2;
 //2026-11-11 (the user: "the snow and rain particles' type (round, pixel, both), size, amount and colour"; ParticleEffect): each kind's type
 // and size (weatherPixel's style: x rain's type, y snow's, z rain's size, w snow's; 1 = the tuned size, the amount is the share in params).
 // ROUND the soft flakes and streaks above; PIXEL crisp pixel-art sprites at the same drops (same cells, light, roofs and fades): a snowflake
@@ -361,7 +387,7 @@ void weatherDrop(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int laye
 
 //One kind's drops along the view ray: each layer's cells (size x cellHeight x size) in the frame falling with that kind, walked in 3D
 // (Amanatides and Woo 1987) from the layer's start to its end or the scene, nearest first
-void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 camera, vec4 frac, vec4 params, vec4 motion, vec4 style) {
+void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 camera, vec4 frac, vec4 params, vec4 motion, vec4 style, vec2 drift) {
     ivec3 cam = ivec3(camera.xyz);
     for (int layer = 0; layer < WEATHER_LAYERS; layer++) {
         float tStart = layer == 0 ? WEATHER_NEAR : weatherLayerEnd(layer - 1);
@@ -371,8 +397,9 @@ void weatherWalk(inout vec4 acc, vec3 dir, float sceneDist, bool isSnow, vec4 ca
         }
         int size = 1 << layer;
         vec3 cs = vec3(float(size), (isSnow ? SNOW_PERIOD : RAIN_PERIOD)*float(size), float(size));
-        //The camera in this layer's frame: x, z from its cell's corner, y its height plus the fall (the frame moves up as the drops fall)
-        vec2 corner = vec2(cam.xz & (size - 1)) + frac.xz;
+        //The camera in this layer's frame: x, z from its cell's corner, y its height plus the fall (the frame moves up as the drops fall);
+        // session 25: less the wind's drift (the frame moves with it)
+        vec2 corner = vec2(cam.xz & (size - 1)) + frac.xz - drift;
         vec3 origin = vec3(corner.x, camera.w + motion.w, corner.y);
         vec3 p = origin + dir*tStart;
         ivec3 cell = ivec3(floor(p/cs));
@@ -511,13 +538,160 @@ vec4 weatherSplash(vec3 rel, vec3 dir, float dist, vec4 camera, vec4 frac, vec4 
     return vec4(weatherLight(rel, false)*alpha, alpha);
 }
 
-vec4 weatherPixel(vec3 dir, float sceneDist, vec4 camera, vec4 frac, vec4 params, vec4 rain, vec4 snow, vec4 style) {
+//2026-11-15 (session 25): one of a cell's sand grains (as weatherDrop; the frame does not fall: origin.y is the camera's height). storm: x the
+// share of cells with a grain, w the time (seconds, wrapped); motion: xyz the streak's half vector
+void sandGrain(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int layer, int drop, vec3 origin, vec4 camera, vec4 frac, vec4 storm,
+               vec4 motion) {
+    ivec3 cam = ivec3(camera.xyz);
+    float size = float(1 << layer);
+    float cellHeight = SAND_PERIOD*size;
+    int mask = (WEATHER_WRAP >> layer) - 1;
+    ivec3 world = ivec3(((cam.x >> layer) + cell.x) & mask, cell.y & mask, ((cam.z >> layer) + cell.z) & mask);
+    uint seed = uint(16*WEATHER_LAYERS + layer + WEATHER_LAYERS*drop);
+    vec4 r = weatherBytes(weatherHash(world, seed));
+    if (r.w >= storm.x) {
+        return;
+    }
+    vec3 a = (vec3(cell) + mix(vec3(WEATHER_MARGIN), vec3(1.0 - WEATHER_MARGIN), r.xzy))*vec3(size, cellHeight, size) - origin;
+    float t0 = dot(a, dir);
+    float reach = length(motion.xyz) + SAND_BOB;
+    float extent = SAND_RADIUS*(1.0 + WEATHER_SIZE_SPREAD);
+    if (length(a - dir*t0) > reach + extent + frac.w*(max(t0, 0.0) + reach)) {
+        return;
+    }
+    ivec2 column = cam.xz + ivec2(floor(frac.xz + a.xz));
+    uint texel = weatherMapAt(column & WEATHER_MAP_MASK);
+    if ((texel & uint(WEATHER_FLAG_KNOWN)) == 0u || (texel & uint(WEATHER_FLAG_DUST)) == 0u) {
+        return;
+    }
+    vec4 v = weatherBytes(weatherHash(world, seed + uint(WEATHER_LAYERS)));
+    a.y += SAND_BOB*sin(3.0*storm.w + 6.2831853*v.x);
+    float above = camera.w + a.y - float(weatherHeight(texel));
+    if (above < 0.0 || v.y >= exp(-above/SAND_HEIGHT)) {
+        return;
+    }
+    vec3 streak = weatherHalfStreak(motion.xyz, size, cellHeight, SAND_BOB);
+    vec3 hit = raySegment(dir, a - streak, a + streak);
+    float spread = 1.0 + WEATHER_SIZE_SPREAD*(2.0*v.z - 1.0);
+    float alpha = weatherCoverage(hit.x, SAND_RADIUS*spread, hit.y, frac.w, SAND_ALPHA);
+    float start = layer == 0 ? WEATHER_NEAR : weatherLayerEnd(layer - 1);
+    float fadeIn = layer == 0 ? WEATHER_NEAR_FADE : size;
+    float end = weatherLayerEnd(layer);
+    alpha *= smoothstep(start, start + fadeIn, hit.y)*(1.0 - smoothstep(end - size, end, hit.y));
+    alpha *= clamp((sceneDist - hit.y)/WEATHER_DEPTH_FADE, 0.0, 1.0)*mix(RAIN_TAIL, 1.0, hit.z);
+    if (alpha <= 0.0) {
+        return;
+    }
+    vec3 colour = weatherSandLight(a + streak*(2.0*hit.z - 1.0))*(1.0 + WEATHER_BRIGHT_SPREAD*(2.0*v.w - 1.0));
+    acc.rgb += (1.0 - acc.a)*alpha*colour;
+    acc.a += (1.0 - acc.a)*alpha;
+}
+
+//2026-11-15 (session 25): the sand grains along the view ray, as weatherWalk (cells SAND_PERIOD tall, the frame drifting with the wind)
+void sandWalk(inout vec4 acc, vec3 dir, float sceneDist, vec4 camera, vec4 frac, vec4 storm, vec4 motion, vec2 drift) {
+    ivec3 cam = ivec3(camera.xyz);
+    float top = dir.y > 0.01 ? SAND_TOP/dir.y : 1e30;
+    for (int layer = 0; layer < SAND_LAYERS; layer++) {
+        float tStart = layer == 0 ? WEATHER_NEAR : weatherLayerEnd(layer - 1);
+        float tEnd = min(min(weatherLayerEnd(layer), sceneDist), top);
+        if (tStart >= tEnd) {
+            return;
+        }
+        int size = 1 << layer;
+        vec3 cs = vec3(float(size), SAND_PERIOD*float(size), float(size));
+        vec2 corner = vec2(cam.xz & (size - 1)) + frac.xz - drift;
+        vec3 origin = vec3(corner.x, camera.w, corner.y);
+        vec3 p = origin + dir*tStart;
+        ivec3 cell = ivec3(floor(p/cs));
+        ivec3 stepCell = ivec3(dir.x >= 0.0 ? 1 : -1, dir.y >= 0.0 ? 1 : -1, dir.z >= 0.0 ? 1 : -1);
+        vec3 tDelta = vec3(abs(dir.x) > 1e-6 ? cs.x/abs(dir.x) : 1e30, abs(dir.y) > 1e-6 ? cs.y/abs(dir.y) : 1e30,
+                abs(dir.z) > 1e-6 ? cs.z/abs(dir.z) : 1e30);
+        vec3 boundary = (vec3(cell) + vec3(greaterThan(stepCell, ivec3(0))))*cs;
+        vec3 tMax = vec3(abs(dir.x) > 1e-6 ? tStart + (boundary.x - p.x)/dir.x : 1e30, abs(dir.y) > 1e-6 ? tStart + (boundary.y - p.y)/dir.y : 1e30,
+                abs(dir.z) > 1e-6 ? tStart + (boundary.z - p.z)/dir.z : 1e30);
+        float t = tStart;
+        for (int i = 0; i < WEATHER_MAX_STEPS && t < tEnd; i++) {
+            sandGrain(acc, dir, sceneDist, cell, layer, 0, origin, camera, frac, storm, motion);
+            if (acc.a > WEATHER_OPAQUE) {
+                return;
+            }
+            if (tMax.x <= tMax.y && tMax.x <= tMax.z) {
+                t = tMax.x;
+                cell.x += stepCell.x;
+                tMax.x += tDelta.x;
+            } else if (tMax.y <= tMax.z) {
+                t = tMax.y;
+                cell.y += stepCell.y;
+                tMax.y += tDelta.y;
+            } else {
+                t = tMax.z;
+                cell.z += stepCell.z;
+                tMax.z += tDelta.z;
+            }
+        }
+    }
+}
+
+//2026-11-15 (session 25): a smooth value noise 0..1 of a world point (cells of one unit, trilinear with a smoothstep fade)
+float stormNoiseAt(ivec3 c) {
+    return weatherBytes(weatherHash(c & (WEATHER_WRAP - 1), 97u)).x;
+}
+
+float stormNoise(vec3 q) {
+    vec3 i = floor(q);
+    vec3 f = q - i;
+    f = f*f*(3.0 - 2.0*f);
+    ivec3 c = ivec3(i);
+    return mix(mix(mix(stormNoiseAt(c), stormNoiseAt(c + ivec3(1, 0, 0)), f.x), mix(stormNoiseAt(c + ivec3(0, 1, 0)), stormNoiseAt(c + ivec3(1, 1, 0)), f.x), f.y),
+            mix(mix(stormNoiseAt(c + ivec3(0, 0, 1)), stormNoiseAt(c + ivec3(1, 0, 1)), f.x), mix(stormNoiseAt(c + ivec3(0, 1, 1)), stormNoiseAt(c + ivec3(1, 1, 1)), f.x), f.y), f.z);
+}
+
+//2026-11-15 (session 25): the drifting veils of blown snow (over snow columns) and dust (over desert columns) along dir up to sceneDist,
+// premultiplied; storm: y the dust veils' strength, z the snow's, w the time; drift: xy the snow's drift, zw the sand's (blocks)
+vec4 stormVeil(vec3 dir, float sceneDist, vec4 camera, vec4 frac, vec4 storm, vec4 drift) {
+    vec4 acc = vec4(0.0);
+    ivec3 cam = ivec3(camera.xyz);
+    float t = STORM_VEIL_NEAR;
+    for (int i = 0; i < STORM_VEIL_SAMPLES && t < sceneDist; i++) {
+        vec3 rel = dir*t;
+        uint texel = weatherMapAt((cam.xz + ivec2(floor(frac.xz + rel.xz))) & WEATHER_MAP_MASK);
+        bool dust = (texel & uint(WEATHER_FLAG_DUST)) != 0u;
+        float strength = dust ? storm.y : (weatherKind(texel, int(floor(camera.w))) == 2 ? storm.z : 0.0);
+        if (strength > 0.0 && (texel & uint(WEATHER_FLAG_KNOWN)) != 0u) {
+            float above = camera.w + rel.y - float(weatherHeight(texel));
+            //World blocks (modulo WEATHER_WRAP) less the drift: the noise moves with the wind; squashed vertically (level gusts)
+            vec2 h = vec2(cam.xz) + frac.xz + rel.xz - (dust ? drift.zw : drift.xy);
+            vec3 q = vec3(h.x, (camera.w + rel.y)*2.0, h.y)*STORM_VEIL_SCALE + vec3(0.0, storm.w*0.15, 0.0);
+            float n = 0.65*stormNoise(q) + 0.35*stormNoise(q*2.7 + 17.0);
+            float d = smoothstep(STORM_VEIL_EDGE, 1.0, n)*exp(-max(above, 0.0)/STORM_VEIL_HEIGHT)*(above > -1.0 ? 1.0 : 0.0);
+            float alpha = min(STORM_VEIL_ALPHA*strength*d, 1.0)*clamp((sceneDist - t)/STORM_VEIL_NEAR, 0.0, 1.0);
+            vec3 colour = dust ? weatherSandLight(rel) : weatherLight(rel, true);
+            acc.rgb += (1.0 - acc.a)*alpha*colour;
+            acc.a += (1.0 - acc.a)*alpha;
+        }
+        t *= STORM_VEIL_GROWTH;
+    }
+    return acc;
+}
+
+//2026-11-15 (session 25): storm: x the sand grains' share of cells (0: none), y the dust veils' strength, z the snow veils', w the time;
+// sand: xyz the grains' half streak; drift: xy the snow's drift, zw the sand's
+vec4 weatherPixel(vec3 dir, float sceneDist, vec4 camera, vec4 frac, vec4 params, vec4 rain, vec4 snow, vec4 style, vec4 storm, vec4 sand,
+                  vec4 drift) {
     vec4 acc = vec4(0.0);
     if (params.x > 0.0) {
-        weatherWalk(acc, dir, sceneDist, false, camera, frac, params, rain, style);
+        weatherWalk(acc, dir, sceneDist, false, camera, frac, params, rain, style, vec2(0.0));
     }
     if (params.y > 0.0 && acc.a <= WEATHER_OPAQUE) {
-        weatherWalk(acc, dir, sceneDist, true, camera, frac, params, snow, style);
+        weatherWalk(acc, dir, sceneDist, true, camera, frac, params, snow, style, drift.xy);
+    }
+    if (storm.x > 0.0 && acc.a <= WEATHER_OPAQUE) {
+        sandWalk(acc, dir, sceneDist, camera, frac, storm, sand, drift.zw);
+    }
+    if ((storm.y > 0.0 || storm.z > 0.0) && acc.a <= WEATHER_OPAQUE) {
+        vec4 v = stormVeil(dir, sceneDist, camera, frac, storm, drift);
+        acc.rgb += (1.0 - acc.a)*v.rgb;
+        acc.a += (1.0 - acc.a)*v.a;
     }
     return acc;
 }

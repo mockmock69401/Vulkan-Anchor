@@ -938,18 +938,17 @@ bool albedoMatches(vec3 albedo, vec3 vanilla, float block, float sky) {
 }
 
 //2026-10-28 (the user: fog by the weather, as Oculus + Complementary Reimagined): in rain surfaces under the sky fade by distance
-// (borderFog.w, AtmosphereUniforms.weatherFog), whatever the camera's height, into the horizon's fog colour tinted with vanilla's
-// fog hue (the biome's blue-grey, as Complementary's rain fog; vanilla's own brightness went navy in thunder). Gaussian in
+// (borderFog.w, AtmosphereUniforms.weatherFog), whatever the camera's height, into the horizon's fog colour (until session 25 tinted with
+// vanilla's fog hue, the biome's blue-grey: a blue band against the grey or dusty sky). Gaussian in
 // distance: the street nearby stays clear, a hundred blocks away 70% is fog. The sky is left alone (and vanilla's clouds)
 vec3 weatherFogOver(Atmosphere a, vec3 lit, vec3 dir, float dist, float amount) {
     if (!(borderFog.w > 0.0) || !atmosphereSky(a)) {
         return lit;
     }
+    //2026-11-15 (session 25, the user: in thunder, and in a sandstorm, far terrain at the render distance turned an unnatural blue): the
+    // horizon's own fog colour (the overcast, the picked fog tint and a storm's dust or snow tint), so fogged terrain meets the sky; vanilla's
+    // biome fog hue (blue-grey) is no longer laid over it
     vec3 rainFog = fogColour(a, dir);
-    float vl = luminance(vanillaFog.rgb);
-    if (vanillaFog.w > 0.5 && vl > 1e-4) {
-        rainFog = vanillaFog.rgb*(luminance(rainFog)/vl);
-    }
     float k = borderFog.w*min(dist, HAZE_MAX_DISTANCE);
     return mix(rainFog, lit, exp(-k*k*amount));
 }

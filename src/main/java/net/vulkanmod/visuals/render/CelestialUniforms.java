@@ -159,7 +159,13 @@ public final class CelestialUniforms {
             aurora[3] = taa ? (float) ((frame * (double) GOLDEN_TURN) % 1.0) : 0;
             if (aurora[3] < 0) aurora[3] += 1;
         }
-        return new Values(celestial, aurora, tints(s.colours(), sky == Sky.END));
+        float[] tints = tints(s.colours(), sky == Sky.END);
+        //2026-11-15 (session 25): the water's body in a sandstorm or a blizzard (exactly 1 without one, and outside the Overworld's sky)
+        if (sky == Sky.SUN) {
+            float[] w = StormMath.waterTint(BiomeSky.sand(thunder), BiomeSky.blizzard(thunder));
+            for (int i = 0; i < 3; i++) tints[12 + i] *= w[i];
+        }
+        return new Values(celestial, aurora, tints);
     }
 
     /** The aurora's strength (see the class comment): 0 with the setting off, by day, in a thunderstorm and in the Nether. */

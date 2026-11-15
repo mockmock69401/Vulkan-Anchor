@@ -194,6 +194,8 @@
   "vulkanmod.visuals.end_galaxy.tooltip": "The End's sky shows a galaxy: a Milky Way band with a bright core and dark dust lanes, faint nebulae and many stars, behind the End's auroras. 100 is the default, 200 twice as bright, 0 off",
   "vulkanmod.visuals.shader_weather": "Shader Weather",
   "vulkanmod.visuals.shader_weather.tooltip": "Draws rain as thin streaks and snow as small drifting flakes in several layers of depth, with small splashes where it hits the ground, kept out from under roofs and caves, in place of vanilla's rain and snow columns and splash particles. Off draws vanilla's weather",
+  "vulkanmod.visuals.storm_weather": "Sandstorms & Blizzards",
+  "vulkanmod.visuals.storm_weather.tooltip": "In a thunderstorm, deserts and badlands get a sandstorm: sand blows along the ground in streaks, gusts of dust drift past and the air turns thick and warm brown. Snowy biomes get a blizzard: far more snow driven sideways by the wind, gusts of blown snow and a white-out. It builds up with the thunder and blends in over the biome's edge. The blowing sand and snow need Shader Weather. Percent of the default strength (Potato: off); 0: off",
   "vulkanmod.visuals.snow_type": "Snowflakes",
   "vulkanmod.visuals.snow_type.tooltip": "How the shader snow looks. Round draws soft round flakes that drift and blur with your motion; Pixel draws crisp pixel-art flakes in a few shapes, slowly turning; Both mixes the two, half each. Pixel and Both cost a little more while it snows (about 0.1 to 0.2 ms)",
   "vulkanmod.visuals.snow_type.0": "Round",

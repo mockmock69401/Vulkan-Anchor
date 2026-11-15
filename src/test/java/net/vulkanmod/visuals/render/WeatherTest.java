@@ -116,7 +116,7 @@ class WeatherTest {
         int map = PASS.indexOf("uint weatherMapAt(ivec2 texel)"), light = PASS.indexOf("vec3 weatherLight(vec3 rel, bool snow)");
         int model = PASS.indexOf("#import <vulkanmod:visuals/post/weather.glsl>");
         assertTrue(map > 0 && light > 0 && model > map && model > light);
-        assertTrue(PASS.contains("weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion, weatherStyle)"));
+        assertTrue(PASS.contains("weatherPixel(dir, sceneDist, weatherCamera, weatherFrac, weatherParams, rainMotion, snowMotion, weatherStyle, stormParams, sandMotion,"));
         //The bindings VkPostProcess binds
         for (String[] b : new String[][]{{"0", "weatherOut"}, {"1", "mainDepth"}, {"2", "lodDepth"}, {"3", "precipitationMap"}, {"6", "lightmapTex"}}) {
             assertTrue(Pattern.compile("binding = " + b[0] + "\\b[^;]*\\b" + b[1] + ";").matcher(PASS).find(), b[1]);
