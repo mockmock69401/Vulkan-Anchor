@@ -714,6 +714,9 @@ class SceneCompositeTest {
         assertArrayEquals(SceneCompositeMath.composite(skyPixel(new float[]{0.5f, 0.6f, 0.8f, 1}, dir(0, 0.3f, 1)), off, LIGHTMAP),
                 SceneCompositeMath.composite(skyPixel(new float[]{0.5f, 0.6f, 0.8f, 1}, dir(0, 0.3f, 1)), rain, LIGHTMAP), 1e-6f);
         assertTrue(COMP.contains("return mix(rainFog, lit, exp(-k*k*amount));") && COMP.contains("lit = weatherFogOver(a, lit, dir, dist, amount);"));
+        //2026-11-15 (session 25): far terrain fogs into the horizon's own colour, the one the sky meets it in (no blue band from vanilla's
+        // biome fog hue): a fully fogged far wall is the atmosphere's fog colour whatever vanilla's fog colour is
+        assertTrue(COMP.contains("vec3 rainFog = fogColour(a, dir);") && !COMP.contains("rainFog = vanillaFog.rgb"));
     }
 
     // ---- 6c. 2026-10-28: block glow and ore glow (slot 33) ----

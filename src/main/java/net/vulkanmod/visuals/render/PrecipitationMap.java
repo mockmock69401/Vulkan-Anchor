@@ -25,8 +25,16 @@ public final class PrecipitationMap {
     public static final int REACH = (int) WeatherMath.WEATHER_LAYER_END_2 + (1 << (WeatherMath.WEATHER_LAYERS - 1)) + 1;
 
     /** A column's climate: precipitation, snow at and below WeatherMath.WEATHER_TEMPERATURE_Y, the lowest y above it where it snows. */
-    public record Climate(boolean precipitation, boolean snowLow, int snowLine) {
-        public static final Climate NONE = new Climate(false, false, WeatherMath.Y_MAX);
+    public record Climate(boolean precipitation, boolean snowLow, int snowLine, boolean dust) {
+        public static final Climate NONE = new Climate(false, false, WeatherMath.Y_MAX, false);
+
+        /** Without dust (not a desert). */
+        public Climate(boolean precipitation, boolean snowLow, int snowLine) {
+            this(precipitation, snowLow, snowLine, false);
+        }
+
+        /** 2026-11-15 (session 25): a desert column (no precipitation; a sandstorm blows sand over it). */
+        public static final Climate DUST = new Climate(false, false, WeatherMath.Y_MAX, true);
     }
 
     /** The level as the map reads it. */
@@ -48,7 +56,7 @@ public final class PrecipitationMap {
     private final Climate[] climates = new Climate[SIZE * SIZE];
     private final boolean[] water = new boolean[SIZE * SIZE];
     private int cursor;
-    private boolean rain, snow;
+    private boolean rain, snow, dust;
 
     public PrecipitationMap() {
         java.util.Arrays.fill(this.climateX, Integer.MIN_VALUE);
@@ -66,6 +74,11 @@ public final class PrecipitationMap {
 
     public boolean hasSnow() {
         return this.snow;
+    }
+
+    /** 2026-11-15 (session 25): a desert column within REACH (weather.glsl's sand walk only runs then). */
+    public boolean hasDust() {
+        return this.dust;
     }
 
     /** Forgets every column (a new level). */
@@ -112,17 +125,19 @@ public final class PrecipitationMap {
         boolean changed = false;
         this.rain = false;
         this.snow = false;
+        this.dust = false;
         for (int z = cz - HALF; z < cz + HALF; z++) {
             for (int x = cx - HALF; x < cx + HALF; x++) {
                 int i = index(x, z);
                 Climate c = this.climateX[i] == x && this.climateZ[i] == z ? this.climates[i] : null;
                 int h = c == null ? NO_HEIGHT : level.height(x, z);
-                int texel = h == NO_HEIGHT ? 0 : WeatherMath.pack(h, c.snowLine(), c.precipitation(), c.snowLow(), this.water[i]);
+                int texel = h == NO_HEIGHT ? 0 : WeatherMath.pack(h, c.snowLine(), c.precipitation(), c.snowLow(), this.water[i], c.dust());
                 //Only the columns the shader's walk can reach (its far layer's end and a cell)
                 if (Math.abs(x - cx) <= REACH && Math.abs(z - cz) <= REACH) {
                     int kind = WeatherMath.kind(texel, cy);
                     this.rain |= kind == WeatherMath.RAIN;
                     this.snow |= kind == WeatherMath.SNOW;
+                    this.dust |= h != NO_HEIGHT && c.dust();
                 }
                 if (this.texels[i] != texel) {
                     this.texels[i] = texel;

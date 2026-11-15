@@ -66,6 +66,22 @@ public final class WeatherMath {
     public static final float IMPACT_END = 10.0f;
     public static final float IMPACT_FADE = 4.0f;
     public static final int WEATHER_FLAG_WATER = 1 << 27;
+    /** 2026-11-15 (session 25): a desert column (sand blows over it in a sandstorm). */
+    public static final int WEATHER_FLAG_DUST = 1 << 28;
+    public static final float SAND_PERIOD = 0.5f;
+    public static final float SAND_RADIUS = 0.006f;
+    public static final float SAND_ALPHA = 0.5f;
+    public static final float SAND_HEIGHT = 3.0f;
+    public static final float SAND_BOB = 0.08f;
+    public static final int SAND_LAYERS = 2;
+    public static final float SAND_TOP = 8.0f;
+    public static final float STORM_VEIL_SCALE = 0.06f;
+    public static final float STORM_VEIL_ALPHA = 0.45f;
+    public static final float STORM_VEIL_HEIGHT = 12.0f;
+    public static final float STORM_VEIL_EDGE = 0.35f;
+    public static final int STORM_VEIL_SAMPLES = 4;
+    public static final float STORM_VEIL_NEAR = 2.5f;
+    public static final float STORM_VEIL_GROWTH = 2.2f;
     public static final int WEATHER_TYPE_ROUND = 0;
     public static final int WEATHER_TYPE_PIXEL = 1;
     public static final int WEATHER_TYPE_BOTH = 2;
@@ -118,10 +134,15 @@ public final class WeatherMath {
 
     /** 2026-11-10: with water at the column's top (the crowns of the rings' drops). */
     public static int pack(int height, int snowLine, boolean precipitation, boolean snowLow, boolean water) {
+        return pack(height, snowLine, precipitation, snowLow, water, false);
+    }
+
+    /** 2026-11-15 (session 25): with dust: a desert column (BiomeSkyMath.classify), where a sandstorm blows sand (weather.glsl sandWalk). */
+    public static int pack(int height, int snowLine, boolean precipitation, boolean snowLow, boolean water, boolean dust) {
         int h = Math.max(Y_MIN, Math.min(Y_MAX, height)) + WEATHER_Y_BIAS;
         int s = Math.max(Y_MIN, Math.min(Y_MAX, snowLine)) + WEATHER_Y_BIAS;
         return h | (s << 12) | (precipitation ? WEATHER_FLAG_PRECIPITATION : 0) | (snowLow ? WEATHER_FLAG_SNOW_LOW : 0) | (water ? WEATHER_FLAG_WATER : 0)
-                | WEATHER_FLAG_KNOWN;
+                | (dust ? WEATHER_FLAG_DUST : 0) | WEATHER_FLAG_KNOWN;
     }
 
     public static int hash(int x, int y, int z, int seed) {

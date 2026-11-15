@@ -127,6 +127,9 @@ public final class VisualsRenderer {
     private ClientLevel precipitationOf;
     /** 2026-11-10 (session 7): System.nanoTime of the map's last update (PrecipitationMap.due). */
     private long precipitationNanos = Long.MIN_VALUE;
+    /** 2026-11-15 (session 25): the storm's drifts (StormMath.advance) and the flow time they were last advanced at. */
+    private float[] snowDrift = new float[2], sandDrift = new float[2];
+    private double stormSeconds = Double.NaN;
     private float[] weatherVelocity = new float[3];
     private double weatherLastX = Double.NaN, weatherLastY, weatherLastZ, weatherLastSeconds;
     private VkUploadStream upload;
@@ -494,7 +497,7 @@ public final class VisualsRenderer {
             //Session 20: the caustics keep time with the ripples' flow
             CausticMath.setClock(flow);
             //Session 25: the camera's desert share (the desert's night sky, stars and clear sky)
-            BiomeSky.update(level, cameraX, cameraY, cameraZ, flow);
+            BiomeSky.update(level, cameraX, cameraY, cameraZ, flow, level.getThunderLevel(partialTick));
             if (FrameRecorder.ON) FrameRecorder.set(FrameRecorder.WIND_PHASE, (long) (FoliageWind.phase0() * 1e6));
             Matrix4fc lodProjection = this.lod != null && this.lod.projection() != null ? this.lod.projection() : projection;
             return AtmosphereFrame.of(VkFrames.serial(), projection, lodProjection, modelView, cameraY, level.getSeaLevel(),
@@ -586,10 +589,18 @@ public final class VisualsRenderer {
                             (int) Math.floor(camera.z), PrecipitationMap.BUDGET);
                 }
                 if (changed || this.post.precipitationMapStale()) map = this.precipitation.texels();
+                //Session 25: the sandstorm and the blizzard (BiomeSky's shares x the thunder), their drift with the wind
+                float sand = BiomeSky.sand(frame.thunder()), blizzard = BiomeSky.blizzard(frame.thunder());
+                float[] wind = StormMath.wind(now);
+                double dt = Double.isNaN(this.stormSeconds) ? 0 : now - this.stormSeconds;
+                this.stormSeconds = now;
+                this.snowDrift = StormMath.advance(this.snowDrift, wind, dt, Math.min(1, blizzard));
+                this.sandDrift = StormMath.advance(this.sandDrift, wind, dt, 1);
+                WeatherUniforms.Storm storm = new WeatherUniforms.Storm(sand, blizzard, wind, this.snowDrift, this.sandDrift, this.precipitation.hasDust());
                 values = WeatherUniforms.compute(settings, frame.rain(), frame.thunder(), frame.cameraFluid() != AtmosphereFrame.CameraFluid.NONE,
                         WeatherUniforms.unjitteredInverse(atmosphere.invVanillaProjection(), TaaJitter.appliedNdc()), atmosphere.invLodProjection(),
                         atmosphere.invView(), atmosphere.lodValid(), this.post.halfWeather() ? (height + 1) / 2 : height, camera.x, camera.y, camera.z, this.weatherVelocity, now,
-                        this.precipitation.hasRain(), this.precipitation.hasSnow(), waterRain(reflection));
+                        this.precipitation.hasRain(), this.precipitation.hasSnow(), waterRain(reflection), storm);
             }
         } catch (RuntimeException e) {
             values = WeatherUniforms.off();

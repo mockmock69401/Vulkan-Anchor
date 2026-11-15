@@ -711,6 +711,8 @@ public final class VkPostProcess {
         //Session 20: Caustics (CausticMath; strength 0 = off)
         if (this.copyUniforms.has(CausticMath.SLOT)) {
             float[] caustic = CausticMath.params(VisualsConfig.get().caustics);
+            //Session 25: a sandstorm or a blizzard hides the sun: no caustics under the water
+            caustic[0] *= 1 - BiomeSky.cover();
             this.copyUniforms.putVec4(CausticMath.SLOT, caustic[0], caustic[1], caustic[2], caustic[3]);
         }
         //Session 20: rain-wet ground (WetGroundMath; strength 0 = off)

@@ -64,8 +64,12 @@ public class VisualsConfig {
      * 21 (2026-11-14): the palettes' bloom, saturation and fog changed (ColourPresets.LOOK; Default's with VisualsConfig's defaults), and
      * Horror turns the auroras off; a file still on a palette's old row takes the new one and stays on it (ColourPresets.moveOldRows), a
      * file on Horror turns the auroras off and stays on it; any other file keeps its values.
+     * 22 (2026-11-15, session 25): Sandstorms &amp; Blizzards (stormWeather), which the presets set; a file on a level takes that level's
+     * value and stays on it, any other file the default.
      */
-    private static final int REVISION = 21;
+    private static final int REVISION = 22;
+    /** Session 25: the first revision with Sandstorms & Blizzards. */
+    static final int STORM_WEATHER_REVISION = 22;
     /** 2026-11-14: the first revision with the trimmed palette rows and Horror's auroras off. */
     static final int PALETTE_TRIM_REVISION = 21;
     /** Session 20: the first revision with Soft Shadows. */
@@ -176,6 +180,10 @@ public class VisualsConfig {
         }
         if (fileRevision < WET_GROUND_REVISION && VisualsPresets.isLevel(c.preset)) {
             VisualsOptionLayout.set(c, VisualsOptionLayout.item("wet_ground"), VisualsPresets.value("wet_ground", c.preset));
+        }
+        //Session 25: likewise a level saved before Sandstorms & Blizzards existed
+        if (fileRevision < STORM_WEATHER_REVISION && VisualsPresets.isLevel(c.preset)) {
+            VisualsOptionLayout.set(c, VisualsOptionLayout.item("storm_weather"), VisualsPresets.value("storm_weather", c.preset));
         }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
@@ -437,6 +445,11 @@ public class VisualsConfig {
     public int desertNight = 100;
     /** 2026-11-15 (session 25, the user: "사막에서는 구름이 없게"): how much of the far clouds a desert clears (BiomeSkyMath): percent, 0 = off. */
     public int desertClouds = 100;
+    /**
+     * 2026-11-15 (session 25, the user: "천둥 날씨에서 사막에서는 모래폭풍, 눈 바이옴에서는 훨씬 강한 눈보라"): a thunderstorm over a desert is a
+     * sandstorm (blowing sand, dusty air), over snow a blizzard (wind-driven snow, white-out) (StormMath): percent, 0 = off.
+     */
+    public int stormWeather = 100;
     /** 2026-11-11 (session 13): the stars' shape: 0 vanilla's squares, 1 round soft points (StarMath.TYPE_ROUND). */
     public int starType = 0;
     /**

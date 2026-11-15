@@ -67,6 +67,8 @@ public final class VisualsPresets {
         //session 20: wet ground (in the rain and while it dries: the puddles' march in the reflection pass; 2026-11-14 at 1280x720 on the
         // AMD iGPU +6.8 ms in full rain at 100, +2.7 ms at 50; at 2560x1440 on the RTX +0.85 ms)
         v.put("wet_ground", new int[]{0, 0, 50, 100, 100});
+        //session 25: sandstorms and blizzards (in a thunderstorm only: the sand grains' walk and the veils in the weather pass)
+        v.put("storm_weather", new int[]{0, 100, 100, 100, 100});
         VALUES = Collections.unmodifiableMap(v);
     }
 

@@ -396,6 +396,8 @@ public final class AtmosphereUniforms {
         ShaderColours colours = s.colours();
         float[] sunTint = sunTint(colours, sun.y, morning), lowTint = lowTint(colours, morning);
         float[] nightTint = colours.tint(ShaderColours.Colour.NIGHT_SKY), glowTint = colours.tint(ShaderColours.Colour.SUN_GLOW);
+        //Session 25: this frame's sandstorm and blizzard (BiomeSky x the thunder; 0 without one)
+        float sand = BiomeSky.sand(thunder), blizzard = BiomeSky.blizzard(thunder);
         //2026-11-15 (session 25): in a desert the night sky is darker and deeper (BiomeSky; exactly 1 elsewhere)
         float[] desertNight = BiomeSky.nightTint();
         nightTint = new float[]{nightTint[0] * desertNight[0], nightTint[1] * desertNight[1], nightTint[2] * desertNight[2]};
@@ -407,24 +409,30 @@ public final class AtmosphereUniforms {
             float dome = sunAmount * ta[i] * SKY_MULTI * blue[i] * sunTint[i] + twilightAmount * th[i] * twilight * lowTint[i]
                     + moonAmount * tam[i] * SKY_MULTI * blue[i] * nightTint[i];
             b[16 + i] = (dome * tint[i] + NIGHT_SKY[i] * nightTint[i]) * dim + (sunLight + moonLight) * diffuse;
-            b[20 + i] = sunAmount * GLOW_AMOUNT * glow * ts[i] * glowWeather * sunTint[i] * glowTint[i];
+            b[20 + i] = sunAmount * GLOW_AMOUNT * glow * ts[i] * glowWeather * sunTint[i] * glowTint[i] * (1 - StormMath.cover(sand, blizzard));
         }
         float[] fogTint = colours.tint(ShaderColours.Colour.FOG), overcastTint = colours.tint(ShaderColours.Colour.OVERCAST);
+        //2026-11-15 (session 25): a thunderstorm over a desert is a sandstorm, over snow a blizzard (BiomeSky, StormMath: exactly 1 and no
+        // extra fog without one): dustier or whiter, denser air
+        float[] stormTint = StormMath.tint(sand, blizzard);
         float[] moonTint = colours.tint(ShaderColours.Colour.MOON);
         for (int i = 0; i < 3; i++) {
-            b[TINTS + i] = fogTint[i];
-            b[TINTS + 4 + i] = overcastTint[i];
+            b[TINTS + i] = fogTint[i] * stormTint[i];
+            b[TINTS + 4 + i] = overcastTint[i] * stormTint[i];
             b[TINTS + 8 + i] = moonTint[i];
         }
-        b[7] = clamp01(RAIN_GREY * Math.max(rain, thunder));
+        //Session 25: a sandstorm or a blizzard hides the sun: the overcast share rises to its cover (no discs, no glints; the reflections
+        // show the storm's overcast)
+        float cover = StormMath.cover(sand, blizzard);
+        b[7] = clamp01(Math.max(RAIN_GREY * Math.max(rain, thunder), cover));
         b[11] = 1 - dayFade;
         b[15] = tauM;
         //2026-11-09 (session 1b): the distance haze setting scales the aerial haze only (its near veil and the far fade), not the ground fog
-        b[19] = fogStrength * Math.max(0, finite(s.distanceHaze())) / AIR_MASS_BLOCKS;
-        b[23] = GLOW_AMOUNT * glow * (1 - GLOW_RAIN_CUT * rain);
+        b[19] = fogStrength * Math.max(0, finite(s.distanceHaze())) / AIR_MASS_BLOCKS * StormMath.haze(sand, blizzard);
+        b[23] = GLOW_AMOUNT * glow * (1 - GLOW_RAIN_CUT * rain) * (1 - cover);
         float fogHeight = Math.max(PostProcessSettings.FOG_HEIGHT_MIN, finite(s.fogHeight()));
         float mist = morning * AtmosphereMath.smoothstep(MIST_DAWN, 0, sun.y) * (1 - AtmosphereMath.smoothstep(MIST_SUN_LOW, MIST_SUN_HIGH, sun.y));
-        b[24] = FOG_DENSITY * fogStrength * (1 + RAIN_FOG * rain + MORNING_MIST * mist);
+        b[24] = FOG_DENSITY * fogStrength * (1 + RAIN_FOG * rain + MORNING_MIST * mist) * StormMath.fog(sand, blizzard);
         b[25] = 1 / fogHeight;
         b[26] = Math.max(0, finite(f.cameraY()) - finite(f.seaLevel()));
         //The sun's reddening air mass (the sunset light setting scales it, as transmittance does): atmosphere.glsl's airlight lifts it for
