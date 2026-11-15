@@ -6,6 +6,8 @@
 layout(location = 0) in ivec4 Position;
 layout(location = 1) in vec4 Color;
 layout(location = 2) in uvec2 UV0;
+//Session 23: terrain.vsh's flags (bit 0: a solid-layer block, opaque whatever its texture's alpha)
+layout(location = 3) in ivec2 UV2;
 
 layout(location = 0) uniform mat4 lightViewProjection;//camera-relative world to the cascade's clip (Vulkan depth 0..1)
 layout(location = 1) uniform vec4 areaOffset;//the chunk area's origin + 4 - the cascade's camera, the layer's alpha cutout
@@ -19,5 +21,5 @@ void main() {
     vec3 pos = fma(vec3(Position.xyz), vec3(1.0/2048.0), areaOffset.xyz + vec3(baseOffset));
     gl_Position = lightViewProjection*vec4(pos, 1.0);
     uv = vec2(UV0)*(1.0/32768.0);
-    cutout = areaOffset.w;
+    cutout = (UV2.x & 1) != 0 ? 0.0 : areaOffset.w;
 }

@@ -30,11 +30,15 @@ layout (location = 4) out vec3 albedoTint;
 //2026-11-10 (shader roadmap session 9, PBR): the fragment's camera-relative world position, for its tangent frame (terrain.fsh)
 layout (location = 5) out vec3 relPos;
 #endif
+//Session 23: 1 for a solid-layer block (its texels opaque whatever their alpha, as in vanilla's solid layer), else 0
+layout (location = 6) flat out int terrainOpaque;
 
 
 layout (location = 0) in ivec4 Position;
 layout (location = 1) in vec4 Color;
 layout (location = 2) in uvec2 UV0;
+//Session 23: the terrain flags (TerrainBufferBuilder.setOpaque: bit 0, a solid-layer block's vertex), in the vertex's last 4 bytes
+layout (location = 3) in ivec2 UV2;
 
 const float UV_INV = 1.0 / 32768.0;
 
@@ -190,6 +194,7 @@ void main() {
     const uint packedLight = uint(Position.a);
     lightLevels = vec2(bitfieldExtract(packedLight, 12, 4), bitfieldExtract(packedLight, 4, 4));
     albedoTint = Color.rgb;
+    terrainOpaque = UV2.x & 1;
 #ifdef TERRAIN_PBR
     relPos = pos.xyz;
 #endif

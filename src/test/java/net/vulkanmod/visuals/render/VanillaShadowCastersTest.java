@@ -98,7 +98,9 @@ class VanillaShadowCastersTest {
         assertTrue(vk.replace(" ", "").contains("ivec3(gl_InstanceIndex)"), vk);
         assertFalse(vk.contains("gl_BaseInstance"), vk);
         assertTrue(f.contains("if (textureLod(atlas, uv, 0.0).a < cutout) {"), "cutouts cast their own shape, by the layer's cutout");
-        assertTrue(v.contains("cutout = areaOffset.w;"), "final review I1: the layer's cutout comes with the area offset");
+        //Final review I1: the layer's cutout comes with the area offset; session 23: none for a solid-layer block (the opaque flag)
+        assertTrue(v.contains("cutout = (UV2.x & 1) != 0 ? 0.0 : areaOffset.w;"), v);
+        assertTrue(v.contains("layout(location = 3) in ivec2 UV2;"), v);
     }
 
     private static String read(String path) throws Exception {

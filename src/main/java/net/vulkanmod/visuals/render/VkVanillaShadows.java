@@ -36,11 +36,13 @@ import static org.lwjgl.vulkan.VK10.*;
 public final class VkVanillaShadows {
     /**
      * VulkanMod's compressed terrain vertex (CustomVertexFormat.COMPRESSED_TERRAIN): short4 position, ubyte4 colour, ushort2 uv0,
-     * short2 uv2, 20 bytes (gate G7o: a 16-byte stride read every vertex after the first from the wrong place).
+     * short2 uv2, 20 bytes (gate G7o: a 16-byte stride read every vertex after the first from the wrong place). Session 23: uv2 holds
+     * the terrain flags (TerrainBufferBuilder.setOpaque), read by vanilla.vert.
      */
     static final int TERRAIN_STRIDE = 20;
-    static final VkGraphicsProgram.VertexLayout TERRAIN = new VkGraphicsProgram.VertexLayout(TERRAIN_STRIDE, new int[]{0, 1, 2},
-            new int[]{VK_FORMAT_R16G16B16A16_SINT, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16_UINT}, new int[]{0, 8, 12});
+    static final VkGraphicsProgram.VertexLayout TERRAIN = new VkGraphicsProgram.VertexLayout(TERRAIN_STRIDE, new int[]{0, 1, 2, 3},
+            new int[]{VK_FORMAT_R16G16B16A16_SINT, VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R16G16_UINT, VK_FORMAT_R16G16_SINT},
+            new int[]{0, 8, 12, 16});
     static final int VIEW_PROJECTION = 0, AREA_OFFSET = 1, ATLAS = 0;
     /** VulkanMod's DrawBuffers.POS_OFFSET: the area origin it pushes is 4 blocks past the origin. */
     static final float POS_OFFSET = 4;

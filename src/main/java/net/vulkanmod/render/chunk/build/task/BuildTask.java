@@ -164,6 +164,7 @@ public class BuildTask extends ChunkTask {
 
                             bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
                             bufferBuilder.setBlockAttributes(blockState);
+                            bufferBuilder.setOpaque(false);
 
                             liquidRenderer.renderLiquid(blockState, fluidState, blockPos, bufferBuilder);
                         }
@@ -192,9 +193,12 @@ public class BuildTask extends ChunkTask {
                                     bufferBuilder = getBufferBuilder(bufferBuilders, renderType);
                                 }
                                 bufferBuilder.setBlockAttributes(blockState);
+                                //Session 23: a solid-layer block's texels are opaque whatever their alpha (TerrainBufferBuilder.setOpaque)
+                                bufferBuilder.setOpaque(TerrainRenderType.get(chunkRenderType) == TerrainRenderType.SOLID);
 
                                 pos.set(blockPos.getX() & 15, blockPos.getY() & 15, blockPos.getZ() & 15);
                                 blockRenderer.renderBlock(blockState, blockPos, pos, bufferBuilder, model, modelData, chunkRenderType);
+                                bufferBuilder.setOpaque(false);
                             }
                         }
                     }
