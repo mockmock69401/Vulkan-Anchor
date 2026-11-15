@@ -34,6 +34,12 @@ public class BufferUploaderM {
     public static void m_231202_(BufferBuilder.RenderedBuffer renderedBuffer) {
         RenderSystem.assertOnRenderThread();
 
+        //Frames skipped (a minimized window): nothing to draw into (MinimizedLoading still runs the loading screen's logic)
+        if (Renderer.skipRendering) {
+            renderedBuffer.release();
+            return;
+        }
+
         BufferBuilder.DrawState parameters = renderedBuffer.drawState();
 
         Renderer renderer = Renderer.getInstance();

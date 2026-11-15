@@ -95,6 +95,12 @@ public class MinecraftMixin {
     private void removeThreadYield() {
     }
 
+    //2026-11-15 (session 23): loading goes on while the window is minimized (MinimizedLoading)
+    @Inject(method = "runTick", at = @At(value = "FIELD", target = "Lnet/minecraft/client/Minecraft;noRender:Z", opcode = Opcodes.GETFIELD, ordinal = 0))
+    private void vulkanmod$loadWhileMinimized(boolean tick, CallbackInfo ci) {
+        net.vulkanmod.vulkan.MinimizedLoading.advance((Minecraft) (Object) this);
+    }
+
     @Inject(method = "getFramerateLimit", at = @At("HEAD"), cancellable = true)
     private void limitWhenMinimized(CallbackInfoReturnable<Integer> cir) {
         if(this.f_91079_) cir.setReturnValue(10);
