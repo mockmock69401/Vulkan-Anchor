@@ -119,7 +119,7 @@ public class SPIRVUtils {
         try {
             source = expandRootImports(filename, source, session);
             includeSession = session;
-            long result = shaderc_compile_into_preprocessed_text(compiler, source, shaderKind.kind, filename, "main", options);
+            long result = preprocessIntoText(source, shaderKind.kind, filename);
             if (result == NULL) throw new RuntimeException("Failed to preprocess shader " + filename);
             try (var resultOwner = new SPIRV.ResultOwner(result,
                     org.lwjgl.util.shaderc.Shaderc::shaderc_result_release)) {
@@ -133,6 +133,24 @@ public class SPIRVUtils {
             }
         } finally {
             includeSession = previous;
+        }
+    }
+
+    /**
+     * shaderc_compile_into_preprocessed_text with the strings encoded off-heap, like compileIntoSpv below. 2026-11-15: a mod's
+     * legacy core shader over 64 KB (Great Sage's Raphael shader in Tensura) overflowed LWJGL's thread stack in the CharSequence
+     * overload, so its RegisterShadersEvent failed, Minecraft dropped every selected resource pack and reloaded twice.
+     */
+    private static long preprocessIntoText(String source, int kind, String filename) {
+        ByteBuffer text = memUTF8(source, false);
+        ByteBuffer name = memUTF8(filename);
+        ByteBuffer entry = memUTF8("main");
+        try {
+            return shaderc_compile_into_preprocessed_text(compiler, text, kind, name, entry, options);
+        } finally {
+            memFree(entry);
+            memFree(name);
+            memFree(text);
         }
     }
 
