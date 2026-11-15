@@ -11,6 +11,8 @@ import net.vulkanmod.render.chunk.WorldRenderer;
 import net.vulkanmod.render.chunk.build.biome.BoxBlur;
 
 import java.util.Arrays;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.function.BiFunction;
 
 public class TintCache {
@@ -64,7 +66,7 @@ public class TintCache {
         if(layer.invalidated)
             calculateLayer(relY);
 
-        int[] values = layer.getValues(colorResolver);
+        int[] values = layer.getValues(colorResolver, this);
         int relX = blockPos.getX() & 15;
         int relZ = blockPos.getZ() & 15;
         int idx = totalWidth * (relZ + blendRadius) + (relX + blendRadius);
@@ -89,6 +91,7 @@ public class TintCache {
                     mixed = true;
 
                 final int idx = (absX - minX) + (absZ - minZ) * totalWidth;
+                layer.biomes[idx] = biome;
                 layer.grass[idx] = biome.getGrassColor(absX, absZ);
                 layer.foliage[idx] = biome.getFoliageColor();
                 layer.water[idx] = biome.getWaterColor();
@@ -101,17 +104,39 @@ public class TintCache {
             BoxBlur.blur(layer.water, temp, SECTION_WIDTH, blendRadius);
         }
 
+        layer.mixed = mixed;
         layer.invalidated = false;
+    }
+
+    /**
+     * A resolver other than vanilla's three (Polytone's colormaps are their own resolvers, for water and plants): its colour per column of
+     * the layer's biomes, blurred the same way.
+     */
+    private int[] resolve(Layer layer, ColorResolver colorResolver) {
+        int[] values = new int[dataSize];
+        for (int relZ = 0; relZ < totalWidth; relZ++) {
+            for (int relX = 0; relX < totalWidth; relX++) {
+                int idx = relX + relZ * totalWidth;
+                values[idx] = colorResolver.getColor(layer.biomes[idx], minX + relX, minZ + relZ);
+            }
+        }
+        if (layer.mixed && blendRadius > 0)
+            BoxBlur.blur(values, temp, SECTION_WIDTH, blendRadius);
+        return values;
     }
 
     static class Layer {
         private boolean invalidated = true;
+        private boolean mixed;
 
+        private Biome[] biomes;
+        private final Map<ColorResolver, int[]> others = new IdentityHashMap<>();
         private int[] grass;
         private int[] foliage;
         private int[] water;
 
         void allocate(int size) {
+            biomes = new Biome[size];
             grass = new int[size];
             foliage = new int[size];
             water = new int[size];
@@ -120,9 +145,10 @@ public class TintCache {
 
         void invalidate() {
             this.invalidated = true;
+            others.clear();
         }
 
-        public int[] getValues(ColorResolver colorResolver) {
+        int[] getValues(ColorResolver colorResolver, TintCache cache) {
             if(colorResolver == BiomeColors.GRASS_COLOR_RESOLVER)
                 return grass;
             else if(colorResolver == BiomeColors.FOLIAGE_COLOR_RESOLVER)
@@ -130,7 +156,12 @@ public class TintCache {
             else if(colorResolver == BiomeColors.WATER_COLOR_RESOLVER)
                 return water;
 
-            throw new IllegalArgumentException("Unexpected resolver: " + colorResolver.toString());
+            int[] values = others.get(colorResolver);
+            if (values == null) {
+                values = cache.resolve(this, colorResolver);
+                others.put(colorResolver, values);
+            }
+            return values;
         }
     }
 }
