@@ -90,6 +90,8 @@ public final class VkPostProcess {
     COPY_HEAT = 25, FINAL_HEAT = 4,
     //Session 19: the End galaxy's baked map (GalaxyMap) at 26
     COPY_GALAXY_MAP = 26,
+    //2026-11-15 (shader roadmap session 25): the footprints' map (FootprintMath, R32_UINT) at 27
+    COPY_FOOTPRINTS = FootprintMath.BINDING,
     //2026-11-13: the reflection reads the frame's sun open share at 12 (sunOpenBuffer, written before the composite)
     REFLECTION_SUN_OPEN = 12,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
@@ -130,6 +132,15 @@ public final class VkPostProcess {
      * The moon's face stands in for it in the bindings before.
      */
     private VkImage2D galaxyMap;
+    /**
+     * 2026-11-15 (session 25): the footprints' map (Footprints, FootprintMath.MAP square, R32_UINT), made with the post-process; filled
+     * FOOTPRINT_ROWS rows a frame after it is made (or a dropped upload), then only the texels new and expired prints change. The composite
+     * reads no footprints until it is whole (footprintRow == MAP).
+     */
+    private VkImage2D footprintMap;
+    private int footprintRow;
+    private long footprintSerial = -1;
+    private static final int FOOTPRINT_ROWS = 64;
     private long galaxySampler;
     private long[] galaxyChunks;
     private static final int GALAXY_ROWS = 256;
@@ -404,6 +415,51 @@ public final class VkPostProcess {
         this.weatherUniforms = weatherUniforms;
         this.weatherUniformBuffer = weatherUniformBuffer;
         this.precipitationMap = precipitationMap;
+        VkImage2D footprintMap = null;
+        try {
+            footprintMap = VkImage2D.create(VK_FORMAT_R32_UINT, FootprintMath.MAP, FootprintMath.MAP, 1,
+                    VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        } catch (RuntimeException | LinkageError e) {
+            VisualsLog.warn("Visuals footprints not created, none are drawn: " + e);
+        }
+        this.footprintMap = footprintMap;
+    }
+
+    /**
+     * Session 25: the footprints' texels for this frame (Footprints): the rows still to fill, then the boxes new and expired prints changed.
+     * Returns whether the composite may read the map (whole and in a frame that was not dropped).
+     */
+    private boolean uploadFootprints(VkUploadStream upload) {
+        int[] map = Footprints.map();
+        if (this.footprintMap == null || map == null) {
+            this.footprintRow = 0;
+            return false;
+        }
+        if (Footprints.takeFullUpload() || (this.footprintSerial >= 0 && VkFrames.isDropped(this.footprintSerial))) this.footprintRow = 0;
+        boolean sent = false;
+        if (this.footprintRow < FootprintMath.MAP) {
+            int rows = Math.min(FOOTPRINT_ROWS, FootprintMath.MAP - this.footprintRow);
+            uploadFootprintRect(upload, map, 0, this.footprintRow, FootprintMath.MAP, rows);
+            this.footprintRow += rows;
+            sent = true;
+        }
+        for (int[] box : Footprints.takeDirty()) {
+            for (int[] r : FootprintMath.split(box)) uploadFootprintRect(upload, map, r[0], r[1], r[2], r[3]);
+            sent = true;
+        }
+        if (sent) this.footprintSerial = VkFrames.serial();
+        return this.footprintRow >= FootprintMath.MAP;
+    }
+
+    private void uploadFootprintRect(VkUploadStream upload, int[] map, int x, int y, int w, int h) {
+        ByteBuffer pixels = MemoryUtil.memAlloc(w * h * 4).order(java.nio.ByteOrder.nativeOrder());
+        try {
+            java.nio.IntBuffer ints = pixels.asIntBuffer();
+            for (int row = 0; row < h; row++) ints.put(map, (y + row) * FootprintMath.MAP + x, w);
+            upload.uploadImage(this.footprintMap, 0, x, y, w, h, MemoryUtil.memAddress(pixels));
+        } finally {
+            MemoryUtil.memFree(pixels);
+        }
     }
 
     /** 2026-11-09 (session 6): whether the shader weather can be drawn (its program was built). */
@@ -715,6 +771,18 @@ public final class VkPostProcess {
             caustic[0] *= 1 - BiomeSky.cover();
             this.copyUniforms.putVec4(CausticMath.SLOT, caustic[0], caustic[1], caustic[2], caustic[3]);
         }
+        //Session 25: footprints (FootprintMath; strength 0 or no prints = off)
+        if (this.copyUniforms.has(FootprintMath.SLOT)) {
+            boolean ready = uploadFootprints(upload);
+            net.minecraft.world.phys.Vec3 eye = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+            float[] foot = ready && Footprints.count() > 0 ? FootprintMath.params(VisualsConfig.get().footprints, Footprints.now(), eye.y) : new float[4];
+            if (Footprints.LOG) Footprints.uploadDebug = "ready " + ready + " row " + this.footprintRow + " params " + foot[0] + "/" + foot[1] + "/" + foot[2];
+            this.copyUniforms.putVec4(FootprintMath.SLOT, foot[0], foot[1], foot[2], foot[3]);
+            if (this.copyUniforms.has(FootprintMath.CAMERA_SLOT)) {
+                float[] cam = FootprintMath.camera(eye.x, eye.z);
+                this.copyUniforms.putVec4(FootprintMath.CAMERA_SLOT, cam[0], cam[1], cam[2], cam[3]);
+            }
+        }
         //Session 20: rain-wet ground (WetGroundMath; strength 0 = off)
         if (this.copyUniforms.has(WetGroundMath.SLOT)) {
             float[] wet = WetGroundMath.params(VisualsConfig.get().wetGround);
@@ -788,7 +856,8 @@ public final class VkPostProcess {
                 .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles)
                 .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view())
                 .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler).storageImage(COPY_HEAT, this.heatImage.view())
-                .sampled(COPY_GALAXY_MAP, this.galaxyMap != null ? this.galaxyMap : this.moonFace, this.galaxyMap != null ? this.galaxySampler : this.moonSampler);
+                .sampled(COPY_GALAXY_MAP, this.galaxyMap != null ? this.galaxyMap : this.moonFace, this.galaxyMap != null ? this.galaxySampler : this.moonSampler)
+                .sampled(COPY_FOOTPRINTS, this.footprintMap != null ? this.footprintMap : this.lodLightStandIn, this.nearest);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         //Session 14 follow-up: no tile flagged yet (the composite flags its tiles with translucent particles), after the last frame's
         // .PARTICLES pass read them
@@ -1183,6 +1252,7 @@ public final class VkPostProcess {
     public void tick() {
         this.cloudMap.tick();
         if (this.precipitationMap != null) this.precipitationMap.tick();
+        if (this.footprintMap != null) this.footprintMap.tick();
         this.lodLightStandIn.tick();
         this.ao.tick();
         if (this.smaa != null) this.smaa.tick();
@@ -1239,6 +1309,7 @@ public final class VkPostProcess {
         if (this.weatherRound != null) this.weatherRound.free();
         if (this.weatherUniformBuffer != null) this.weatherUniformBuffer.free();
         if (this.precipitationMap != null) this.precipitationMap.free();
+        if (this.footprintMap != null) this.footprintMap.free();
         this.lightStandIn.free();
         this.lodLightStandIn.free();
         if (this.scene != null) destroy(this.images());

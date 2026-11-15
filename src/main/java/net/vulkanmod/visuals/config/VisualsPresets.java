@@ -69,6 +69,8 @@ public final class VisualsPresets {
         v.put("wet_ground", new int[]{0, 0, 50, 100, 100});
         //session 25: sandstorms and blizzards (in a thunderstorm only: the sand grains' walk and the veils in the weather pass)
         v.put("storm_weather", new int[]{0, 100, 100, 100, 100});
+        //session 25: footprints (four map reads on near top faces in the composite, a few texels uploaded per step)
+        v.put("footprints", new int[]{0, 100, 100, 100, 100});
         VALUES = Collections.unmodifiableMap(v);
     }
 

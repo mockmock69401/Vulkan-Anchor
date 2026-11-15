@@ -5,6 +5,7 @@ import net.vulkanmod.visuals.particle.VanillaParticles;
 import net.vulkanmod.visuals.render.BiomeSkyMath;
 import net.vulkanmod.visuals.render.CausticMath;
 import net.vulkanmod.visuals.render.StormMath;
+import net.vulkanmod.visuals.render.FootprintMath;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.WetGroundMath;
 import net.vulkanmod.visuals.render.CloudMath;
@@ -80,6 +81,8 @@ public final class VisualsOptionLayout {
         //2026-11-15 (session 25): a thunderstorm's sandstorm over deserts and blizzard over snow (0: off; the blowing sand and snow need
         // the shader weather, the dusty or white air does not)
         items.add(percent("storm_weather", 0, StormMath.STRENGTH_MAX, Impact.LOW));
+        //2026-11-15 (session 25): the players' footprints in snow and sand, fading after a while (0: off)
+        items.add(percent("footprints", 0, FootprintMath.STRENGTH_MAX, Impact.LOW));
         items.addAll(ParticleEffect.SNOW.items(Impact.LOW));
         items.addAll(ParticleEffect.RAIN.items(Impact.LOW));
         return List.copyOf(items);
@@ -344,6 +347,7 @@ public final class VisualsOptionLayout {
             case "desert_night" -> c.desertNight;
             case "desert_clouds" -> c.desertClouds;
             case "storm_weather" -> c.stormWeather;
+            case "footprints" -> c.footprints;
             case "shader_weather" -> c.shaderWeather ? 1 : 0;
             case "half_res_effects" -> c.halfResEffects ? 1 : 0;
             case "nether_heat_haze" -> c.netherHeatHaze;
@@ -437,6 +441,7 @@ public final class VisualsOptionLayout {
             case "desert_night" -> c.desertNight = v;
             case "desert_clouds" -> c.desertClouds = v;
             case "storm_weather" -> c.stormWeather = v;
+            case "footprints" -> c.footprints = v;
             case "shader_weather" -> c.shaderWeather = v != 0;
             case "half_res_effects" -> c.halfResEffects = v != 0;
             case "nether_heat_haze" -> c.netherHeatHaze = v;

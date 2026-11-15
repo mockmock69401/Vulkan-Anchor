@@ -498,6 +498,8 @@ public final class VisualsRenderer {
             CausticMath.setClock(flow);
             //Session 25: the camera's desert share (the desert's night sky, stars and clear sky)
             BiomeSky.update(level, cameraX, cameraY, cameraZ, flow, level.getThunderLevel(partialTick));
+            //Session 25: the players' footprints in snow and sand
+            Footprints.update(level, flow);
             if (FrameRecorder.ON) FrameRecorder.set(FrameRecorder.WIND_PHASE, (long) (FoliageWind.phase0() * 1e6));
             Matrix4fc lodProjection = this.lod != null && this.lod.projection() != null ? this.lod.projection() : projection;
             return AtmosphereFrame.of(VkFrames.serial(), projection, lodProjection, modelView, cameraY, level.getSeaLevel(),

@@ -83,6 +83,8 @@ layout(binding = 24) uniform sampler2D moonFace;
 layout(binding = 25, rgba16f) uniform restrict image2D heatField;
 //Session 19: the End galaxy's band and nebulae, baked once (GalaxyMap, galaxy.glsl galaxyMapCoord's layout); read while dimensionParams.x > 0
 layout(binding = 26) uniform sampler2D galaxyMap;
+//2026-11-15 (shader roadmap session 25): the footprints' map (FootprintMath, footprint.glsl)
+layout(binding = 27) uniform usampler2D footprintMap;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -200,6 +202,10 @@ layout(location = 70) uniform vec4 portalHi3;
 layout(location = 71) uniform vec4 causticParams;
 //2026-11-13 (session 20, WetGroundMath): x the wet ground's strength (0 = off), zw the camera's x, z wrapped at WET_PUDDLE_PERIOD
 layout(location = 72) uniform vec4 wetParams;
+//2026-11-15 (session 25, FootprintMath): footprint.glsl's footParams (x the depth strength, 0 = off; y now's time step; z the camera's y)
+// and footCamera (xy the camera's world texel, zw within it)
+layout(location = 73) uniform vec4 footParams;
+layout(location = 74) uniform vec4 footCamera;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -226,6 +232,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/caustics.glsl>
 #import <vulkanmod:visuals/post/wetground.glsl>
+#import <vulkanmod:visuals/post/footprint.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
 #import <vulkanmod:visuals/post/pbr.glsl>
@@ -1207,6 +1214,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
 #endif
         if (wetGround > 0.0) {
             lit = wetGroundColour(lit, wetGround, wetPuddleShare);
+        }
+        //Session 25: footprints in snow and sand (footprint.glsl) on the top faces of solid terrain near the camera
+        if (footParams.x > 0.0 && !plant && !cloud && !fromLod && kind == 0.0 && normalWorld.y > 0.7) {
+            lit *= footprintShade(world, dist, sunPart, atmosphereSun.y >= 0.0 ? atmosphereSun.xyz : -atmosphereSun.xyz);
         }
         //Session 20: caustics (caustics.glsl) on what lies under water and gets the sun: the floor seen through the surface from above (its
         // depth below the surface along the view), or with the camera under an open surface whatever lies below that surface's height

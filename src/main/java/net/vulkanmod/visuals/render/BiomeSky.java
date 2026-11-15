@@ -111,7 +111,7 @@ public final class BiomeSky {
         if (LOG && (seconds - loggedSeconds >= 2 || seconds < loggedSeconds)) {
             loggedSeconds = seconds;
             net.vulkanmod.visuals.VisualsLog.info(String.format(java.util.Locale.ROOT, "Visuals biome shares at %.0f %.0f: desert %.3f (target %.3f), snow %.3f (target %.3f)",
-                    x, z, desert, target, snow, snowTarget));
+                    x, z, desert, target, snow, snowTarget) + "; footprints: " + Footprints.describe());
         }
         lastSeconds = seconds;
     }
