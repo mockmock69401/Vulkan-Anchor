@@ -322,6 +322,8 @@ public final class AtmosphereUniforms {
         float[] v = new float[12];
         if (block[3] == AtmosphereMath.ATMOSPHERE_SKY) {
             v[8] = clamp01(block[11] * (1 - clamp01(f.rain())));
+            //2026-11-15 (session 25): a desert's stars are brighter (BiomeSky; atmosphere.glsl caps the weight at STAR_GATE_MAX)
+            v[8] *= BiomeSky.starBoost();
             float[] sunrise = f.sunrise();
             v[9] = sunrise != null && sunrise.length >= 4 ? clamp01(sunrise[3]) : 0;
         }
@@ -394,6 +396,9 @@ public final class AtmosphereUniforms {
         ShaderColours colours = s.colours();
         float[] sunTint = sunTint(colours, sun.y, morning), lowTint = lowTint(colours, morning);
         float[] nightTint = colours.tint(ShaderColours.Colour.NIGHT_SKY), glowTint = colours.tint(ShaderColours.Colour.SUN_GLOW);
+        //2026-11-15 (session 25): in a desert the night sky is darker and deeper (BiomeSky; exactly 1 elsewhere)
+        float[] desertNight = BiomeSky.nightTint();
+        nightTint = new float[]{nightTint[0] * desertNight[0], nightTint[1] * desertNight[1], nightTint[2] * desertNight[2]};
         for (int i = 0; i < 3; i++) {
             float sunLight = sunAmount * ts[i] * tint[i] * dim * sunTint[i], moonLight = moonAmount * tm[i] * tint[i] * dim * nightTint[i];
             b[4 + i] = sunLight * (1 - diffuse);

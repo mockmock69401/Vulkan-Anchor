@@ -493,6 +493,8 @@ public final class VisualsRenderer {
                     VisualsConfig.get().hangingSway / 100f);
             //Session 20: the caustics keep time with the ripples' flow
             CausticMath.setClock(flow);
+            //Session 25: the camera's desert share (the desert's night sky, stars and clear sky)
+            BiomeSky.update(level, cameraX, cameraY, cameraZ, flow);
             if (FrameRecorder.ON) FrameRecorder.set(FrameRecorder.WIND_PHASE, (long) (FoliageWind.phase0() * 1e6));
             Matrix4fc lodProjection = this.lod != null && this.lod.projection() != null ? this.lod.projection() : projection;
             return AtmosphereFrame.of(VkFrames.serial(), projection, lodProjection, modelView, cameraY, level.getSeaLevel(),

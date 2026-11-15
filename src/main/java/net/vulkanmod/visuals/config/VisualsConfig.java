@@ -430,6 +430,13 @@ public class VisualsConfig {
     public int starCount = 100;
     public int starSize = 100;
     public int starBrightness = 100;
+    /**
+     * 2026-11-15 (session 25, the user: "사막에서는 밤하늘이 조금 더 어둡고 채도가 높았으면"): in a desert the night sky is darker and deeper
+     * indigo-violet and the stars brighter (BiomeSkyMath): percent, 0 = off.
+     */
+    public int desertNight = 100;
+    /** 2026-11-15 (session 25, the user: "사막에서는 구름이 없게"): how much of the far clouds a desert clears (BiomeSkyMath): percent, 0 = off. */
+    public int desertClouds = 100;
     /** 2026-11-11 (session 13): the stars' shape: 0 vanilla's squares, 1 round soft points (StarMath.TYPE_ROUND). */
     public int starType = 0;
     /**

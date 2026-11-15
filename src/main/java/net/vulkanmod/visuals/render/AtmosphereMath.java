@@ -44,6 +44,8 @@ public final class AtmosphereMath {
     public static final float SKY_REDDENING = 0.7f;
     /** Vanilla's sunrise/sunset fan is suppressed on the sun's side: fully above FAN_SIDE_HIGH horizontal cosine to the sun, not below FAN_SIDE_LOW. */
     public static final float FAN_SIDE_LOW = -0.3f, FAN_SIDE_HIGH = 0.1f;
+    /** 2026-11-15 (session 25): vanillaStars' cap on the star weight (a desert's stars weigh more: BiomeSkyMath.starBoost). */
+    public static final float STAR_GATE_MAX = BiomeSkyMath.STAR_GATE_MAX;
     /**
      * The haze's optical depths use d^3 / (d^2 + HAZE_ONSET^2) for a view distance d: gentle right by the camera, unchanged far away.
      * 2026-11-09 (session 1b): 400 kept everything within 150 blocks clear; 32 starts the haze a few blocks out.
@@ -329,7 +331,7 @@ public final class AtmosphereMath {
         float side = ld > 0.0001f && ls > 0.0001f ? (dir[0] * a.sun[0] + dir[2] * a.sun[2]) / (ld * ls) : 0;
         float fan = gate[1] > 0 ? Math.min(gate[1], 1) : 0;
         float keep = 1 - fan * smoothstep(FAN_SIDE_LOW, FAN_SIDE_HIGH, side);
-        float v = white * keep * Math.min(gate[0], 1);
+        float v = white * keep * Math.min(gate[0], STAR_GATE_MAX);
         return new float[]{v, v, v};
     }
 
@@ -340,7 +342,9 @@ public final class AtmosphereMath {
     public static float[] cloudColour(CloudLight c, float[] march) {
         float[] m = CloudMath.four(march);
         float x = m[0] > 0 ? m[0] : 0, y = m[1] > 0 ? m[1] : 0, z = m[2] > 0 ? Math.min(m[2], 1) : 0;
-        return new float[]{x * c.lit[0] + y * c.ambient[0], x * c.lit[1] + y * c.ambient[1], x * c.lit[2] + y * c.ambient[2], z};
+        //2026-11-15 (session 25): times 1 - light.w, the desert's clearing (BiomeSkyMath.cloudClear)
+        float keep = 1 - (c.light.length > 3 ? Math.max(0, Math.min(1, c.light[3])) : 0);
+        return new float[]{(x * c.lit[0] + y * c.ambient[0]) * keep, (x * c.lit[1] + y * c.ambient[1]) * keep, (x * c.lit[2] + y * c.ambient[2]) * keep, z * keep};
     }
 
     public static float[] cloudOver(Atmosphere a, CloudLight c, float[] march, float[] dir, float amount) {

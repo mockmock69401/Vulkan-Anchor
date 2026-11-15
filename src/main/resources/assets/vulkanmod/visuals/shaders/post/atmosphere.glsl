@@ -150,6 +150,8 @@ const float LOW_PATH_POWER = 1.5;
 // azimuth is above FAN_SIDE_HIGH, not at all below FAN_SIDE_LOW (the fan spans the sun's half of the horizon)
 const float FAN_SIDE_LOW = -0.3;
 const float FAN_SIDE_HIGH = 0.1;
+//2026-11-15 (session 25): vanillaStars' cap on the star weight (a desert's stars weigh up to 2.5 at the default: BiomeSkyMath.starBoost)
+const float STAR_GATE_MAX = 4.0;
 //Overcast light (rain): the sky's colour is replaced by its luminance times this tint (luminance 1)
 const float OVERCAST_RED = 0.96;
 const float OVERCAST_GREEN = 1.0;
@@ -490,17 +492,19 @@ vec3 vanillaStars(Atmosphere a, vec3 dir, vec3 pixel, vec4 vanillaSky, vec4 vani
     float side = ld > 0.0001 && ls > 0.0001 ? dot(dir.xz/ld, a.sun.xz/ls) : 0.0;
     float fan = gate.y > 0.0 ? min(gate.y, 1.0) : 0.0;
     float keep = 1.0 - fan*smoothstep(FAN_SIDE_LOW, FAN_SIDE_HIGH, side);
-    return vec3(white*keep*min(gate.x, 1.0));
+    return vec3(white*keep*min(gate.x, STAR_GATE_MAX));
 }
 
 //The far clouds' premultiplied colour and coverage from clouds.glsl's farCloudMarch result m (x sunlit weight, y sky-lit weight,
 // z coverage; session 3: the vanilla shape's y is its coverage): rgb = m.x lit + m.y ambient, a = m.z. Composite over the sky with
 // sky * (1 - a) + rgb.
+// 2026-11-15 (session 25): times 1 - c.light.w, the desert's clearing of the clouds (0: all kept; BiomeSkyMath.cloudClear)
 vec4 cloudColour(CloudLight c, vec4 m) {
+    float keep = 1.0 - clamp(c.light.w, 0.0, 1.0);
     float x = m.x > 0.0 ? m.x : 0.0;
     float y = m.y > 0.0 ? m.y : 0.0;
     float z = m.z > 0.0 ? min(m.z, 1.0) : 0.0;
-    return vec4(x*c.lit.rgb + y*c.ambient.rgb, z);
+    return vec4(x*c.lit.rgb + y*c.ambient.rgb, z)*keep;
 }
 
 //cloudColour hazed over the march's mean distance m.w along dir (the in-scatter weighted by the coverage)
