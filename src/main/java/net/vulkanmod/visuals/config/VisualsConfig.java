@@ -66,8 +66,11 @@ public class VisualsConfig {
      * file on Horror turns the auroras off and stays on it; any other file keeps its values.
      * 22 (2026-11-15, session 25): Sandstorms &amp; Blizzards (stormWeather), which the presets set; a file on a level takes that level's
      * value and stays on it, any other file the default.
+     * 23 (2026-11-15, session 25): Footprints (footprints), which the presets set; likewise.
      */
-    private static final int REVISION = 22;
+    private static final int REVISION = 23;
+    /** Session 25: the first revision with Footprints. */
+    static final int FOOTPRINTS_REVISION = 23;
     /** Session 25: the first revision with Sandstorms & Blizzards. */
     static final int STORM_WEATHER_REVISION = 22;
     /** 2026-11-14: the first revision with the trimmed palette rows and Horror's auroras off. */
@@ -184,6 +187,9 @@ public class VisualsConfig {
         //Session 25: likewise a level saved before Sandstorms & Blizzards existed
         if (fileRevision < STORM_WEATHER_REVISION && VisualsPresets.isLevel(c.preset)) {
             VisualsOptionLayout.set(c, VisualsOptionLayout.item("storm_weather"), VisualsPresets.value("storm_weather", c.preset));
+        }
+        if (fileRevision < FOOTPRINTS_REVISION && VisualsPresets.isLevel(c.preset)) {
+            VisualsOptionLayout.set(c, VisualsOptionLayout.item("footprints"), VisualsPresets.value("footprints", c.preset));
         }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
@@ -450,6 +456,11 @@ public class VisualsConfig {
      * sandstorm (blowing sand, dusty air), over snow a blizzard (wind-driven snow, white-out) (StormMath): percent, 0 = off.
      */
     public int stormWeather = 100;
+    /**
+     * 2026-11-15 (session 25, the user: "눈과 모래 위를 걸으면 발자국이 남았다가 서서히 사라지게"): footprints in snow and sand that fade after a
+     * while (Footprints, FootprintMath): percent of the default depth, 0 = off.
+     */
+    public int footprints = 100;
     /** 2026-11-11 (session 13): the stars' shape: 0 vanilla's squares, 1 round soft points (StarMath.TYPE_ROUND). */
     public int starType = 0;
     /**

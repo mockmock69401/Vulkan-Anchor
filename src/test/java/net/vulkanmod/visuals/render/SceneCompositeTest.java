@@ -228,6 +228,7 @@ class SceneCompositeTest {
         expected.put("COPY_MOON_FACE", VulkanShaderMeta.Kind.SAMPLER);//2026-11-12 (session 15, the moon's face)
         expected.put("COPY_HEAT", VulkanShaderMeta.Kind.IMAGE);//2026-11-13 (session 19, the Nether's heat haze)
         expected.put("COPY_GALAXY_MAP", VulkanShaderMeta.Kind.SAMPLER);//2026-11-13 (session 19, the End galaxy's map)
+        expected.put("COPY_FOOTPRINTS", VulkanShaderMeta.Kind.SAMPLER);//2026-11-15 (session 25, the footprints' map)
         Set<String> want = new TreeSet<>();
         for (Map.Entry<String, VulkanShaderMeta.Kind> e : expected.entrySet()) {
             Integer binding = fields.get(e.getKey());
@@ -241,7 +242,7 @@ class SceneCompositeTest {
             have.add(b.binding() + ":" + b.kind());
         }
         assertEquals(want, have);
-        assertEquals(27, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14), the particle tiles at 21, the half-size clouds and aurora at 22, 23 (session 14 follow-up), the moon's face at 24 (session 15), the heat haze's offsets at 25, the End galaxy's map at 26 (session 19)");
+        assertEquals(28, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14), the particle tiles at 21, the half-size clouds and aurora at 22, 23 (session 14 follow-up), the moon's face at 24 (session 15), the heat haze's offsets at 25, the End galaxy's map at 26 (session 19), the footprints' map at 27 (session 25)");
         //Every slot 0..34 with the type its writer uses: the three matrices, then vec4
         for (int loc = 0; loc <= 34; loc++) assertEquals(loc <= 2 ? "mat4" : "vec4", member(loc).type(), "location " + loc);
         //The clean writers and W4 fill every slot but the held light's (HeldLightSystem needs a device buffer: its slot is checked by value)

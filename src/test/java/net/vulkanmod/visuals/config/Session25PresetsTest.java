@@ -8,9 +8,9 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Session 25: Sandstorms & Blizzards (revision 22), which the presets set, in files saved before it existed. */
+/** Session 25: Sandstorms & Blizzards (revision 22) and Footprints (revision 23), which the presets set, in files saved before they existed. */
 class Session25PresetsTest {
-    private static final String[][] SETTINGS = {{"storm_weather", "stormWeather", "21"}};
+    private static final String[][] SETTINGS = {{"storm_weather", "stormWeather", "21"}, {"footprints", "footprints", "22"}};
 
     @Test
     void eachLevelSetsThemAndIsStillDetected() {
