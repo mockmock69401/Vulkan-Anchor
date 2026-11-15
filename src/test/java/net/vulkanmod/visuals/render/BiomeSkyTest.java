@@ -13,18 +13,41 @@ class BiomeSkyTest {
     private static final float EPS = 1e-5f;
 
     @Test
-    void classifiesDesertsBadlandsAndNotSavannas() {
-        //vanilla: desert 2.0 dry, badlands 2.0 dry (tagged), savanna 2.0 dry (tagged savanna), plains 0.8 wet, snowy plains 0.0 wet
-        assertEquals(1, BiomeSkyMath.classify(false, false, false, false, 2.0f));
-        assertEquals(1, BiomeSkyMath.classify(false, true, false, false, 2.0f));
-        assertEquals(0, BiomeSkyMath.classify(false, false, true, false, 2.0f));
-        assertEquals(0, BiomeSkyMath.classify(false, false, false, true, 0.8f));
-        assertEquals(0, BiomeSkyMath.classify(false, false, false, true, 0.0f));
-        //a modded desert tag wins over anything; a hot wet jungle (0.95, rain) is not one; a dry but mild biome is not one
-        assertEquals(1, BiomeSkyMath.classify(true, false, true, true, 0.5f));
-        assertEquals(0, BiomeSkyMath.classify(false, false, false, true, 2.0f));
-        assertEquals(0, BiomeSkyMath.classify(false, false, false, false, 1.0f));
-        assertEquals(0, BiomeSkyMath.classify(false, false, false, false, Float.NaN));
+    void onlyListedOrTaggedDryBiomesAreDeserts() {
+        //vanilla (no precipitation in the desert and the badlands)
+        for (String id : new String[]{"minecraft:desert", "minecraft:badlands", "minecraft:eroded_badlands", "minecraft:wooded_badlands"}) {
+            assertEquals(1, BiomeSkyMath.classify(id, false, false), id);
+        }
+        //modded deserts from the supported packs, by id alone (Tensura, Regions Unexplored, Terralith, BWG, Atmospheric, BoP)
+        for (String id : new String[]{"tensura:desert_of_death", "regions_unexplored:saguaro_desert", "regions_unexplored:joshua_desert",
+                "terralith:desert_oasis", "terralith:white_mesa", "biomeswevegone:mojave_desert", "atmospheric:dunes", "biomesoplenty:dryland"}) {
+            assertEquals(1, BiomeSkyMath.classify(id, false, false), id);
+        }
+        //the user's report: Regions Unexplored's bamboo forest (rain, 0.875) is no desert, nor are savannas, steppes, shrubland, beaches,
+        // volcanic land or anything hot, dry and unknown (the old temperature guess took Gardens of the Dead's and Nether-like biomes)
+        assertEquals(0, BiomeSkyMath.classify("regions_unexplored:bamboo_forest", false, true));
+        for (String id : new String[]{"minecraft:savanna", "minecraft:savanna_plateau", "regions_unexplored:steppe", "regions_unexplored:dry_bushland",
+                "terralith:shrubland", "terralith:arid_highlands", "biomesoplenty:volcano", "biomesoplenty:cold_desert", "gardens_of_the_dead:whistling_woods",
+                "somemod:scorched_flats"}) {
+            assertEquals(0, BiomeSkyMath.classify(id, false, false), id);
+        }
+        //a tag counts for a mod outside the list, but only without precipitation (BoP's lush desert and Atmospheric's snowy scrubland are tagged
+        // desert yet rain or snow; BWG's red rock badlands rain)
+        assertEquals(1, BiomeSkyMath.classify("othermod:great_erg", true, false));
+        assertEquals(0, BiomeSkyMath.classify("biomesoplenty:lush_desert", true, true));
+        assertEquals(0, BiomeSkyMath.classify("atmospheric:snowy_scrubland", true, true));
+        assertEquals(0, BiomeSkyMath.classify("biomeswevegone:red_rock_peaks", true, true));
+        //a listed biome that a pack made rainy is not a desert there; no id and no tag: not a desert
+        assertEquals(0, BiomeSkyMath.classify("minecraft:desert", false, true));
+        assertEquals(0, BiomeSkyMath.classify(null, false, false));
+    }
+
+    @Test
+    void theListHoldsOnlyNamespacedIds() {
+        for (String id : BiomeSkyMath.DESERT_BIOMES) {
+            assertTrue(id.matches("[a-z0-9_.-]+:[a-z0-9_/.-]+"), id);
+        }
+        assertTrue(BiomeSkyMath.DESERT_BIOMES.size() >= 40);
     }
 
     @Test

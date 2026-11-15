@@ -4,9 +4,12 @@ package net.vulkanmod.visuals.render;
  * 2026-11-15 (shader roadmap session 25, the user: "사막에서는 밤하늘이 조금 더 어둡고 채도가 높았으면", "사막에서는 구름이 없게"): how much of
  * a desert the camera stands in, and what that does to the sky. Pure math (BiomeSkyTest); BiomeSky reads the level and keeps the state.
  * <ul>
- * <li>A biome is a desert (1) or not (0) by classify: tagged a desert (c:is_desert, forge:is_desert) or badlands, else, untagged, hot
- * (base temperature at least DESERT_TEMPERATURE: vanilla's desert and badlands are 2.0) and dry (no precipitation), but never a savanna
- * (also 2.0 and dry, yet grassland).</li>
+ * <li>A biome is a desert (1) or not (0) by classify, from an explicit list (2026-11-15 follow-up, the user: "구름이 있어야 하는 바이옴까지
+ * 전부 구름이 없어지는 현상 ... 사막에 해당하는 바이옴만 정확하게 뽑아서"): it never rains or snows there (no precipitation) and either its id is
+ * in DESERT_BIOMES (vanilla's desert and badlands, and the deserts, dunes, badlands, mesas and oases of every supported pack's mods, picked
+ * from their biome data: session25-biomes.md in the notes) or a mod tags it a desert or badlands (c:is_desert, forge:is_desert,
+ * minecraft:is_badlands, c:is_badlands, forge:is_badlands: a mod outside those packs). Anything else, an unknown modded biome included, is
+ * not a desert: savannas, shrublands, steppes, beaches, volcanic and ashen land, cold deserts and biomes where it rains keep their sky.</li>
  * <li>The camera's desert share is the mean of a KERNEL x KERNEL grid of columns SPACING blocks apart around it, weighted by a Gaussian of
  * SIGMA blocks (kernel), so the share ramps over about 50 blocks of walking across a border instead of switching at the line; then it
  * follows that target over FOLLOW_SECONDS (follow), so a teleport fades too.</li>
@@ -20,8 +23,28 @@ package net.vulkanmod.visuals.render;
 public final class BiomeSkyMath {
     /** The settings' ranges (percent): the night sky's strength, the clouds' clearing. */
     public static final int NIGHT_MAX = 200, CLEAR_MAX = 100;
-    /** A hot, dry biome at or above this base temperature counts as a desert. */
-    public static final float DESERT_TEMPERATURE = 1.5f;
+    /** The deserts by id (see the class comment); a biome on it still needs no precipitation. */
+    public static final java.util.Set<String> DESERT_BIOMES = java.util.Set.of(
+            //vanilla
+            "minecraft:desert", "minecraft:badlands", "minecraft:eroded_badlands", "minecraft:wooded_badlands",
+            //Atmospheric (BMC4, Prominence II)
+            "atmospheric:dunes", "atmospheric:flourishing_dunes", "atmospheric:petrified_dunes", "atmospheric:rocky_dunes", "atmospheric:scrubland",
+            "atmospheric:spiny_thicket",
+            //Biomes O' Plenty
+            "biomesoplenty:dryland", "biomesoplenty:wasteland",
+            //Oh The Biomes We've Gone
+            "biomeswevegone:atacama_outback", "biomeswevegone:mojave_desert", "biomeswevegone:windswept_desert",
+            //Regions Unexplored
+            "regions_unexplored:joshua_desert", "regions_unexplored:saguaro_desert", "regions_unexplored:outback", "regions_unexplored:arid_mountains",
+            //Tensura
+            "tensura:desert_of_death", "tensura:barren_land", "tensura:underworld_sands", "tensura:underworld_red_sands",
+            //Terralith
+            "terralith:ancient_sands", "terralith:bryce_canyon", "terralith:desert_canyon", "terralith:desert_oasis", "terralith:desert_spires",
+            "terralith:lush_desert", "terralith:red_oasis", "terralith:sandstone_valley", "terralith:savanna_badlands", "terralith:warped_mesa",
+            "terralith:white_mesa",
+            //other dimensions' deserts (their own sky decides whether the desert sky applies)
+            "allthemodium:desert", "allthemodium:desert_hills", "chronodawn:chronodawn_desert", "eternal_starlight:crystallized_desert",
+            "blue_skies:crystal_dunes", "blue_skies:crystal_dunes_spikes");
     /** The sampling grid: KERNEL x KERNEL columns SPACING blocks apart, weighted by a Gaussian of SIGMA blocks. */
     public static final int KERNEL = 5, SPACING = 12;
     public static final float SIGMA = 20f;
@@ -39,11 +62,10 @@ public final class BiomeSkyMath {
     private BiomeSkyMath() {
     }
 
-    /** 1 for a desert, 0 otherwise (see the class comment). */
-    public static float classify(boolean desertTag, boolean badlandsTag, boolean savannaTag, boolean precipitation, float baseTemperature) {
-        if (desertTag || badlandsTag) return 1;
-        if (savannaTag) return 0;
-        return !precipitation && Float.isFinite(baseTemperature) && baseTemperature >= DESERT_TEMPERATURE ? 1 : 0;
+    /** 1 for a desert, 0 otherwise (see the class comment): id the biome's id (null: unknown), tagged a desert or badlands tag on it. */
+    public static float classify(String id, boolean tagged, boolean precipitation) {
+        if (precipitation) return 0;
+        return (id != null && DESERT_BIOMES.contains(id)) || tagged ? 1 : 0;
     }
 
     /** The grid's offset in blocks of sample i (0 .. KERNEL^2 - 1): x for axis 0, z for axis 1. */

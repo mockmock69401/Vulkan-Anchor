@@ -120,6 +120,8 @@ public final class BiomeSky {
     private static final class Tags {
         static final TagKey<Biome> C_DESERT = TagKey.create(Registries.BIOME, new ResourceLocation("c", "is_desert"));
         static final TagKey<Biome> FORGE_DESERT = TagKey.create(Registries.BIOME, new ResourceLocation("forge", "is_desert"));
+        static final TagKey<Biome> C_BADLANDS = TagKey.create(Registries.BIOME, new ResourceLocation("c", "is_badlands"));
+        static final TagKey<Biome> FORGE_BADLANDS = TagKey.create(Registries.BIOME, new ResourceLocation("forge", "is_badlands"));
     }
 
     /** Session 25 (step 3): whether a biome is a desert (the precipitation map's dust flag). */
@@ -128,8 +130,9 @@ public final class BiomeSky {
     }
 
     private static float classify(Holder<Biome> biome) {
-        Biome b = biome.value();
-        return BiomeSkyMath.classify(biome.is(Tags.C_DESERT) || biome.is(Tags.FORGE_DESERT), biome.is(BiomeTags.IS_BADLANDS), biome.is(BiomeTags.IS_SAVANNA),
-                b.hasPrecipitation(), b.getBaseTemperature());
+        String id = biome.unwrapKey().map(k -> k.location().toString()).orElse(null);
+        boolean tagged = biome.is(Tags.C_DESERT) || biome.is(Tags.FORGE_DESERT) || biome.is(BiomeTags.IS_BADLANDS) || biome.is(Tags.C_BADLANDS)
+                || biome.is(Tags.FORGE_BADLANDS);
+        return BiomeSkyMath.classify(id, tagged, biome.value().hasPrecipitation());
     }
 }
