@@ -1,6 +1,7 @@
 package net.vulkanmod.vulkan;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import net.vulkanmod.compat.gl.VanillaGlState;
 import com.mojang.blaze3d.platform.Window;
 
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -329,26 +330,32 @@ public abstract class VRenderSystem {
 
     public static void enableBlend() {
         PipelineState.blendInfo.enabled = true;
+        VanillaGlState.blendEnabled(true);
     }
 
     public static void disableBlend() {
         PipelineState.blendInfo.enabled = false;
+        VanillaGlState.blendEnabled(false);
     }
 
     public static void blendFunc(GlStateManager.SourceFactor sourceFactor, GlStateManager.DestFactor destFactor) {
         PipelineState.blendInfo.setBlendFunction(sourceFactor, destFactor);
+        VanillaGlState.blendFunc(sourceFactor.value, destFactor.value);
     }
 
     public static void blendFunc(int srcFactor, int dstFactor) {
         PipelineState.blendInfo.setBlendFunction(srcFactor, dstFactor);
+        VanillaGlState.blendFunc(srcFactor, dstFactor);
     }
 
     public static void blendFuncSeparate(GlStateManager.SourceFactor p_69417_, GlStateManager.DestFactor p_69418_, GlStateManager.SourceFactor p_69419_, GlStateManager.DestFactor p_69420_) {
         PipelineState.blendInfo.setBlendFuncSeparate(p_69417_, p_69418_, p_69419_, p_69420_);
+        VanillaGlState.blendFuncSeparate(p_69417_.value, p_69418_.value, p_69419_.value, p_69420_.value);
     }
 
     public static void blendFuncSeparate(int srcFactorRGB, int dstFactorRGB, int srcFactorAlpha, int dstFactorAlpha) {
         PipelineState.blendInfo.setBlendFuncSeparate(srcFactorRGB, dstFactorRGB, srcFactorAlpha, dstFactorAlpha);
+        VanillaGlState.blendFuncSeparate(srcFactorRGB, dstFactorRGB, srcFactorAlpha, dstFactorAlpha);
     }
 
     public static void blendEquation(int mode) {

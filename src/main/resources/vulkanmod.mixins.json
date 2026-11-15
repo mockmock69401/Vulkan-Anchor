@@ -74,6 +74,8 @@
     "render.BufferSourceM",
     "render.GameRendererMixin",
     "render.GlProgramManagerMixin",
+    "render.GlBlendStateM",
+    "render.GlBooleanStateM",
     "render.GlStateManagerM",
     "render.LevelRendererMixin",
     "render.MinecraftMixin",
