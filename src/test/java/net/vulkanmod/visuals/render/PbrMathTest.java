@@ -278,6 +278,13 @@ class PbrMathTest {
         assertTrue(COPY.contains("layout(binding = 19, r32ui) uniform readonly restrict uimage2D terrainSpecular;"));
         assertTrue(COPY.contains("layout(location = " + PbrUniforms.COPY_SLOT + ") uniform vec4 pbrParams;"));
         assertTrue(REFLECTION.contains("layout(binding = 10, r32ui) uniform readonly restrict uimage2D terrainNormal;"));
+        //Session 16b: an albedo metal mirrors with its albedo from the terrain's albedo image, the composite's tags and constants
+        assertTrue(REFLECTION.contains("layout(binding = 13, r32ui) uniform readonly restrict uimage2D terrainAlbedo;"), "VkPostProcess.REFLECTION_TERRAIN_ALBEDO");
+        assertTrue(COPY.contains("const uint TERRAIN_ALBEDO_WRITTEN = 2147483648u;") && REFLECTION.contains("const uint REFLECT_ALBEDO_WRITTEN = 2147483648u;"));
+        assertTrue(COPY.contains("const uint TERRAIN_ALBEDO_TAG_MASK = 63u;") && REFLECTION.contains("const uint REFLECT_ALBEDO_TAG_MASK = 63u;"));
+        assertTrue(COPY.contains("((a >> 24) & TERRAIN_ALBEDO_TAG_MASK) == ((v >> 12) & TERRAIN_ALBEDO_TAG_MASK)")
+                && REFLECTION.contains("((a >> 24) & REFLECT_ALBEDO_TAG_MASK) == ((v >> 12) & REFLECT_ALBEDO_TAG_MASK)"));
+        assertTrue(REFLECTION.contains("pbrReflectivity(smoothness, pbrMirrorF0(p, code, own), -dot(d, n))"));
         for (String name : new String[]{"postSceneCopy.PBR", "postSceneCopy.TINTED.PBR", "postReflection.PBR", "postReflection.LEAN.PBR",
                 "postReflection.TINTED.PBR", "postReflection.LEAN.TINTED.PBR"}) {
             assertTrue(ShaderCatalog.visuals().get(name).defines().containsKey("PBR"), name);

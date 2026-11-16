@@ -32,6 +32,9 @@ layout(binding = 11) uniform sampler2D moonFace;
 //2026-11-13: the frame's sun open share (sunopen.glsl), worked out once by postSceneCopy.SUN_OPEN right before the composite (VkPostProcess
 // sunOpenBuffer, 1 when that pass is not built). Each water pixel near the sun used to work it out itself: 9 taps, up to 18 depth reads
 layout(binding = 12, std430) readonly restrict buffer SunOpenShare { float sunOpenShareValue; };
+//2026-11-16 (session 16b): the terrain's albedo (TerrainLightTarget's albedo image, scene_copy.comp's terrainAlbedoAt), read only by the
+// .PBR builds for a metal coloured by its albedo (bound always)
+layout(binding = 13, r32ui) uniform readonly restrict uimage2D terrainAlbedo;
 
 //0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
@@ -449,6 +452,26 @@ vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
 }
 
 #ifdef PBR
+//2026-11-16 (session 16b; the user: a gold block's reflection banded, its top green at 8:24 PM): a metal coloured by its albedo
+// (LabPBR 255) mirrors with its albedo in linear units per channel, read here from the terrain's albedo image, as the composite's
+// highlight does (pbrF0). The mark carries only that F0's brightness in 8 sqrt steps (Faithful PBR's gold: 0.51, 0.73 or 1 in blotches)
+// and its hue came from the lit colour, so under a blue sky light gold's mirror went green. The step and the lit colour's hue stay
+// for a pixel whose albedo the image does not hold (scene_copy.comp's terrainAlbedoAt: same tags, constants as there)
+const uint REFLECT_ALBEDO_WRITTEN = 2147483648u;
+const uint REFLECT_ALBEDO_TAG_MASK = 63u;
+
+vec3 pbrMirrorF0(ivec2 p, int code, vec3 own) {
+    if (code >= PBR_CODE_METAL_ALBEDO) {
+        uint v = imageLoad(terrainLight, p).r;
+        uint a = imageLoad(terrainAlbedo, p).r;
+        if (a >= REFLECT_ALBEDO_WRITTEN && ((a >> 24) & REFLECT_ALBEDO_TAG_MASK) == ((v >> 12) & REFLECT_ALBEDO_TAG_MASK)) {
+            vec3 albedo = vec3(float(a & 255u), float((a >> 8) & 255u), float((a >> 16) & 255u))/255.0;
+            return displayToLinear(albedo);
+        }
+    }
+    return pbrCodeF0(code, metalTint(own));
+}
+
 //2026-11-10 (session 9): a PBR pixel the composite marked (pbr.glsl's mark: its smoothness, wet or not, and its reflectance): as
 // blockReflection, on its normal-mapped normal (the material image, where it is still this pixel's fragment's; else the snapped depth
 // normal; under a film of rain water the face's own) tilted by its GGX roughness, mixed in by its Fresnel term faded in over the smoothness
@@ -488,7 +511,7 @@ vec3 pbrReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
     if (!(-dot(d, n) > 0.0)) {
         n = nGeom;
     }
-    vec3 f = pbrReflectivity(smoothness, pbrCodeF0(code, metalTint(own)), -dot(d, n));
+    vec3 f = pbrReflectivity(smoothness, pbrMirrorF0(p, code, own), -dot(d, n));
     vec3 r = reflect(d, n);
     float rise = dot(r, nGeom);
     if (rise < REFLECT_MIN_UP) {
