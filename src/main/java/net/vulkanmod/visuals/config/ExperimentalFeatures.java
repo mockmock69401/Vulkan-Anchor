@@ -49,7 +49,15 @@ public final class ExperimentalFeatures {
             percent(INTERACTION, "footprint_depth", 0, FootprintMath.DEPTH_MAX, Impact.NONE, "footprints",
                     c -> c.footprintDepth, (c, v) -> c.footprintDepth = v),
             percent(INTERACTION, "footprint_duration", FootprintMath.DURATION_MIN, FootprintMath.DURATION_MAX, Impact.NONE, "footprints",
-                    c -> c.footprintDuration, (c, v) -> c.footprintDuration = v));
+                    c -> c.footprintDuration, (c, v) -> c.footprintDuration = v),
+            //Session 26: wakes behind and rings around what moves through the water (Wakes; needs the water reflections), and water running down
+            // the lens after coming out of the water (LensWater); each on / off and its strength (percent of the default)
+            toggle(INTERACTION, "water_wakes", Impact.LOW, null, c -> c.waterWakes, (c, on) -> c.waterWakes = on),
+            percent(INTERACTION, "water_wake_strength", 0, 200, Impact.NONE, "water_wakes",
+                    c -> c.waterWakeStrength, (c, v) -> c.waterWakeStrength = v),
+            toggle(INTERACTION, "lens_water", Impact.NONE, null, c -> c.lensWater, (c, on) -> c.lensWater = on),
+            percent(INTERACTION, "lens_water_strength", 0, 200, Impact.NONE, "lens_water",
+                    c -> c.lensWaterStrength, (c, v) -> c.lensWaterStrength = v));
 
     private ExperimentalFeatures() {
     }

@@ -500,6 +500,9 @@ public final class VisualsRenderer {
             BiomeSky.update(level, cameraX, cameraY, cameraZ, flow, level.getThunderLevel(partialTick));
             //Session 25: the players' footprints in snow and sand
             Footprints.update(level, flow);
+            //Session 26: the wakes of what moves through the water; the water on the lens after the camera comes out of it
+            Wakes.update(level, flow, partialTick, new Vec3(cameraX, cameraY, cameraZ));
+            LensWater.update(Minecraft.getInstance().gameRenderer.getMainCamera().getFluidInCamera() == net.minecraft.world.level.material.FogType.WATER, flow);
             if (FrameRecorder.ON) FrameRecorder.set(FrameRecorder.WIND_PHASE, (long) (FoliageWind.phase0() * 1e6));
             Matrix4fc lodProjection = this.lod != null && this.lod.projection() != null ? this.lod.projection() : projection;
             return AtmosphereFrame.of(VkFrames.serial(), projection, lodProjection, modelView, cameraY, level.getSeaLevel(),

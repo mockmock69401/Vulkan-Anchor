@@ -61,7 +61,9 @@ class LooseUniformWriterTest {
         LooseUniformWriter w = new LooseUniformWriter(stage("postBlit", 1));
         assertFalse(w.inUniformBuffer());
         w.putVec4(0, 0.5f, 0, 0, 0);
-        assertEquals(16, w.buffer().remaining());
+        //session 26: and the lens water's slot after it
+        assertEquals(32, w.buffer().remaining());
+        assertTrue(w.has(net.vulkanmod.visuals.render.LensWater.BLIT_SLOT));
         assertEquals(0.5f, w.buffer().getFloat(0));
     }
 

@@ -98,6 +98,8 @@ public final class VkPostProcess {
     REFLECTION_SUN_OPEN = 12,
     //2026-11-16 (session 16b): the reflection reads the terrain's albedo image at 13 (an albedo metal's mirror F0, its .PBR builds)
     REFLECTION_TERRAIN_ALBEDO = 13,
+    //2026-11-16 (shader roadmap session 26): the reflection reads the wakes' trails at 14 (WakeMath, Wakes)
+    REFLECTION_WAKES = WakeMath.BINDING,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -160,6 +162,12 @@ public final class VkPostProcess {
     private VkImage2D wetClimateMap;
     private long wetClimateSerial = -1;
     private boolean wetClimateRead;
+    /**
+     * 2026-11-16 (session 26): the wakes' trails and ring sources (WakeMath.BYTES), written each frame the reflection draws a wake (Wakes.pack);
+     * null when it could not be made (no wakes). wakeOn: this frame's reflection reads it.
+     */
+    private VkGpuBuffer wakeBuffer;
+    private final java.nio.ByteBuffer wakeBytes = MemoryUtil.memAlloc(WakeMath.BYTES);
     private long galaxySampler;
     private long[] galaxyChunks;
     private static final int GALAXY_ROWS = 256;
@@ -450,6 +458,13 @@ public final class VkPostProcess {
             VisualsLog.warn("Visuals rain map not created, the wet ground follows the rain at the camera: " + e);
         }
         this.wetClimateMap = wetClimateMap;
+        VkGpuBuffer wakeBuffer = null;
+        try {
+            wakeBuffer = VkGpuBuffer.device(WakeMath.BYTES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+        } catch (RuntimeException | LinkageError e) {
+            VisualsLog.warn("Visuals wakes not created, none are drawn: " + e);
+        }
+        this.wakeBuffer = wakeBuffer;
     }
 
     /** 2026-11-16: the rain map's texels when they changed (or the last upload's frame was dropped); whether the composite may read it. */
@@ -895,6 +910,23 @@ public final class VkPostProcess {
         }
         if (this.lightingUniformBuffer != null) upload.upload(this.lightingUniformBuffer, 0, this.lightingUniforms.buffer());
         reflection.write(this.reflectionUniforms);
+        //Session 26: the wakes (WakeMath; strength 0 or no trail = off), only the trails in use go up
+        if (this.reflectionUniforms.has(WakeMath.SLOT)) {
+            float[] wake = new float[4];
+            if (this.wakeBuffer != null && reflection.on() && Wakes.strength() > 0) {
+                float[] data = Wakes.pack(net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera().getPosition());
+                int trails = Wakes.count();
+                if (trails > 0) {
+                    int floats = WakeMath.floats(trails);
+                    this.wakeBytes.clear();
+                    this.wakeBytes.asFloatBuffer().put(data, 0, floats);
+                    this.wakeBytes.limit(floats * 4);
+                    upload.upload(this.wakeBuffer, 0, this.wakeBytes);
+                    wake = WakeMath.params(Wakes.strength(), Wakes.chunks());
+                }
+            }
+            this.reflectionUniforms.putVec4(WakeMath.SLOT, wake[0], wake[1], wake[2], wake[3]);
+        }
         this.sky.writeReflection(this.reflectionUniforms);
         light.write(this.reflectionUniforms, LightVolumeUniforms.REFLECTION_FIRST);
         if (this.reflectionUniformBuffer != null) upload.upload(this.reflectionUniformBuffer, 0, this.reflectionUniforms.buffer());
@@ -1172,7 +1204,8 @@ public final class VkPostProcess {
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight)
                 .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal).sampled(REFLECTION_MOON_FACE, this.moonFace, this.moonSampler)
-                .storage(REFLECTION_SUN_OPEN, this.sunOpenBuffer).storageImage(REFLECTION_TERRAIN_ALBEDO, terrainAlbedo);
+                .storage(REFLECTION_SUN_OPEN, this.sunOpenBuffer).storageImage(REFLECTION_TERRAIN_ALBEDO, terrainAlbedo)
+                .storage(REFLECTION_WAKES, this.wakeBuffer != null ? this.wakeBuffer : this.lightStandIn);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
         VkComputeProgram program = this.tintedOn && this.reflectionTinted != null
                 ? (this.leanOn && this.reflectionLeanTinted != null ? this.reflectionLeanTinted : this.reflectionTinted)
@@ -1337,6 +1370,11 @@ public final class VkPostProcess {
         //2026-11-09 (session 6): screenParams.w 1 blends the weather overlay (0: as before, the overlay is bound but not read)
         values.writeWeather(this.finalUniforms, this.weatherDrawn);
         values.writeHeat(this.finalUniforms, this.heatDrawn);
+        //2026-11-16 (session 26): water running down the lens (LensWater; zeros = none)
+        if (this.finalUniforms.has(LensWater.FINAL_SLOT)) {
+            float[] lens = LensWater.params();
+            this.finalUniforms.putVec4(LensWater.FINAL_SLOT, lens[0], lens[1], lens[2], lens[3]);
+        }
         VkBindings bindings = new VkBindings().sampled(FINAL_SCENE, this.scene, this.nearest).sampled(FINAL_BLOOM, this.bloom[0], this.linear)
                 .sampled(FINAL_SHAFTS, this.shaftImage, this.linear).sampled(FINAL_WEATHER, this.weatherImage, this.nearest)
                 .sampled(FINAL_HEAT, this.heatImage, this.linear);
@@ -1409,6 +1447,8 @@ public final class VkPostProcess {
         if (this.precipitationMap != null) this.precipitationMap.free();
         if (this.footprintMap != null) this.footprintMap.free();
         if (this.wetClimateMap != null) this.wetClimateMap.free();
+        if (this.wakeBuffer != null) this.wakeBuffer.free();
+        MemoryUtil.memFree(this.wakeBytes);
         this.lightStandIn.free();
         this.lodLightStandIn.free();
         if (this.scene != null) destroy(this.images());

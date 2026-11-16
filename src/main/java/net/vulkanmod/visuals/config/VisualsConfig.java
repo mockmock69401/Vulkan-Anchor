@@ -503,6 +503,15 @@ public class VisualsConfig {
      * 2026-11-11: the shader snow's and rain's look (ParticleEffect.SNOW, RAIN): the type (0 round, 1 pixel, 2 both), the size, the
      * amount and the brightness (percent, 100 = default; the amount replaced session 6's one density; the brightness multiplies the colour).
      */
+    /**
+     * 2026-11-16 (shader roadmap session 26, the user: "이동할 때 물결치는 효과" and "물에 들어갔다 나올 때 물이 흘러내리는 효과", Experimental >
+     * Interaction): wakes behind and rings around what moves through the water (Wakes, WakeMath; drawn by the water reflections), and water
+     * running down the lens after the camera comes out of the water (LensWater); each on / off and its strength (percent of the default).
+     */
+    public boolean waterWakes = true;
+    public int waterWakeStrength = 100;
+    public boolean lensWater = true;
+    public int lensWaterStrength = 100;
     public int snowType = 0;
     public int snowSize = 100;
     public int snowAmount = 100;

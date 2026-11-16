@@ -707,5 +707,13 @@
   "vulkanmod.visuals.footprint_depth": "Footprint Depth",
   "vulkanmod.visuals.footprint_depth.tooltip": "How deep the footprints are pressed: deeper hollows have steeper, more strongly lit and shaded walls and a darker floor. Percent of the default depth; 0: flat marks only; needs Footprints",
   "vulkanmod.visuals.footprint_duration": "Footprint Duration",
-  "vulkanmod.visuals.footprint_duration.tooltip": "How long footprints stay before they fade away (by default about 15 seconds in sand and 25 in snow). Percent of the default time; needs Footprints"
+  "vulkanmod.visuals.footprint_duration.tooltip": "How long footprints stay before they fade away (by default about 15 seconds in sand and 25 in snow). Percent of the default time; needs Footprints",
+  "vulkanmod.visuals.water_wakes": "Water Wakes",
+  "vulkanmod.visuals.water_wakes.tooltip": "Players, mobs and boats moving through the water leave a V-shaped wake, and rings spread around a body at rest. The reflections and the view into the water bend along them. Needs Water Reflections",
+  "vulkanmod.visuals.water_wake_strength": "Wake Strength",
+  "vulkanmod.visuals.water_wake_strength.tooltip": "How strongly the wakes and rings bend the water and catch the light. Percent of the default; needs Water Wakes",
+  "vulkanmod.visuals.lens_water": "Water on the Lens",
+  "vulkanmod.visuals.lens_water.tooltip": "Coming up out of the water, a sheet of water on the screen warps the view and runs off in about a second",
+  "vulkanmod.visuals.lens_water_strength": "Lens Water Strength",
+  "vulkanmod.visuals.lens_water_strength.tooltip": "How strongly the water on the lens bends the picture. Percent of the default; needs Water on the Lens"
 }

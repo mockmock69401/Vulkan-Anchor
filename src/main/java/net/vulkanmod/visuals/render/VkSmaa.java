@@ -210,6 +210,11 @@ final class VkSmaa {
      */
     void draw(VkCommandBuffer cmd, long nearest, VkImage2D image, float strength, VkImage2D overlay, boolean weather) {
         this.blitUniforms.putVec4(0, strength, weather ? 1 : 0, 0, 0);
+        //2026-11-16 (session 26): water running down the lens (LensWater; zeros = none)
+        if (this.blitUniforms.has(LensWater.BLIT_SLOT)) {
+            float[] lens = LensWater.params();
+            this.blitUniforms.putVec4(LensWater.BLIT_SLOT, lens[0], lens[1], lens[2], lens[3]);
+        }
         this.blit.bind(cmd, VkContext.boundRenderPassHandle(), VkContext.boundRenderPassKey(), new VkBindings().sampled(0, image, nearest)
                 .sampled(1, overlay, nearest), this.blitUniforms);
         vkCmdDraw(cmd, 4, 1, 0, 0);
