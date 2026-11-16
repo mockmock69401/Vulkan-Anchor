@@ -121,6 +121,21 @@ class StormTest {
     }
 
     @Test
+    void theSandIsFineAndSparse() {
+        //2026-11-16 (the user: "모래 입자가 너무 굵고 많은 거 같아. 두 부분을 줄여줘"): thinner, fainter grains in fewer cells than the first cut
+        String glsl = net.vulkanmod.visuals.vk.shader.ShaderFiles.read("post/weather.glsl");
+        java.util.regex.Matcher r = java.util.regex.Pattern.compile("const float SAND_RADIUS = ([0-9.]+);").matcher(glsl);
+        java.util.regex.Matcher a = java.util.regex.Pattern.compile("const float SAND_ALPHA = ([0-9.]+);").matcher(glsl);
+        assertTrue(r.find() && a.find());
+        assertTrue(Float.parseFloat(r.group(1)) <= 0.003f);
+        assertTrue(Float.parseFloat(a.group(1)) < 0.5f);
+        assertTrue(StormMath.SAND_SHARE <= 0.4f);
+        //a full sandstorm at the default tuning: grains in under half the cells
+        float[] o = WeatherUniforms.storm(new WeatherUniforms.Storm(1, 0, new float[]{8, 3}, new float[2], new float[2], true), new float[3], 10);
+        assertTrue(o[0] > 0 && o[0] < 0.5f);
+    }
+
+    @Test
     void aBlizzardThickensTheSnowAndBlowsItSideways() {
         Matrix4f inv = new Matrix4f().perspective((float) Math.toRadians(70), 16 / 9f, 0.05f, 1000).invert();
         PostProcessSettings on = PostProcessSettings.from(new net.vulkanmod.visuals.config.VisualsConfig());

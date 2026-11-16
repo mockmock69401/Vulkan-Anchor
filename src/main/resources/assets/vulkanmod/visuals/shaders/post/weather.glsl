@@ -129,10 +129,12 @@ const int WEATHER_FLAG_WATER = 134217728;
 // (stormVeil): gusts of blown dust or snow, a value noise of STORM_VEIL_SCALE per block drifting with the wind, sampled at STORM_VEIL_SAMPLES distances
 // from STORM_VEIL_NEAR growing by STORM_VEIL_GROWTH, each covering at most STORM_VEIL_ALPHA x the storm (thicker near the ground: STORM_VEIL_HEIGHT), above
 // STORM_VEIL_EDGE of the noise
+//2026-11-16 (the user: "모래 입자가 너무 굵고 많은 거 같아. 두 부분을 줄여줘"): the grains half as wide (SAND_RADIUS 0.006 -> 0.003) and
+// fainter (SAND_ALPHA 0.5 -> 0.4), and in fewer cells (StormMath.SAND_SHARE 1 -> 0.4): fine blowing sand, not a hail of pellets
 const int WEATHER_FLAG_DUST = 268435456;
 const float SAND_PERIOD = 0.5;
-const float SAND_RADIUS = 0.006;
-const float SAND_ALPHA = 0.5;
+const float SAND_RADIUS = 0.003;
+const float SAND_ALPHA = 0.4;
 const float SAND_HEIGHT = 3.0;
 const float SAND_BOB = 0.08;
 //The sand's walk: its first SAND_LAYERS layers only (farther grains are lost in the dust), one grain a cell, and no farther than where the

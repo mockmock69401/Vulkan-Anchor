@@ -69,8 +69,9 @@ public final class WeatherMath {
     /** 2026-11-15 (session 25): a desert column (sand blows over it in a sandstorm). */
     public static final int WEATHER_FLAG_DUST = 1 << 28;
     public static final float SAND_PERIOD = 0.5f;
-    public static final float SAND_RADIUS = 0.006f;
-    public static final float SAND_ALPHA = 0.5f;
+    //2026-11-16 (the user: the grains too coarse): 0.006 -> 0.003, alpha 0.5 -> 0.4
+    public static final float SAND_RADIUS = 0.003f;
+    public static final float SAND_ALPHA = 0.4f;
     public static final float SAND_HEIGHT = 3.0f;
     public static final float SAND_BOB = 0.08f;
     public static final int SAND_LAYERS = 2;
