@@ -486,5 +486,13 @@
   "vulkanmod.visuals.footprint_depth": "발자국 깊이",
   "vulkanmod.visuals.footprint_depth.tooltip": "발자국이 파이는 깊이입니다. 깊을수록 벽이 가팔라져 빛과 그늘이 뚜렷해지고 바닥이 어두워집니다. 기본 깊이의 퍼센트이며 0이면 납작한 자국만 남습니다. 발자국이 켜져 있어야 합니다",
   "vulkanmod.visuals.footprint_duration": "발자국 유지 시간",
-  "vulkanmod.visuals.footprint_duration.tooltip": "발자국이 사라지기 전까지 남아 있는 시간입니다(기본은 모래 약 15초, 눈 약 25초). 기본 시간의 퍼센트이며 발자국이 켜져 있어야 합니다"
+  "vulkanmod.visuals.footprint_duration.tooltip": "발자국이 사라지기 전까지 남아 있는 시간입니다(기본은 모래 약 15초, 눈 약 25초). 기본 시간의 퍼센트이며 발자국이 켜져 있어야 합니다",
+  "vulkanmod.visuals.water_wakes": "물결 자국",
+  "vulkanmod.visuals.water_wakes.tooltip": "물속을 지나는 플레이어, 몹, 보트 뒤로 V자 물결이 남고, 멈춰 있으면 몸 주위로 동심원 물결이 퍼집니다. 반사와 물속 모습도 물결을 따라 휘어집니다. 물 반사가 켜져 있어야 합니다",
+  "vulkanmod.visuals.water_wake_strength": "물결 자국 세기",
+  "vulkanmod.visuals.water_wake_strength.tooltip": "물결이 수면을 휘게 하고 빛을 받는 정도입니다. 기본 세기의 퍼센트이며 물결 자국이 켜져 있어야 합니다",
+  "vulkanmod.visuals.lens_water": "화면에 맺힌 물",
+  "vulkanmod.visuals.lens_water.tooltip": "물 밖으로 나오면 화면에 맺힌 물이 풍경을 일렁이게 하다가 1초쯤 만에 흘러내립니다",
+  "vulkanmod.visuals.lens_water_strength": "화면에 맺힌 물 세기",
+  "vulkanmod.visuals.lens_water_strength.tooltip": "화면에 맺힌 물이 그림을 휘게 하는 정도입니다. 기본 세기의 퍼센트이며 화면에 맺힌 물이 켜져 있어야 합니다"
 }

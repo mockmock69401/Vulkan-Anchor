@@ -14,6 +14,9 @@ layout(location = 4) uniform vec4 screenParams;//1 / width, 1 / height, vignette
 // the bloom are read at, read while heatParams.x is 1 (bound always)
 layout(binding = 4) uniform sampler2D heatTex;
 layout(location = 5) uniform vec4 heatParams;
+//2026-11-16 (shader roadmap session 26): water running down the lens (lenswater.glsl; LensWater): post_final.frag reads it while lensParams.y > 0
+// (post_ldr.comp, before TAA and SMAA, leaves it to post_blit.frag: written 0 there)
+layout(location = 6) uniform vec4 lensParams;
 
 //Just under one 8-bit step peak to peak: values already on the 8-bit grid stay where they are
 const float DITHER = 0.0039137257;

@@ -35,6 +35,8 @@ layout(binding = 12, std430) readonly restrict buffer SunOpenShare { float sunOp
 //2026-11-16 (session 16b): the terrain's albedo (TerrainLightTarget's albedo image, scene_copy.comp's terrainAlbedoAt), read only by the
 // .PBR builds for a metal coloured by its albedo (bound always)
 layout(binding = 13, r32ui) uniform readonly restrict uimage2D terrainAlbedo;
+//2026-11-16 (shader roadmap session 26): the wakes' trails and ring sources (wake.glsl, Wakes), read while wakeParams.x > 0
+layout(binding = 14, std430) readonly restrict buffer WakeData { vec4 wakeData[]; };
 
 //0..3 fixed meanings (boundary 3.3); 4..7, 9, 10, 23 W4's struct Atmosphere in field order; 8 view to world (camera relative);
 // 11, 12 RippleMath.offsets; 13 x ripple strength, y reflection strength, z the camera's sky exposure, w 1 = the reflective debug
@@ -80,6 +82,8 @@ layout(location = 31) uniform vec4 atmosphereMoonTint;
 layout(location = 32) uniform vec4 auroraTintLow;
 layout(location = 33) uniform vec4 auroraTintMid;
 layout(location = 34) uniform vec4 auroraTintTop;
+//2026-11-16 (session 26): the wakes (wake.glsl's wakeParams; WakeMath.SLOT)
+layout(location = 35) uniform vec4 wakeParams;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -92,6 +96,7 @@ layout(location = 34) uniform vec4 auroraTintTop;
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/rainripple.glsl>
+#import <vulkanmod:visuals/post/wake.glsl>
 #import <vulkanmod:visuals/post/wetground.glsl>
 #import <vulkanmod:visuals/post/pbr.glsl>
 
@@ -694,11 +699,23 @@ void main() {
         n = normalize(n + vec3(-drops.x, 0.0, -drops.y)*n.y);
         rainShine = rainRippleShine(drops);
     }
+    //2026-11-16 (session 26): the wakes of what moves through the water (wake.glsl; slot 35, binding 14)
+    float wakeFoam = 0.0;
+    bool waked = false;
+    if (mark > 0.0 && wakeParams.x > 0.0) {
+        vec4 wake = wakeAt(world, footprint);
+        if (wake.x != 0.0 || wake.y != 0.0) {
+            n = normalize(n + vec3(-wake.x, 0.0, -wake.y)*n.y);
+            waked = true;
+        }
+        rainShine += wake.z;
+        wakeFoam = wake.w;
+    }
     float ripple = mark > 0.0 ? rippleAmount(strength, rippleParams.x, footprint) : 0.0;
     float f = reflectivity(mark, -dot(d, n))*clamp(reflectParams.y, 0.0, 1.0);
     //The water's own colour, refracted by the ripples, only from the same water (B9)
     vec3 own = lit.rgb;
-    if (ripple > 0.0) {
+    if (ripple > 0.0 || waked) {
         vec3 tilt = toView*(n - nGeom);
         vec2 shift = vec2(tilt.x, -tilt.y)*(REFRACT_BLOCKS/max(bpp, 0.000001));
         float sl = length(shift);
@@ -716,7 +733,7 @@ void main() {
     }
     //2026-11-10 (session 7): nothing mirrored (water reflections at 0, no rings' shine): the pixel is its refracted colour, which the
     // mix below gives at f 0; the sky, the clouds, the aurora and the march it would weigh by 0 are skipped (0.8 ms over the sea at 1440)
-    if (!(f > 0.0) && !(rainShine > 0.0)) {
+    if (!(f > 0.0) && !(rainShine > 0.0) && !(wakeFoam > 0.0)) {
         imageStore(sceneOut, p, vec4(own, 1.0));
         return;
     }
@@ -777,5 +794,11 @@ void main() {
         reflection = w < 1.0 ? mix(reflection, hazedHit, w) : hazedHit;
     }
     //2026-10-29: the rings' crests catch a share of the mirrored light
-    imageStore(sceneOut, p, vec4(mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine, 1.0));
+    vec3 outColour = mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine;
+    //Session 26: a wake's foam, white lit by what the water mirrors and its own light (wake.glsl)
+    if (wakeFoam > 0.0) {
+        float light = max(dot(reflection, vec3(0.2126, 0.7152, 0.0722)), dot(own, vec3(0.2126, 0.7152, 0.0722))*2.0);
+        outColour = mix(outColour, vec3(light*WAKE_FOAM_WHITE), wakeFoam);
+    }
+    imageStore(sceneOut, p, vec4(outColour, 1.0));
 }

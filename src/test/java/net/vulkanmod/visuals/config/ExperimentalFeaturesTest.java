@@ -27,7 +27,7 @@ class ExperimentalFeaturesTest {
         assertEquals(List.of(ExperimentalFeatures.WEATHER, ExperimentalFeatures.INTERACTION), page.blocks().stream().map(VisualsOptionLayout.Block::key).toList());
         assertEquals(List.of("sandstorm_grain_size", "sandstorm_grain_amount", "blizzard_flake_size", "blizzard_flake_amount"),
                 page.blocks().get(0).items().stream().map(VisualsOptionLayout.Item::key).toList());
-        assertEquals(List.of("footprint_depth", "footprint_duration"), page.blocks().get(1).items().stream().map(VisualsOptionLayout.Item::key).toList());
+        assertEquals(List.of("footprint_depth", "footprint_duration", "water_wakes", "water_wake_strength", "lens_water", "lens_water_strength"), page.blocks().get(1).items().stream().map(VisualsOptionLayout.Item::key).toList());
         //each greys out with the effect it tunes
         assertEquals("storm_weather", VisualsOptionLayout.item("sandstorm_grain_size").requires());
         assertEquals("footprints", VisualsOptionLayout.item("footprint_duration").requires());
@@ -44,7 +44,8 @@ class ExperimentalFeaturesTest {
     void eachSettingReadsAndWritesItsFieldAndDefaultsTo100() {
         for (ExperimentalFeatures.Entry e : ExperimentalFeatures.ENTRIES) {
             VisualsOptionLayout.Item item = VisualsOptionLayout.item(e.item().key());
-            assertEquals(100, VisualsOptionLayout.defaultValue(item), item.key());
+            //session 26: the switches (wakes, lens water) default to on
+            assertEquals(item.kind() == VisualsOptionLayout.Kind.SWITCH ? 1 : 100, VisualsOptionLayout.defaultValue(item), item.key());
             VisualsConfig c = new VisualsConfig();
             int v = Math.max(item.min(), Math.min(item.max(), 137));
             VisualsOptionLayout.set(c, item, v);
