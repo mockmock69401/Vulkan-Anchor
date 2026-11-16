@@ -45,6 +45,32 @@ class SoftShadowMathTest {
     }
 
     @Test
+    void theNearMapsTexelsAndThePixelsFootprintAreFiltered() {
+        float close = 2 * ShadowMath.CLOSE_RADIUS / ShadowMath.CLOSE_HEIGHT;
+        float near = 2 * ShadowMath.NEAR_RADIUS / ShadowMath.NEAR_HEIGHT;
+        assertEquals(1 / 16f, close, 1e-6);
+        assertTrue(close < SoftShadowMath.AA_TEXEL_MIN && near > SoftShadowMath.AA_TEXEL_MIN);
+        //blocks per pixel per block of distance at 1440 rows, fov 70
+        float perBlock = 2 / (1.4281480f * 1440);
+        //5 blocks out on the floor, the eye 1.6 above it: under the close map's texel either way, the sharp lookup as before
+        float[] f5 = SoftShadowMath.footprint(5 * perBlock, 1.6f / 5);
+        assertTrue(SoftShadowMath.least(close, f5)[0] < close);
+        //15 blocks out the flecks fall between the pixels along the view, not across it
+        float[] f15 = SoftShadowMath.footprint(15 * perBlock, 1.6f / 15);
+        assertTrue(f15[0] > close && f15[1] < close, "15 blocks " + f15[0] + " " + f15[1]);
+        //the near map's texels past the close cascade; the along half width capped
+        assertEquals(1.5f * near, SoftShadowMath.least(near, SoftShadowMath.footprint(40 * perBlock, 1))[1], 1e-6);
+        assertEquals(SoftShadowMath.AA_ALONG_MAX, SoftShadowMath.footprint(150 * perBlock, 0.01f)[0], 1e-6);
+        assertEquals(SoftShadowMath.footprint(1, 0.01f)[0], SoftShadowMath.footprint(1, SoftShadowMath.AA_COS_MIN)[0], 1e-6);
+        //the taps hold still at the least width and turn fully from twice it
+        assertEquals(0, SoftShadowMath.turnShare(0.1f, 0.2f));
+        assertEquals(0, SoftShadowMath.turnShare(0.2f, 0.2f));
+        assertEquals(0.5f, SoftShadowMath.turnShare(0.3f, 0.2f), 1e-6);
+        assertEquals(1, SoftShadowMath.turnShare(0.5f, 0.2f));
+        assertEquals(1, SoftShadowMath.turnShare(0.1f, 0));
+    }
+
+    @Test
     void theShaderMirrorsTheConstants() throws IOException {
         String s = Files.readString(SHADER);
         assertTrue(s.contains("layout(location = " + SoftShadowMath.SLOT + ") uniform vec4 softParams;"));
@@ -52,6 +78,14 @@ class SoftShadowMathTest {
         assertTrue(s.contains("const int SOFT_FILTER_TAPS = " + SoftShadowMath.FILTER_TAPS + ";"));
         //off: the soft lookup is never reached
         assertTrue(s.contains("if (soft && softParams.x > 0.0) {"));
+        assertTrue(s.contains("const float SOFT_AA_TEXELS = " + SoftShadowMath.AA_TEXELS + ";"));
+        assertTrue(s.contains("const float SOFT_AA_TEXEL_MIN = " + SoftShadowMath.AA_TEXEL_MIN + ";"));
+        assertTrue(s.contains("const float SOFT_AA_PIXELS = " + SoftShadowMath.AA_PIXELS + ";"));
+        assertTrue(s.contains("const float SOFT_AA_COS_MIN = " + SoftShadowMath.AA_COS_MIN + ";"));
+        assertTrue(s.contains("const float SOFT_AA_ALONG_MAX = " + SoftShadowMath.AA_ALONG_MAX + ";"));
+        assertTrue(s.contains("return max(softFootprint, vec2(texel > SOFT_AA_TEXEL_MIN ? SOFT_AA_TEXELS*texel : 0.0));"));
+        assertTrue(s.contains("softFootprint = vec2(max(min(across/max(abs(dot(n, v)), SOFT_AA_COS_MIN), SOFT_AA_ALONG_MAX), across), across);"));
+        assertTrue(s.contains("float turn = softTurn*clamp((width - least.y)/max(least.y, 1e-6), 0.0, 1.0);"));
         //the far cascade stays sharp, the close and near ones and the entity map are soft
         assertTrue(s.contains("wideBlocks, false, edge);"));
         assertEquals(2, s.split("wideBlocks, true, edge\\);", -1).length - 1);

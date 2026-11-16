@@ -23,6 +23,14 @@ public final class SoftShadowMath {
     public static final int SEARCH_TAPS = 8, FILTER_TAPS = 12;
     /** The taps' turns repeat every FRAMES frames. */
     public static final int FRAMES = 64;
+    /**
+     * 2026-11-16 (the user: "나뭇잎 그림자가 일정 거리 밖에서 자글자글해보이는 현상이 있어"): the filter's least half widths, so the leaves' flecks
+     * do not alias into a crawling speckle: the pixel's footprint on its receiver, AA_PIXELS pixels across and that over the facing (at
+     * least AA_COS_MIN) along the view, at most AA_ALONG_MAX blocks; and AA_TEXELS texels of a map whose texel exceeds AA_TEXEL_MIN blocks
+     * (the near map's 0.16; the close map's 1/16 block, a leaf's pixel, keeps the sharp lookup). At the least width the taps do not turn;
+     * they turn fully from twice it.
+     */
+    public static final float AA_TEXELS = 1.5f, AA_TEXEL_MIN = 0.07f, AA_PIXELS = 1.5f, AA_COS_MIN = 0.08f, AA_ALONG_MAX = 1.5f;
     /** lighting.comp's softParams location. */
     public static final int SLOT = 19;
 
@@ -34,6 +42,23 @@ public final class SoftShadowMath {
         float s = Math.max(0, Math.min(STRENGTH_MAX, setting)) / 100f;
         if (!(s > 0)) return new float[]{0, 0, 0};
         return new float[]{SPREAD * s, MAX_WIDTH * s, (float) Math.floorMod(frame, FRAMES)};
+    }
+
+    /** lighting.comp's softLeast: the least half widths {along, across} (blocks) at a map's texel (blocks) and the pixel's footprint. */
+    public static float[] least(float texel, float[] footprint) {
+        float t = texel > AA_TEXEL_MIN ? AA_TEXELS * texel : 0;
+        return new float[]{Math.max(footprint[0], t), Math.max(footprint[1], t)};
+    }
+
+    /** lighting.comp's setFootprint: {along, across} (blocks) for blocks per pixel at the receiver and its facing (|cos| to the view). */
+    public static float[] footprint(float blocksPerPixel, float facing) {
+        float across = AA_PIXELS * blocksPerPixel;
+        return new float[]{Math.max(Math.min(across / Math.max(Math.abs(facing), AA_COS_MIN), AA_ALONG_MAX), across), across};
+    }
+
+    /** The share of the taps' turn for a half width against the least: 0 at or under it, 1 from twice it. */
+    public static float turnShare(float width, float least) {
+        return Math.max(0, Math.min(1, (width - least) / Math.max(least, 1e-6f)));
     }
 
     /** lighting.comp's half width for blockers above blocks over the receiver: spread x above, at most the widest; 0 when off. */
