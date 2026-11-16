@@ -2,7 +2,12 @@ package net.vulkanmod.visuals.render;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -15,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 2026-11-15 (shader roadmap session 25): where the players walk on snow (snow layers, snow blocks) or sand (sand, red sand: BlockTags.SAND),
+ * 2026-11-15 (shader roadmap session 25): where the players walk on snow (snow layers, snow blocks) or sand (2026-11-16: every sand, isSand),
  * a print every FootprintMath.STRIDE blocks, the feet alternating; the map FootprintMath draws them into, and the texel boxes to upload.
  * Every player the client sees leaves prints (the local one and, in multiplayer, the others: their position and ground state come from
  * the server); mobs do not. Updated once a frame by VisualsRenderer (captureAtmosphere) with the flow clock; nothing with the setting at 0.
@@ -36,6 +41,19 @@ public final class Footprints {
     static String uploadDebug = "none";
 
     private Footprints() {
+    }
+
+    /** 2026-11-16: the common tags mods put their sands in (besides vanilla's #minecraft:sand); made on first use (the game's registries). */
+    private static final class Tags {
+        static final TagKey<Block> C_SANDS = TagKey.create(Registries.BLOCK, new ResourceLocation("c", "sands"));
+        static final TagKey<Block> FORGE_SAND = TagKey.create(Registries.BLOCK, new ResourceLocation("forge", "sand"));
+    }
+
+    /** 2026-11-16: sand underfoot: tagged sand (vanilla's, c:, forge:) or a listed one (FootprintMath.SAND_BLOCKS). */
+    static boolean isSand(BlockState state) {
+        if (state.isAir()) return false;
+        if (state.is(BlockTags.SAND) || state.is(Tags.C_SANDS) || state.is(Tags.FORGE_SAND)) return true;
+        return FootprintMath.isSandId(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString());
     }
 
     /** The map (MAP x MAP words), or null while the setting is off (nothing made yet). */
@@ -135,11 +153,15 @@ public final class Footprints {
             BlockState at = lvl.getBlockState(feet);
             if (at.is(Blocks.SNOW)) {
                 surface = feet.getY();
+            } else if (isSand(at)) {
+                //2026-11-16: standing in a sand layer (a full sand block is never where the feet are)
+                surface = feet.getY();
+                sand = true;
             } else if (at.isAir()) {
                 BlockState below = lvl.getBlockState(feet.below());
                 if (below.is(Blocks.SNOW_BLOCK) || below.is(Blocks.POWDER_SNOW)) {
                     surface = feet.getY() - 1;
-                } else if (below.is(BlockTags.SAND)) {
+                } else if (isSand(below)) {
                     surface = feet.getY() - 1;
                     sand = true;
                 } else if (below.is(Blocks.SNOW)) {

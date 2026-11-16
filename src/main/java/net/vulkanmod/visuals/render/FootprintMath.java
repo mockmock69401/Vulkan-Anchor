@@ -48,6 +48,46 @@ public final class FootprintMath {
     /** footCamera's texel wraps here (a multiple of the map and of its four-wrap tag: 4 x MAP). */
     public static final int CAMERA_WRAP = 4 * MAP;
 
+    /**
+     * 2026-11-16 (session 25 follow-up, the user: "모래 종류가 더 있는 거 같아. 모드팩에서 모래 관련 블록을 조사하고 연관된 블록에 발자국을 모두
+     * 적용해줘"): a block is sand underfoot when a pack tags it sand (#minecraft:sand, #c:sands, #forge:sand: Footprints) or it is one of
+     * SAND_BLOCKS, the sand floors the supported packs add without those tags (from their block data: session25-sands.md in the notes).
+     * Layers (Conquest's, Immersive Weathering's) count where the foot stands in them, as snow layers do. Not sand here: sandstone, sandy
+     * soil and dirt, sand mixed with gravel or grown over, quicksand (the player sinks), hardened, infested, compressed and decorative blocks.
+     */
+    public static final java.util.Set<String> SAND_BLOCKS = sandBlocks();
+
+    private static java.util.Set<String> sandBlocks() {
+        java.util.Set<String> s = new java.util.HashSet<>(java.util.List.of(
+                //vanilla (soul sand: the Nether's sand; suspicious sand where a pack leaves it out of #sand)
+                "minecraft:soul_sand", "minecraft:suspicious_sand",
+                //Better Archeology, Hybrid Aquatic: suspicious red sand, aerated sand
+                "betterarcheology:suspicious_red_sand", "hybrid_aquatic:suspicious_red_sand", "hybrid_aquatic:aerated_sand",
+                //Eldritch End (Prominence II): the Hasturian sands
+                "eldritch_end:hasturian_sand", "eldritch_end:hasturian_dune_sand",
+                //Nether Experience: silica sand
+                "netherexp:silica_sand",
+                //Dynamic Trees: the sand under a tree's roots
+                "dynamictrees:rooty_sand", "dynamictrees:rooty_red_sand",
+                //Immersive Weathering: sand layers
+                "immersive_weathering:sand_layer_block", "immersive_weathering:red_sand_layer_block",
+                //Conquest Reforged: layers of vanilla's sands
+                "conquest:sand_layer", "conquest:red_sand_layer", "conquest:soul_sand_layer"));
+        //Conquest Reforged: its sands, each a full block and a layer
+        for (String n : new String[]{"brown_sand", "dark_brown_sand", "gray_sand", "light_gray_sand", "lime_sand", "orange_sand", "pink_sand",
+                "purple_sand", "tan_sand", "mossy_sand", "mossy_brown_sand", "mossy_tan_sand", "dry_river_sand", "wet_sand", "wet_river_sand",
+                "wet_brown_sand", "wet_gray_sand", "wet_light_gray_sand", "wet_lime_sand", "wet_pink_sand", "wet_purple_sand", "wet_tan_sand"}) {
+            s.add("conquest:" + n);
+            s.add("conquest:" + n + "_layer");
+        }
+        return java.util.Set.copyOf(s);
+    }
+
+    /** Whether a block (its id, "namespace:path") is a listed sand (SAND_BLOCKS; the tags are Footprints'). */
+    public static boolean isSandId(String id) {
+        return id != null && SAND_BLOCKS.contains(id);
+    }
+
     private FootprintMath() {
     }
 
