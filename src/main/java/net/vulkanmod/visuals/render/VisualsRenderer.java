@@ -598,7 +598,12 @@ public final class VisualsRenderer {
                 this.stormSeconds = now;
                 this.snowDrift = StormMath.advance(this.snowDrift, wind, dt, Math.min(1, blizzard));
                 this.sandDrift = StormMath.advance(this.sandDrift, wind, dt, 1);
-                WeatherUniforms.Storm storm = new WeatherUniforms.Storm(sand, blizzard, wind, this.snowDrift, this.sandDrift, this.precipitation.hasDust());
+                //2026-11-16: the Experimental page's particle tuning
+                net.vulkanmod.visuals.config.VisualsConfig vc = net.vulkanmod.visuals.config.VisualsConfig.get();
+                StormMath.Tuning tuning = vc == null ? StormMath.Tuning.DEFAULT
+                        : StormMath.tuning(vc.sandstormGrainSize, vc.sandstormGrainAmount, vc.blizzardFlakeSize, vc.blizzardFlakeAmount);
+                WeatherUniforms.Storm storm = new WeatherUniforms.Storm(sand, blizzard, wind, this.snowDrift, this.sandDrift, this.precipitation.hasDust(),
+                        tuning);
                 values = WeatherUniforms.compute(settings, frame.rain(), frame.thunder(), frame.cameraFluid() != AtmosphereFrame.CameraFluid.NONE,
                         WeatherUniforms.unjitteredInverse(atmosphere.invVanillaProjection(), TaaJitter.appliedNdc()), atmosphere.invLodProjection(),
                         atmosphere.invView(), atmosphere.lodValid(), this.post.halfWeather() ? (height + 1) / 2 : height, camera.x, camera.y, camera.z, this.weatherVelocity, now,

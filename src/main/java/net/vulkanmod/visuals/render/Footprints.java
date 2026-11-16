@@ -99,7 +99,7 @@ public final class Footprints {
         }
         if (lvl != level) reset(lvl);
         FootprintMath.Print old;
-        while ((old = RING.expire(seconds)) != null) {
+        while ((old = RING.expire(seconds, c.footprintDuration)) != null) {
             int[] box = FootprintMath.clear(map, old);
             markDirty(box);
         }

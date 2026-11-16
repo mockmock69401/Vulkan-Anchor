@@ -46,6 +46,34 @@ public final class StormMath {
         return t;
     }
 
+    /**
+     * 2026-11-16 (session 25 follow-up, the user: "모래폭풍과 눈폭풍의 입자 굵기와 빈도를 조절할 수 있는 설정"): the Experimental page's tuning
+     * (ExperimentalFeatures), each percent of the default: sizes TUNE_SIZE_MIN..TUNE_SIZE_MAX, amounts 0..TUNE_AMOUNT_MAX.
+     */
+    public static final int TUNE_SIZE_MIN = 25, TUNE_SIZE_MAX = 200, TUNE_AMOUNT_MAX = 200;
+
+    /**
+     * The storm's particles as factors of their defaults: the sand grains' width (weather.glsl SAND_RADIUS) and how many cells hold one
+     * (SAND_SHARE); the snowflakes' size in a blizzard (over the snow's own size, by the blizzard's strength) and the extra flakes it adds
+     * (SNOW_EXTRA).
+     */
+    public record Tuning(float grainSize, float grainAmount, float flakeSize, float flakeAmount) {
+        public static final Tuning DEFAULT = new Tuning(1, 1, 1, 1);
+    }
+
+    /** The tuning from the settings (percent; each kept in its range). */
+    public static Tuning tuning(int grainSize, int grainAmount, int flakeSize, int flakeAmount) {
+        return new Tuning(size(grainSize), amount(grainAmount), size(flakeSize), amount(flakeAmount));
+    }
+
+    private static float size(int percent) {
+        return Math.max(TUNE_SIZE_MIN, Math.min(TUNE_SIZE_MAX, percent)) / 100f;
+    }
+
+    private static float amount(int percent) {
+        return Math.max(0, Math.min(TUNE_AMOUNT_MAX, percent)) / 100f;
+    }
+
     /** The sand grains' colour over the lightmap's light (a pale warm sand). */
     public static final float[] SAND_COLOUR = {1.0f, 0.86f, 0.64f};
 

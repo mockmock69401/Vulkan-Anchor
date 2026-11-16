@@ -690,5 +690,21 @@
   "vulkanmod.visuals.particle_combat_brightness.tooltip": "Multiplies the brightness apart from the colour. 100 is vanilla. Glowing particles (flames, embers, end rods, portals) change their glow and bloom with it",
   "vulkanmod.visuals.colour_particle_combat": "Combat",
   "vulkanmod.visuals.colour_particle_combat.tooltip": "The colour of combat. The swatch is vanilla's typical colour; another moves every particle in the group by the same ratio (particles whose colour means something, like potions and redstone, stay apart)",
-  "vulkanmod.visuals.block.colours_particles": "Particle Colours"
+  "vulkanmod.visuals.block.colours_particles": "Particle Colours",
+  "vulkanmod.visuals.page.experimental": "Experimental",
+  "vulkanmod.visuals.block.experimental_weather": "Weather",
+  "vulkanmod.visuals.block.experimental_weather.note": "Experimental settings: they may change or go away in a later version.",
+  "vulkanmod.visuals.block.experimental_interaction": "Interaction",
+  "vulkanmod.visuals.sandstorm_grain_size": "Sandstorm Grain Size",
+  "vulkanmod.visuals.sandstorm_grain_size.tooltip": "How big the blowing grains of a sandstorm are. Smaller grains read as fine dust, bigger ones as coarse sand. Percent of the default size; needs Sandstorms & Blizzards",
+  "vulkanmod.visuals.sandstorm_grain_amount": "Sandstorm Grain Amount",
+  "vulkanmod.visuals.sandstorm_grain_amount.tooltip": "How many grains a sandstorm blows past. More grains cost a little more. The dusty air and the gusts of dust stay at 0. Percent of the default amount; 0: no grains; needs Sandstorms & Blizzards",
+  "vulkanmod.visuals.blizzard_flake_size": "Blizzard Flake Size",
+  "vulkanmod.visuals.blizzard_flake_size.tooltip": "How big the snowflakes are while a blizzard blows (on top of the snow's own size). Percent of the default size; needs Sandstorms & Blizzards",
+  "vulkanmod.visuals.blizzard_flake_amount": "Blizzard Flake Amount",
+  "vulkanmod.visuals.blizzard_flake_amount.tooltip": "How many extra snowflakes a blizzard adds to the snowfall. More flakes cost a little more. Percent of the default; 0: only the snowfall's own flakes; needs Sandstorms & Blizzards",
+  "vulkanmod.visuals.footprint_depth": "Footprint Depth",
+  "vulkanmod.visuals.footprint_depth.tooltip": "How deep the footprints are pressed: deeper hollows have steeper, more strongly lit and shaded walls and a darker floor. Percent of the default depth; 0: flat marks only; needs Footprints",
+  "vulkanmod.visuals.footprint_duration": "Footprint Duration",
+  "vulkanmod.visuals.footprint_duration.tooltip": "How long footprints stay before they fade away (by default about 15 seconds in sand and 25 in snow). Percent of the default time; needs Footprints"
 }
