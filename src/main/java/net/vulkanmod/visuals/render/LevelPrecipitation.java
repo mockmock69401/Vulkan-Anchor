@@ -14,7 +14,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
  * (vanilla reads it there), Biome.hasPrecipitation, and Biome.getPrecipitationAt for snow at and below y 80 and the snow line above it.
  * Render thread only.
  */
-final class LevelPrecipitation implements PrecipitationMap.Columns {
+final class LevelPrecipitation implements PrecipitationMap.Columns, WetClimateMap.Columns {
     private final ClientLevel level;
     private final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
     private LevelChunk chunk;
@@ -46,6 +46,12 @@ final class LevelPrecipitation implements PrecipitationMap.Columns {
     public boolean water(int x, int z) {
         int h = this.height(x, z);
         return h != PrecipitationMap.NO_HEIGHT && this.chunk.getFluidState(this.pos.set(x, h - 1, z)).is(FluidTags.WATER);
+    }
+
+    /** 2026-11-16 (WetClimateMap): vanilla's rule rains at (x, y, z) (Biome.getPrecipitationAt: not NONE, not SNOW). */
+    @Override
+    public boolean rains(int x, int y, int z) {
+        return this.level.getBiome(this.pos.set(x, y, z)).value().getPrecipitationAt(this.pos.set(x, y, z)) == Biome.Precipitation.RAIN;
     }
 
     @Override

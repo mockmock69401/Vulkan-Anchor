@@ -85,6 +85,8 @@ layout(binding = 25, rgba16f) uniform restrict image2D heatField;
 layout(binding = 26) uniform sampler2D galaxyMap;
 //2026-11-15 (shader roadmap session 25): the footprints' map (FootprintMath, footprint.glsl)
 layout(binding = 27) uniform usampler2D footprintMap;
+//2026-11-16: where the rain falls on the ground (WetClimateMap, wetclimate.glsl)
+layout(binding = 28) uniform usampler2D wetClimateMap;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -206,6 +208,8 @@ layout(location = 72) uniform vec4 wetParams;
 // and footCamera (xy the camera's world texel, zw within it)
 layout(location = 73) uniform vec4 footParams;
 layout(location = 74) uniform vec4 footCamera;
+//2026-11-16 (WetClimateMap): wetclimate.glsl's wetClimate (xy the camera's x, z wrapped, z 1 with the map, w the rain at the camera)
+layout(location = 75) uniform vec4 wetClimate;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -233,6 +237,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/caustics.glsl>
 #import <vulkanmod:visuals/post/wetground.glsl>
 #import <vulkanmod:visuals/post/footprint.glsl>
+#import <vulkanmod:visuals/post/wetclimate.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
 #import <vulkanmod:visuals/post/pbr.glsl>
@@ -1045,6 +1050,9 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     float portalStrength = 0.0, portalGlow = 0.0;
     float portalLight = portalLo0.w > 0.5 && !fromLod ? portalShareAt(world, block, portalStrength, portalGlow) : 0.0;
     bool portalOn = known && portalLight > 0.0;
+    //2026-11-16: the wetness where the rain falls on this ground (wetclimate.glsl: none in deserts, badlands and savannas, none where it
+    // snows), so no ground there gets wet or dries after the rain
+    float wetness = pbrParams.x > 0.0 && !fromLod ? pbrParams.x*wetClimateAt(world) : 0.0;
 #ifdef PBR
     //Session 9: the front fragment's LabPBR material (pbr.glsl), where it is this pixel's own (its albedo matched) on terrain that is
     // not a plant, translucent or an LOD; rain on it by the sky open above (its diffuse factor: a porous one darkens)
@@ -1052,15 +1060,15 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     bool pbr = hasAlbedo && !plant && !cloud && !fromLod && kind == 0.0
             && pbrMaterial(imageLoad(terrainLight, p).r, imageLoad(terrainNormal, p).r, imageLoad(terrainSpecular, p).r, mat);
     float pbrFilm = 0.0;
-    float pbrDiffuse = pbr ? pbrWet(mat, pbrWetAt(pbrParams.x, sky), normalWorld, pbrFilm) : 1.0;
+    float pbrDiffuse = pbr ? pbrWet(mat, pbrWetAt(wetness, sky), normalWorld, pbrFilm) : 1.0;
 #endif
     //Session 20: rain-wet ground where no LabPBR material takes the rain (wetground.glsl): how wet (PBR's wetness by the open sky), and
     // how much of it lies under a puddle
     float wetGround = 0.0;
     float wetPuddleShare = 0.0;
-    if (wetParams.x > 0.0 && pbrParams.x > 0.0 && passRan && !plant && !emissive && !cloud && !fromLod && kind == 0.0
+    if (wetParams.x > 0.0 && wetness > 0.0 && passRan && !plant && !emissive && !cloud && !fromLod && kind == 0.0
             && dot(normalWorld, normalWorld) > 0.25) {
-        wetGround = wetGroundAt(pbrParams.x, sky, wetParams.x);
+        wetGround = wetGroundAt(wetness, sky, wetParams.x);
 #ifdef PBR
         if (pbr && mat.specular) {
             wetGround = 0.0;
