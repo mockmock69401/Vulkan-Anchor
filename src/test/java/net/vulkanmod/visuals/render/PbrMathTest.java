@@ -211,6 +211,20 @@ class PbrMathTest {
         assertTrue(PbrMath.facingRatio(new float[]{1, 0, 0}, up, PbrMath.normalize(new float[]{1, 0.01f, 0})) <= PbrMath.PBR_FACING_RATIO_MAX);
         assertEquals(PbrMath.PBR_SSS_SHARE, PbrMath.scatter(0, 1, 1), 1e-6);
         assertEquals(0.8f, PbrMath.scatter(0.8f, 1, 1), 1e-6, "never less than the face gets");
+        //Session 16b: a grazed face (a north or south wall all day) in shadow scatters no sun; across its penumbra the light only rises
+        // (it was dark only in the penumbra: shadow 0 took the sky's estimate, a thin black line on Faithful PBR's sand)
+        assertEquals(PbrMath.PBR_SCATTER_GRAZING, LightingMath.GRAZING_NDOTL);
+        float sky = 1;
+        assertEquals(0f, PbrMath.scatter(0, 0.3f, PbrMath.scatterVisibility(0, 0, sky)), "grazed, in shadow");
+        float last = -1;
+        for (float v = 0; v <= 1.0001f; v += 0.05f) {
+            float s = PbrMath.scatter(0, 0.3f, PbrMath.scatterVisibility(0, v, sky));
+            assertTrue(s >= last, "no dip across the penumbra at " + v);
+            last = s;
+        }
+        assertEquals(PbrMath.scatter(0, 0.3f, sky), PbrMath.scatter(0, 0.3f, PbrMath.scatterVisibility(-0.5f, 0, sky)), 1e-6,
+                "a face turned away (not looked up) keeps the sky's estimate");
+        assertTrue(COPY.contains("pbrScatterVisibility(dot(normalWorld, a.sun.xyz), lt.w, skyGate("));
     }
 
     @Test
