@@ -274,7 +274,7 @@ public final class CloudMath {
 
     /** realDensity: the cumulus density 0..1 at camera-relative (x, y, z). */
     public static float realDensity(byte[] map, Realistic r, float x, float y, float z, int octaves) {
-        float h = (y - r.base) / r.thickness, f = Math.min(r.cover, 1);
+        float ly = realHeight(x, y, z) - r.base, h = ly / r.thickness, f = Math.min(r.cover, 1);
         if (!(h > 0 && h < 1) || !(f > 0)) return 0;
         float mx = r.offsetX + x, mz = r.offsetZ + z;
         float s = (noise(map, mx, mz, 1) - 1 + f) / f;
@@ -283,7 +283,7 @@ public final class CloudMath {
         float hp = (h - lift) / ((1 - lift) * mix(REAL_TOP_MIN, 1, s) * mix(1 - REAL_TOWER, 1, tower));
         if (!(hp > 0 && hp < 1)) return 0;
         float d = s * smoothstep(0, REAL_BOTTOM, hp) * (1 - smoothstep(REAL_ROUND, 1, hp));
-        float er = erosionFor(mx, y - r.base, mz, octaves, d);
+        float er = erosionFor(mx, ly, mz, octaves, d);
         if (er < 0) return 0;
         float e = REAL_ERODE * er;
         return Math.max((d - e) / (1 - e), 0);
@@ -295,8 +295,64 @@ public final class CloudMath {
         return (1 - g * g) / (k * (float) Math.sqrt(k));
     }
 
+    /**
+     * 2026-11-16 (the user: "the realistic clouds only show at a certain height in the sky; let them reach the horizon, as in Genshin"):
+     * the realistic layer curves down with the horizontal distance as on a planet REAL_CURVE blocks in radius, so it meets the eye's level
+     * some 11,000 blocks from the sea and banks along the horizon (it was a flat slab cut at the LOD distance, which ended 4 to 6 degrees
+     * above the horizon); a ray's march ends at REAL_REACH blocks, the clouds fading out from CLOUD_FADE_START of it.
+     */
+    public static final float REAL_CURVE = 250000, REAL_REACH = 24000;
+    /** The far banks melt into the haze: from REAL_HAZE_NEAR to REAL_HAZE_FAR blocks out the haze sees a cloud up to 1 + REAL_HAZE_GAIN times as far. */
+    public static final float REAL_HAZE_NEAR = 2000, REAL_HAZE_FAR = 12000, REAL_HAZE_GAIN = 2;
+
+    /** realHazeDistance: the distance the haze sees for a cloud at camera-relative (x, z), t along the ray. */
+    public static float realHazeDistance(float x, float z, float t) {
+        return t * (1 + REAL_HAZE_GAIN * smoothstep(REAL_HAZE_NEAR, REAL_HAZE_FAR, (float) Math.sqrt(x * x + z * z)));
+    }
+
+    /** realHeight: the curved height of camera-relative (x, y, z), its y plus the layer's drop there. */
+    public static float realHeight(float x, float y, float z) {
+        return y + (x * x + z * z) / (2 * REAL_CURVE);
+    }
+
+    /** realLevel: the ordered distances along dir from origin where the curved height is y, or null when it never is. */
+    public static float[] realLevel(float[] origin, float[] dir, float y) {
+        double a = Math.max((dir[0] * dir[0] + dir[2] * dir[2]) / (2.0 * REAL_CURVE), 1e-12);
+        double b = dir[1] + (origin[0] * dir[0] + origin[2] * dir[2]) / (double) REAL_CURVE;
+        double c = realHeight(origin[0], origin[1], origin[2]) - y;
+        double disc = b * b - 4 * a * c;
+        if (disc < 0) return null;
+        double q = -0.5 * (b + (b >= 0 ? Math.sqrt(disc) : -Math.sqrt(disc)));
+        if (q == 0) return new float[]{0, 0};
+        double r1 = q / a, r2 = c / q;
+        return new float[]{(float) Math.min(r1, r2), (float) Math.max(r1, r2)};
+    }
+
+    /** realInterval: the ray's first span inside the curved layer, cut to [0, min(maxDist, REAL_REACH)]; null when there is none. */
+    public static float[] realInterval(Realistic r, float[] origin, float[] dir, float maxDist) {
+        float bottom = r.base, top = r.base + r.thickness, h = realHeight(origin[0], origin[1], origin[2]);
+        float[] lo = realLevel(origin, dir, bottom), hi = realLevel(origin, dir, top);
+        float t0, t1;
+        if (h < bottom) {
+            if (lo == null || hi == null) return null;
+            t0 = lo[1];
+            t1 = hi[1];
+        } else if (h <= top) {
+            if (hi == null) return null;
+            t0 = 0;
+            t1 = lo != null && lo[0] > 0 ? Math.min(lo[0], hi[1]) : hi[1];
+        } else {
+            if (hi == null || hi[1] < 0) return null;
+            t0 = hi[0];
+            t1 = lo != null && lo[0] > t0 ? lo[0] : hi[1];
+        }
+        t0 = Math.max(t0, 0);
+        t1 = Math.min(t1, Math.min(maxDist, REAL_REACH));
+        return t1 > t0 ? new float[]{t0, t1} : null;
+    }
+
     private static float[] interval(Realistic r, float[] origin, float[] dir, float maxDist) {
-        return interval(r.base, r.thickness, r.lodDistance, origin, dir, maxDist);
+        return realInterval(r, origin, dir, maxDist);
     }
 
     /** realMarch: (sunlit weight, sky-lit weight, coverage, coverage-weighted distance) of the cumulus and the cirrus behind them. */
@@ -323,10 +379,10 @@ public final class CloudMath {
                 float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
                 float d = realDensity(map, r, px, py, pz, octaves);
                 if (d <= 0) continue;
-                float fade = 1 - smoothstep(CLOUD_FADE_START, 1, (float) Math.sqrt(px * px + pz * pz) / r.lodDistance);
+                float fade = 1 - smoothstep(CLOUD_FADE_START, 1, (float) Math.sqrt(px * px + pz * pz) / REAL_REACH);
                 float sigma = d * REAL_DENSITY;
                 float a = (1 - (float) Math.exp(-sigma * dt)) * fade;
-                float h = clamp01((py - r.base) / r.thickness);
+                float h = clamp01((realHeight(px, py, pz) - r.base) / r.thickness);
                 float od = lights > 0 ? lightDepth(map, r, px, py, pz, lightDir, lights) : REAL_FLAT_DEPTH * (1 - h);
                 od *= level;
                 float s = 0, share = 1, depth = 1;
@@ -339,16 +395,17 @@ public final class CloudMath {
                 float w = a * trans;
                 sun += w * s;
                 amb += w * mix(REAL_AMBIENT_LOW, 1, h);
-                dsum += w * t;
+                dsum += w * realHazeDistance(px, pz, t);
                 wsum += w;
                 trans *= 1 - a;
             }
         }
         float top = r.base + REAL_CIRRUS_HEIGHT;
-        if (trans >= 0.01f && dir[1] > 0 && origin[1] < top) {
-            float t = (top - origin[1]) / dir[1];
+        float[] ct = realLevel(origin, dir, top);
+        if (trans >= 0.01f && realHeight(origin[0], origin[1], origin[2]) < top && ct != null && ct[1] > 0) {
+            float t = ct[1];
             float qx = origin[0] + dir[0] * t, qz = origin[2] + dir[2] * t;
-            float rr = (float) Math.sqrt(qx * qx + qz * qz) / r.lodDistance;
+            float rr = (float) Math.sqrt(qx * qx + qz * qz) / REAL_REACH;
             float fc = Math.min(REAL_CIRRUS_COVER * r.cover / REAL_COVER, 0.95f);
             if (t < maxDist && rr < 1 && fc > 0) {
                 float v = clamp01((noise(map, r.offsetX + qx, r.offsetZ + qz, 2) - 1 + fc) / fc);
@@ -356,7 +413,7 @@ public final class CloudMath {
                 float w = a * trans;
                 sun += w * mix(hg(c, REAL_CIRRUS_G * level), 1, 0.5f);
                 amb += w * REAL_CIRRUS_AMBIENT;
-                dsum += w * t;
+                dsum += w * realHazeDistance(qx, qz, t);
                 wsum += w;
                 trans *= 1 - a;
             }
