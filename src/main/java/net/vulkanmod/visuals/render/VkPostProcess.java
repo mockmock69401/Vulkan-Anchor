@@ -815,7 +815,8 @@ public final class VkPostProcess {
         if (this.copyUniforms.has(FootprintMath.SLOT)) {
             boolean ready = uploadFootprints(upload);
             net.minecraft.world.phys.Vec3 eye = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-            float[] foot = ready && Footprints.count() > 0 ? FootprintMath.params(VisualsConfig.get().footprints, Footprints.now(), eye.y) : new float[4];
+            float[] foot = ready && Footprints.count() > 0 ? FootprintMath.params(VisualsConfig.get().footprints, Footprints.now(), eye.y,
+                    VisualsConfig.get().footprintDepth, VisualsConfig.get().footprintDuration) : new float[4];
             if (Footprints.LOG) Footprints.uploadDebug = "ready " + ready + " row " + this.footprintRow + " params " + foot[0] + "/" + foot[1] + "/" + foot[2];
             this.copyUniforms.putVec4(FootprintMath.SLOT, foot[0], foot[1], foot[2], foot[3]);
             if (this.copyUniforms.has(FootprintMath.CAMERA_SLOT)) {

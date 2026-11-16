@@ -469,5 +469,21 @@
   "vulkanmod.visuals.particle_combat_brightness.tooltip": "색과 따로 밝기를 곱합니다. 100이 바닐라. 빛나는 입자(불꽃·불씨·엔드 막대·포털)는 빛과 블룸도 함께 바뀝니다",
   "vulkanmod.visuals.colour_particle_combat": "전투",
   "vulkanmod.visuals.colour_particle_combat.tooltip": "전투의 색. 견본은 바닐라의 대표 색이고, 다른 색을 고르면 이 묶음의 모든 입자가 같은 비율로 바뀝니다(물약·레드스톤처럼 색에 뜻이 있는 입자도 서로 구분됨)",
-  "vulkanmod.visuals.block.colours_particles": "입자 색"
+  "vulkanmod.visuals.block.colours_particles": "입자 색",
+  "vulkanmod.visuals.page.experimental": "실험적 기능",
+  "vulkanmod.visuals.block.experimental_weather": "날씨",
+  "vulkanmod.visuals.block.experimental_weather.note": "실험적 기능입니다. 다음 버전에서 바뀌거나 없어질 수 있습니다.",
+  "vulkanmod.visuals.block.experimental_interaction": "상호작용",
+  "vulkanmod.visuals.sandstorm_grain_size": "모래폭풍 입자 굵기",
+  "vulkanmod.visuals.sandstorm_grain_size.tooltip": "모래폭풍에 날리는 모래알의 크기입니다. 작을수록 고운 먼지처럼, 클수록 굵은 모래처럼 보입니다. 기본 크기의 퍼센트이며 모래폭풍·눈보라가 켜져 있어야 합니다",
+  "vulkanmod.visuals.sandstorm_grain_amount": "모래폭풍 입자 빈도",
+  "vulkanmod.visuals.sandstorm_grain_amount.tooltip": "모래폭풍에 날리는 모래알의 양입니다. 많을수록 조금 더 무거워집니다. 0이어도 탁한 공기와 먼지 돌풍은 남습니다. 기본 양의 퍼센트이며 0이면 모래알이 없습니다. 모래폭풍·눈보라가 켜져 있어야 합니다",
+  "vulkanmod.visuals.blizzard_flake_size": "눈보라 입자 굵기",
+  "vulkanmod.visuals.blizzard_flake_size.tooltip": "눈보라가 칠 때 눈송이의 크기입니다(눈 크기 설정 위에 곱해집니다). 기본 크기의 퍼센트이며 모래폭풍·눈보라가 켜져 있어야 합니다",
+  "vulkanmod.visuals.blizzard_flake_amount": "눈보라 입자 빈도",
+  "vulkanmod.visuals.blizzard_flake_amount.tooltip": "눈보라가 눈에 더하는 눈송이의 양입니다. 많을수록 조금 더 무거워집니다. 기본 양의 퍼센트이며 0이면 평소 눈의 양만 내립니다. 모래폭풍·눈보라가 켜져 있어야 합니다",
+  "vulkanmod.visuals.footprint_depth": "발자국 깊이",
+  "vulkanmod.visuals.footprint_depth.tooltip": "발자국이 파이는 깊이입니다. 깊을수록 벽이 가팔라져 빛과 그늘이 뚜렷해지고 바닥이 어두워집니다. 기본 깊이의 퍼센트이며 0이면 납작한 자국만 남습니다. 발자국이 켜져 있어야 합니다",
+  "vulkanmod.visuals.footprint_duration": "발자국 유지 시간",
+  "vulkanmod.visuals.footprint_duration.tooltip": "발자국이 사라지기 전까지 남아 있는 시간입니다(기본은 모래 약 15초, 눈 약 25초). 기본 시간의 퍼센트이며 발자국이 켜져 있어야 합니다"
 }

@@ -471,6 +471,17 @@ public class VisualsConfig {
      * while (Footprints, FootprintMath): percent of the default depth, 0 = off.
      */
     public int footprints = 100;
+    /**
+     * 2026-11-16 (session 25 follow-up, the user: "모래폭풍과 눈폭풍의 입자 굵기와 빈도를 조절할 수 있는 설정 ... 발자국 깊이와 유지 시간"): the
+     * Experimental page (ExperimentalFeatures), each percent of its default: the sandstorm's grains' size and amount, the blizzard's flakes'
+     * size and extra amount (StormMath.Tuning), the footprints' depth and how long they stay (FootprintMath).
+     */
+    public int sandstormGrainSize = 100;
+    public int sandstormGrainAmount = 100;
+    public int blizzardFlakeSize = 100;
+    public int blizzardFlakeAmount = 100;
+    public int footprintDepth = 100;
+    public int footprintDuration = 100;
     /** 2026-11-11 (session 13): the stars' shape: 0 vanilla's squares, 1 round soft points (StarMath.TYPE_ROUND). */
     public int starType = 0;
     /**

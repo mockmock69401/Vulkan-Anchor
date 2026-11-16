@@ -30,8 +30,18 @@ public final class WeatherUniforms {
      * 2026-11-15 (session 25): this frame's storm (StormMath): sand and blizzard strengths 0..2, the wind (x, z blocks per second), the snow's
      * and the sand's drift (x, z blocks, wrapped at WEATHER_WRAP), and whether the map holds a desert column near the camera.
      */
-    public record Storm(float sand, float blizzard, float[] wind, float[] snowDrift, float[] sandDrift, boolean dustNear) {
+    public record Storm(float sand, float blizzard, float[] wind, float[] snowDrift, float[] sandDrift, boolean dustNear, StormMath.Tuning tuning) {
         public static final Storm NONE = new Storm(0, 0, new float[2], new float[2], new float[2], false);
+
+        /** With the default particles (StormMath.Tuning.DEFAULT). */
+        public Storm(float sand, float blizzard, float[] wind, float[] snowDrift, float[] sandDrift, boolean dustNear) {
+            this(sand, blizzard, wind, snowDrift, sandDrift, dustNear, StormMath.Tuning.DEFAULT);
+        }
+
+        /** 2026-11-16: the Experimental page's tuning (null: the defaults). */
+        public StormMath.Tuning tune() {
+            return this.tuning != null ? this.tuning : StormMath.Tuning.DEFAULT;
+        }
     }
     /** Fall speeds (blocks per second): vanilla's rain texture falls about this fast, its snow a little over a block a second. */
     public static final float RAIN_FALL = 14.0f, SNOW_FALL = 1.5f;
@@ -122,7 +132,7 @@ public final class WeatherUniforms {
         ParticleStyles p = s.particles();
         float boost = r * (1 + THUNDER_EXTRA * th);
         float[] params = {rainNear ? Math.min(1, RAIN_SHARE * p.amount(ParticleEffect.RAIN) * boost) : 0,
-                snowNear ? Math.min(1, SNOW_SHARE * p.amount(ParticleEffect.SNOW) * boost * (1 + StormMath.SNOW_EXTRA * Math.max(0, storm.blizzard()))) : 0,
+                snowNear ? Math.min(1, SNOW_SHARE * p.amount(ParticleEffect.SNOW) * boost * (1 + StormMath.SNOW_EXTRA * storm.tune().flakeAmount() * Math.max(0, storm.blizzard()))) : 0,
                 COVERAGE_BASE + (1 - COVERAGE_BASE) * r, (float) wrap(seconds * SWAY_RATE, SWAY_WRAP)};
         double bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
         float[] camera = {Math.floorMod((long) bx, WeatherMath.WEATHER_WRAP), (float) by, Math.floorMod((long) bz, WeatherMath.WEATHER_WRAP), (float) y};
@@ -135,24 +145,27 @@ public final class WeatherUniforms {
         float[] wind = storm.wind() != null && storm.wind().length >= 2 ? storm.wind() : new float[2];
         float[] snowV = b > 0 ? new float[]{v[0] - wind[0] * b, v[1], v[2] - wind[1] * b} : v;
         float snowExposure = SNOW_EXPOSURE + (StormMath.SNOW_STORM_EXPOSURE - SNOW_EXPOSURE) * b;
+        //2026-11-16: the blizzard's flake size (Experimental), on the snow's own size as the blizzard builds
+        float[] style = style(p);
+        style[3] *= 1 + (storm.tune().flakeSize() - 1) * b;
         return new Values(true, invVanillaProjection, invLodProjection != null ? invLodProjection : invVanillaProjection, invView, lodValid, camera, frac,
                 params, motion(RAIN_FALL, v, WeatherMath.RAIN_PERIOD, seconds, EXPOSURE), motion(SNOW_FALL, snowV, WeatherMath.SNOW_PERIOD, seconds, snowExposure),
                 new float[]{(float) wrap(seconds, (double) WeatherMath.SPLASH_PERIOD * WeatherMath.SPLASH_WRAP), 0, 0, 0},
                 water != null && water.length == 4 ? water : new float[4], brightened(s.colours().tint(ShaderColours.Colour.RAIN), p.brightness(ParticleEffect.RAIN)),
-                brightened(s.colours().tint(ShaderColours.Colour.SNOW), p.brightness(ParticleEffect.SNOW)), style(p), storm(storm, v, seconds));
+                brightened(s.colours().tint(ShaderColours.Colour.SNOW), p.brightness(ParticleEffect.SNOW)), style, storm(storm, v, seconds));
     }
 
     /**
      * Session 25: slots 18..21 as 16 floats: storm (x the sand grains' share of cells: SAND_SHARE x the sandstorm while a desert column is
-     * near, y the dust veils' strength, z the snow veils', w the time wrapped at STORM_TIME_WRAP), sand (xyz the grains' half streak: the wind
-     * less the camera's velocity over SAND_EXPOSURE), drift (xy the snow's, zw the sand's) and the sand's colour (StormMath.SAND_COLOUR).
+     * near (times the grain amount), y the dust veils' strength, z the snow veils', w the time wrapped at STORM_TIME_WRAP), sand (xyz the
+     * grains' half streak: the wind less the camera's velocity over SAND_EXPOSURE; w the grains' size, a factor of SAND_RADIUS), drift (xy the snow's, zw the sand's) and the sand's colour (StormMath.SAND_COLOUR).
      */
     static float[] storm(Storm storm, float[] velocity, double seconds) {
         float[] o = new float[16];
         float sand = Math.max(0, storm.sand()), blizzard = Math.max(0, storm.blizzard());
         if (!(sand > 0) && !(blizzard > 0)) return o;
         float[] wind = storm.wind() != null && storm.wind().length >= 2 ? storm.wind() : new float[2];
-        o[0] = storm.dustNear() ? Math.min(1, StormMath.SAND_SHARE * sand) : 0;
+        o[0] = storm.dustNear() ? Math.min(1, StormMath.SAND_SHARE * sand * storm.tune().grainAmount()) : 0;
         o[1] = sand;
         o[2] = blizzard;
         o[3] = (float) wrap(seconds, STORM_TIME_WRAP);
@@ -160,6 +173,7 @@ public final class WeatherUniforms {
         o[4] = (wind[0] - velocity[0]) * k;
         o[5] = -velocity[1] * k;
         o[6] = (wind[1] - velocity[2]) * k;
+        o[7] = storm.tune().grainSize();
         float[] sd = storm.snowDrift() != null && storm.snowDrift().length >= 2 ? storm.snowDrift() : new float[2];
         float[] dd = storm.sandDrift() != null && storm.sandDrift().length >= 2 ? storm.sandDrift() : new float[2];
         o[8] = sd[0];

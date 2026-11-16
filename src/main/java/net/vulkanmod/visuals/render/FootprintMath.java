@@ -21,8 +21,17 @@ public final class FootprintMath {
     public static final int BLOCKS = MAP / PER_BLOCK;
     public static final float TIME_STEP = 0.125f;
     public static final int TIME_WRAP = 4096;
-    /** Prints kept on the CPU (oldest replaced first); at a walk's 6 prints a second, about 40 s. */
-    public static final int RING = 256;
+    /**
+     * Prints kept on the CPU (oldest replaced first); at a walk's 6 prints a second, about 170 s (2026-11-16: was 256, about 40 s, before
+     * the duration setting could keep a print in snow up to 100 s).
+     */
+    public static final int RING = 1024;
+    /**
+     * 2026-11-16 (session 25 follow-up, the user: "발자국 깊이와 유지 시간도 추가해줘"): the Experimental page's depth (percent of the hollow's
+     * default depth, 0..DEPTH_MAX) and duration (percent of SNOW_FADE / SAND_FADE, DURATION_MIN..DURATION_MAX: up to 100 s in snow, well within
+     * the TIME_WRAP steps' 512 s). footParams.w carries both as depth + PACK x duration (whole percents, exact in a float).
+     */
+    public static final int DEPTH_MAX = 300, DURATION_MIN = 25, DURATION_MAX = 400, PACK = 1024;
     /** A boot's half length and half width (blocks), and how far either side of the walk's line the two feet land. */
     public static final float HALF_LENGTH = 0.17f, HALF_WIDTH = 0.105f, SIDE = 0.14f;
     /** A print every STRIDE blocks walked on the ground (each foot every second one). */
@@ -167,10 +176,24 @@ public final class FootprintMath {
         return new float[]{(float) (-Math.cos(r) * s), (float) (-Math.sin(r) * s)};
     }
 
-    /** The composite's footParams for a setting (percent), now (seconds) and the camera's y: x the depth strength (0: off), y now's time step, z the camera's y. */
+    /** The composite's footParams for a setting (percent), now (seconds) and the camera's y, at the default depth and duration. */
     public static float[] params(int setting, double seconds, double cameraY) {
+        return params(setting, seconds, cameraY, 100, 100);
+    }
+
+    /**
+     * The composite's footParams: x the strength (the setting, 0: off), y now's time step, z the camera's y, w the depth and the duration
+     * (percents, packed: depth + PACK x duration; footprint.glsl unpacks them).
+     */
+    public static float[] params(int setting, double seconds, double cameraY, int depth, int duration) {
         float s = Math.max(0, Math.min(STRENGTH_MAX, setting)) / 100f;
-        return new float[]{s, timeStep(seconds), (float) cameraY, 0};
+        int d = Math.max(0, Math.min(DEPTH_MAX, depth)), t = Math.max(DURATION_MIN, Math.min(DURATION_MAX, duration));
+        return new float[]{s, timeStep(seconds), (float) cameraY, d + (float) PACK * t};
+    }
+
+    /** A print's fade time (seconds): SAND_FADE or SNOW_FADE times the duration (percent, kept in its range). */
+    public static float fadeSeconds(boolean sand, int duration) {
+        return (sand ? SAND_FADE : SNOW_FADE) * Math.max(DURATION_MIN, Math.min(DURATION_MAX, duration)) / 100f;
     }
 
     /**
@@ -220,10 +243,18 @@ public final class FootprintMath {
 
         /** Removes and returns the oldest print if its age at seconds is at least its fade time, else null. */
         public Print expire(double seconds) {
+            return expire(seconds, 100);
+        }
+
+        /**
+         * As expire(seconds) with the duration setting (percent; fadeSeconds). The oldest print goes first: a sand print behind an older snow
+         * one waits for it (cleared a little late, already faded out in the composite).
+         */
+        public Print expire(double seconds, int duration) {
             if (this.size == 0) return null;
             int tail = Math.floorMod(this.head - this.size, this.prints.length);
             Print p = this.prints[tail];
-            if (seconds - p.seconds() < (p.sand() ? SAND_FADE : SNOW_FADE) && seconds >= p.seconds()) return null;
+            if (seconds - p.seconds() < fadeSeconds(p.sand(), duration) && seconds >= p.seconds()) return null;
             this.prints[tail] = null;
             this.size--;
             return p;

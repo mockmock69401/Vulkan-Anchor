@@ -279,7 +279,10 @@ public final class VisualsOptionLayout {
                             colour(Colour.PARTICLE_DRIPS, null),
                             colour(Colour.PARTICLE_MAGIC, null),
                             colour(Colour.PARTICLE_AMBIENT, null),
-                            colour(Colour.PARTICLE_COMBAT, null))))));
+                            colour(Colour.PARTICLE_COMBAT, null))))),
+            //2026-11-16 (session 25 follow-up, the user: "셰이더에 실험적 기능 메뉴를 추가"): the Experimental page, its weather and interaction
+            // blocks (ExperimentalFeatures: add a setting there)
+            new Page(ExperimentalFeatures.PAGE, ExperimentalFeatures.blocks()));
 
     private VisualsOptionLayout() {
     }
@@ -389,6 +392,8 @@ public final class VisualsOptionLayout {
             case "foliage_wind" -> c.foliageWind;
             case "hanging_sway" -> c.hangingSway;
             default -> {
+                ExperimentalFeatures.Entry experimental = ExperimentalFeatures.byKey(item.key());
+                if (experimental != null) yield experimental.get().applyAsInt(c);
                 ParticleEffect.Target effect = ParticleEffect.byItemKey(item.key());
                 if (effect != null) yield effect.effect().get(c, effect.part());
                 Colour colour = Colour.byKey(item.key());
@@ -483,6 +488,11 @@ public final class VisualsOptionLayout {
             case "foliage_wind" -> c.foliageWind = v;
             case "hanging_sway" -> c.hangingSway = v;
             default -> {
+                ExperimentalFeatures.Entry experimental = ExperimentalFeatures.byKey(item.key());
+                if (experimental != null) {
+                    experimental.set().accept(c, v);
+                    return;
+                }
                 ParticleEffect.Target effect = ParticleEffect.byItemKey(item.key());
                 if (effect != null) {
                     effect.effect().set(c, effect.part(), v);

@@ -539,7 +539,8 @@ vec4 weatherSplash(vec3 rel, vec3 dir, float dist, vec4 camera, vec4 frac, vec4 
 }
 
 //2026-11-15 (session 25): one of a cell's sand grains (as weatherDrop; the frame does not fall: origin.y is the camera's height). storm: x the
-// share of cells with a grain, w the time (seconds, wrapped); motion: xyz the streak's half vector
+// share of cells with a grain, w the time (seconds, wrapped); motion: xyz the streak's half vector, w the grains' size (a factor of SAND_RADIUS:
+// the Experimental page's grain size)
 void sandGrain(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int layer, int drop, vec3 origin, vec4 camera, vec4 frac, vec4 storm,
                vec4 motion) {
     ivec3 cam = ivec3(camera.xyz);
@@ -555,7 +556,8 @@ void sandGrain(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int layer,
     vec3 a = (vec3(cell) + mix(vec3(WEATHER_MARGIN), vec3(1.0 - WEATHER_MARGIN), r.xzy))*vec3(size, cellHeight, size) - origin;
     float t0 = dot(a, dir);
     float reach = length(motion.xyz) + SAND_BOB;
-    float extent = SAND_RADIUS*(1.0 + WEATHER_SIZE_SPREAD);
+    float radius = SAND_RADIUS*motion.w;
+    float extent = radius*(1.0 + WEATHER_SIZE_SPREAD);
     if (length(a - dir*t0) > reach + extent + frac.w*(max(t0, 0.0) + reach)) {
         return;
     }
@@ -573,7 +575,7 @@ void sandGrain(inout vec4 acc, vec3 dir, float sceneDist, ivec3 cell, int layer,
     vec3 streak = weatherHalfStreak(motion.xyz, size, cellHeight, SAND_BOB);
     vec3 hit = raySegment(dir, a - streak, a + streak);
     float spread = 1.0 + WEATHER_SIZE_SPREAD*(2.0*v.z - 1.0);
-    float alpha = weatherCoverage(hit.x, SAND_RADIUS*spread, hit.y, frac.w, SAND_ALPHA);
+    float alpha = weatherCoverage(hit.x, radius*spread, hit.y, frac.w, SAND_ALPHA);
     float start = layer == 0 ? WEATHER_NEAR : weatherLayerEnd(layer - 1);
     float fadeIn = layer == 0 ? WEATHER_NEAR_FADE : size;
     float end = weatherLayerEnd(layer);
