@@ -160,28 +160,12 @@ class ColourPresetsTest {
         }
         c.cloudStyle = CloudMath.STYLE_ANIME;
         assertEquals(ColourPresets.ANIME, ColourPresets.detect(c));
-        //Another palette: back to the performance level's style (High: the vanilla shape; Ultra: realistic; Custom: the vanilla shape)
-        for (int level : new int[]{VisualsPresets.HIGH, VisualsPresets.ULTRA, VisualsPresets.CUSTOM}) {
-            for (int palette : new int[]{ColourPresets.DEFAULT, ColourPresets.REALISTIC, ColourPresets.CINEMATIC, ColourPresets.HORROR}) {
-                VisualsConfig d = new VisualsConfig();
-                VisualsPresets.apply(d, level);
-                int before = d.cloudStyle;
-                ColourPresets.apply(d, ColourPresets.ANIME);
-                ColourPresets.apply(d, palette);
-                assertEquals(before, d.cloudStyle, "palette " + palette + " after Anime at preset " + level);
-                assertEquals(palette, ColourPresets.detect(d));
-                if (VisualsPresets.isLevel(level)) assertEquals(level, VisualsPresets.detect(d));
-            }
-        }
-        //...and leaves a style that is not the anime one alone (the realistic clouds under Custom stay), and the other palettes ignore it
+        //2026-11-16: the other palettes are PaletteCloudStyleTest's; anime clouds by hand under Horror keep it, Custom changes nothing
         VisualsConfig e = new VisualsConfig();
-        e.cloudStyle = CloudMath.STYLE_REALISTIC;
         ColourPresets.apply(e, ColourPresets.HORROR);
-        assertEquals(CloudMath.STYLE_REALISTIC, e.cloudStyle);
-        assertEquals(ColourPresets.HORROR, ColourPresets.detect(e));
         e.cloudStyle = CloudMath.STYLE_ANIME;
         assertEquals(ColourPresets.HORROR, ColourPresets.detect(e), "anime clouds by hand under another palette keep it");
-        assertEquals(CloudMath.STYLE_ANIME, ColourPresets.cloudStyle(ColourPresets.CUSTOM, CloudMath.STYLE_ANIME, VisualsPresets.HIGH), "Custom changes nothing");
+        assertEquals(CloudMath.STYLE_ANIME, ColourPresets.cloudStyle(ColourPresets.CUSTOM, CloudMath.STYLE_ANIME), "Custom changes nothing");
     }
 
     /** Session 11: a file saved on the Anime palette before it included the clouds takes them and stays Anime; others keep their style. */

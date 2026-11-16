@@ -97,14 +97,18 @@ public final class VisualsPresets {
     /**
      * 2026-11-14: as keepsLook, and the auroras off while the colour palette is Horror (it turns them off; ColourPresets.aurora). values
      * gives a setting's value by key (the colour palette's, VisualsOptionLayout.COLOUR_PRESET), or Integer.MIN_VALUE for one it does not know.
+     * 2026-11-16: likewise the realistic clouds while the palette is Realistic or Cinematic (they pick them; ColourPresets.clouds), so a
+     * level below Ultra keeps them and counts them as its own; under another palette they are the cost they always were.
      */
     public static boolean keepsLook(String key, int value, ToIntFunction<String> values) {
-        if (key.equals("cloud_style") && value == CloudMath.STYLE_ANIME) return true;
+        if (key.equals(ColourPresets.CLOUD_KEY)) {
+            return value == CloudMath.STYLE_ANIME || value == ColourPresets.clouds(values.applyAsInt(VisualsOptionLayout.COLOUR_PRESET));
+        }
         return key.equals(ColourPresets.AURORA_KEY) && value == CelestialUniforms.AURORA_OFF
                 && values.applyAsInt(VisualsOptionLayout.COLOUR_PRESET) == ColourPresets.HORROR;
     }
 
-    /** Sets every preset setting to level's value (keepsLook: the anime clouds stay) and the preset to level; Custom (or anything else) only records Custom. */
+    /** Sets every preset setting to level's value (keepsLook: a palette's clouds stay) and the preset to level; Custom (or anything else) only records Custom. */
     public static void apply(VisualsConfig c, int level) {
         if (!isLevel(level)) {
             c.preset = CUSTOM;
@@ -120,7 +124,7 @@ public final class VisualsPresets {
 
     /**
      * Whether every preset setting has level's value. values gives a setting's value by key, or Integer.MIN_VALUE for one it does not
-     * know (the page's hidden Distant Horizons block): such a setting is not compared, nor the anime clouds (keepsLook).
+     * know (the page's hidden Distant Horizons block): such a setting is not compared, nor a palette's clouds (keepsLook).
      */
     public static boolean matches(int level, ToIntFunction<String> values) {
         if (!isLevel(level)) return false;

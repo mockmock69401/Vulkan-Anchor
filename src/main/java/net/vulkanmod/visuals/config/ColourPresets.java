@@ -143,18 +143,32 @@ public final class ColourPresets {
 
     /**
      * Session 11 (2026-11-10, the user: "anime-style clouds too, after Fantasy, linked with the Anime palette"): the cloud style is the one
-     * performance setting a palette touches. ANIME picks the anime clouds (and shows only while they are on: changing the cloud style by
-     * hand shows Custom); every other palette leaves the style alone, except that it takes the anime clouds back to the performance
-     * preset's cloud style (the vanilla shape under Custom), so going Anime and back to another palette restores the sky it had. The
-     * performance presets never fight this: they keep the anime clouds (VisualsPresets.keepsLook).
+     * performance setting a palette touches. ANIME picks the anime clouds.
+     *
+     * <p>2026-11-16 (the user: "only the Anime preset should change the clouds; choosing another preset resets the cloud choice", then
+     * "choosing the Realistic or Cinematic preset should pick the realistic clouds"): REALISTIC and CINEMATIC pick the realistic clouds,
+     * ANIME the anime ones (clouds), and each shows only while its clouds are on (changing the cloud style by hand shows Custom). DEFAULT
+     * and HORROR leave the style as the player set it, the anime clouds too: they took the anime clouds back to the performance preset's
+     * style, the vanilla shape at Potato to High and under Custom, which wiped the player's choice. The performance presets keep a
+     * palette's clouds (VisualsPresets.keepsLook).
      */
     public static final String CLOUD_KEY = "cloud_style";
+    /** clouds' answer for a palette that leaves the cloud style alone. */
+    public static final int ANY_CLOUDS = -1;
 
-    /** The cloud style choosing palette level leaves, from the current style and performance preset. */
-    public static int cloudStyle(int level, int style, int preset) {
-        if (level == ANIME) return CloudMath.STYLE_ANIME;
-        if (isLevel(level) && style == CloudMath.STYLE_ANIME) return VisualsPresets.isLevel(preset) ? VisualsPresets.value(CLOUD_KEY, preset) : CloudMath.STYLE_VANILLA;
-        return style;
+    /** The cloud style palette level picks (CloudMath.STYLE_REALISTIC for REALISTIC and CINEMATIC, STYLE_ANIME for ANIME), or ANY_CLOUDS. */
+    public static int clouds(int level) {
+        return switch (level) {
+            case REALISTIC, CINEMATIC -> CloudMath.STYLE_REALISTIC;
+            case ANIME -> CloudMath.STYLE_ANIME;
+            default -> ANY_CLOUDS;
+        };
+    }
+
+    /** The cloud style choosing palette level leaves, from the current style (clouds; DEFAULT, HORROR and CUSTOM keep it). */
+    public static int cloudStyle(int level, int style) {
+        int own = clouds(level);
+        return own == ANY_CLOUDS ? style : own;
     }
 
     /**
@@ -183,7 +197,7 @@ public final class ColourPresets {
         if (isLevel(level)) {
             for (Colour colour : Colour.values()) c.setColour(colour, value(colour, level));
             for (String key : LOOK_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), look(key, level));
-            c.cloudStyle = cloudStyle(level, c.cloudStyle, c.preset);
+            c.cloudStyle = cloudStyle(level, c.cloudStyle);
             c.aurora = aurora(level, c.aurora, c.preset);
         }
         c.colourPreset = isLevel(level) ? level : CUSTOM;
@@ -191,8 +205,8 @@ public final class ColourPresets {
 
     /**
      * The palette the colours and look settings are all on (the first, so DEFAULT before the others), or CUSTOM. looks gives a look
-     * setting's value by key, and the cloud style's (CLOUD_KEY) and aurora mode's (AURORA_KEY): ANIME also needs the anime clouds, HORROR
-     * the auroras off.
+     * setting's value by key, and the cloud style's (CLOUD_KEY) and aurora mode's (AURORA_KEY): ANIME also needs the anime clouds,
+     * REALISTIC and CINEMATIC the realistic ones (clouds), HORROR the auroras off.
      */
     public static int detect(ToIntFunction<Colour> colours, ToIntFunction<String> looks) {
         for (int level = 0; level < LEVELS; level++) {
@@ -204,7 +218,7 @@ public final class ColourPresets {
                 }
             }
             for (int i = 0; all && i < LOOK_KEYS.length; i++) all = looks.applyAsInt(LOOK_KEYS[i]) == LOOK[level][i];
-            if (all && level == ANIME) all = looks.applyAsInt(CLOUD_KEY) == CloudMath.STYLE_ANIME;
+            if (all && clouds(level) != ANY_CLOUDS) all = looks.applyAsInt(CLOUD_KEY) == clouds(level);
             if (all && level == HORROR) all = looks.applyAsInt(AURORA_KEY) == CelestialUniforms.AURORA_OFF;
             if (all) return level;
         }

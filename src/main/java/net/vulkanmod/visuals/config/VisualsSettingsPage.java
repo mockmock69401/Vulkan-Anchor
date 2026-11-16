@@ -162,7 +162,7 @@ public final class VisualsSettingsPage {
                 try {
                     for (String key : VisualsPresets.VALUES.keySet()) {
                         Option<?> o = byKey.get(key);
-                        //Session 11: the anime clouds are a look the levels keep (VisualsPresets.keepsLook)
+                        //Session 11: the anime clouds are a look the levels keep, 2026-11-16: and Realistic's or Cinematic's realistic clouds (VisualsPresets.keepsLook)
                         if (o != null && !VisualsPresets.keepsLook(key, intValue(o), k -> byKey.containsKey(k) ? intValue(byKey.get(k)) : Integer.MIN_VALUE)) show(o, VisualsOptionLayout.item(key), VisualsPresets.value(key, level));
                     }
                 } finally {
@@ -217,11 +217,11 @@ public final class VisualsSettingsPage {
                 for (String key : ColourPresets.LOOK_KEYS) {
                     for (Option<?> o : allByKey.getOrDefault(key, List.of())) show(o, VisualsOptionLayout.item(key), ColourPresets.look(key, level));
                 }
-                //Session 11: Anime shows the anime clouds; another palette takes them back to the performance preset's style
+                //Session 11: Anime shows the anime clouds; 2026-11-16: Realistic and Cinematic the realistic ones, Default and Horror leave them
                 Option<?> clouds = byKey.get(ColourPresets.CLOUD_KEY);
                 Option<?> performance = byKey.get(VisualsOptionLayout.PRESET);
                 if (clouds != null) {
-                    int style = ColourPresets.cloudStyle(level, intValue(clouds), performance == null ? VisualsPresets.CUSTOM : intValue(performance));
+                    int style = ColourPresets.cloudStyle(level, intValue(clouds));
                     if (style != intValue(clouds)) show(clouds, VisualsOptionLayout.item(ColourPresets.CLOUD_KEY), style);
                 }
                 //2026-11-14: Horror shows the auroras off; another palette takes them back to the performance preset's mode
