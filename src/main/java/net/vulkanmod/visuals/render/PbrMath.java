@@ -218,6 +218,14 @@ public final class PbrMath {
         return Math.max(direct, PBR_SSS_SHARE * clamp01(sss) * clamp01(visibility));
     }
 
+    /** Session 16b: pbr.glsl's PBR_SCATTER_GRAZING (LightingMath.GRAZING_NDOTL: the lighting pass looks a grazed face up). */
+    public static final float PBR_SCATTER_GRAZING = 0.002f;
+
+    /** pbrScatterVisibility: the lighting pass's visibility where it looked the face up, the sky's estimate only on a face turned away. */
+    public static float scatterVisibility(float faceNDotL, float visibility, float skyEstimate) {
+        return faceNDotL >= -PBR_SCATTER_GRAZING ? visibility : skyEstimate;
+    }
+
     /** pbrHighlight for one channel (f0 and light of that channel). */
     public static float highlight(Material m, float f0, float[] v, float[] l, float light) {
         float[] n = m.normal();

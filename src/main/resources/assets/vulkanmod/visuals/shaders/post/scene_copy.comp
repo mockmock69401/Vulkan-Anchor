@@ -1098,7 +1098,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         if (pbr) {
             direct *= pbrFacingRatio(mat.normal, normalWorld, a.sun.xyz);
             if (mat.sss > 0.0) {
-                direct = pbrScatter(direct, mat.sss, lt.w > 0.0 ? lt.w : skyGate(clamp(sky/15.0, 0.0, 1.0)));
+                direct = pbrScatter(direct, mat.sss, pbrScatterVisibility(dot(normalWorld, a.sun.xyz), lt.w, skyGate(clamp(sky/15.0, 0.0, 1.0))));
             }
         }
 #endif

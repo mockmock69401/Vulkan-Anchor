@@ -213,6 +213,18 @@ float pbrScatter(float direct, float sss, float visibility) {
     return max(direct, PBR_SSS_SHARE*clamp(sss, 0.0, 1.0)*clamp(visibility, 0.0, 1.0));
 }
 
+//2026-11-16 (session 16b; the user: thin black lines on sand with Faithful PBR, moving with the shadows' angle): the visibility
+// pbrScatter takes. The lighting pass looks up every face toward the sun or grazed by it (lighting.comp's GRAZING_NDOTL; vanilla's sun
+// turns in the x-y plane, so north and south faces are grazed all day) and writes 0 both there in shadow and on a face turned away,
+// which it does not look up. Every 0 counted as "not looked up" and took the sky light's estimate: a grazed face in shadow scattered the
+// full sun and only the penumbra between its shadow and its light stayed dark, a line along the sun's direction (Faithful's sand
+// scatters, b 119..129). Now the estimate stands in only on a face turned away
+const float PBR_SCATTER_GRAZING = 0.002;
+
+float pbrScatterVisibility(float faceNDotL, float visibility, float skyEstimate) {
+    return faceNDotL >= -PBR_SCATTER_GRAZING ? visibility : skyEstimate;
+}
+
 //One light's highlight (scene units) on the material seen along v (toward the camera) from l, of strength light (blockHighlight's
 // units and limits); f0 per channel
 vec3 pbrHighlight(PbrMaterial m, vec3 f0, vec3 v, vec3 l, vec3 light) {
