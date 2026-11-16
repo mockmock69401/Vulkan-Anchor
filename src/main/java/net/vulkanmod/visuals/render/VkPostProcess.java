@@ -94,6 +94,8 @@ public final class VkPostProcess {
     COPY_FOOTPRINTS = FootprintMath.BINDING,
     //2026-11-13: the reflection reads the frame's sun open share at 12 (sunOpenBuffer, written before the composite)
     REFLECTION_SUN_OPEN = 12,
+    //2026-11-16 (session 16b): the reflection reads the terrain's albedo image at 13 (an albedo metal's mirror F0, its .PBR builds)
+    REFLECTION_TERRAIN_ALBEDO = 13,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -920,7 +922,7 @@ public final class VkPostProcess {
         }
         toRead(cmd, this.heatImage);
         VkGpuTimer.mark(cmd, "post.reflection");
-        this.computeReflection(cmd, depths, data, ready, lodLight, light.terrainLight(), light.terrainNormal());
+        this.computeReflection(cmd, depths, data, ready, lodLight, light.terrainLight(), light.terrainNormal(), light.terrainAlbedo());
         VkGpuTimer.mark(cmd, "post.bloom");
         this.bloom[0].transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT);
@@ -1066,7 +1068,7 @@ public final class VkPostProcess {
     }
 
     private void computeReflection(VkCommandBuffer cmd, Depths depths, VkGpuBuffer data, VkGpuBuffer ready, long lodLight, long terrainLight,
-                                   long terrainNormal) {
+                                   long terrainNormal, long terrainAlbedo) {
         if (!this.reflectionOn) return;
         this.scene.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT);
@@ -1076,7 +1078,7 @@ public final class VkPostProcess {
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight)
                 .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal).sampled(REFLECTION_MOON_FACE, this.moonFace, this.moonSampler)
-                .storage(REFLECTION_SUN_OPEN, this.sunOpenBuffer);
+                .storage(REFLECTION_SUN_OPEN, this.sunOpenBuffer).storageImage(REFLECTION_TERRAIN_ALBEDO, terrainAlbedo);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
         VkComputeProgram program = this.tintedOn && this.reflectionTinted != null
                 ? (this.leanOn && this.reflectionLeanTinted != null ? this.reflectionLeanTinted : this.reflectionTinted)
