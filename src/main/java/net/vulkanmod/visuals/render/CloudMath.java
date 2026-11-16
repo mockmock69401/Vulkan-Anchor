@@ -392,12 +392,22 @@ public final class CloudMath {
     public static final float ANIME_WRAP = 0.8f, ANIME_SHADE_FROM = 0, ANIME_SHADE_TO = 1, ANIME_SHADOW = 0.4f, ANIME_FLAT = 0.6f;
     public static final float ANIME_CREASE_SHADE = 0.25f, ANIME_LOW_LIT = 0.65f, ANIME_LOW_REACH = 0.6f, ANIME_AMBIENT_LOW = 0.6f;
     public static final float ANIME_SILVER = 0.15f, ANIME_SILVER_G = 0.5f;
-    /** CPU side: the anime layer's base ANIME_LIFT above vanilla's, ANIME_THICKNESS thick at cloud size 100% (scaled as realThickness). */
+    /** CPU side: the anime layer's base ANIME_LIFT above vanilla's, ANIME_THICKNESS thick at cloud size 100% (in proportion to the size). */
     public static final float ANIME_LIFT = 32, ANIME_THICKNESS = 140;
 
-    /** The anime layer's thickness at a cloud size (fraction): ANIME_THICKNESS at 1. */
+    /**
+     * The anime layer's thickness at a cloud size (fraction): ANIME_THICKNESS x size. 2026-11-16 (the user: the size changed how many
+     * clumps there were, not how big): it was (1 + size) / 2 as realThickness, so the puffs (their lattice scales with the thickness) grew
+     * half as fast as the weather's clumps (CloudMath.cells: in proportion), and at 50% a clump shrank under one puff and stood as a whole
+     * one. In proportion, the size scales a whole cloud: its footprint, height, puffs and soft lengths (animeScale).
+     */
     public static float animeThickness(float size) {
-        return ANIME_THICKNESS * (1 + size) / 2;
+        return ANIME_THICKNESS * size;
+    }
+
+    /** The anime size scale of a layer (clouds.glsl animeScale): its thickness over ANIME_THICKNESS, 1 at cloud size 100%. */
+    public static float animeScale(Realistic r) {
+        return r.thickness / ANIME_THICKNESS;
     }
 
     /** farCloudMarch's march samples for the anime style's quality 0..2 (cloudOffset.z's whole part minus ANIME_Z). */
@@ -440,8 +450,7 @@ public final class CloudMath {
         float[] none = {0, -1, 0};
         float f = Math.min(r.cover, 1);
         if (!(f > 0)) return none;
-        float k = r.thickness / ANIME_THICKNESS;
-        float cell = animeCell(ANIME_PUFF_CELL, k);
+        float cell = animeCell(ANIME_PUFF_CELL, animeScale(r));
         if (h >= 0 && h >= Math.min(((ANIME_PUFF_HIGH + ANIME_PUFF_TALL) * ANIME_PUFF_MAX + 0.75f * ANIME_PUFF_BLEND) * cell, r.thickness)) return none;
         int n = (int) Math.round(PERIOD / cell);
         float ux = mx / cell, uz = mz / cell;
@@ -495,10 +504,11 @@ public final class CloudMath {
 
     /**
      * animeNormal: the cloud surface's unit normal at camera-relative (x, y, z): straight down at the column's bottom turning smoothly to the
-     * top's normal (from its heights ANIME_NORMAL_STEP blocks either side) at its top (the flat base's cut rims drew bright arcs).
+     * top's normal (from its heights ANIME_NORMAL_STEP blocks times the size scale either side) at its top (the flat base's cut rims drew
+     * bright arcs).
      */
     public static float[] animeNormal(byte[] map, Realistic r, float x, float y, float z) {
-        float mx = r.offsetX + x, mz = r.offsetZ + z, e = ANIME_NORMAL_STEP;
+        float mx = r.offsetX + x, mz = r.offsetZ + z, e = ANIME_NORMAL_STEP * animeScale(r);
         float[] c = animeShape(map, r, mx, mz), px = animeShape(map, r, mx + e, mz), nx = animeShape(map, r, mx - e, mz),
                 pz = animeShape(map, r, mx, mz + e), nz = animeShape(map, r, mx, mz - e);
         float w = smoothstep(0, 1, clamp01((y - r.base - c[0]) / Math.max(c[1] - c[0], 1e-3f)));
@@ -533,14 +543,16 @@ public final class CloudMath {
      * animeMarch: (sunlit weight, sky-lit weight, coverage, distance) of the anime clouds along dir: samples through the layer (cut where
      * the fade ends) from jitter 0..1 along each step, each as dense as it is deep inside its pillow (soft over ANIME_SOFT blocks), then
      * the light at the coverage-weighted point. Fading out, a cloud also thins (its outer ANIME_FADE_SHRINK blocks go first), so the far ones
-     * shrink away; the distance returned (for the haze) is ANIME_HAZE of the point's.
+     * shrink away; the distance returned (for the haze) is ANIME_HAZE of the point's. The size scale (animeScale) scales the step, the soft
+     * lengths and the shrink, and the density over it, so a cloud looks alike at every size.
      */
     public static float[] animeMarch(byte[] map, Realistic r, float[] origin, float[] dir, float maxDist, float[] lightDir, float jitter, int samples) {
         float horizontal = (float) Math.sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
         float[] span = interval(r, origin, dir, Math.min(maxDist, ANIME_FADE_FAR / Math.max(horizontal, CLOUD_MIN_HORIZONTAL)));
         if (span == null) return new float[4];
         float len = span[1] - span[0];
-        int n = (int) Math.max(ANIME_SAMPLES_MIN, Math.min(Math.max(samples, ANIME_SAMPLES_MIN), Math.ceil(len / ANIME_STEP)));
+        float k = animeScale(r);
+        int n = (int) Math.max(ANIME_SAMPLES_MIN, Math.min(Math.max(samples, ANIME_SAMPLES_MIN), Math.ceil(len / (ANIME_STEP * k))));
         float dt = len / n;
         float trans = 1, tsum = 0, wsum = 0;
         for (int i = 0; i < ANIME_SAMPLES_HIGH; i++) {
@@ -550,7 +562,7 @@ public final class CloudMath {
             float d = animeDepth(map, r, px, py, pz);
             if (d <= 0) continue;
             float fade = animeFade((float) Math.sqrt(px * px + pz * pz));
-            float a = (1 - (float) Math.exp(-ANIME_DENSITY * smoothstep(0, ANIME_SOFT, d - (1 - fade) * ANIME_FADE_SHRINK) * dt)) * fade;
+            float a = (1 - (float) Math.exp(-(ANIME_DENSITY / k) * smoothstep(0, ANIME_SOFT * k, d - (1 - fade) * ANIME_FADE_SHRINK * k) * dt)) * fade;
             float w = a * trans;
             tsum += w * t;
             wsum += w;

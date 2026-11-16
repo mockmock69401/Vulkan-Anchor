@@ -352,7 +352,7 @@
   "vulkanmod.visuals.cloud_coverage": "Cloud Coverage",
   "vulkanmod.visuals.cloud_coverage.tooltip": "How much the realistic clouds fill out: lower thins and shrinks every cloud at once, higher swells them until they merge (200 is nearly overcast, 0 clears the sky). Rain adds more. Size and Count change the clouds themselves, not how full they are",
   "vulkanmod.visuals.cloud_size": "Cloud Size",
-  "vulkanmod.visuals.cloud_size.tooltip": "How big each realistic cloud is, and the gaps between them: higher gives fewer, larger and taller clouds over the same share of the sky, lower many small ones. Larger clouds cost a little more",
+  "vulkanmod.visuals.cloud_size.tooltip": "How big each realistic or anime cloud is, and the gaps between them: higher gives fewer, larger and taller clouds over the same share of the sky, lower many small ones. Larger clouds cost a little more",
   "vulkanmod.visuals.cloud_count": "Cloud Count",
   "vulkanmod.visuals.cloud_count.tooltip": "How many realistic clouds there are: lower removes whole clouds and leaves the others as they are, so the sky clears in patches. 100 is the default; 200 keeps every cloud",
   "vulkanmod.visuals.cloud_quality": "Cloud Quality",

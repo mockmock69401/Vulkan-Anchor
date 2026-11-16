@@ -415,7 +415,7 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
 // lavender-grey base that dissolves into the sky, a cream silver lining toward the sun, fading into the horizon's haze.
 // The clumps are still the realistic style's weather (the g channel over the coverage cloudOffset.w), so the cloud size, count and
 // coverage settings shape them alike, but a clump is built of puffs: rounded domes on a lattice of ANIME_PUFF_CELL blocks (times the
-// layer's thickness over ANIME_THICKNESS, so the size setting scales them), each centred up to ANIME_PUFF_JITTER cells off its cell's
+// size scale animeScale, the layer's thickness over ANIME_THICKNESS), each centred up to ANIME_PUFF_JITTER cells off its cell's
 // middle, there only where the weather at its centre's texel is cloudy, its radius ANIME_PUFF_MIN..ANIME_PUFF_MAX cells (down to
 // ANIME_PUFF_SHRINK of that toward the clump's outline, over ANIME_EDGE of the weather), its profile (1 - (d / R)^2)^ANIME_PUFF_PROFILE
 // (0.5 a sphere; more is softer at the rim) ANIME_PUFF_TALL of R up and down from a centre ANIME_PUFF_LOW..ANIME_PUFF_HIGH of R above the
@@ -433,8 +433,10 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
 // toward the light glows with ANIME_SILVER of its forward scattering (Henyey-Greenstein ANIME_SILVER_G). The light is the realistic
 // style's (CloudUniforms: the sky's sunlight, kept bright at sunset, and the sky's colour above, both times the cloud colour). The haze
 // takes the clouds at ANIME_HAZE of their distance (their white tops and lavender bases stay); the fade, not the haze, takes them out
-// before the horizon
-//The default layer thickness (CloudMath.ANIME_THICKNESS; the size setting scales cloudShape.y from it)
+// before the horizon. The cloud size scales the whole cloud alike (2026-11-16, the user: the size changed how many clumps there were, not
+// how big): the weather's clumps, the layer's thickness, so the puffs, and every length in blocks above (the soft top and base, the step,
+// the normal's step, the fade's shrink; the density over it, so a cloud is as opaque at every size)
+//The layer thickness at cloud size 100% (CloudMath.ANIME_THICKNESS; the size setting scales cloudShape.y from it in proportion)
 const float ANIME_THICKNESS = 140.0;
 const float ANIME_PUFF_CELL = 104.0;
 const float ANIME_PUFF_JITTER = 0.12;
@@ -493,9 +495,14 @@ uint animeHash(ivec2 c, int y, int n) {
     return h;
 }
 
-//The puff lattice's cell in blocks (the layer's thickness scales it)
+//The cloud size's scale: the layer's thickness over ANIME_THICKNESS (CloudMath.animeThickness), 1 at size 100%
+float animeScale() {
+    return cloudShape.y/ANIME_THICKNESS;
+}
+
+//The puff lattice's cell in blocks (the size scales it)
 float animePuffCell() {
-    return animeCell(ANIME_PUFF_CELL, cloudShape.y/ANIME_THICKNESS);
+    return animeCell(ANIME_PUFF_CELL, animeScale());
 }
 
 //The lattice cell at the corner of the 2 x 2 cells on the side of u (m in cells) that can reach it
@@ -586,7 +593,7 @@ float animeDepth(float h, vec3 bt) {
 }
 
 //The column (animeUnion's) at camera-relative p, and the surface's unit normal there: straight down at the column's bottom turning
-// smoothly to the top's normal (from its heights ANIME_NORMAL_STEP blocks either side) at its top (the flat base's cut rims drew bright
+// smoothly to the top's normal (from its heights ANIME_NORMAL_STEP blocks times the size scale either side) at its top (the flat base's cut rims drew bright
 // arcs). The five columns share the 3 x 3 puffs around p's cell, which hold every puff that can reach them (ANIME_NORMAL_STEP is under
 // half a cell)
 vec3 animeNormal(vec3 p, out vec3 c) {
@@ -596,7 +603,8 @@ vec3 animeNormal(vec3 p, out vec3 c) {
     int n = int(floor(CLOUD_MAP*CLOUD_CELL/cell + 0.5));
     vec2 u = m/cell;
     ivec2 o = ivec2(floor(u)) - 1;
-    float e = ANIME_NORMAL_STEP/cell;
+    float ns = ANIME_NORMAL_STEP*animeScale();
+    float e = ns/cell;
     vec3 col[5];
     for (int k = 0; k < 5; k++) {
         col[k] = vec3(0.0, -1.0, 0.0);
@@ -618,7 +626,7 @@ vec3 animeNormal(vec3 p, out vec3 c) {
     float pz = animeColumn(col[3]).y;
     float nz = animeColumn(col[4]).y;
     float w = smoothstep(0.0, 1.0, clamp((p.y - cloudShape.x - c.x)/max(c.y - c.x, 0.001), 0.0, 1.0));
-    vec3 top = normalize(vec3(-(px - nx), 2.0*ANIME_NORMAL_STEP, -(pz - nz)));
+    vec3 top = normalize(vec3(-(px - nx), 2.0*ns, -(pz - nz)));
     return normalize(mix(vec3(0.0, -1.0, 0.0), top, w));
 }
 
@@ -647,7 +655,9 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
         return vec4(0.0);
     }
     float len = span.y - span.x;
-    int n = int(clamp(ceil(len/ANIME_STEP), float(ANIME_SAMPLES_MIN), float(max(samples, ANIME_SAMPLES_MIN))));
+    //The size scales the step, the soft lengths and the fade's shrink, and the density over it: the same samples and look at every size
+    float k = animeScale();
+    int n = int(clamp(ceil(len/(ANIME_STEP*k)), float(ANIME_SAMPLES_MIN), float(max(samples, ANIME_SAMPLES_MIN))));
     float dt = len/float(n);
     float trans = 1.0;
     float tsum = 0.0;
@@ -684,7 +694,7 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
             continue;
         }
         float fade = animeFade(length(p.xz));
-        float a = (1.0 - exp(-ANIME_DENSITY*smoothstep(0.0, ANIME_SOFT, d - (1.0 - fade)*ANIME_FADE_SHRINK)*dt))*fade;
+        float a = (1.0 - exp(-(ANIME_DENSITY/k)*smoothstep(0.0, ANIME_SOFT*k, d - (1.0 - fade)*ANIME_FADE_SHRINK*k)*dt))*fade;
         float w = a*trans;
         tsum += w*t;
         wsum += w;
