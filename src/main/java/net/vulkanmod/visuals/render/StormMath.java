@@ -21,10 +21,11 @@ package net.vulkanmod.visuals.render;
 public final class StormMath {
     /** The setting's range (percent). */
     public static final int STRENGTH_MAX = 200;
+    //2026-11-16 (the user: "모래 입자가 너무 굵고 많은 거 같아"): SAND_SHARE 1 -> 0.4 (with weather.glsl's thinner, fainter grains)
     public static final float FOG_SAND = 9.0f, FOG_SNOW = 6.0f, HAZE_SAND = 4.0f, HAZE_SNOW = 3.0f;
     public static final float[] SAND_FOG_TINT = {1.28f, 1.0f, 0.70f}, SNOW_FOG_TINT = {0.95f, 1.0f, 1.12f};
     public static final float WIND_ANGLE = 0.6f, WIND_TURN = 0.35f, WIND_TURN_PERIOD = 90f, WIND_SPEED = 11f, GUST = 0.35f;
-    public static final float SNOW_EXTRA = 1.5f, SNOW_STORM_EXPOSURE = 0.014f, SAND_SHARE = 1.0f, SAND_EXPOSURE = 0.016f;
+    public static final float SNOW_EXTRA = 1.5f, SNOW_STORM_EXPOSURE = 0.014f, SAND_SHARE = 0.4f, SAND_EXPOSURE = 0.016f;
     /**
      * 2026-11-15 (the user: "모래폭풍이나 눈보라가 불 때는 해가 가려져서 물과 얼음의 반사면도 달라져야 해"): a storm hides the sun. cover is how much
      * (0..1): the sky's overcast share rises to it (so the sun's and the moon's discs and their glints on water and ice are gone, and the
