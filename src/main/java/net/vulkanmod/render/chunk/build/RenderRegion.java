@@ -16,6 +16,8 @@ import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraftforge.client.model.data.ModelData;
+import net.minecraftforge.client.model.data.ModelDataManager;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -49,8 +51,13 @@ public class RenderRegion implements BlockAndTintGetter {
 
     private final Function<BlockPos, BlockState> blockStateGetter;
 
-    RenderRegion(Level level, int x, int y, int z, PalettedContainer<BlockState>[] blockData, DataLayer[][] lightData, Map<BlockPos, BlockEntity> blockEntityMap) {
+    /** Session 23: the built section's block entities' model data (Forge's ModelDataManager, taken when the region was made). */
+    private final Map<BlockPos, ModelData> modelData;
+
+    RenderRegion(Level level, int x, int y, int z, PalettedContainer<BlockState>[] blockData, DataLayer[][] lightData, Map<BlockPos, BlockEntity> blockEntityMap,
+                 Map<BlockPos, ModelData> modelData) {
         this.level = level;
+        this.modelData = modelData;
 
         this.minSecX = x - 1;
         this.minSecY = y - 1;
@@ -182,6 +189,17 @@ public class RenderRegion implements BlockAndTintGetter {
     @Nullable
     public BlockEntity getBlockEntity(@NotNull BlockPos blockPos) {
         return this.blockEntityMap.get(blockPos);
+    }
+
+    /** The model data of the block entity at the position (Forge's chunk region does the same), EMPTY where there is none. */
+    public ModelData getModelData(BlockPos blockPos) {
+        return this.modelData.getOrDefault(blockPos, ModelData.EMPTY);
+    }
+
+    /** As Forge's chunk region: the level's manager, for models and renderers that look the data up themselves. */
+    @Override
+    public ModelDataManager getModelDataManager() {
+        return this.level.getModelDataManager();
     }
 
     public int getBlockTint(BlockPos blockPos, ColorResolver colorResolver) {

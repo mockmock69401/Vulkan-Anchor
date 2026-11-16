@@ -73,7 +73,8 @@ public class BlockRenderer {
     }
 
     public ModelData modelData(BakedModel model, BlockState blockState, BlockPos blockPos) {
-        return model.getModelData(resources.region, blockPos, blockState, ModelData.EMPTY);
+        //Session 23: the block entity's model data (Snow! Real Magic keeps the covered block there), as Forge's chunk builder passes it
+        return model.getModelData(resources.region, blockPos, blockState, resources.region.getModelData(blockPos));
     }
 
     /** The model's render types (Forge's ChunkRenderTypeSet), with the random seeded as for its quads. */

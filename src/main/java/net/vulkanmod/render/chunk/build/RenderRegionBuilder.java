@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk.build;
 
 import it.unimi.dsi.fastutil.longs.Long2ReferenceLinkedOpenHashMap;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -10,6 +11,9 @@ import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraftforge.client.model.data.ModelData;
+
+import java.util.Map;
 
 public class RenderRegionBuilder {
     private static final DataLayer DEFAULT_SKY_LIGHT_DATA_LAYER = new DataLayer(15);
@@ -64,7 +68,12 @@ public class RenderRegionBuilder {
             }
         }
 
-        return new RenderRegion(level, secX, secY, secZ, blockData, lightData, entityMap);
+        //Session 23 (Snow! Real Magic's snowy Windswept stairs drew nothing): the block entities' model data, as Forge's own chunk task
+        // takes it on this thread (ModelDataManager.getAt refreshes the chunk's entries); the build reads it through RenderRegion
+        var modelDataManager = level.getModelDataManager();
+        Map<BlockPos, ModelData> modelData = modelDataManager != null ? modelDataManager.getAt(new ChunkPos(secX, secZ)) : Map.of();
+
+        return new RenderRegion(level, secX, secY, secZ, blockData, lightData, entityMap, modelData);
     }
 
     private DataLayer[] getSectionDataLayers(Level level, SectionPos pos) {

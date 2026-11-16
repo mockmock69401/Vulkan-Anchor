@@ -141,7 +141,8 @@ public class BuildTask extends ChunkTask {
                         // render_type cutout, and a multipart model returns no quads for a type its parts do not have.
                         BakedModel model = blockRenderer.blockModel(blockState);
                         ModelData modelData = blockRenderer.modelData(model, blockState, blockPos);
-                        //Session 23: a FRAPI model (Continuity's) draws through vanilla's block renderer, once (it emits all its quads)
+                        //Session 23: a FRAPI model (Continuity's, Snow! Real Magic's) draws through vanilla's block renderer, layer by layer
+                        // as Forge's chunk builder asks it (the renderer emits each layer's quads for its render type)
                         boolean frapi = BlockRenderer.drawsThroughRenderer(model);
                         for (RenderType chunkRenderType : blockRenderer.renderTypes(model, blockState, blockPos, modelData)) {
                             renderType = TerrainRenderType.get(chunkRenderType);
@@ -157,7 +158,7 @@ public class BuildTask extends ChunkTask {
                             if (frapi) {
                                 blockRenderer.renderFrapi(blockState, blockPos, pos, bufferBuilder, model, modelData, chunkRenderType);
                                 bufferBuilder.setOpaque(false);
-                                break;
+                                continue;
                             }
                             blockRenderer.renderBatched(blockState, blockPos, pos, bufferBuilder, model, modelData, chunkRenderType);
                             bufferBuilder.setOpaque(false);
