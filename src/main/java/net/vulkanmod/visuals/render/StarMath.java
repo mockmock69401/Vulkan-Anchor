@@ -40,7 +40,15 @@ public final class StarMath {
      * nothing at its edge) through vanilla's position-texture shader and the same additive draw; the half size is ROUND_SIZE x larger so a
      * round star adds about the light its square did (the point's alpha sums to about 1 / ROUND_SIZE^2 of the square's).
      */
-    public static final int TYPE_VANILLA = 0, TYPE_ROUND = 1, TYPE_MAX = 1;
+    public static final int TYPE_VANILLA = 0, TYPE_ROUND = 1, TYPE_MAX = 2;
+    /**
+     * 2026-11-16 (session 12 follow-up, the user: "a way to show the night sky's stars like Genshin Impact"): TYPE_ANIME draws no
+     * vanilla stars; the composite paints its own (AnimeStarMath, animestars.glsl): a soft teal Milky Way band with dark gaps and fine
+     * dust stars (AnimeSkyMap), crisp white points of a few sizes and a small glow on the brightest, fading toward the horizon. The count,
+     * size, brightness and colour settings apply to them. Where the composite draws no sky (another dimension's, the post-process off)
+     * vanilla's stars stay (StarSky.drawValue).
+     */
+    public static final int TYPE_ANIME = 2;
     public static final float ROUND_CORE = 0.35f, ROUND_SIZE = 1.6f;
     /** The round point's texture size (texels a side). */
     public static final int ROUND_TEXTURE = 32;

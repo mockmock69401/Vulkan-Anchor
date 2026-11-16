@@ -20,6 +20,8 @@ public final class StarSky {
     private static int builtType = StarMath.TYPE_VANILLA;
     private static int cornerIndex;
     private static net.minecraft.resources.ResourceLocation roundTexture;
+    //2026-11-16 (session 12 follow-up): the composite draws the anime stars (StarMath.TYPE_ANIME) over the sky (set each frame by VkPostProcess)
+    private static volatile boolean compositeAnime;
 
     private StarSky() {
     }
@@ -84,10 +86,17 @@ public final class StarSky {
         return roundTexture;
     }
 
-    /** The stars' draw value for vanilla's b this frame. */
+    /** The stars' draw value for vanilla's b this frame: none while the composite paints the anime stars instead. */
     public static float drawValue(float vanilla) {
         VisualsConfig c = settings();
-        return c == null ? vanilla : StarMath.drawValue(vanilla, c.starBrightness);
+        if (c == null) return vanilla;
+        if (c.starType == StarMath.TYPE_ANIME && compositeAnime) return 0f;
+        return StarMath.drawValue(vanilla, c.starBrightness);
+    }
+
+    /** Session 12 follow-up: whether the composite draws the sky with the anime stars this frame (VkPostProcess.prepare). */
+    public static void compositeDrawsAnime(boolean drawn) {
+        compositeAnime = drawn;
     }
 
     /** Rebuilds vanilla's star buffer when the count or size setting changed since it was built. */

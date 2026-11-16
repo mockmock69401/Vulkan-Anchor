@@ -482,7 +482,10 @@ public class VisualsConfig {
     public int blizzardFlakeAmount = 100;
     public int footprintDepth = 100;
     public int footprintDuration = 100;
-    /** 2026-11-11 (session 13): the stars' shape: 0 vanilla's squares, 1 round soft points (StarMath.TYPE_ROUND). */
+    /**
+     * 2026-11-11 (session 13): the stars' shape: 0 vanilla's squares, 1 round soft points (StarMath.TYPE_ROUND); 2026-11-16 (session 12
+     * follow-up): 2 the anime night, the composite's stars and Milky Way (StarMath.TYPE_ANIME, AnimeStarMath).
+     */
     public int starType = 0;
     /**
      * 2026-11-09 (session 6): rain and snow drawn by the shader (thin streaks and small flakes in depth layers, none under roofs) in place

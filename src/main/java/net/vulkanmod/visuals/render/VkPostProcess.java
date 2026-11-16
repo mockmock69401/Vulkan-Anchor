@@ -137,6 +137,14 @@ public final class VkPostProcess {
      */
     private VkImage2D galaxyMap;
     /**
+     * 2026-11-16 (session 12 follow-up): the anime star type's band map (AnimeSkyMap, 2 MB), made the first time the anime stars are wanted
+     * and its bake is done, uploaded whole in one frame (again if that frame was dropped); bound at the galaxy map's binding outside the
+     * End. animeStars: this frame's slot (AnimeStarMath.params).
+     */
+    private VkImage2D animeMap;
+    private long animeMapSerial = -1;
+    private float[] animeStars = new float[4];
+    /**
      * 2026-11-15 (session 25): the footprints' map (Footprints, FootprintMath.MAP square, R32_UINT), made with the post-process; filled
      * FOOTPRINT_ROWS rows a frame after it is made (or a dropped upload), then only the texels new and expired prints change. The composite
      * reads no footprints until it is whole (footprintRow == MAP).
@@ -699,11 +707,40 @@ public final class VkPostProcess {
         dimension.write(this.copyUniforms);
     }
 
+    /** The image at the galaxy map's binding: the End's galaxy map while the End's galaxy is drawn, else the anime band's while its stars use it, else the End's or the moon's face as a stand-in. */
+    private VkImage2D galaxyMapBound() {
+        if (this.dimension.galaxy() > 0 && this.galaxyMap != null) return this.galaxyMap;
+        if (this.animeStars[3] > 0 && this.animeMap != null) return this.animeMap;
+        return this.galaxyMap != null ? this.galaxyMap : this.moonFace;
+    }
+
     /** Session 19: every chunk of the galaxy's map was uploaded in a frame that was not dropped. */
     private boolean galaxyUploaded() {
         if (this.galaxyChunks == null) return false;
         for (long serial : this.galaxyChunks) if (serial < 0 || VkFrames.isDropped(serial)) return false;
         return true;
+    }
+
+    /** Session 12 follow-up: once the anime band's map is baked, its image and the map in one upload (again if that frame was dropped); whether it is up. */
+    private boolean uploadAnimeMap(VkUploadStream upload) {
+        if (this.animeMapSerial >= 0 && !VkFrames.isDropped(this.animeMapSerial)) return true;
+        byte[] map = AnimeSkyMap.ready();
+        if (map == null) return false;
+        if (this.animeMap == null) {
+            this.animeMap = VkImage2D.create(VK_FORMAT_R8G8B8A8_UNORM, AnimeSkyMap.WIDTH, AnimeSkyMap.HEIGHT, 1,
+                    VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+            if (this.galaxySampler == 0) this.galaxySampler = VkSamplers.linearClamp();
+        }
+        ByteBuffer pixels = MemoryUtil.memAlloc(map.length);
+        try {
+            pixels.put(map).flip();
+            upload.uploadImage(this.animeMap, 0, 0, 0, AnimeSkyMap.WIDTH, AnimeSkyMap.HEIGHT, MemoryUtil.memAddress(pixels));
+        } finally {
+            MemoryUtil.memFree(pixels);
+        }
+        this.animeMapSerial = VkFrames.serial();
+        //read from the next frame on (this frame's upload is recorded with it, but keep the first frame plain)
+        return false;
     }
 
     /** Session 19: once the galaxy's map is baked, its image, then one chunk of rows a frame (again for a chunk in a dropped frame). */
@@ -789,6 +826,17 @@ public final class VkPostProcess {
                 }
             }
             this.moonFaceSerial = VkFrames.serial();
+        }
+        //Session 12 follow-up: the anime stars (their band's map once baked; vanilla's stars stay where the composite draws no sky)
+        VisualsConfig animeConfig = VisualsConfig.get();
+        boolean animeWanted = animeConfig != null && animeConfig.enabled && animeConfig.starType == StarMath.TYPE_ANIME;
+        boolean skyDrawn = atmosphere.mode() == AtmosphereMath.ATMOSPHERE_SKY;
+        if (animeWanted) AnimeSkyMap.start();
+        boolean animeBand = animeWanted && this.uploadAnimeMap(upload);
+        this.animeStars = AnimeStarMath.params(animeConfig, skyDrawn, animeBand);
+        StarSky.compositeDrawsAnime(animeWanted && skyDrawn);
+        if (this.copyUniforms.has(AnimeStarMath.ANIME_SLOT)) {
+            this.copyUniforms.putVec4(AnimeStarMath.ANIME_SLOT, this.animeStars[0], this.animeStars[1], this.animeStars[2], this.animeStars[3]);
         }
         //Session 19: the End galaxy's map, a chunk a frame while it is wanted
         if (this.dimension.galaxy() > 0 || (GalaxyMap.ready() != null && !this.galaxyUploaded())) this.uploadGalaxy(upload);
@@ -903,7 +951,7 @@ public final class VkPostProcess {
                 .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles)
                 .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view())
                 .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler).storageImage(COPY_HEAT, this.heatImage.view())
-                .sampled(COPY_GALAXY_MAP, this.galaxyMap != null ? this.galaxyMap : this.moonFace, this.galaxyMap != null ? this.galaxySampler : this.moonSampler)
+                .sampled(COPY_GALAXY_MAP, this.galaxyMapBound(), this.galaxyMapBound() != this.moonFace ? this.galaxySampler : this.moonSampler)
                 .sampled(COPY_FOOTPRINTS, this.footprintMap != null ? this.footprintMap : this.lodLightStandIn, this.nearest)
                 .sampled(COPY_WET_CLIMATE, this.wetClimateRead ? this.wetClimateMap : this.lodLightStandIn, this.nearest);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
@@ -1353,6 +1401,7 @@ public final class VkPostProcess {
         this.moonFace.free();
         VkSamplers.free(this.moonSampler);
         if (this.galaxyMap != null) this.galaxyMap.free();
+        if (this.animeMap != null) this.animeMap.free();
         if (this.galaxySampler != 0) VkSamplers.free(this.galaxySampler);
         if (this.weather != null) this.weather.free();
         if (this.weatherRound != null) this.weatherRound.free();
