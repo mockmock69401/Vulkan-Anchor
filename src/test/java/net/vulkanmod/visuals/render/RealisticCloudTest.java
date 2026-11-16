@@ -15,6 +15,8 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Session 3 (2026-11-09): the realistic clouds (clouds.glsl's realistic part, CloudMath's mirror, CloudUniforms, the settings). */
@@ -501,7 +503,8 @@ class RealisticCloudTest {
 
     /** The cumulus density before the erosion (realDensity's d), 0 where it returns early. */
     private static float uneroded(CloudMath.Realistic r, float x, float y, float z) {
-        float h = (y - r.base()) / r.thickness(), f = Math.min(r.cover(), 1);
+        //2026-11-16: in the curved layer (CloudMath.realHeight)
+        float h = (CloudMath.realHeight(x, y, z) - r.base()) / r.thickness(), f = Math.min(r.cover(), 1);
         if (!(h > 0 && h < 1) || !(f > 0)) return 0;
         float mx = r.offsetX() + x, mz = r.offsetZ() + z;
         float s = (CloudMath.noise(MAP, mx, mz, 1) - 1 + f) / f;
@@ -536,11 +539,11 @@ class RealisticCloudTest {
                             continue;
                         }
                         //session 3b's sum of every octave
-                        float e = CloudMath.REAL_ERODE * CloudMath.erosion(r.offsetX() + x, y - r.base(), r.offsetZ() + z, octaves);
+                        float e = CloudMath.REAL_ERODE * CloudMath.erosion(r.offsetX() + x, CloudMath.realHeight(x, y, z) - r.base(), r.offsetZ() + z, octaves);
                         float full = Math.max((d - e) / (1 - e), 0);
                         assertEquals(full, CloudMath.realDensity(MAP, r, x, y, z, octaves), 0f, "at " + x + " " + y + " " + z + " octaves " + octaves);
                         cloudy++;
-                        if (CloudMath.erosionFor(r.offsetX() + x, y - r.base(), r.offsetZ() + z, octaves, d) < 0) skipped++;
+                        if (CloudMath.erosionFor(r.offsetX() + x, CloudMath.realHeight(x, y, z) - r.base(), r.offsetZ() + z, octaves, d) < 0) skipped++;
                     }
                 }
             }
@@ -548,5 +551,55 @@ class RealisticCloudTest {
             if (octaves >= 2) assertTrue(skipped > cloudy / 20, "octaves " + octaves + ": skipped " + skipped + " of " + cloudy);
             if (octaves < 2) assertEquals(0, skipped);
         }
+    }
+
+    private static float[] elevated(double degrees) {
+        double e = Math.toRadians(degrees);
+        return new float[]{0, (float) Math.sin(e), (float) Math.cos(e)};
+    }
+
+    /**
+     * 2026-11-16 (the user: "the realistic clouds only show at a certain height in the sky; let them reach the horizon, as in Genshin"): the
+     * curved layer reaches the horizon whatever the LOD distance (here Distant Horizons' 256 chunks, 4096 blocks, where the flat layer
+     * ended some 4 to 6 degrees up), and near the camera it is the flat layer it was.
+     */
+    @Test
+    void theLayerReachesTheHorizon() {
+        //from the sea: the base 260 blocks up, as in game
+        CloudMath.Realistic r = new CloudMath.Realistic(260, CloudMath.REAL_THICKNESS, 4096, 1000, 1500, CloudMath.REAL_COVER * 2);
+        float[] o = new float[3];
+        for (double deg : new double[]{0, 0.25, 1, 2, 4}) {
+            float[] span = CloudMath.realInterval(r, o, elevated(deg), 1e6f);
+            assertNotNull(span, deg + " degrees");
+            assertTrue(span[0] * Math.cos(Math.toRadians(deg)) > 4096 * CloudMath.CLOUD_FADE_START, deg + " degrees: past where the flat layer faded");
+            assertTrue(span[1] <= CloudMath.REAL_REACH);
+            float[] m = CloudMath.realMarch(MAP, r, o, elevated(deg), 1e6f, UP, 0.5f, CloudMath.REAL_SAMPLES_HIGH, 0, 1);
+            assertTrue(m[2] > 0.3f, deg + " degrees: clouds on the horizon, coverage " + m[2]);
+        }
+        //level with the eye, the base is met sqrt(2 R height) away
+        float[] level = CloudMath.realInterval(r, o, new float[]{0, 0, 1}, 1e6f);
+        assertEquals(Math.sqrt(2.0 * CloudMath.REAL_CURVE * 260), level[0], 1);
+        //below the horizon, under a scene 1000 blocks away (the sea): nothing
+        assertNull(CloudMath.realInterval(r, o, elevated(-1), 1000));
+        //near the camera the curve is under half a block, and a steep ray crosses the layer where the flat one did
+        assertEquals(0.5f, CloudMath.realHeight(500, 0, 0), 0.001f);
+        float[] steep = CloudMath.realInterval(r, o, elevated(60), 1e6f);
+        assertEquals(260 / Math.sin(Math.toRadians(60)), steep[0], 0.5);
+        assertEquals((260 + CloudMath.REAL_THICKNESS) / Math.sin(Math.toRadians(60)), steep[1], 1.5);
+        float[] up = CloudMath.realInterval(r, o, UP, 1e6f);
+        assertArrayEquals(new float[]{260, 260 + CloudMath.REAL_THICKNESS}, up, 0.01f);
+        //from inside the layer: from the camera to the top, or down to the base
+        float[] in = {0, 300, 0};
+        assertEquals(0f, CloudMath.realInterval(r, in, UP, 1e6f)[0]);
+        assertEquals(260 + CloudMath.REAL_THICKNESS - 300, CloudMath.realInterval(r, in, UP, 1e6f)[1], 0.01f);
+        assertEquals(40, CloudMath.realInterval(r, in, DOWN, 1e6f)[1], 0.01f);
+        //from above: nothing level or upward (the layer curves away below), down through the top to the base
+        float[] above = {0, 600, 0};
+        assertNull(CloudMath.realInterval(r, above, new float[]{0, 0, 1}, 1e6f));
+        assertNull(CloudMath.realInterval(r, above, UP, 1e6f));
+        assertArrayEquals(new float[]{600 - 260 - CloudMath.REAL_THICKNESS, 600 - 260}, CloudMath.realInterval(r, above, DOWN, 1e6f), 0.01f);
+        //no cloud past REAL_REACH: a grazing ray from above meets the far curve beyond it
+        float[] far = CloudMath.realInterval(r, above, elevated(-0.2), 1e6f);
+        assertTrue(far == null || far[1] <= CloudMath.REAL_REACH);
     }
 }

@@ -181,6 +181,26 @@ const float REAL_CIRRUS_COVER = 0.3;
 const float REAL_CIRRUS_OPACITY = 0.45;
 const float REAL_CIRRUS_G = 0.7;
 const float REAL_CIRRUS_AMBIENT = 1.2;
+//2026-11-16 (the user: "the realistic clouds only show at a certain height in the sky; let them reach the horizon, as in Genshin"): the
+// layer was a flat slab cut at the LOD distance (4096 blocks at Distant Horizons' 256 chunks, faded from 3072), so seen from the ground
+// it ended some 4 to 6 degrees above the horizon and the haze took the rest. Now it curves down with the horizontal distance as on a
+// planet REAL_CURVE blocks in radius (its height drops by d^2 / (2 REAL_CURVE): under a block within 700 blocks, 18 at 3000), so it
+// meets the eye's level about sqrt(2 REAL_CURVE height) away (some 11,000 blocks from the sea) and banks along the horizon, where the
+// haze thins it into the sky. No LOD cut: a ray's march ends at REAL_REACH blocks, the clouds fading out from CLOUD_FADE_START of it (only
+// seen from high above the layer: from below it meets the horizon first)
+const float REAL_CURVE = 250000.0;
+const float REAL_REACH = 24000.0;
+//Toward the horizon the far banks melt into the haze: from REAL_HAZE_NEAR to REAL_HAZE_FAR blocks out the haze sees a cloud up to
+// 1 + REAL_HAZE_GAIN times as far as it is (the mean distance the march returns), so the low banks pale into the horizon's haze instead
+// of keeping a near cloud's contrast down to the horizon
+const float REAL_HAZE_NEAR = 2000.0;
+const float REAL_HAZE_FAR = 12000.0;
+const float REAL_HAZE_GAIN = 2.0;
+
+//2026-11-16: the distance the haze sees for a cloud at camera-relative p, t along the ray (REAL_HAZE_GAIN)
+float realHazeDistance(vec3 p, float t) {
+    return t*(1.0 + REAL_HAZE_GAIN*smoothstep(REAL_HAZE_NEAR, REAL_HAZE_FAR, length(p.xz)));
+}
 //The 3D noise's hash: Teschner et al. 2003 primes combine the cell, then a 32-bit finaliser (Wellons 2018, public domain)
 const int REAL_PRIME_X = 73856093;
 const int REAL_PRIME_Y = 19349663;
@@ -283,9 +303,63 @@ float realErosionFor(vec3 q, int octaves, float d) {
     return e;
 }
 
+//2026-11-16: the curved height of camera-relative p: its y plus the layer's drop there (REAL_CURVE)
+float realHeight(vec3 p) {
+    return p.y + dot(p.xz, p.xz)/(2.0*REAL_CURVE);
+}
+
+//2026-11-16: the distances along dir from origin where the curved height is y (both roots of a t^2 + b t + c, ordered; a nearly
+// vertical ray's far root is huge), or (1, 0) when it never is
+vec2 realLevel(vec3 origin, vec3 dir, float y) {
+    float a = max(dot(dir.xz, dir.xz)/(2.0*REAL_CURVE), 1e-12);
+    float b = dir.y + dot(origin.xz, dir.xz)/REAL_CURVE;
+    float c = realHeight(origin) - y;
+    float disc = b*b - 4.0*a*c;
+    if (disc < 0.0) {
+        return vec2(1.0, 0.0);
+    }
+    float q = -0.5*(b + (b >= 0.0 ? sqrt(disc) : -sqrt(disc)));
+    if (q == 0.0) {
+        return vec2(0.0);
+    }
+    float r1 = q/a;
+    float r2 = c/q;
+    return vec2(min(r1, r2), max(r1, r2));
+}
+
+//2026-11-16: the ray's first span inside the curved layer, cut to [0, min(maxDist, REAL_REACH)]; y <= x: none
+vec2 realInterval(vec3 origin, vec3 dir, float maxDist) {
+    float bottom = cloudShape.x;
+    float top = cloudShape.x + cloudShape.y;
+    float h = realHeight(origin);
+    vec2 lo = realLevel(origin, dir, bottom);
+    vec2 hi = realLevel(origin, dir, top);
+    float t0;
+    float t1;
+    if (h < bottom) {
+        //below: in through the base on the way up, out through the top
+        t0 = lo.y;
+        t1 = hi.y;
+    } else if (h <= top) {
+        //inside: out through the base if the ray sinks to it first, else through the top
+        t0 = 0.0;
+        t1 = lo.y >= lo.x && lo.x > 0.0 ? min(lo.x, hi.y) : hi.y;
+    } else {
+        //above: in through the top on the way down, out through the base, or the top again
+        if (!(hi.y >= hi.x) || hi.y < 0.0) {
+            return vec2(0.0);
+        }
+        t0 = hi.x;
+        t1 = lo.y >= lo.x && lo.x > t0 ? lo.x : hi.y;
+    }
+    return vec2(max(t0, 0.0), min(t1, min(maxDist, REAL_REACH)));
+}
+
 //The cumulus density 0..1 at camera-relative p: the weather over its coverage, the tower's height profile, eroded by the noise
+// (2026-11-16: in the curved layer, realHeight)
 float realDensity(vec3 p, int octaves) {
-    float h = (p.y - cloudShape.x)/cloudShape.y;
+    float y = realHeight(p) - cloudShape.x;
+    float h = y/cloudShape.y;
     float f = min(cloudOffset.w, 1.0);
     if (!(h > 0.0 && h < 1.0) || !(f > 0.0)) {
         return 0.0;
@@ -302,7 +376,7 @@ float realDensity(vec3 p, int octaves) {
         return 0.0;
     }
     float d = s*smoothstep(0.0, REAL_BOTTOM, hp)*(1.0 - smoothstep(REAL_ROUND, 1.0, hp));
-    float er = realErosionFor(vec3(m.x, p.y - cloudShape.x, m.y), octaves, d);
+    float er = realErosionFor(vec3(m.x, y, m.y), octaves, d);
     if (er < 0.0) {
         return 0.0;
     }
@@ -317,7 +391,8 @@ float realHg(float c, float g) {
 }
 
 //The realistic clouds along dir from origin up to maxDist: the cumulus (samples through the layer, lights samples toward lightDir or,
-// with 0, the flat depth; octaves of erosion noise) from jitter 0..1 along each step, then the cirrus behind them.
+// with 0, the flat depth; octaves of erosion noise) from jitter 0..1 along each step, then the cirrus behind them. 2026-11-16: both
+// layers curved (realHeight), out to the horizon, faded toward REAL_REACH instead of the LOD distance.
 // Returns (sunlit weight, sky-lit weight, coverage, coverage-weighted distance)
 vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter, int samples, int lights, int octaves) {
     if (cloudShape.w < 0.5) {
@@ -337,7 +412,7 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
     float trans = 1.0;
     float dsum = 0.0;
     float wsum = 0.0;
-    vec2 span = cloudInterval(origin, dir, maxDist);
+    vec2 span = realInterval(origin, dir, maxDist);
     if (span.y > span.x) {
         float len = span.y - span.x;
         int n = int(clamp(ceil(len/REAL_STEP), float(REAL_SAMPLES_MIN), float(max(samples, REAL_SAMPLES_MIN))));
@@ -352,10 +427,10 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
             if (d <= 0.0) {
                 continue;
             }
-            float fade = 1.0 - smoothstep(CLOUD_FADE_START, 1.0, length(p.xz)/cloudShape.z);
+            float fade = 1.0 - smoothstep(CLOUD_FADE_START, 1.0, length(p.xz)/REAL_REACH);
             float sigma = d*REAL_DENSITY;
             float a = (1.0 - exp(-sigma*dt))*fade;
-            float h = clamp((p.y - cloudShape.x)/cloudShape.y, 0.0, 1.0);
+            float h = clamp((realHeight(p) - cloudShape.x)/cloudShape.y, 0.0, 1.0);
             float od = 0.0;
             if (lights > 0) {
                 float prev = 0.0;
@@ -384,16 +459,17 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
             float w = a*trans;
             sun += w*s;
             amb += w*mix(REAL_AMBIENT_LOW, 1.0, h);
-            dsum += w*t;
+            dsum += w*realHazeDistance(p, t);
             wsum += w;
             trans *= 1.0 - a;
         }
     }
     float top = cloudShape.x + REAL_CIRRUS_HEIGHT;
-    if (trans >= 0.01 && dir.y > 0.0 && origin.y < top) {
-        float t = (top - origin.y)/dir.y;
+    vec2 ct = realLevel(origin, dir, top);
+    if (trans >= 0.01 && realHeight(origin) < top && ct.y >= ct.x && ct.y > 0.0) {
+        float t = ct.y;
         vec3 q = origin + dir*t;
-        float r = length(q.xz)/cloudShape.z;
+        float r = length(q.xz)/REAL_REACH;
         float fc = min(REAL_CIRRUS_COVER*cloudOffset.w/REAL_COVER, 0.95);
         if (t < maxDist && r < 1.0 && fc > 0.0) {
             float v = clamp((cloudNoise(cloudOffset.xy + q.xz).b - 1.0 + fc)/fc, 0.0, 1.0);
@@ -401,7 +477,7 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
             float w = a*trans;
             sun += w*mix(realHg(c, REAL_CIRRUS_G*level), 1.0, 0.5);
             amb += w*REAL_CIRRUS_AMBIENT;
-            dsum += w*t;
+            dsum += w*realHazeDistance(q, t);
             wsum += w;
             trans *= 1.0 - a;
         }
