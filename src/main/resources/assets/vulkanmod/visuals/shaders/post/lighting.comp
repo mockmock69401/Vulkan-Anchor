@@ -195,14 +195,59 @@ const float SOFT_MIN_TEXELS = 1.0;
 //This pixel's turn of the soft taps (radians), set before its lookups
 float softTurn = 0.0;
 
+//2026-11-16 (the user: "나뭇잎 그림자가 일정 거리 밖에서 자글자글해보이는 현상이 있어"): looking low over the ground a pixel spans 1/cos
+// more ground along the view than across it, and the lighting is shaded at half resolution, so the leaves' flecks in a canopy's shadow
+// (a leaf's pixel is 1/16 block) fell between the samples from some ten blocks out and crawled as the camera moved; past the close
+// cascade (32 blocks) the near map's texel (0.16 blocks) is coarser than a fleck too, and the soft filter, narrower than a texel there,
+// fell back to the 2 x 2 lookup. So the filter covers at least the pixel's footprint on its receiver, an ellipse SOFT_AA_PIXELS pixels
+// across and that over the facing along the view (the facing at least SOFT_AA_COS_MIN, the half width at most SOFT_AA_ALONG_MAX), and
+// SOFT_AA_TEXELS texels of a map whose texel exceeds SOFT_AA_TEXEL_MIN (the close map's 1/16 block does not). Its taps lie on the
+// receiver's plane; at the least width they do not turn, so the shadow is a smooth function of the position, and they turn fully from
+// twice it (the penumbra's own width). Near the camera the footprint is under the close map's texel: the sharp lookup as before.
+// SoftShadowMath mirrors the constants.
+const float SOFT_AA_TEXELS = 1.5;
+const float SOFT_AA_TEXEL_MIN = 0.07;
+const float SOFT_AA_PIXELS = 1.5;
+const float SOFT_AA_COS_MIN = 0.08;
+const float SOFT_AA_ALONG_MAX = 1.5;
+//This pixel's footprint on its receiver, set before its lookups (setFootprint): the unit directions along the view and across it (view
+// space) and the half widths along and across (blocks)
+vec3 softAlong = vec3(1.0, 0.0, 0.0);
+vec3 softAcross = vec3(0.0, 1.0, 0.0);
+vec2 softFootprint = vec2(0.0);
+
+//The footprint for a receiver at view-space pos with unit normal n, blocksPerPixel per block of distance times the distance
+void setFootprint(vec3 pos, vec3 n, float blocksPerPixel) {
+    vec3 v = pos/max(length(pos), 1e-6);
+    vec3 along = v - n*dot(v, n);
+    float len = length(along);
+    if (len < 1e-3) {
+        along = abs(n.z) < 0.9 ? cross(n, vec3(0.0, 0.0, 1.0)) : cross(n, vec3(1.0, 0.0, 0.0));
+        len = length(along);
+    }
+    softAlong = along/len;
+    softAcross = cross(n, softAlong);
+    float across = SOFT_AA_PIXELS*blocksPerPixel;
+    softFootprint = vec2(max(min(across/max(abs(dot(n, v)), SOFT_AA_COS_MIN), SOFT_AA_ALONG_MAX), across), across);
+}
+
+//The least half widths (along, across; blocks) at a map of texel blocks
+vec2 softLeast(float texel) {
+    return max(softFootprint, vec2(texel > SOFT_AA_TEXEL_MIN ? SOFT_AA_TEXELS*texel : 0.0));
+}
+
 float interleavedNoise(vec2 p) {
     return fract(52.9829189*fract(dot(p, vec2(0.06711056, 0.00583715))));
 }
 
-vec2 vogel(int k, int count) {
+vec2 vogelTurned(int k, int count, float turn) {
     float r = sqrt((float(k) + 0.5)/float(count));
-    float a = float(k)*GOLDEN_ANGLE + softTurn;
+    float a = float(k)*GOLDEN_ANGLE + turn;
     return r*vec2(cos(a), sin(a));
+}
+
+vec2 vogel(int k, int count) {
+    return vogelTurned(k, count, softTurn);
 }
 
 //The receiver plane's depth slope across the map (clip z per clip xy), capped; zOverXy converts a clip xy offset's depth
@@ -222,9 +267,30 @@ vec2 receiverSlope(mat4 m, vec3 n, out float xyScale, out float zScale) {
     return slope;
 }
 
+//The filter: SOFT_FILTER_TAPS bilinear lookups on an ellipse on the receiver's plane (half widths radii along and across the view,
+// blocks) turned by turn; the depth each tap compares follows the plane
+float softFilter(sampler2D map, mat4 m, vec2 uv, float ref, vec2 radii, float turn) {
+    mat3 r = mat3(m);
+    vec3 a = r*(softAlong*radii.x);
+    vec3 b = r*(softAcross*radii.y);
+    float lit = 0.0;
+    for (int k = 0; k < SOFT_FILTER_TAPS; k++) {
+        vec2 t = vogelTurned(k, SOFT_FILTER_TAPS, turn);
+        vec3 o = a*t.x + b*t.y;
+        lit += pcf(map, uv + o.xy*0.5, ref + o.z);
+    }
+    return lit/float(SOFT_FILTER_TAPS);
+}
+
+//A map's texel along its coarser axis (blocks)
+float texelBlocks(sampler2D map, float xyScale) {
+    vec2 size = vec2(textureSize(map, 0));
+    return 2.0/(xyScale*min(size.x, size.y));
+}
+
 //The soft lookup: -1 where the blocker search found nothing in reach of a penumbra wider than the sharp lookup's (the caller keeps
-// the sharp one), else the visibility through a filter as wide as the blockers' distance asks
-float softLookup(sampler2D map, vec2 uv, float ref, vec2 slope, float xyScale, float zScale) {
+// the sharp one), else the visibility through a filter as wide as the blockers' distance asks, and at least softLeast
+float softLookup(sampler2D map, mat4 m, vec2 uv, float ref, vec2 slope, float xyScale, float zScale) {
     float zOverXy = zScale/xyScale;
     float searchClip = softParams.y*xyScale;
     //The lookup's own texels first (a shadow narrower than the taps' spacing is never missed), then the disc
@@ -248,18 +314,14 @@ float softLookup(sampler2D map, vec2 uv, float ref, vec2 slope, float xyScale, f
     }
     float above = max(ref - blockerSum/blockers, 0.0)/max(zScale, 1e-9);
     float width = min(above*softParams.x, softParams.y);
-    vec2 size = vec2(textureSize(map, 0));
-    float texel = 2.0/(xyScale*min(size.x, size.y));
-    if (width < SOFT_MIN_TEXELS*texel) {
+    float texel = texelBlocks(map, xyScale);
+    vec2 least = softLeast(texel);
+    vec2 radii = max(vec2(width), least);
+    if (radii.x < SOFT_MIN_TEXELS*texel) {
         return -1.0;
     }
-    float radiusClip = width*xyScale;
-    float lit = 0.0;
-    for (int k = 0; k < SOFT_FILTER_TAPS; k++) {
-        vec2 o = radiusClip*vogel(k, SOFT_FILTER_TAPS);
-        lit += pcf(map, uv + o*0.5, ref + dot(slope, o)*zOverXy);
-    }
-    return lit/float(SOFT_FILTER_TAPS);
+    float turn = softTurn*clamp((width - least.y)/max(least.y, 1e-6), 0.0, 1.0);
+    return softFilter(map, m, uv, ref, radii, turn);
 }
 
 //One map's visibility at clip (inside it): the sharp lookup (soft: as wide as its blockers' distance asks), mixed by fade into the wide
@@ -277,7 +339,16 @@ float mapVisibility(sampler2D map, mat4 m, vec3 clip, vec3 n, float bias, float 
         if (soft && softParams.x > 0.0) {
             slope = receiverSlope(m, n, xyScale, zScale);
             sloped = true;
-            sharp = softLookup(map, uv, ref, slope, xyScale, zScale);
+            sharp = softLookup(map, m, uv, ref, slope, xyScale, zScale);
+        } else if (soft) {
+            //Soft Shadows off: still the least width where the map's texels or the pixel are coarser than the leaves (no search)
+            slope = receiverSlope(m, n, xyScale, zScale);
+            sloped = true;
+            float texel = texelBlocks(map, xyScale);
+            vec2 least = softLeast(texel);
+            if (least.x >= SOFT_MIN_TEXELS*texel) {
+                sharp = softFilter(map, m, uv, ref, least, 0.0);
+            }
         }
         if (sharp < 0.0) {
             sharp = pcf(map, uv, ref);
@@ -508,6 +579,7 @@ void main() {
             if (centreMark == PLANT_ALPHA_CODE) {
                 //B13: lit as if facing the sun, its own visibility
                 used = sunView.xyz;
+                setFootprint(view, used, bpp);
                 v = sunVisibility(view, used, sf, wide);
             } else {
                 //2026-11-08: light sources too (the composite lights their texels that are no light as any block's)
@@ -518,6 +590,7 @@ void main() {
                 }
                 //A face turned away from the sun is not looked up (its own block shadows it); one the rays run along is (see
                 // GRAZING_NDOTL); far away the lookup leans toward the ground's normal, as the facing does
+                setFootprint(view, leanNormal(n, upView.xyz, cf), bpp);
                 v = g > 0.0 || nl == 0.0 ? sunVisibility(view, leanNormal(n, upView.xyz, cf), sf, wide) : 0.0;
             }
         }
@@ -542,6 +615,7 @@ void main() {
             } else if (scenePosition(pp, fullSize, pv)) {
                 float bpp = length(pv)*pixelBlocks;
                 softTurn = TWO_PI*interleavedNoise(vec2(pp) + 5.588238*softParams.z);
+                setFootprint(pv, sunView.xyz, bpp);
                 plant = sunOn ? sunVisibility(pv, sunView.xyz, shadowFade(bpp), wideRadius(bpp)) : 1.0;
             }
         }

@@ -437,4 +437,7 @@ public final class LightingMath {
     public static final float GOLDEN_ANGLE = 2.39996323f, TWO_PI = 6.2831853f;
     /** The soft filter is the sharp lookup while its half width is under this many of the map's texels. */
     public static final float SOFT_MIN_TEXELS = 1.0f;
+    /** 2026-11-16: the soft filter's least half width (SoftShadowMath.least, footprint). */
+    public static final float SOFT_AA_TEXELS = SoftShadowMath.AA_TEXELS, SOFT_AA_TEXEL_MIN = SoftShadowMath.AA_TEXEL_MIN,
+            SOFT_AA_PIXELS = SoftShadowMath.AA_PIXELS, SOFT_AA_COS_MIN = SoftShadowMath.AA_COS_MIN, SOFT_AA_ALONG_MAX = SoftShadowMath.AA_ALONG_MAX;
 }
