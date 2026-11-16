@@ -67,8 +67,12 @@ public class VisualsConfig {
      * 22 (2026-11-15, session 25): Sandstorms &amp; Blizzards (stormWeather), which the presets set; a file on a level takes that level's
      * value and stays on it, any other file the default.
      * 23 (2026-11-15, session 25): Footprints (footprints), which the presets set; likewise.
+     * 24 (2026-11-16): the Realistic and Cinematic palettes pick the realistic clouds (ColourPresets.clouds); a file on one of them takes
+     * the realistic clouds and stays on it; any other file keeps its cloud style.
      */
-    private static final int REVISION = 23;
+    private static final int REVISION = 24;
+    /** 2026-11-16: the first revision whose Realistic and Cinematic palettes include the realistic clouds. */
+    static final int PALETTE_CLOUDS_REVISION = 24;
     /** Session 25: the first revision with Footprints. */
     static final int FOOTPRINTS_REVISION = 23;
     /** Session 25: the first revision with Sandstorms & Blizzards. */
@@ -226,6 +230,12 @@ public class VisualsConfig {
                 && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_ANIME
                 : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
             c.cloudStyle = CloudMath.STYLE_ANIME;
+        }
+        //2026-11-16: likewise a file on Realistic or Cinematic before they picked the realistic clouds
+        if (fileRevision < PALETTE_CLOUDS_REVISION && ColourPresets.clouds(c.colourPreset) == CloudMath.STYLE_REALISTIC
+                && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_REALISTIC
+                : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == c.colourPreset) {
+            c.cloudStyle = CloudMath.STYLE_REALISTIC;
         }
         //2026-11-14: a file on Horror before it turned the auroras off turns them off (and stays on the palette)
         if (fileRevision < PALETTE_TRIM_REVISION && c.colourPreset == ColourPresets.HORROR
