@@ -207,6 +207,72 @@ class AnimeCloudTest {
     }
 
     /**
+     * 2026-11-16 (the user: the size changed how many clumps there were, not how big): the size scales a whole cloud alike. The layer's
+     * thickness is in proportion to it, so the puffs' lattice follows the weather's octaves (CloudMath.cells) at every size; on a full map
+     * a column at the same place in lattice cells is the same column scaled, and a ray straight up through it is as opaque. On the real
+     * maps a clump's width along a line grows with the size, and the clouds cover the same share of the weather.
+     */
+    @Test
+    void theSizeScalesTheWholeCloud() {
+        float[] sizes = {0.5f, 1, 2};
+        for (float size : sizes) {
+            assertEquals(CloudMath.ANIME_THICKNESS * size, CloudMath.animeThickness(size), 1e-4f);
+            float cell = CloudMath.animeCell(CloudMath.ANIME_PUFF_CELL, size);
+            float weather = (float) CloudMath.PERIOD / CloudMath.cells(64, size);
+            float cell1 = CloudMath.animeCell(CloudMath.ANIME_PUFF_CELL, 1), weather1 = (float) CloudMath.PERIOD / CloudMath.cells(64, 1);
+            assertEquals(cell1 / weather1, cell / weather, 0.05f * cell1 / weather1, "the puffs follow the weather at size " + size);
+        }
+        //A full map: every puff stands at full size, so the same lattice place is the same column scaled
+        byte[] full = new byte[CloudMath.MAP * CloudMath.MAP * 4];
+        java.util.Arrays.fill(full, (byte) 255);
+        float[][] at = {{3.3f, 7.6f}, {5.05f, 2.2f}, {11.7f, 4.45f}, {8.5f, 8.5f}};
+        for (float[] u : at) {
+            CloudMath.Realistic one = new CloudMath.Realistic(200, CloudMath.animeThickness(1), 8192, 0, 0, 1f);
+            float c1 = CloudMath.animeCell(CloudMath.ANIME_PUFF_CELL, 1);
+            float[] s1 = CloudMath.animeShape(full, one, u[0] * c1, u[1] * c1);
+            float[] m1 = CloudMath.animeMarch(full, new CloudMath.Realistic(200, CloudMath.animeThickness(1), 8192, u[0] * c1, u[1] * c1, 1f),
+                    new float[3], UP, 1e6f, UP, 0.5f, CloudMath.ANIME_SAMPLES_HIGH);
+            assertTrue(s1[1] > s1[0], "a full map has a cloud at " + u[0] + ", " + u[1]);
+            for (float size : sizes) {
+                float c = CloudMath.animeCell(CloudMath.ANIME_PUFF_CELL, size);
+                CloudMath.Realistic r = new CloudMath.Realistic(200, CloudMath.animeThickness(size), 8192, u[0] * c, u[1] * c, 1f);
+                float[] s = CloudMath.animeShape(full, r, u[0] * c, u[1] * c);
+                assertEquals(s1[1] / c1, s[1] / c, 0.03f * s1[1] / c1, "the top scales at size " + size);
+                assertEquals(s1[0] / c1, s[0] / c, 0.03f * Math.max(s1[1] / c1, 0.01f), "the base scales at size " + size);
+                float[] m = CloudMath.animeMarch(full, r, new float[3], UP, 1e6f, UP, 0.5f, CloudMath.ANIME_SAMPLES_HIGH);
+                assertEquals(m1[2], m[2], 0.05f, "as opaque at size " + size);
+            }
+        }
+        //The real maps: the mean run of cloud along lines (a clump's width) grows with the size (session 18's lattice: 108 / 163 / 215
+        // blocks at 50 / 100 / 200%, so 1.3x from 100 to 200; now 84 / 163 / 251), and the clouds cover the same share of the weather's
+        // cloudy texels at every size (the weather's own share moves with the size: the count drops other clumps on each size's map)
+        float[] width = new float[sizes.length], share = new float[sizes.length];
+        for (int i = 0; i < sizes.length; i++) {
+            byte[] map = CloudMath.withNoise(new byte[CloudMath.MAP * CloudMath.MAP * 4], sizes[i], 1);
+            CloudMath.Realistic r = new CloudMath.Realistic(200, CloudMath.animeThickness(sizes[i]), 8192, 0, 0, CloudMath.REAL_COVER);
+            int inside = 0, count = 0, total = 0, cloudy = 0;
+            for (int z = 0; z < CloudMath.PERIOD; z += 48) {
+                boolean was = false;
+                for (int x = 0; x < CloudMath.PERIOD; x += 4) {
+                    float[] s = CloudMath.animeShape(map, r, x, z);
+                    boolean in = s[1] > s[0];
+                    if (in) inside++;
+                    if (in && !was) count++;
+                    was = in;
+                    total++;
+                }
+            }
+            for (int t = 0; t < CloudMath.MAP * CloudMath.MAP; t++) {
+                if ((map[t * 4 + 1] & 0xFF) / 255f > 1 - CloudMath.REAL_COVER) cloudy++;
+            }
+            width[i] = 4f * inside / Math.max(count, 1);
+            share[i] = (inside / (float) total) / (cloudy / (float) (CloudMath.MAP * CloudMath.MAP));
+        }
+        assertTrue(width[1] > 1.4f * width[0] && width[2] > 1.4f * width[1], "wider with the size: " + java.util.Arrays.toString(width));
+        assertTrue(Math.abs(share[0] / share[1] - 1) < 0.15f && Math.abs(share[2] / share[1] - 1) < 0.15f, "the weather's share alike: " + java.util.Arrays.toString(share));
+    }
+
+    /**
      * The light is soft (no bands): it rises smoothly from ANIME_SHADOW facing away to 1 facing the light, it is darker toward every puff's
      * edge and toward the base, the sky light dims toward the base, and the light at the horizon is ANIME_FLAT.
      */
