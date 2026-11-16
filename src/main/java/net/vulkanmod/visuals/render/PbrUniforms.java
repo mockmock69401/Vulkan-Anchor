@@ -12,7 +12,8 @@ import net.vulkanmod.visuals.vk.LooseUniformWriter;
  * <p>
  * The wetness follows the rain where the camera is (session 6's rain level, where its biome rains rather than snows), eased in over
  * {@link PbrMath#WET_RISE_SECONDS} and dried over {@link PbrMath#WET_DRY_SECONDS} of real time (the ground stays wet a while after the
- * rain); each surface then takes it by the sky open above it (pbr.glsl's pbrWetAt).
+ * rain); each surface then takes it by the sky open above it (pbr.glsl's pbrWetAt). 2026-11-16: and by whether the rain falls on its own
+ * ground (WetClimate: not in deserts, badlands and savannas, not where it snows); the wetness then follows the rain anywhere in that map.
  */
 public final class PbrUniforms {
     /** The composite's slot (scene_copy.comp's pbrParams). */
@@ -42,7 +43,14 @@ public final class PbrUniforms {
         float rain = 0f;
         if (level != null && level.dimensionType().hasSkyLight()) {
             Biome biome = level.getBiome(camera).value();
-            if (biome.getPrecipitationAt(camera) == Biome.Precipitation.RAIN) rain = level.getRainLevel(partialTick);
+            boolean here = biome.getPrecipitationAt(camera) == Biome.Precipitation.RAIN;
+            float levelRain = level.getRainLevel(partialTick);
+            //2026-11-16: where it rains (WetClimate's map, each pixel by its own ground in the composite); the wetness follows the rain
+            // where the map has rain at all, or without a map the rain at the camera as before
+            WetClimate.update(level, camera, levelRain > 0 || wetness > 0, here);
+            if (WetClimate.ready() ? WetClimate.anyRain() : here) rain = levelRain;
+        } else {
+            WetClimate.update(null, camera, false, false);
         }
         wetness = PbrMath.easeWetness(wetness, rain, seconds);
     }

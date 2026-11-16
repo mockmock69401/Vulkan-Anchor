@@ -92,6 +92,8 @@ public final class VkPostProcess {
     COPY_GALAXY_MAP = 26,
     //2026-11-15 (shader roadmap session 25): the footprints' map (FootprintMath, R32_UINT) at 27
     COPY_FOOTPRINTS = FootprintMath.BINDING,
+    //2026-11-16: where the rain falls on the ground (WetClimateMap, R32_UINT) at 28
+    COPY_WET_CLIMATE = WetClimateMap.BINDING,
     //2026-11-13: the reflection reads the frame's sun open share at 12 (sunOpenBuffer, written before the composite)
     REFLECTION_SUN_OPEN = 12,
     //2026-11-16 (session 16b): the reflection reads the terrain's albedo image at 13 (an albedo metal's mirror F0, its .PBR builds)
@@ -143,6 +145,13 @@ public final class VkPostProcess {
     private int footprintRow;
     private long footprintSerial = -1;
     private static final int FOOTPRINT_ROWS = 64;
+    /**
+     * 2026-11-16: where the rain falls on the ground (WetClimate's map, WetClimateMap.SIZE square, R32_UINT), sent whole when it changed;
+     * the composite reads it once an upload of it was committed (wetClimateSerial).
+     */
+    private VkImage2D wetClimateMap;
+    private long wetClimateSerial = -1;
+    private boolean wetClimateRead;
     private long galaxySampler;
     private long[] galaxyChunks;
     private static final int GALAXY_ROWS = 256;
@@ -425,6 +434,35 @@ public final class VkPostProcess {
             VisualsLog.warn("Visuals footprints not created, none are drawn: " + e);
         }
         this.footprintMap = footprintMap;
+        VkImage2D wetClimateMap = null;
+        try {
+            wetClimateMap = VkImage2D.create(VK_FORMAT_R32_UINT, WetClimateMap.SIZE, WetClimateMap.SIZE, 1,
+                    VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        } catch (RuntimeException | LinkageError e) {
+            VisualsLog.warn("Visuals rain map not created, the wet ground follows the rain at the camera: " + e);
+        }
+        this.wetClimateMap = wetClimateMap;
+    }
+
+    /** 2026-11-16: the rain map's texels when they changed (or the last upload's frame was dropped); whether the composite may read it. */
+    private boolean uploadWetClimate(VkUploadStream upload) {
+        if (this.wetClimateMap == null || !WetClimate.ready()) return false;
+        if (this.wetClimateSerial >= 0 && VkFrames.isDropped(this.wetClimateSerial)) {
+            WetClimate.resend();
+            this.wetClimateSerial = -1;
+        }
+        int[] map = WetClimate.takeChanged();
+        if (map != null) {
+            ByteBuffer pixels = MemoryUtil.memAlloc(map.length * 4).order(java.nio.ByteOrder.nativeOrder());
+            try {
+                pixels.asIntBuffer().put(map);
+                upload.uploadImage(this.wetClimateMap, 0, 0, 0, WetClimateMap.SIZE, WetClimateMap.SIZE, MemoryUtil.memAddress(pixels));
+            } finally {
+                MemoryUtil.memFree(pixels);
+            }
+            this.wetClimateSerial = VkFrames.serial();
+        }
+        return this.wetClimateSerial >= 0;
     }
 
     /**
@@ -790,6 +828,12 @@ public final class VkPostProcess {
             float[] wet = WetGroundMath.params(VisualsConfig.get().wetGround);
             this.copyUniforms.putVec4(WetGroundMath.SLOT, wet[0], wet[1], wet[2], wet[3]);
         }
+        //2026-11-16: where the rain falls (WetClimateMap; all 0 without the map: the wetness alone, as before)
+        if (this.copyUniforms.has(WetClimateMap.SLOT)) {
+            this.wetClimateRead = uploadWetClimate(upload);
+            float[] climate = this.wetClimateRead ? WetClimate.params() : new float[4];
+            this.copyUniforms.putVec4(WetClimateMap.SLOT, climate[0], climate[1], climate[2], climate[3]);
+        }
         if (this.copyUniformBuffer != null) upload.upload(this.copyUniformBuffer, 0, this.copyUniforms.buffer());
         lighting.writeLighting(this.lightingUniforms, light.terrain());
         shadow.write(this.lightingUniforms);
@@ -859,7 +903,8 @@ public final class VkPostProcess {
                 .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view())
                 .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler).storageImage(COPY_HEAT, this.heatImage.view())
                 .sampled(COPY_GALAXY_MAP, this.galaxyMap != null ? this.galaxyMap : this.moonFace, this.galaxyMap != null ? this.galaxySampler : this.moonSampler)
-                .sampled(COPY_FOOTPRINTS, this.footprintMap != null ? this.footprintMap : this.lodLightStandIn, this.nearest);
+                .sampled(COPY_FOOTPRINTS, this.footprintMap != null ? this.footprintMap : this.lodLightStandIn, this.nearest)
+                .sampled(COPY_WET_CLIMATE, this.wetClimateRead ? this.wetClimateMap : this.lodLightStandIn, this.nearest);
         if (this.copyUniformBuffer != null) copyBindings.uniform(LOOSE_UNIFORMS, this.copyUniformBuffer);
         //Session 14 follow-up: no tile flagged yet (the composite flags its tiles with translucent particles), after the last frame's
         // .PARTICLES pass read them
@@ -1255,6 +1300,7 @@ public final class VkPostProcess {
         this.cloudMap.tick();
         if (this.precipitationMap != null) this.precipitationMap.tick();
         if (this.footprintMap != null) this.footprintMap.tick();
+        if (this.wetClimateMap != null) this.wetClimateMap.tick();
         this.lodLightStandIn.tick();
         this.ao.tick();
         if (this.smaa != null) this.smaa.tick();
@@ -1312,6 +1358,7 @@ public final class VkPostProcess {
         if (this.weatherUniformBuffer != null) this.weatherUniformBuffer.free();
         if (this.precipitationMap != null) this.precipitationMap.free();
         if (this.footprintMap != null) this.footprintMap.free();
+        if (this.wetClimateMap != null) this.wetClimateMap.free();
         this.lightStandIn.free();
         this.lodLightStandIn.free();
         if (this.scene != null) destroy(this.images());
