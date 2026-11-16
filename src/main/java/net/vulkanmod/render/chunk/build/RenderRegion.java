@@ -16,6 +16,7 @@ import net.minecraft.world.level.chunk.PalettedContainer;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 import net.minecraft.world.level.material.FluidState;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -185,6 +186,16 @@ public class RenderRegion implements BlockAndTintGetter {
     @Nullable
     public BlockEntity getBlockEntity(@NotNull BlockPos blockPos) {
         return this.blockEntityMap.get(blockPos);
+    }
+
+    /**
+     * Session 23 (Snow! Real Magic's snowy Windswept stairs drew nothing): the block entity's model data, which renderers and models
+     * that look it up through the level read here (NeoForge's default answers EMPTY), as BuildTask passes it to the model.
+     */
+    @Override
+    public ModelData getModelData(BlockPos blockPos) {
+        BlockEntity blockEntity = this.blockEntityMap.get(blockPos);
+        return blockEntity != null ? blockEntity.getModelData() : ModelData.EMPTY;
     }
 
     public int getBlockTint(BlockPos blockPos, ColorResolver colorResolver) {
