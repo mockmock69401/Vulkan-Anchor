@@ -23,6 +23,24 @@ class FootprintTest {
     }
 
     @Test
+    void everySandTheSurveyFoundTakesPrints() {
+        //2026-11-16 (the user: "모래 종류가 더 있는 거 같아"): untagged sand floors from the supported packs (session25-sands.md)
+        for (String id : new String[]{"minecraft:soul_sand", "minecraft:suspicious_sand", "conquest:tan_sand", "conquest:tan_sand_layer",
+                "conquest:wet_sand", "conquest:sand_layer", "conquest:red_sand_layer", "eldritch_end:hasturian_sand", "eldritch_end:hasturian_dune_sand",
+                "immersive_weathering:sand_layer_block", "hybrid_aquatic:suspicious_red_sand", "netherexp:silica_sand", "dynamictrees:rooty_sand"}) {
+            assertTrue(FootprintMath.isSandId(id), id);
+        }
+        //not sand underfoot: sandstone, soils, gravelly or grown-over mixes, quicksand, decorative and unknown blocks
+        for (String id : new String[]{"minecraft:sandstone", "minecraft:soul_soil", "minecraft:gravel", "conquest:sandy_soil", "conquest:sand_and_gravel",
+                "conquest:overgrown_sand", "conquest:sand_vertical_corner", "tensura:quicksand", "beachparty:sandcastle", "allthecompressed:sand_1x",
+                "somemod:sand"}) {
+            assertTrue(!FootprintMath.isSandId(id), id);
+        }
+        assertTrue(!FootprintMath.isSandId(null));
+        for (String id : FootprintMath.SAND_BLOCKS) assertTrue(id.matches("[a-z0-9_.-]+:[a-z0-9_/.-]+"), id);
+    }
+
+    @Test
     void theShaderAgreesWithTheMirror() {
         assertEquals(FootprintMath.MAP, glsl("FOOT_MAP"));
         assertEquals(FootprintMath.MASK, glsl("FOOT_MASK"));
