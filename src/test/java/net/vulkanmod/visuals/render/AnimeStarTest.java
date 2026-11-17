@@ -59,10 +59,14 @@ class AnimeStarTest {
         assertTrue(c.contains("layout(location = " + AnimeStarMath.ANIME_SLOT + ") uniform vec4 animeStarParams;"));
         assertEquals(1, c.split("layout\\(location = " + AnimeStarMath.ANIME_SLOT + "\\)", -1).length - 1, "the slot is used once");
         assertTrue(c.contains("#import <vulkanmod:visuals/post/animestars.glsl>"));
-        int anime = c.indexOf("stars += animeStars(");
+        int anime = c.indexOf("vec3 anime = animeStars(");
         int tint = c.indexOf("stars *= vanillaStarTint(");
+        int animeTint = c.indexOf("anime *= starTint.rgb;");
+        int added = c.indexOf("stars += anime;");
         int sky = c.indexOf("vec3 sky = skyColour(a, dir)");
-        assertTrue(anime > 0 && anime < tint && tint < sky, "the anime stars take the star colour and go under the far clouds");
+        //2026-11-17 (session 15 follow-up): the plain star colour, not vanillaStarTint's (its white square around vanilla's moon showed on the band)
+        assertTrue(tint > 0 && tint < anime && anime < animeTint && animeTint < added && added < sky,
+                "the anime stars take the star colour and go under the far clouds");
         assertTrue(c.indexOf("if (animeStarParams.x > 0.0)") < anime, "nothing is evaluated while the type is off");
     }
 
@@ -137,5 +141,63 @@ class AnimeStarTest {
         }
         assertTrue(bright > 100 && dusty > 300, bright + " / " + dusty);
         assertTrue(bright < a.length / 4 / 4, "the band is a band, not the sky");
+    }
+
+    //dir at (x, y) in the disc plane of centre (water.glsl discPlane's axes)
+    private static float[] onDisc(float[] centre, float x, float y) {
+        float[] axis = {-centre[0] * centre[2], -centre[1] * centre[2], 1 - centre[2] * centre[2]};
+        float al = (float) Math.sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+        for (int i = 0; i < 3; i++) axis[i] /= al;
+        float[] side = {axis[1] * centre[2] - axis[2] * centre[1], axis[2] * centre[0] - axis[0] * centre[2], axis[0] * centre[1] - axis[1] * centre[0]};
+        float[] d = new float[3];
+        for (int i = 0; i < 3; i++) d[i] = centre[i] + x * axis[i] + y * side[i];
+        float l = (float) Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        for (int i = 0; i < 3; i++) d[i] /= l;
+        return d;
+    }
+
+    /**
+     * 2026-11-17 (session 15 follow-up, the user: "the round moon's picture is drawn with its background"): the band and the stars were cut
+     * out of a square 1.25 x the moon around it, and the band's missing teal showed as a dark square. Now the round moon's disc hides them
+     * (a circle, not a square), the stars stay a little off its limb, and the band goes on behind vanilla's additive square moon.
+     */
+    @Test
+    void onlyTheMoonsDiscHidesTheBand() throws IOException {
+        float[] moon = {0.3f, 0.8f, -0.52f};
+        float l = (float) Math.sqrt(moon[0] * moon[0] + moon[1] * moon[1] + moon[2] * moon[2]);
+        for (int i = 0; i < 3; i++) moon[i] /= l;
+        for (float size : new float[]{0.25f, 1, 2}) {
+            float[] round = {WaterMath.CELESTIAL_ROUND, 0, 1, size};
+            float r = WaterMath.MOON_ROUND_RADIUS * size;
+            assertArrayEquals(new float[]{0, 0}, AnimeStarMath.moonKeep(moon, moon, round), EPS, "behind the moon: nothing");
+            //the old square's corner (1.1 r on both axes: outside the disc, inside the square of 1.25 r): all of it now
+            assertArrayEquals(new float[]{1, 1}, AnimeStarMath.moonKeep(onDisc(moon, 1.1f * r, -1.1f * r), moon, round), EPS, "size " + size);
+            //past the margin: both
+            assertArrayEquals(new float[]{1, 1}, AnimeStarMath.moonKeep(onDisc(moon, -1.6f * r, 0), moon, round), EPS);
+            if (size >= 1) {
+                //just off the limb: the band, no stars yet
+                float[] near = AnimeStarMath.moonKeep(onDisc(moon, 0, 1.12f * r), moon, round);
+                assertEquals(1, near[0], EPS);
+                assertEquals(0, near[1], EPS);
+            }
+            //round: all of the band just past the disc's soft edge at every angle around it (no square)
+            double out = r + 2.5 * WaterMath.DISC_EDGE;
+            for (int k = 0; k < 16; k++) {
+                double t = k * Math.PI / 8;
+                float[] keep = AnimeStarMath.moonKeep(onDisc(moon, (float) (out * Math.cos(t)), (float) (out * Math.sin(t))), moon, round);
+                assertEquals(1, keep[0], EPS, "angle " + k);
+            }
+        }
+        float[] square = {0, 0, 1, 1};
+        float[] centre = AnimeStarMath.moonKeep(moon, moon, square);
+        assertEquals(1, centre[0], EPS, "the band goes on behind vanilla's additive square moon");
+        assertEquals(0, centre[1], EPS, "no stars over it");
+        assertArrayEquals(new float[]{1, 1}, AnimeStarMath.moonKeep(onDisc(moon, 0.08f, 0.08f), moon, square), EPS);
+        assertArrayEquals(new float[]{1, 1}, AnimeStarMath.moonKeep(new float[]{-moon[0], -moon[1], -moon[2]}, moon, square), EPS, "the other side");
+        //the shader: the band by its own keep, no square cut of the whole light
+        String g = glsl();
+        assertTrue(g.contains("vec2 animeMoonKeep(vec3 dir, vec3 moon, vec4 celestial)"));
+        assertTrue(g.contains("glow*moonKeep.x") && g.contains("ANIME_STAR_BRIGHTNESS*moonKeep.y"));
+        assertFalse(g.contains("max(VANILLA_MOON_MASK, MOON_ROUND_RADIUS"), "the old square around the round moon is gone");
     }
 }

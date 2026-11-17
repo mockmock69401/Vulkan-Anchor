@@ -1,7 +1,7 @@
 //2026-11-16 (shader roadmap session 12 follow-up, the user: "add a way to show the night sky's stars like Genshin Impact"): the anime
 // star type's stars and Milky Way along a sky pixel's direction (StarMath.TYPE_ANIME). AnimeStarMath.java mirrors every const and the
 // Java-checkable functions here: change both together (AnimeStarTest compares them). Needs galaxy.glsl (its hash and map coordinate),
-// atmosphere.glsl (the fan's FAN_SIDE_*) and water.glsl (discCover, the moon's radii) imported first.
+// atmosphere.glsl (the fan's FAN_SIDE_*) and water.glsl (discPlane, discCover, roundCover, the moon's radii) imported first.
 //
 // UNITS. Colours are W2's scene units (postmath.glsl). Directions are WORLD space unit vectors (y up) from the camera.
 //
@@ -107,6 +107,24 @@ float animeStarLayer(vec3 d, float cells, float chance, float light, int seed, f
     return flux*l;
 }
 
+//2026-11-17 (session 15 follow-up, the user: "the round moon's picture is drawn with its background": a dark square around the moon over
+// the band): what the moon leaves of the band (x) and of the stars (y) along dir, moon its direction. The moon hides what lies behind it
+// and nothing more: the round moon's disc (its soft edge) covers the band and the stars, and around it, out to ANIME_MOON_MARGIN of its
+// radius, no stars touch the limb. Vanilla's square moon is drawn additively (its black shows the sky behind it), so the band goes on
+// behind it and only the stars stay out of its square (vanilla's mask x ANIME_MOON_MARGIN). Before, both were cut out of a square
+// around either moon, and the band's missing teal showed as a dark square around the round moon.
+vec2 animeMoonKeep(vec3 dir, vec3 moon, vec4 celestial) {
+    if (!celestialRound(celestial)) {
+        return vec2(1.0, 1.0 - discCover(dir, moon, VANILLA_MOON_MASK*ANIME_MOON_MARGIN));
+    }
+    vec2 uv;
+    if (!discPlane(dir, moon, uv)) {
+        return vec2(1.0);
+    }
+    float r = MOON_ROUND_RADIUS*moonScale(celestial);
+    return vec2(1.0 - roundCover(uv, r), 1.0 - roundCover(uv, r*ANIME_MOON_MARGIN));
+}
+
 //The anime stars' light along a sky pixel (see the header)
 vec3 animeStars(Atmosphere a, vec3 dir, vec3 skyDir, vec4 params, vec4 gate, float pixelAngle, vec3 mapTexel, vec4 celestial) {
     if (!(params.x > 0.0) || !(gate.x > 0.0)) {
@@ -116,16 +134,16 @@ vec3 animeStars(Atmosphere a, vec3 dir, vec3 skyDir, vec4 params, vec4 gate, flo
     if (!(horizon > 0.0)) {
         return vec3(0.0);
     }
-    //the vanilla stars' fan (vanillaStars) and no stars over the moon
+    //the vanilla stars' fan (vanillaStars)
     float ld = length(dir.xz);
     float ls = length(a.sun.xz);
     float side = ld > 0.0001 && ls > 0.0001 ? dot(dir.xz/ld, a.sun.xz/ls) : 0.0;
     float fan = gate.y > 0.0 ? min(gate.y, 1.0) : 0.0;
     float keep = 1.0 - fan*smoothstep(FAN_SIDE_LOW, FAN_SIDE_HIGH, side);
-    keep *= 1.0 - discCover(dir, -a.sun.xyz, max(VANILLA_MOON_MASK, MOON_ROUND_RADIUS*moonScale(celestial))*ANIME_MOON_MARGIN);
     //the weight's square below 1 (as vanilla's stars add b x b: they fade out at dawn as fast), a desert's boost above it as it is
     float weight = min(gate.x, STAR_GATE_MAX)*min(gate.x, 1.0)*horizon*keep;
-    if (!(weight > 0.0)) {
+    vec2 moonKeep = animeMoonKeep(dir, -a.sun.xyz, celestial);
+    if (!(weight > 0.0) || !(max(moonKeep.x, moonKeep.y) > 0.0)) {
         return vec3(0.0);
     }
     bool band = params.w > 0.5;
@@ -137,5 +155,5 @@ vec3 animeStars(Atmosphere a, vec3 dir, vec3 skyDir, vec4 params, vec4 gate, flo
     float big = animeStarLayer(skyDir, ANIME_BIG_CELLS, min(ANIME_BIG_CHANCE*count, 1.0), ANIME_BIG_LIGHT, 13, sigma, true, ANIME_GLOW_SHARE);
     vec3 stars = dust*vec3(ANIME_DUST_R, ANIME_DUST_G, ANIME_DUST_B) + (small + big)*vec3(ANIME_COOL_R, ANIME_COOL_G, ANIME_COOL_B);
     vec3 glow = band ? mapTexel.r*mapTexel.r*ANIME_MAP_SCALE*ANIME_BAND_BRIGHTNESS*vec3(ANIME_BAND_R, ANIME_BAND_G, ANIME_BAND_B) : vec3(0.0);
-    return (stars*ANIME_STAR_BRIGHTNESS + glow)*params.x*weight;
+    return (stars*(ANIME_STAR_BRIGHTNESS*moonKeep.y) + glow*moonKeep.x)*params.x*weight;
 }

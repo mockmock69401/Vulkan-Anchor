@@ -63,7 +63,7 @@ public final class AnimeStarMath {
     //Toward the horizon (world direction's y) everything fades: 0 at HORIZON_LOW, full at HORIZON_HIGH
     public static final float ANIME_HORIZON_LOW = 0.0f;
     public static final float ANIME_HORIZON_HIGH = 0.32f;
-    //Around the moon (its round radius or vanilla's mask, the larger) x MOON_MARGIN no stars
+    //No stars within MOON_MARGIN x the round moon's radius (x vanilla's mask around the square moon); see moonKeep
     public static final float ANIME_MOON_MARGIN = 1.25f;
 
     private AnimeStarMath() {
@@ -81,6 +81,22 @@ public final class AnimeStarMath {
     public static float horizon(float y) {
         float t = Math.max(0, Math.min(1, (y - ANIME_HORIZON_LOW) / (ANIME_HORIZON_HIGH - ANIME_HORIZON_LOW)));
         return t * t * (3 - 2 * t);
+    }
+
+    /**
+     * animestars.glsl animeMoonKeep (2026-11-17, session 15 follow-up: a dark square around the round moon over the band): what the moon
+     * (direction moon, the celestial slot's shape and size) leaves of the band [0] and of the stars [1] along dir. The round moon's disc
+     * hides both, and the stars stay MOON_MARGIN of its radius away; behind vanilla's additive square moon the band goes on and only the
+     * stars stay out of its square.
+     */
+    public static float[] moonKeep(float[] dir, float[] moon, float[] celestial) {
+        if (!WaterMath.celestialRound(celestial)) {
+            return new float[]{1, 1 - WaterMath.discCover(dir, moon, WaterMath.VANILLA_MOON_MASK * ANIME_MOON_MARGIN)};
+        }
+        float[] uv = WaterMath.discPlane(dir, moon);
+        if (uv == null) return new float[]{1, 1};
+        float r = WaterMath.MOON_ROUND_RADIUS * WaterMath.moonScale(celestial);
+        return new float[]{1 - WaterMath.roundCover(uv, r), 1 - WaterMath.roundCover(uv, r * ANIME_MOON_MARGIN)};
     }
 
     /** The size class's factor for a hash 0..1 (animestars.glsl animeSizeClass). */
