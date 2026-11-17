@@ -16,7 +16,8 @@ import net.vulkanmod.visuals.config.VisualsConfig;
  * <p>
  * SLOT (the composite's ANIME_SLOT, scene_copy.comp animeStarParams): x the brightness (setting / 100; 0: the type is off or the
  * composite draws no sky: nothing evaluated), y the count (setting / 100), z the size (setting / 100), w 1 once the band's map is
- * uploaded (0: the stars alone). The star weight (night, rain, a desert's boost) and the fan are the vanilla stars' (STAR_GATE); below 1
+ * uploaded (0: the stars alone). 2026-11-17: x negative: only the Milky Way (its glow and dust stars) at brightness -x, a desert's over the
+ * Vanilla and Round star types (STAR_GATE z its share, w how far it turns lavender: BiomeSkyMath.band, lavender). The star weight (night, rain, a desert's boost) and the fan are the vanilla stars' (STAR_GATE); below 1
  * the weight is squared, as vanilla's stars add b x b, so they fade at dawn and dusk as vanilla's do.
  */
 public final class AnimeStarMath {
@@ -53,6 +54,14 @@ public final class AnimeStarMath {
     public static final float ANIME_BAND_R = 0.32f;
     public static final float ANIME_BAND_G = 0.78f;
     public static final float ANIME_BAND_B = 1.0f;
+    //2026-11-17: a desert's band and dust stars (BiomeSkyMath.lavender mixes toward them): a cool blue band with less green than the
+    // teal one, which reads lavender over the violet sky
+    public static final float ANIME_LAVENDER_R = 0.42f;
+    public static final float ANIME_LAVENDER_G = 0.45f;
+    public static final float ANIME_LAVENDER_B = 1.0f;
+    public static final float ANIME_LAVENDER_DUST_R = 0.9f;
+    public static final float ANIME_LAVENDER_DUST_G = 0.86f;
+    public static final float ANIME_LAVENDER_DUST_B = 1.0f;
     //The dust stars' colour (a little cyan, the band's) and the other stars' cool white
     public static final float ANIME_DUST_R = 0.78f;
     public static final float ANIME_DUST_G = 0.95f;
@@ -109,11 +118,28 @@ public final class AnimeStarMath {
      * atmosphere's ATMOSPHERE_SKY) and whether the band's map is uploaded. All 0 unless the type is anime and the sky is drawn.
      */
     public static float[] params(VisualsConfig c, boolean sky, boolean bandReady) {
-        if (c == null || !c.enabled || !sky || c.starType != StarMath.TYPE_ANIME) return new float[4];
+        return params(c, sky, bandReady, 0);
+    }
+
+    /**
+     * 2026-11-17: as params, and with another star type a desert's Milky Way alone (desertBand, BiomeSky.band: x the negative brightness,
+     * once the map is up; nothing at share 0).
+     */
+    public static float[] params(VisualsConfig c, boolean sky, boolean bandReady, float desertBand) {
+        if (c == null || !c.enabled || !sky) return new float[4];
+        boolean anime = c.starType == StarMath.TYPE_ANIME;
+        if (!anime && !(desertBand > 0 && bandReady)) return new float[4];
         float brightness = Math.max(0, Math.min(StarMath.BRIGHTNESS_MAX, c.starBrightness)) / 100f;
         if (!(brightness > 0)) return new float[4];
         float count = Math.max(0, Math.min(StarMath.COUNT_MAX, c.starCount)) / 100f;
         float size = Math.max(StarMath.SIZE_MIN, Math.min(StarMath.SIZE_MAX, c.starSize)) / 100f;
-        return new float[]{brightness, count, size, bandReady ? 1 : 0};
+        return new float[]{anime ? brightness : -brightness, count, size, bandReady ? 1 : 0};
+    }
+
+    /** 2026-11-17 (animestars.glsl animeBandColour): the band's colour turned lavender by share 0..1. */
+    public static float[] bandColour(float lavender) {
+        float t = Math.max(0, Math.min(1, Float.isNaN(lavender) ? 0 : lavender));
+        return new float[]{ANIME_BAND_R + (ANIME_LAVENDER_R - ANIME_BAND_R) * t, ANIME_BAND_G + (ANIME_LAVENDER_G - ANIME_BAND_G) * t,
+                ANIME_BAND_B + (ANIME_LAVENDER_B - ANIME_BAND_B) * t};
     }
 }

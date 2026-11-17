@@ -119,6 +119,80 @@ class BiomeSkyTest {
         assertArrayEquals(new float[]{1, 1, 1}, BiomeSkyMath.nightTint(Float.NaN, 100), EPS);
     }
 
+    /** AtmosphereUniforms' NIGHT_SKY: the Default palette's night base. */
+    private static final float[] BASE = {0.0015f, 0.0018f, 0.0027f};
+
+    private static float[] times(float[] a, float[] b) {
+        return new float[]{a[0] * b[0], a[1] * b[1], a[2] * b[2]};
+    }
+
+    @Test
+    void theDesertNightColours() {
+        //every colour is exactly 1 (no tint, no band, plain moon) outside deserts and with the setting off
+        for (int c = 0; c <= BiomeSkyMath.COLOUR_MAX; c++) {
+            assertArrayEquals(new float[]{1, 1, 1}, BiomeSkyMath.nightTint(0, 100, c, BASE), EPS);
+            assertArrayEquals(new float[]{1, 1, 1}, BiomeSkyMath.nightTint(1, 0, c, BASE), EPS);
+            assertEquals(0, BiomeSkyMath.band(0, 100, c), EPS);
+            assertEquals(0, BiomeSkyMath.lavender(1, 0, c), EPS);
+            assertEquals(1, BiomeSkyMath.moonGlow(0, 100, c), EPS);
+        }
+        //Deep Indigo is session 25's tint; the two-argument form is it
+        assertArrayEquals(BiomeSkyMath.DESERT_NIGHT_TINT, BiomeSkyMath.nightTint(1, 100, BiomeSkyMath.DEEP_INDIGO, BASE), EPS);
+        assertArrayEquals(BiomeSkyMath.nightTint(0.4f, 150), BiomeSkyMath.nightTint(0.4f, 150, BiomeSkyMath.DEEP_INDIGO, BASE), EPS);
+        //Starlit Violet (the default): brighter than the palette's night, blue far ahead, red above green (violet), a lavender band, a glowing moon
+        float[] v = BiomeSkyMath.nightTint(1, 100, BiomeSkyMath.STARLIT_VIOLET, BASE);
+        float[] vc = times(BASE, v);
+        assertTrue(vc[2] > vc[0] && vc[0] > vc[1], Arrays.toString(vc));
+        assertEquals(BiomeSkyMath.COLOUR_BRIGHT[BiomeSkyMath.STARLIT_VIOLET] * BiomeSkyMath.luminance(BASE), BiomeSkyMath.luminance(vc), 1e-6f);
+        //the same colour under a teal palette or a blue one: the hue is the colour's own
+        for (float[] other : new float[][]{{0.001f, 0.003f, 0.0026f}, {0.0008f, 0.0016f, 0.004f}}) {
+            float[] oc = times(other, BiomeSkyMath.nightTint(1, 100, BiomeSkyMath.STARLIT_VIOLET, other));
+            for (int i = 0; i < 3; i++) assertEquals(vc[i] / vc[2], oc[i] / oc[2], 1e-4f);
+        }
+        //half the share: half way to it
+        float[] half = BiomeSkyMath.nightTint(0.5f, 100, BiomeSkyMath.STARLIT_VIOLET, BASE);
+        for (int i = 0; i < 3; i++) assertEquals((1 + v[i]) / 2, half[i], 1e-5f);
+        assertEquals(1, BiomeSkyMath.band(1, 100, BiomeSkyMath.STARLIT_VIOLET), EPS);
+        assertEquals(1, BiomeSkyMath.lavender(1, 100, BiomeSkyMath.STARLIT_VIOLET), EPS);
+        assertTrue(BiomeSkyMath.moonGlow(1, 100, BiomeSkyMath.STARLIT_VIOLET) > 1.5f);
+        //Moonlit Blue: blue, green above red; a band, not lavender
+        float[] b = times(BASE, BiomeSkyMath.nightTint(1, 100, BiomeSkyMath.MOONLIT_BLUE, BASE));
+        assertTrue(b[2] > b[1] && b[1] > b[0], Arrays.toString(b));
+        assertEquals(1, BiomeSkyMath.band(1, 100, BiomeSkyMath.MOONLIT_BLUE), EPS);
+        assertEquals(0, BiomeSkyMath.lavender(1, 100, BiomeSkyMath.MOONLIT_BLUE), EPS);
+        //Palette and Deep Indigo: no band; Palette no tint
+        assertArrayEquals(new float[]{1, 1, 1}, BiomeSkyMath.nightTint(1, 100, BiomeSkyMath.PALETTE, BASE), EPS);
+        assertEquals(0, BiomeSkyMath.band(1, 100, BiomeSkyMath.PALETTE), EPS);
+        assertEquals(0, BiomeSkyMath.band(1, 100, BiomeSkyMath.DEEP_INDIGO), EPS);
+        //the band and lavender shares stop at 1 at 200%; an unknown colour is the default
+        assertEquals(1, BiomeSkyMath.band(1, 200, BiomeSkyMath.STARLIT_VIOLET), EPS);
+        assertEquals(0.5f, BiomeSkyMath.band(0.5f, 100, BiomeSkyMath.STARLIT_VIOLET), EPS);
+        assertArrayEquals(v, BiomeSkyMath.nightTint(1, 100, 99, BASE), EPS);
+        assertArrayEquals(v, BiomeSkyMath.nightTint(1, 100, -1, BASE), EPS);
+    }
+
+    @Test
+    void theDesertBandOverOtherStarTypes() {
+        net.vulkanmod.visuals.config.VisualsConfig c = new net.vulkanmod.visuals.config.VisualsConfig();
+        c.enabled = true;
+        c.starType = StarMath.TYPE_VANILLA;
+        //outside a desert (or before the map is up) the other types draw nothing here
+        assertArrayEquals(new float[4], AnimeStarMath.params(c, true, true, 0), EPS);
+        assertArrayEquals(new float[4], AnimeStarMath.params(c, true, false, 1), EPS);
+        //in a desert: the band alone, x negative
+        float[] p = AnimeStarMath.params(c, true, true, 1);
+        assertEquals(-1, p[0], EPS);
+        assertEquals(1, p[3], EPS);
+        //the anime type is as before, a desert or not
+        c.starType = StarMath.TYPE_ANIME;
+        assertArrayEquals(AnimeStarMath.params(c, true, true), AnimeStarMath.params(c, true, true, 1), EPS);
+        assertTrue(AnimeStarMath.params(c, true, true)[0] > 0);
+        //the band's colour: teal at 0; at 1 bluer, redder and less green than the teal (lavender over the violet sky)
+        assertArrayEquals(new float[]{AnimeStarMath.ANIME_BAND_R, AnimeStarMath.ANIME_BAND_G, AnimeStarMath.ANIME_BAND_B}, AnimeStarMath.bandColour(0), EPS);
+        float[] l = AnimeStarMath.bandColour(1);
+        assertTrue(l[2] > l[1] && l[0] > AnimeStarMath.ANIME_BAND_R && l[1] < AnimeStarMath.ANIME_BAND_G);
+    }
+
     @Test
     void starsAndCloudsFollowTheShare() {
         assertEquals(1, BiomeSkyMath.starBoost(0, 100), EPS);

@@ -57,10 +57,28 @@ public final class BiomeSky {
         return StormMath.strength(thunder, snow, c == null ? 0 : c.stormWeather);
     }
 
-    /** The night sky's tint this frame (exactly 1 outside deserts or with the setting at 0). */
-    public static float[] nightTint() {
+    /** The night sky's tint this frame on the palette's night colour base (exactly 1 outside deserts or with the setting at 0). */
+    public static float[] nightTint(float[] base) {
         VisualsConfig c = VisualsConfig.get();
-        return BiomeSkyMath.nightTint(desert, c == null ? 0 : c.desertNight);
+        return c == null ? new float[]{1, 1, 1} : BiomeSkyMath.nightTint(desert, c.desertNight, c.desertNightColour, base);
+    }
+
+    /** 2026-11-17: the desert Milky Way's share over the Vanilla and Round star types this frame (0 outside deserts). */
+    public static float band() {
+        VisualsConfig c = VisualsConfig.get();
+        return c == null ? 0 : BiomeSkyMath.band(desert, c.desertNight, c.desertNightColour);
+    }
+
+    /** 2026-11-17: how far the Milky Way turns lavender this frame. */
+    public static float lavender() {
+        VisualsConfig c = VisualsConfig.get();
+        return c == null ? 0 : BiomeSkyMath.lavender(desert, c.desertNight, c.desertNightColour);
+    }
+
+    /** 2026-11-17: the moon's glow factor this frame (1 outside deserts). */
+    public static float moonGlow() {
+        VisualsConfig c = VisualsConfig.get();
+        return c == null ? 1 : BiomeSkyMath.moonGlow(desert, c.desertNight, c.desertNightColour);
     }
 
     /** The stars' weight factor this frame. */
