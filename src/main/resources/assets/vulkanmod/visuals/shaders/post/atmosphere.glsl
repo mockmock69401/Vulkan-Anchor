@@ -507,11 +507,46 @@ vec4 cloudColour(CloudLight c, vec4 m) {
     return vec4(x*c.lit.rgb + y*c.ambient.rgb, z)*keep;
 }
 
-//cloudColour hazed over the march's mean distance m.w along dir (the in-scatter weighted by the coverage)
-vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount) {
+//2026-11-17 (the user: "at night the clouds should differ little from the sky; in game they look like storm clouds"; Genshin Impact's night
+// clouds, looked at only, are moonlit banks a little lighter than the sky around them, never darker): by day a cloud's sky light is the
+// sky straight up (CloudLight.ambient), and its sunlit part outshines the sky. At night the moonlit part is dim, the sky toward the horizon
+// is several times brighter than straight up (more air in-scatters the moon), and the moon's glow and the Anime stars' Milky Way band
+// brighten the sky further, so the shaded sides and bases came out darker than the sky behind them (most of all the realistic clouds,
+// under a third of it). Through the night (night() from NIGHT_CLOUD_LOW to NIGHT_CLOUD_HIGH: none while the sunset still glows) the sky
+// light is the smooth sky in the view's direction (skyColour + sunGlow + the band's glow, never the stars' points), NIGHT_CLOUD_LIGHT
+// times it at NIGHT_CLOUD_SATURATION of its saturation, the shaded base keeping NIGHT_CLOUD_BASE of it (the march's sky-lit weight over
+// its coverage); the moonlit part stays on top (brighter rims)
+const float NIGHT_CLOUD_LOW = 0.6;
+const float NIGHT_CLOUD_HIGH = 1.0;
+const float NIGHT_CLOUD_LIGHT = 1.35;
+const float NIGHT_CLOUD_SATURATION = 0.7;
+const float NIGHT_CLOUD_BASE = 0.8;
+
+//The night clouds' share of the sky's colour (see NIGHT_CLOUD_LIGHT): 0 by day and at sunset .. 1 at night
+float nightClouds(Atmosphere a) {
+    return smoothstep(NIGHT_CLOUD_LOW, NIGHT_CLOUD_HIGH, a.moonLight.w);
+}
+
+//cloudColour hazed over the march's mean distance m.w along dir (the in-scatter weighted by the coverage); at night lit by the smooth sky
+// in dir (nightClouds), band the sky's glow beyond skyColour + sunGlow there (scene_copy's Milky Way band; 0 where none is drawn)
+vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount, vec3 band) {
     vec4 cloud = cloudColour(c, m);
+    float night = nightClouds(a);
+    if (night > 0.0 && cloud.a > 0.0) {
+        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + band;
+        vec3 light = NIGHT_CLOUD_LIGHT*mix(vec3(luminance(sky)), sky, NIGHT_CLOUD_SATURATION);
+        float z = min(m.z, 1.0);
+        float shade = mix(NIGHT_CLOUD_BASE, 1.0, clamp(max(m.y, 0.0)/z, 0.0, 1.0));
+        vec3 lit = (max(m.x, 0.0)*c.lit.rgb + z*shade*light)*(1.0 - clamp(c.light.w, 0.0, 1.0));
+        cloud.rgb = mix(cloud.rgb, lit, night);
+    }
     vec3 t;
     vec3 i;
     haze(a, dir, m.w, amount, t, i);
     return vec4(cloud.rgb*t + i*cloud.a, cloud.a);
+}
+
+//cloudOver with no glow beyond skyColour + sunGlow (the reflections' sky)
+vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount) {
+    return cloudOver(a, c, m, dir, amount, vec3(0.0));
 }

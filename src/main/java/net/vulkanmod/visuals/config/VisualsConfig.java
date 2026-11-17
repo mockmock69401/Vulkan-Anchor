@@ -72,8 +72,12 @@ public class VisualsConfig {
      * the realistic clouds and stays on it; any other file keeps its cloud style.
      * 25 (2026-11-17, session 12 follow-up): the Anime palette picks the anime stars (ColourPresets.stars); a file on it takes the anime
      * stars and stays on it; any other file keeps its star type.
+     * 26 (2026-11-17, session 18): the Anime palette's night sky is a deeper blue (ColourPresets.ANIME_NIGHT_BEFORE_26 before); a file on
+     * Anime with the old night sky takes the new one and stays on the palette; any other file keeps its night sky.
      */
-    private static final int REVISION = 25;
+    private static final int REVISION = 26;
+    /** 2026-11-17: the first revision with the Anime palette's blue night sky. */
+    static final int PALETTE_NIGHT_REVISION = 26;
     /** 2026-11-17: the first revision whose Anime palette includes the anime stars. */
     static final int PALETTE_STARS_REVISION = 25;
     /** 2026-11-16: the first revision whose Realistic and Cinematic palettes include the realistic clouds. */
@@ -206,14 +210,16 @@ public class VisualsConfig {
         //2026-11-11: a file still exactly on a palette's old look values takes the new ones (first: the Anime check below reads the new row)
         //Session 12: a file on a palette before the star colour existed takes the palette's (first: the checks below compare every colour)
         //Session 13: likewise the particle groups' colours (and the star colour for a file older than both)
+        java.util.EnumSet<Colour> missing = java.util.EnumSet.noneOf(Colour.class);
         if (fileRevision < PARTICLE_LOOK_REVISION) {
-            java.util.EnumSet<Colour> missing = java.util.EnumSet.noneOf(Colour.class);
             if (fileRevision < STARS_REVISION && !json.has("colourStars")) missing.add(Colour.STARS);
             for (ParticleEffect e : ParticleEffect.values()) {
                 if (e.colour().key().startsWith("colour_particle_") && !json.has(colourField(e.colour()))) missing.add(e.colour());
             }
-            ColourPresets.moveOldColours(c, missing);
         }
+        //2026-11-17 (session 18): a file on Anime with its old night sky takes the new one; first, so every check below compares the new row
+        if (fileRevision < PALETTE_NIGHT_REVISION) ColourPresets.moveOldAnimeNight(c, missing);
+        if (fileRevision < PARTICLE_LOOK_REVISION) ColourPresets.moveOldColours(c, missing);
         if (fileRevision >= FIRST_LOOK_REVISION && fileRevision < PALETTE_LOOK_REVISION) ColourPresets.moveOldLook(c);
         //2026-11-12: a file on a palette before the palettes set the moonlight takes the palette's (first: the Anime check reads it)
         //2026-11-13: likewise the tone block (exposure, tone mapping, contrast, warm sun / cool shade); one move for a file older than both

@@ -347,8 +347,42 @@ public final class AtmosphereMath {
         return new float[]{(x * c.lit[0] + y * c.ambient[0]) * keep, (x * c.lit[1] + y * c.ambient[1]) * keep, (x * c.lit[2] + y * c.ambient[2]) * keep, z * keep};
     }
 
+    /**
+     * 2026-11-17 (the user: the night clouds looked like storm clouds; they should differ little from the sky): through the night a cloud's
+     * sky light is the smooth sky in the view's direction, skyColour + sunGlow + the Milky Way band's glow (atmosphere.glsl cloudOver,
+     * nightClouds; scene_copy.comp nightCloudBand).
+     */
+    public static final float NIGHT_CLOUD_LOW = 0.6f, NIGHT_CLOUD_HIGH = 1.0f, NIGHT_CLOUD_LIGHT = 1.35f, NIGHT_CLOUD_SATURATION = 0.7f,
+            NIGHT_CLOUD_BASE = 0.8f;
+
+    /** nightClouds: 0 by day and at sunset .. 1 at night. */
+    public static float nightClouds(Atmosphere a) {
+        return smoothstep(NIGHT_CLOUD_LOW, NIGHT_CLOUD_HIGH, a.moonLight[3]);
+    }
+
     public static float[] cloudOver(Atmosphere a, CloudLight c, float[] march, float[] dir, float amount) {
+        return cloudOver(a, c, march, dir, amount, new float[3]);
+    }
+
+    /** cloudOver with band the sky's glow beyond skyColour + sunGlow in dir (scene_copy's Milky Way band; zeros where none is drawn). */
+    public static float[] cloudOver(Atmosphere a, CloudLight c, float[] march, float[] dir, float amount, float[] band) {
         float[] cloud = cloudColour(c, march);
+        float night = nightClouds(a);
+        if (night > 0 && cloud[3] > 0) {
+            float[] m = CloudMath.four(march);
+            float[] sky = skyColour(a, dir);
+            float[] glow = sunGlow(a, dir);
+            for (int i = 0; i < 3; i++) sky[i] += glow[i] + band[i];
+            float l = PostMath.luminance(sky[0], sky[1], sky[2]);
+            float z = Math.min(m[2], 1);
+            float shade = NIGHT_CLOUD_BASE + (1 - NIGHT_CLOUD_BASE) * Math.max(0, Math.min(1, Math.max(m[1], 0) / z));
+            float keep = 1 - (c.light.length > 3 ? Math.max(0, Math.min(1, c.light[3])) : 0);
+            for (int i = 0; i < 3; i++) {
+                float light = NIGHT_CLOUD_LIGHT * (l + (sky[i] - l) * NIGHT_CLOUD_SATURATION);
+                float lit = (Math.max(m[0], 0) * c.lit[i] + z * shade * light) * keep;
+                cloud[i] += (lit - cloud[i]) * night;
+            }
+        }
         Haze h = haze(a, dir, CloudMath.four(march)[3], amount);
         float[] out = new float[4];
         for (int i = 0; i < 3; i++) out[i] = cloud[i] * h.transmittance[i] + h.inscatter[i] * cloud[3];
