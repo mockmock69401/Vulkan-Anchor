@@ -1003,7 +1003,8 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         //Session 12 follow-up: the anime star type's stars and Milky Way (vanilla draws none then; animeStarParams.x 0: nothing evaluated).
         // 2026-11-17 (session 15 follow-up): the star colour on all of them (vanillaStarTint's white square is vanilla's moon's, and showed
         // as a square on the band)
-        if (animeStarParams.x > 0.0) {
+        //2026-11-17: x negative: a desert's Milky Way alone over the other star types (starGate.z its share)
+        if (animeStarParams.x > 0.0 || (animeStarParams.x < 0.0 && starGate.z > 0.0)) {
             vec3 skyDir = animeSkyDir(dir, a.sun.xyz);
             vec3 bandTexel = animeStarParams.w > 0.5 ? textureLod(galaxyMap, galaxyMapCoord(skyDir), 0.0).rgb : vec3(0.0);
             vec3 anime = animeStars(a, dir, skyDir, animeStarParams, starGate, 2.0*abs(invVanillaProj[1][1])/float(size.y), bandTexel, celestial);

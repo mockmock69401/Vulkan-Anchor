@@ -174,6 +174,8 @@ public final class VisualsOptionLayout {
                             new Item("star_brightness", Kind.PERCENT, 0, StarMath.BRIGHTNESS_MAX, Impact.NONE, null),
                             //2026-11-15 (session 25): a desert's darker, deeper night sky and brighter stars; its cloudless sky
                             percent("desert_night", 0, BiomeSkyMath.NIGHT_MAX, Impact.NONE),
+                            //2026-11-17: the desert night's colour (greyed out with the desert night sky off)
+                            new Item("desert_night_colour", Kind.CHOICE, 0, BiomeSkyMath.COLOUR_MAX, Impact.NONE, "desert_night"),
                             percent("desert_clouds", 0, BiomeSkyMath.CLEAR_MAX, Impact.NONE),
                             //2026-11-12 (session 14 follow-up): the far clouds and the shader weather at half resolution (much cheaper, a little
                             // softer); on in the Potato, Low and Medium presets
@@ -348,6 +350,7 @@ public final class VisualsOptionLayout {
             case "star_size" -> c.starSize;
             case "star_brightness" -> c.starBrightness;
             case "desert_night" -> c.desertNight;
+            case "desert_night_colour" -> c.desertNightColour;
             case "desert_clouds" -> c.desertClouds;
             case "storm_weather" -> c.stormWeather;
             case "footprints" -> c.footprints;
@@ -444,6 +447,7 @@ public final class VisualsOptionLayout {
             case "star_size" -> c.starSize = v;
             case "star_brightness" -> c.starBrightness = v;
             case "desert_night" -> c.desertNight = v;
+            case "desert_night_colour" -> c.desertNightColour = v;
             case "desert_clouds" -> c.desertClouds = v;
             case "storm_weather" -> c.stormWeather = v;
             case "footprints" -> c.footprints = v;

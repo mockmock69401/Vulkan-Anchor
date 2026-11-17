@@ -326,6 +326,9 @@ public final class AtmosphereUniforms {
             v[8] *= BiomeSky.starBoost();
             float[] sunrise = f.sunrise();
             v[9] = sunrise != null && sunrise.length >= 4 ? clamp01(sunrise[3]) : 0;
+            //2026-11-17: a desert's Milky Way over the Vanilla and Round star types, and how far it turns lavender (BiomeSky; 0 elsewhere)
+            v[10] = BiomeSky.band();
+            v[11] = BiomeSky.lavender();
         }
         float[] sky = f.skyColour();
         if (sky != null && sky.length >= 3) {
@@ -399,7 +402,8 @@ public final class AtmosphereUniforms {
         //Session 25: this frame's sandstorm and blizzard (BiomeSky x the thunder; 0 without one)
         float sand = BiomeSky.sand(thunder), blizzard = BiomeSky.blizzard(thunder);
         //2026-11-15 (session 25): in a desert the night sky is darker and deeper (BiomeSky; exactly 1 elsewhere)
-        float[] desertNight = BiomeSky.nightTint();
+        //2026-11-17: in the desert night's own colour (BiomeSkyMath.nightTint), at the palette's night brightness
+        float[] desertNight = BiomeSky.nightTint(new float[]{NIGHT_SKY[0] * nightTint[0], NIGHT_SKY[1] * nightTint[1], NIGHT_SKY[2] * nightTint[2]});
         nightTint = new float[]{nightTint[0] * desertNight[0], nightTint[1] * desertNight[1], nightTint[2] * desertNight[2]};
         for (int i = 0; i < 3; i++) {
             float sunLight = sunAmount * ts[i] * tint[i] * dim * sunTint[i], moonLight = moonAmount * tm[i] * tint[i] * dim * nightTint[i];
@@ -429,7 +433,8 @@ public final class AtmosphereUniforms {
         b[15] = tauM;
         //2026-11-09 (session 1b): the distance haze setting scales the aerial haze only (its near veil and the far fade), not the ground fog
         b[19] = fogStrength * Math.max(0, finite(s.distanceHaze())) / AIR_MASS_BLOCKS * StormMath.haze(sand, blizzard);
-        b[23] = GLOW_AMOUNT * glow * (1 - GLOW_RAIN_CUT * rain) * (1 - cover);
+        //2026-11-17: a desert night's moon glows softer and wider (BiomeSky: exactly 1 elsewhere)
+        b[23] = GLOW_AMOUNT * glow * (1 - GLOW_RAIN_CUT * rain) * (1 - cover) * BiomeSky.moonGlow();
         float fogHeight = Math.max(PostProcessSettings.FOG_HEIGHT_MIN, finite(s.fogHeight()));
         float mist = morning * AtmosphereMath.smoothstep(MIST_DAWN, 0, sun.y) * (1 - AtmosphereMath.smoothstep(MIST_SUN_LOW, MIST_SUN_HIGH, sun.y));
         b[24] = FOG_DENSITY * fogStrength * (1 + RAIN_FOG * rain + MORNING_MIST * mist) * StormMath.fog(sand, blizzard);

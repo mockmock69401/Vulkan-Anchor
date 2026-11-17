@@ -846,9 +846,12 @@ public final class VkPostProcess {
         VisualsConfig animeConfig = VisualsConfig.get();
         boolean animeWanted = animeConfig != null && animeConfig.enabled && animeConfig.starType == StarMath.TYPE_ANIME;
         boolean skyDrawn = atmosphere.mode() == AtmosphereMath.ATMOSPHERE_SKY;
-        if (animeWanted) AnimeSkyMap.start();
-        boolean animeBand = animeWanted && this.uploadAnimeMap(upload);
-        this.animeStars = AnimeStarMath.params(animeConfig, skyDrawn, animeBand);
+        //2026-11-17: a desert's Milky Way over the other star types needs the band's map too
+        float desertBand = animeConfig != null && animeConfig.enabled ? BiomeSky.band() : 0;
+        boolean bandWanted = animeWanted || desertBand > 0;
+        if (bandWanted) AnimeSkyMap.start();
+        boolean animeBand = bandWanted && this.uploadAnimeMap(upload);
+        this.animeStars = AnimeStarMath.params(animeConfig, skyDrawn, animeBand, desertBand);
         StarSky.compositeDrawsAnime(animeWanted && skyDrawn);
         if (this.copyUniforms.has(AnimeStarMath.ANIME_SLOT)) {
             this.copyUniforms.putVec4(AnimeStarMath.ANIME_SLOT, this.animeStars[0], this.animeStars[1], this.animeStars[2], this.animeStars[3]);

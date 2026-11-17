@@ -15,6 +15,8 @@
 //   animeStars(a, dir, skyDir, params, gate, pixelAngle, mapTexel, celestial): the light (rgb, scene units, >= 0) to add to a sky pixel.
 //   params the composite's animeStarParams (AnimeStarMath's slot: x brightness, 0 = off and nothing evaluated; y count; z size; w 1 with
 //   the map); gate the vanilla stars' STAR_GATE (x the star weight, y the fan); pixelAngle the angle one pixel spans (radians).
+//   2026-11-17 (a desert's night): x negative draws only the band's glow and dust stars at brightness -x, times gate.z (a desert's
+//   Milky Way over the Vanilla and Round star types); gate.w (0..1) turns the band and its dust lavender.
 
 const float ANIME_DUST_CELLS = 500.0;
 const float ANIME_DUST_CHANCE = 0.16;
@@ -41,6 +43,13 @@ const float ANIME_BAND_BRIGHTNESS = 0.07;
 const float ANIME_BAND_R = 0.32;
 const float ANIME_BAND_G = 0.78;
 const float ANIME_BAND_B = 1.0;
+//2026-11-17: a desert's lavender band and dust stars (gate.w mixes toward them)
+const float ANIME_LAVENDER_R = 0.42;
+const float ANIME_LAVENDER_G = 0.45;
+const float ANIME_LAVENDER_B = 1.0;
+const float ANIME_LAVENDER_DUST_R = 0.9;
+const float ANIME_LAVENDER_DUST_G = 0.86;
+const float ANIME_LAVENDER_DUST_B = 1.0;
 const float ANIME_DUST_R = 0.78;
 const float ANIME_DUST_G = 0.95;
 const float ANIME_DUST_B = 1.0;
@@ -127,7 +136,9 @@ vec2 animeMoonKeep(vec3 dir, vec3 moon, vec4 celestial) {
 
 //The anime stars' light along a sky pixel (see the header)
 vec3 animeStars(Atmosphere a, vec3 dir, vec3 skyDir, vec4 params, vec4 gate, float pixelAngle, vec3 mapTexel, vec4 celestial) {
-    if (!(params.x > 0.0) || !(gate.x > 0.0)) {
+    bool bandOnly = params.x < 0.0;
+    float brightness = bandOnly ? -params.x*clamp(gate.z, 0.0, 1.0) : params.x;
+    if (!(brightness > 0.0) || !(gate.x > 0.0)) {
         return vec3(0.0);
     }
     float horizon = animeHorizon(dir.y);
@@ -151,9 +162,12 @@ vec3 animeStars(Atmosphere a, vec3 dir, vec3 skyDir, vec4 params, vec4 gate, flo
     float count = params.y;
     float sigma = max(pixelAngle, 1e-5)*ANIME_STAR_SIGMA*params.z;
     float dust = density > 0.0 ? animeStarLayer(skyDir, ANIME_DUST_CELLS, min(ANIME_DUST_CHANCE*density*count, 1.0), ANIME_DUST_LIGHT, 11, sigma, false, 0.0) : 0.0;
-    float small = animeStarLayer(skyDir, ANIME_SMALL_CELLS, min((ANIME_SMALL_CHANCE + ANIME_SMALL_BAND*density)*count, 1.0), ANIME_SMALL_LIGHT, 12, sigma, true, 0.0);
-    float big = animeStarLayer(skyDir, ANIME_BIG_CELLS, min(ANIME_BIG_CHANCE*count, 1.0), ANIME_BIG_LIGHT, 13, sigma, true, ANIME_GLOW_SHARE);
-    vec3 stars = dust*vec3(ANIME_DUST_R, ANIME_DUST_G, ANIME_DUST_B) + (small + big)*vec3(ANIME_COOL_R, ANIME_COOL_G, ANIME_COOL_B);
-    vec3 glow = band ? mapTexel.r*mapTexel.r*ANIME_MAP_SCALE*ANIME_BAND_BRIGHTNESS*vec3(ANIME_BAND_R, ANIME_BAND_G, ANIME_BAND_B) : vec3(0.0);
-    return (stars*(ANIME_STAR_BRIGHTNESS*moonKeep.y) + glow*moonKeep.x)*params.x*weight;
+    float small = bandOnly ? 0.0 : animeStarLayer(skyDir, ANIME_SMALL_CELLS, min((ANIME_SMALL_CHANCE + ANIME_SMALL_BAND*density)*count, 1.0), ANIME_SMALL_LIGHT, 12, sigma, true, 0.0);
+    float big = bandOnly ? 0.0 : animeStarLayer(skyDir, ANIME_BIG_CELLS, min(ANIME_BIG_CHANCE*count, 1.0), ANIME_BIG_LIGHT, 13, sigma, true, ANIME_GLOW_SHARE);
+    float lavender = clamp(gate.w, 0.0, 1.0);
+    vec3 dustColour = mix(vec3(ANIME_DUST_R, ANIME_DUST_G, ANIME_DUST_B), vec3(ANIME_LAVENDER_DUST_R, ANIME_LAVENDER_DUST_G, ANIME_LAVENDER_DUST_B), lavender);
+    vec3 bandColour = mix(vec3(ANIME_BAND_R, ANIME_BAND_G, ANIME_BAND_B), vec3(ANIME_LAVENDER_R, ANIME_LAVENDER_G, ANIME_LAVENDER_B), lavender);
+    vec3 stars = dust*dustColour + (small + big)*vec3(ANIME_COOL_R, ANIME_COOL_G, ANIME_COOL_B);
+    vec3 glow = band ? mapTexel.r*mapTexel.r*ANIME_MAP_SCALE*ANIME_BAND_BRIGHTNESS*bandColour : vec3(0.0);
+    return (stars*(ANIME_STAR_BRIGHTNESS*moonKeep.y) + glow*moonKeep.x)*brightness*weight;
 }

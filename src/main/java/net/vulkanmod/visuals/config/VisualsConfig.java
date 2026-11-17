@@ -472,6 +472,11 @@ public class VisualsConfig {
      * indigo-violet and the stars brighter (BiomeSkyMath): percent, 0 = off.
      */
     public int desertNight = 100;
+    /**
+     * 2026-11-17 (the user: "사막에서 하늘 색도 선택할 수 있게 빼고 비슷하게 교정시켜줘"): the desert night sky's colour (BiomeSkyMath: 0 Starlit
+     * Violet, 1 Deep Indigo, 2 Moonlit Blue, 3 the palette's own).
+     */
+    public int desertNightColour = 0;
     /** 2026-11-15 (session 25, the user: "사막에서는 구름이 없게"): how much of the far clouds a desert clears (BiomeSkyMath): percent, 0 = off. */
     public int desertClouds = 100;
     /**
