@@ -997,15 +997,21 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         // the far clouds
         //Session 12: the picked star colour on the stars (the .TINTED build)
         vec3 stars = vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial);
-        //Session 12 follow-up: the anime star type's stars and Milky Way (vanilla draws none then; animeStarParams.x 0: nothing evaluated)
-        if (animeStarParams.x > 0.0) {
-            vec3 skyDir = animeSkyDir(dir, a.sun.xyz);
-            vec3 bandTexel = animeStarParams.w > 0.5 ? textureLod(galaxyMap, galaxyMapCoord(skyDir), 0.0).rgb : vec3(0.0);
-            stars += animeStars(a, dir, skyDir, animeStarParams, starGate, 2.0*abs(invVanillaProj[1][1])/float(size.y), bandTexel, celestial);
-        }
 #ifdef ATMOSPHERE_TINTS
         stars *= vanillaStarTint(a, dir, starTint);
 #endif
+        //Session 12 follow-up: the anime star type's stars and Milky Way (vanilla draws none then; animeStarParams.x 0: nothing evaluated).
+        // 2026-11-17 (session 15 follow-up): the star colour on all of them (vanillaStarTint's white square is vanilla's moon's, and showed
+        // as a square on the band)
+        if (animeStarParams.x > 0.0) {
+            vec3 skyDir = animeSkyDir(dir, a.sun.xyz);
+            vec3 bandTexel = animeStarParams.w > 0.5 ? textureLod(galaxyMap, galaxyMapCoord(skyDir), 0.0).rgb : vec3(0.0);
+            vec3 anime = animeStars(a, dir, skyDir, animeStarParams, starGate, 2.0*abs(invVanillaProj[1][1])/float(size.y), bandTexel, celestial);
+#ifdef ATMOSPHERE_TINTS
+            anime *= starTint.rgb;
+#endif
+            stars += anime;
+        }
         vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraScreen(dir, p);
         return vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0);
     }
