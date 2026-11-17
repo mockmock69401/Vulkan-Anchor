@@ -11,6 +11,11 @@ import net.vulkanmod.visuals.config.VisualsConfig;
  * map); crisp white points of a few distinct sizes over the whole sky, the brightest with a small soft glow; all fading toward the
  * horizon. The deep blue of the sky itself is the night sky colour (the palettes'), not this.
  * <p>
+ * SCATTER (2026-11-17, the user: "the stars look lined up on a grid; scatter them more randomly, like Genshin"): a star lies anywhere in
+ * its cell (it sat in the middle third, which read as rows), each layer's grid is turned its own way, and AnimeSkyMap's clump field
+ * gathers the small and big stars in places and thins them in others. Above 100 % the count makes the grids finer instead of filling
+ * every cell. animestars.glsl has the details.
+ * <p>
  * THE SKY FRAME: the stars turn with the sun as vanilla's do (vanilla draws its stars and sun in one frame turning about the z axis), so
  * the band rises and sets through the night. skyDir turns a world direction into that frame: the sun's direction goes to straight up.
  * <p>
@@ -34,19 +39,16 @@ public final class AnimeStarMath {
     public static final float ANIME_BIG_CELLS = 40.0f;
     public static final float ANIME_BIG_CHANCE = 0.12f;
     public static final float ANIME_BIG_LIGHT = 3.2f;
-    //A star's width (pixels, e^-1/2), its centre within the middle INSET..1 - INSET of its cell; the sizes of its class (x the width and
-    // the light): most are SIZE_A, then SIZE_B, the rarest SIZE_C (the class from a hash: under CLASS_B, under CLASS_C, above)
+    //A star's width (pixels, e^-1/2; anywhere in its cell, at most a sixth of a cell); the sizes of its class (x the width and the light):
+    // most are SIZE_A, then SIZE_B, the rarest SIZE_C (the class from a hash: under CLASS_B, under CLASS_C, above)
     public static final float ANIME_STAR_SIGMA = 0.55f;
-    public static final float ANIME_STAR_INSET = 0.32f;
     public static final float ANIME_SIZE_A = 1.0f;
     public static final float ANIME_SIZE_B = 1.7f;
     public static final float ANIME_SIZE_C = 2.6f;
     public static final float ANIME_CLASS_B = 0.62f;
     public static final float ANIME_CLASS_C = 0.9f;
-    //The big stars' glow: GLOW_WIDTH x their width, at most GLOW_CELL of their cell (three times that stays inside the INSET margin),
-    // GLOW_SHARE of their peak
+    //The big stars' glow: GLOW_WIDTH x their width (at most a sixth of a cell, as the star), GLOW_SHARE of their peak
     public static final float ANIME_GLOW_WIDTH = 3.0f;
-    public static final float ANIME_GLOW_CELL = 0.08f;
     public static final float ANIME_GLOW_SHARE = 0.16f;
     //The stars' and the band's light (scene units at brightness 1, star weight 1), the band's colour
     public static final float ANIME_STAR_BRIGHTNESS = 0.11f;
@@ -74,6 +76,9 @@ public final class AnimeStarMath {
     public static final float ANIME_HORIZON_HIGH = 0.32f;
     //No stars within MOON_MARGIN x the round moon's radius (x vanilla's mask around the square moon); see moonKeep
     public static final float ANIME_MOON_MARGIN = 1.25f;
+    //2026-11-17: the clump field's hold on the small and big stars' chance: x (LOW + GAIN x clump), the clump 0..1 (AnimeSkyMap's b)
+    public static final float ANIME_CLUMP_LOW = 0.2f;
+    public static final float ANIME_CLUMP_GAIN = 1.6f;
 
     private AnimeStarMath() {
     }

@@ -53,6 +53,39 @@ class AnimeStarTest {
         }
     }
 
+    /** 2026-11-17: each layer's grid is turned its own way by a rotation (orthonormal, determinant 1), and no two turn alike. */
+    @Test
+    void eachLayersGridIsTurnedByItsOwnRotation() throws IOException {
+        Matcher m = Pattern.compile("const mat3 (ANIME_TURN_[A-Z]+) = mat3\\(([^)]*)\\);").matcher(glsl());
+        java.util.List<double[]> turns = new java.util.ArrayList<>();
+        while (m.find()) {
+            String[] v = m.group(2).split(",");
+            assertEquals(9, v.length, m.group(1));
+            double[] r = new double[9];
+            for (int i = 0; i < 9; i++) r[i] = Double.parseDouble(v[i].trim());
+            //columns c0 = r[0..2], c1 = r[3..5], c2 = r[6..8]
+            for (int a = 0; a < 3; a++) {
+                for (int b = 0; b < 3; b++) {
+                    double dot = r[3 * a] * r[3 * b] + r[3 * a + 1] * r[3 * b + 1] + r[3 * a + 2] * r[3 * b + 2];
+                    assertEquals(a == b ? 1 : 0, dot, 1e-5, m.group(1) + " columns " + a + ", " + b);
+                }
+            }
+            double det = r[0] * (r[4] * r[8] - r[5] * r[7]) - r[3] * (r[1] * r[8] - r[2] * r[7]) + r[6] * (r[1] * r[5] - r[2] * r[4]);
+            assertEquals(1, det, 1e-5, m.group(1));
+            for (double[] o : turns) assertFalse(java.util.Arrays.equals(o, r), "the layers turn differently");
+            turns.add(r);
+        }
+        assertEquals(3, turns.size(), "dust, small and big");
+        String g = glsl();
+        for (String layer : new String[]{"DUST", "SMALL", "BIG"}) assertTrue(g.contains("animeStarLayer(skyDir, ANIME_TURN_" + layer + ", "), layer);
+        //a star anywhere in its cell: no inset, and the four cells around the nearest corner
+        assertFalse(g.contains("INSET"));
+        assertTrue(g.contains("vec2 base = floor(f - 0.5);"));
+        //whether a star is there is read from the map at the star, so all of its pixels agree (not cut along the map's texels)
+        assertTrue(g.contains("textureLod(galaxyMap, galaxyMapCoord(sd*turn), 0.0)"));
+        assertFalse(g.contains("mapTexel.b"), "no chance from the pixel's own texel");
+    }
+
     @Test
     void theCompositeDeclaresTheSlotAndDrawsTheStarsUnderTheTint() throws IOException {
         String c = resource("/assets/vulkanmod/visuals/shaders/post/scene_copy.comp");
@@ -141,6 +174,19 @@ class AnimeStarTest {
         }
         assertTrue(bright > 100 && dusty > 300, bright + " / " + dusty);
         assertTrue(bright < a.length / 4 / 4, "the band is a band, not the sky");
+        //2026-11-17: the clump field covers the whole sky, with thick and thin places (about half each way)
+        int n = a.length / 4, thin = 0, thick = 0;
+        double sum = 0;
+        for (int i = 0; i < a.length; i += 4) {
+            int b = a[i + 2] & 0xFF;
+            sum += b / 255.0;
+            if (b < 40) thin++;
+            if (b > 215) thick++;
+        }
+        assertTrue(sum / n > 0.3 && sum / n < 0.7, "mean " + sum / n);
+        assertTrue(thin > n / 10 && thick > n / 10, thin + " thin, " + thick + " thick of " + n);
+        float[] p = AnimeSkyMap.texel(AnimeSkyMap.toSky(pole));
+        assertEquals(3, p.length, "off the band too");
     }
 
     //dir at (x, y) in the disc plane of centre (water.glsl discPlane's axes)

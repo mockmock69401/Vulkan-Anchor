@@ -6,7 +6,8 @@ import java.util.stream.IntStream;
 /**
  * 2026-11-16 (shader roadmap session 12 follow-up): the anime star type's Milky Way band (AnimeStarMath, animestars.glsl), baked once on
  * the CPU into a small equirectangular RGBA8 map in the stars' frame (galaxy.glsl galaxyMapCoord's layout of AnimeStarMath.skyDir):
- * r the square root of the band's glow over ANIME_MAP_SCALE, g the fine dust stars' density 0..1. Baked on the common pool the first
+ * r the square root of the band's glow over ANIME_MAP_SCALE, g the fine dust stars' density 0..1, b the clump field 0..1 (2026-11-17: where
+ * the small and big stars gather or thin out over the whole sky, so they do not spread evenly; AnimeStarMath.ANIME_CLUMP_*). Baked on the common pool the first
  * time the anime stars are wanted (start(), well under a second); until it is uploaded the composite draws the stars without the band.
  * <p>
  * THE BAND (a painted band after the user's screenshot, not a photograph): a broad soft great circle (latitude b from its pole, longitude
@@ -30,6 +31,8 @@ public final class AnimeSkyMap {
             GAP_DEPTH = 0.7f;
     public static final float HAZE = 0.05f, HAZE_WIDTH = 2.2f;
     public static final float DUST_BASE = 0.25f, DUST_GAIN = 1.4f, DUST_GAP = 0.9f;
+    /** The clump field: fBm at CLUMP_SCALE over the stars' frame, CLUMP_LOW..CLUMP_HIGH smoothed to 0..1. */
+    public static final float CLUMP_SCALE = 5.0f, CLUMP_LOW = 0.3f, CLUMP_HIGH = 0.7f;
 
     private static final float[] POLE, CORE, SIDE;
 
@@ -93,14 +96,14 @@ public final class AnimeSkyMap {
                 int i = (y * width + x) * 4;
                 out[i] = (byte) Math.round(Math.sqrt(Math.max(0, Math.min(1, t[0] / ANIME_MAP_SCALE))) * 255);
                 out[i + 1] = (byte) Math.round(Math.max(0, Math.min(1, t[1])) * 255);
-                out[i + 2] = 0;
+                out[i + 2] = (byte) Math.round(Math.max(0, Math.min(1, t[2])) * 255);
                 out[i + 3] = (byte) 255;
             }
         });
         return out;
     }
 
-    /** {the band's glow, the dust stars' density} along d (a direction in the stars' frame). */
+    /** {the band's glow, the dust stars' density, the clump field} along d (a direction in the stars' frame). */
     public static float[] texel(float[] d) {
         float gp = d[0] * POLE[0] + d[1] * POLE[1] + d[2] * POLE[2];
         float gc = d[0] * CORE[0] + d[1] * CORE[1] + d[2] * CORE[2];
@@ -111,7 +114,8 @@ public final class AnimeSkyMap {
         float base = (float) Math.exp(-(b / width) * (b / width))
                 * (ALONG_FLOOR + (1 - ALONG_FLOOR) * (float) Math.exp(-(l / ALONG_REACH) * (l / ALONG_REACH)));
         float haze = HAZE * (float) Math.exp(-(b / (width * HAZE_WIDTH)) * (b / (width * HAZE_WIDTH)));
-        if (base < 0.002f) return new float[]{haze, 0};
+        float clump = smooth(CLUMP_LOW, CLUMP_HIGH, GalaxyMap.fbm(d[0] * CLUMP_SCALE + 71, d[1] * CLUMP_SCALE + 3, d[2] * CLUMP_SCALE + 29, 4));
+        if (base < 0.002f) return new float[]{haze, 0, clump};
         float clouds = GalaxyMap.fbm(gc * CLOUD_ALONG + 5, gs * CLOUD_ALONG, gp * CLOUD_ACROSS, 5);
         float c = smooth(CLOUD_LOW, CLOUD_HIGH, clouds);
         float wisp = GalaxyMap.fbm(gc * WISP_CELLS + 41, gs * WISP_CELLS + 13, gp * WISP_CELLS, 4);
@@ -121,6 +125,6 @@ public final class AnimeSkyMap {
         float dark = smooth(GAP_LOW, GAP_HIGH, g) * (float) Math.exp(-(b / gapWidth) * (b / gapWidth));
         glow *= 1 - GAP_DEPTH * dark;
         float dust = base * (DUST_BASE + c) * (1 - DUST_GAP * dark) * DUST_GAIN;
-        return new float[]{glow + haze, Math.min(1, dust)};
+        return new float[]{glow + haze, Math.min(1, dust), clump};
     }
 }
