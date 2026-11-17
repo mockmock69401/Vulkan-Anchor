@@ -52,7 +52,8 @@ public final class ColourPresets {
      * night sky, stars (session 12), fog, rainy sky, clouds, rain, snow, sunlight, shade light, moon, torch light, aurora body, aurora top, aurora lower edge,
      * End aurora, water, underwater; session 13's particle groups: smoke, flames, embers, drips, magic, ambient, combat (Realistic: real
      * smoke a little darker; Cinematic: warm smoke and fire, teal water; Anime: light clean smoke, bright fire and magic; Horror: dark smoke,
-     * sickly fire, murky drips).
+     * sickly fire, murky drips). 2026-11-17 (the user: "match the sky colour too", after Genshin Impact's night, looked at only: a deep,
+     * saturated blue, lighter toward the horizon): Anime's night sky 0x3A6CFF (was ANIME_NIGHT_BEFORE_26, a dim grey-violet).
      */
     private static final int[][] PALETTES = {
             ShaderColours.defaults(),
@@ -62,7 +63,7 @@ public final class ColourPresets {
             {0x5C98C0, 0xFF7A2E, 0xFF9C5A, 0xFFC48A, 0x183C4C, 0xD6F0FF, 0xF0B8A8, 0xB6C6CA, 0xFFEEDC, 0xC4DEE6, 0xEEF8FF, 0xFFB066, 0xD0F0F0, 0xD2EEFF, 0xFF8C3A,
                     0x3CF2E2, 0xFF5A86, 0x7E62FF, 0x9E74FF, 0x369AA6, 0x28868E,
                     0x9A8E84, 0xFF9030, 0xFF7020, 0x3C8CC0, 0x8C70FF, 0xA49A8E, 0xE8D8C8},
-            {0x58A6F4, 0xFF9874, 0xFFC0AA, 0xFFF2CC, 0x2E3C7C, 0xE0E6FF, 0xC6DEF8, 0xDCE6FF, 0xFFFFFF, 0xD4EAFF, 0xFFFFFF, 0xFFD08E, 0xE0E4FF, 0xF4F6FF, 0xFFB46E,
+            {0x58A6F4, 0xFF9874, 0xFFC0AA, 0xFFF2CC, 0x3A6CFF, 0xE0E6FF, 0xC6DEF8, 0xDCE6FF, 0xFFFFFF, 0xD4EAFF, 0xFFFFFF, 0xFFD08E, 0xE0E4FF, 0xF4F6FF, 0xFFB46E,
                     0x4CFFD6, 0xFF74E4, 0xB482FF, 0xD494FF, 0x3CD2EA, 0x3CCAE2,
                     0xB4B8C8, 0xFFB850, 0xFFA040, 0x4CA8FF, 0xD080FF, 0xC0C4D8, 0xFFFFFF},
             {0x6C7876, 0xA23C2C, 0x8C7A5E, 0xC49482, 0x0E1316, 0x8E968A, 0x858F84, 0x6E766E, 0x9A9C98, 0x98A298, 0xC6CAC6, 0xD8D0B0, 0xB8C8C0, 0xD04A3A, 0xFF6A30,
@@ -347,6 +348,25 @@ public final class ColourPresets {
         for (Colour colour : missing) if (c.colour(colour) != colour.defaultRgb()) return false;
         for (Colour colour : Colour.values()) if (!missing.contains(colour) && c.colour(colour) != value(colour, level)) return false;
         for (Colour colour : missing) c.setColour(colour, value(colour, level));
+        return true;
+    }
+
+    /** 2026-11-17: the Anime palette's night sky before revision 26. */
+    static final int ANIME_NIGHT_BEFORE_26 = 0x2E3C7C;
+
+    /**
+     * 2026-11-17: a file on the Anime palette whose night sky is still the palette's old one (ANIME_NIGHT_BEFORE_26) and whose every other
+     * colour is the palette's (or, missing, at its default: a file older than those colours) takes the new night sky, so it stays on the
+     * palette it chose. Returns whether it did.
+     */
+    static boolean moveOldAnimeNight(VisualsConfig c, java.util.Set<Colour> missing) {
+        if (c.colourPreset != ANIME || c.colour(Colour.NIGHT_SKY) != ANIME_NIGHT_BEFORE_26) return false;
+        for (Colour colour : Colour.values()) {
+            if (colour == Colour.NIGHT_SKY) continue;
+            boolean old = missing.contains(colour) && c.colour(colour) == colour.defaultRgb();
+            if (!old && c.colour(colour) != value(colour, ANIME)) return false;
+        }
+        c.setColour(Colour.NIGHT_SKY, value(Colour.NIGHT_SKY, ANIME));
         return true;
     }
 

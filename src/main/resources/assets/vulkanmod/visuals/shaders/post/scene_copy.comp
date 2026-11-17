@@ -829,6 +829,29 @@ vec3 auroraScreen(vec3 dir, ivec2 p) {
     return auroraSky(dir, p);
 }
 
+//2026-11-17 (the night clouds, atmosphere.glsl NIGHT_CLOUD_LIGHT): the Anime stars' Milky Way band's soft glow in dir (animeStars' glow
+// term, without its stars or the moon's and fan's cut-outs; a desert's band alone over the other star types at -x times starGate.z, turned
+// lavender by starGate.w), which the night clouds take with the sky behind them; 0 without the band. Per direction, so a cloud lit over the
+// sky and over far terrain is lit alike
+vec3 nightCloudBand(Atmosphere a, vec3 dir) {
+    float brightness = animeStarParams.x < 0.0 ? -animeStarParams.x*clamp(starGate.z, 0.0, 1.0) : animeStarParams.x;
+    if (!(brightness > 0.0) || !(animeStarParams.w > 0.5) || !(starGate.x > 0.0)) {
+        return vec3(0.0);
+    }
+    float weight = min(starGate.x, STAR_GATE_MAX)*min(starGate.x, 1.0)*animeHorizon(dir.y);
+    if (!(weight > 0.0)) {
+        return vec3(0.0);
+    }
+    float r = textureLod(galaxyMap, galaxyMapCoord(animeSkyDir(dir, a.sun.xyz)), 0.0).r;
+    vec3 colour = mix(vec3(ANIME_BAND_R, ANIME_BAND_G, ANIME_BAND_B), vec3(ANIME_LAVENDER_R, ANIME_LAVENDER_G, ANIME_LAVENDER_B),
+            clamp(starGate.w, 0.0, 1.0));
+    vec3 band = r*r*ANIME_MAP_SCALE*ANIME_BAND_BRIGHTNESS*colour*brightness*weight;
+#ifdef ATMOSPHERE_TINTS
+    band *= starTint.rgb;//the star colour, as on the band itself
+#endif
+    return band;
+}
+
 vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) {
     if (cloudShape.w < 0.5 || !atmosphereSky(a)) {
         return colour;
@@ -848,7 +871,8 @@ vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) 
     if (!(m.z > 0.0)) {
         return colour;//no cloud in front: no haze to evaluate
     }
-    vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0);
+    vec3 band = nightClouds(a) > 0.0 ? nightCloudBand(a, dir) : vec3(0.0);
+    vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0, band);
     return colour*(1.0 - r.a) + r.rgb;
 }
 
