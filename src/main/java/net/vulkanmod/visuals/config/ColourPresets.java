@@ -4,6 +4,7 @@ import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
+import net.vulkanmod.visuals.render.StarMath;
 
 import java.util.function.ToIntFunction;
 
@@ -172,6 +173,27 @@ public final class ColourPresets {
     }
 
     /**
+     * 2026-11-17 (shader roadmap session 12 follow-up, the user approved: "Yes, link them"): the star type, linked as the clouds are. ANIME
+     * picks the anime stars (StarMath.TYPE_ANIME, the painted night with the teal Milky Way) and shows only while they are on (changing the
+     * star type by hand shows Custom); every other palette leaves the star type as the player set it, the anime stars too. The star type is
+     * not a performance setting, so the performance presets never change it (VisualsPresets.VALUES has no star_type).
+     */
+    public static final String STAR_KEY = "star_type";
+    /** stars' answer for a palette that leaves the star type alone. */
+    public static final int ANY_STARS = -1;
+
+    /** The star type palette level picks (StarMath.TYPE_ANIME for ANIME), or ANY_STARS. */
+    public static int stars(int level) {
+        return level == ANIME ? StarMath.TYPE_ANIME : ANY_STARS;
+    }
+
+    /** The star type choosing palette level leaves, from the current type (stars; every palette but ANIME keeps it). */
+    public static int starType(int level, int type) {
+        int own = stars(level);
+        return own == ANY_STARS ? type : own;
+    }
+
+    /**
      * 2026-11-14 (the user: "in the Horror preset, turn the aurora off automatically"): the aurora mode is the second performance setting
      * a palette touches. HORROR turns the auroras off (and shows only while they are off); another palette takes them back on to the
      * performance preset's mode when they are off and the preset is a level, so going Horror and back restores the sky it had (under a
@@ -192,12 +214,13 @@ public final class ColourPresets {
         return false;
     }
 
-    /** Sets every colour and look setting to the palette's, the cloud style (cloudStyle) and the aurora mode (aurora); CUSTOM (or anything else) changes nothing. Records the choice. */
+    /** Sets every colour and look setting to the palette's, the cloud style (cloudStyle), the star type (starType) and the aurora mode (aurora); CUSTOM (or anything else) changes nothing. Records the choice. */
     public static void apply(VisualsConfig c, int level) {
         if (isLevel(level)) {
             for (Colour colour : Colour.values()) c.setColour(colour, value(colour, level));
             for (String key : LOOK_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), look(key, level));
             c.cloudStyle = cloudStyle(level, c.cloudStyle);
+            c.starType = starType(level, c.starType);
             c.aurora = aurora(level, c.aurora, c.preset);
         }
         c.colourPreset = isLevel(level) ? level : CUSTOM;
@@ -206,7 +229,8 @@ public final class ColourPresets {
     /**
      * The palette the colours and look settings are all on (the first, so DEFAULT before the others), or CUSTOM. looks gives a look
      * setting's value by key, and the cloud style's (CLOUD_KEY) and aurora mode's (AURORA_KEY): ANIME also needs the anime clouds,
-     * REALISTIC and CINEMATIC the realistic ones (clouds), HORROR the auroras off.
+     * REALISTIC and CINEMATIC the realistic ones (clouds), HORROR the auroras off; and the star type's (STAR_KEY): ANIME also needs the
+     * anime stars (stars).
      */
     public static int detect(ToIntFunction<Colour> colours, ToIntFunction<String> looks) {
         for (int level = 0; level < LEVELS; level++) {
@@ -219,6 +243,7 @@ public final class ColourPresets {
             }
             for (int i = 0; all && i < LOOK_KEYS.length; i++) all = looks.applyAsInt(LOOK_KEYS[i]) == LOOK[level][i];
             if (all && clouds(level) != ANY_CLOUDS) all = looks.applyAsInt(CLOUD_KEY) == clouds(level);
+            if (all && stars(level) != ANY_STARS) all = looks.applyAsInt(STAR_KEY) == stars(level);
             if (all && level == HORROR) all = looks.applyAsInt(AURORA_KEY) == CelestialUniforms.AURORA_OFF;
             if (all) return level;
         }

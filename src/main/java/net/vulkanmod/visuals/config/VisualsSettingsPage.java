@@ -128,6 +128,14 @@ public final class VisualsSettingsPage {
         //Session 11: the cloud style also moves the colour palette (Anime needs the anime clouds), so the preset's link runs the palette's too
         Runnable paletteFollow = linkColourPreset(byKey, allByKey);
         linkPreset(byKey, refresh, paletteFollow);
+        //2026-11-17: the star type moves the colour palette too (Anime needs the anime stars); it is no performance setting
+        Option<?> starType = byKey.get(ColourPresets.STAR_KEY);
+        if (starType != null) {
+            starType.setOnChange(() -> {
+                paletteFollow.run();
+                refresh.run();
+            });
+        }
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
         excludeEachOther(byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), byKey.get(VisualsOptionLayout.FRAME_GENERATION), refresh);
@@ -223,6 +231,12 @@ public final class VisualsSettingsPage {
                 if (clouds != null) {
                     int style = ColourPresets.cloudStyle(level, intValue(clouds));
                     if (style != intValue(clouds)) show(clouds, VisualsOptionLayout.item(ColourPresets.CLOUD_KEY), style);
+                }
+                //2026-11-17: Anime shows the anime stars; every other palette leaves the star type
+                Option<?> stars = byKey.get(ColourPresets.STAR_KEY);
+                if (stars != null) {
+                    int type = ColourPresets.starType(level, intValue(stars));
+                    if (type != intValue(stars)) show(stars, VisualsOptionLayout.item(ColourPresets.STAR_KEY), type);
                 }
                 //2026-11-14: Horror shows the auroras off; another palette takes them back to the performance preset's mode
                 Option<?> aurora = byKey.get(ColourPresets.AURORA_KEY);
