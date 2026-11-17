@@ -10,6 +10,7 @@ import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
+import net.vulkanmod.visuals.render.StarMath;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,8 +70,12 @@ public class VisualsConfig {
      * 23 (2026-11-15, session 25): Footprints (footprints), which the presets set; likewise.
      * 24 (2026-11-16): the Realistic and Cinematic palettes pick the realistic clouds (ColourPresets.clouds); a file on one of them takes
      * the realistic clouds and stays on it; any other file keeps its cloud style.
+     * 25 (2026-11-17, session 12 follow-up): the Anime palette picks the anime stars (ColourPresets.stars); a file on it takes the anime
+     * stars and stays on it; any other file keeps its star type.
      */
-    private static final int REVISION = 24;
+    private static final int REVISION = 25;
+    /** 2026-11-17: the first revision whose Anime palette includes the anime stars. */
+    static final int PALETTE_STARS_REVISION = 25;
     /** 2026-11-16: the first revision whose Realistic and Cinematic palettes include the realistic clouds. */
     static final int PALETTE_CLOUDS_REVISION = 24;
     /** Session 25: the first revision with Footprints. */
@@ -224,6 +229,14 @@ public class VisualsConfig {
             java.util.Map<String, Integer> before = new java.util.HashMap<>(ColourPresets.TONE_BEFORE_18);
             if (fileRevision < MOONLIGHT_REVISION) before.put("moonlight", ColourPresets.MOONLIGHT_BEFORE_16);
             ColourPresets.moveNewLooks(c, before);
+        }
+        //2026-11-17: a file saved on the Anime palette before it included the anime stars takes them (and stays on the palette); first,
+        // so the anime clouds' check below finds them (for a file older than both, the clouds it takes there are assumed here too)
+        if (fileRevision < PALETTE_STARS_REVISION && c.colourPreset == ColourPresets.ANIME
+                && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.STAR_KEY) ? StarMath.TYPE_ANIME
+                : key.equals(ColourPresets.CLOUD_KEY) && fileRevision < ANIME_CLOUDS_REVISION ? CloudMath.STYLE_ANIME
+                : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
+            c.starType = StarMath.TYPE_ANIME;
         }
         //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
         if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
