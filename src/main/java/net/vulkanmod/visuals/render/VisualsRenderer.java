@@ -60,6 +60,11 @@ public final class VisualsRenderer {
     /** The far clouds' and the light shafts' reach without an LOD distance: 16 sections of 512 blocks, the LOD default it was tuned at. */
     static final float FAR_SECTIONS = 16;
 
+    /** 2026-11-18: the moon's shadow strength (MoonShadowMath.strength) in a level with sky light, else 0. */
+    static float moonStrength(PostProcessSettings settings, ClientLevel level) {
+        return level != null && level.dimensionType().hasSkyLight() ? MoonShadowMath.strength(settings.moonlight(), level.getMoonPhase()) : 0;
+    }
+
     /** The far clouds' and the shafts' reach in LOD sections: the extension's LOD distance when it supplied inputs this frame, else the default. */
     static float farSections(LodInputs lod) {
         return lod == null ? FAR_SECTIONS : lod.lodDistanceSections();
@@ -310,8 +315,10 @@ public final class VisualsRenderer {
                     if (server != null) FrameRecorder.set(FrameRecorder.SERVER_DAY_TIME, server.overworld().getDayTime());
                 }
             }
+            //2026-11-18: at night the moon's views (MoonShadowMath), by the moonlight setting and the moon's phase
             this.shadowFrame = this.shadowsOn() ? ShadowFrame.of(serial, this.lightingChoice.sun(), plan.shadows(), shadowTime,
-                    level != null ? level.getRainLevel(partialTick) : 0, this.skyExposure.value(), cameraX, cameraY, cameraZ, this.frameId) : null;
+                    level != null ? level.getRainLevel(partialTick) : 0, this.skyExposure.value(), cameraX, cameraY, cameraZ, this.frameId,
+                    moonStrength(settings, level)) : null;
             //2026-10-29: the entities drawn after this cast into the entity shadow map when this frame has sun shadows
             EntityShadowCapture.beginFrame(serial, this.shadowFrame != null && this.entityShadows != null && VisualsConfig.get().entityShadows, modelView);
 
@@ -845,7 +852,7 @@ public final class VisualsRenderer {
                     camera.x, camera.y, camera.z, settings.portalGlow());
             //2026-11-10 (session 8): with the picked block light and moon colours (slots 31, 32)
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
-                    atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight).tinted(settings.colours());
+                    atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight, moonStrength(settings, level)).tinted(settings.colours());
             //P7j design 3.3, P7f-2: the last valid cascades, rebased to this frame's sun views (which exist only when this frame
             // prepared the maps); never after a shadow failure
             boolean shadowsOn = this.shadowsOn();
