@@ -62,6 +62,11 @@ const float SHADE_LEVEL = 0.65;
 const float SUN_LEVEL = 2.88;
 const float LOW_SUN_SHADE_LEVEL = 0.55;
 const float LOW_SUN_SUN_LEVEL = 1.1;
+//2026-11-18 (moon shadows): the levels by moonlight, a sun term of -1 (LightingMath.lightTerm: the sun below the horizon); the moonlit
+// ground keeps about the night's brightness, the moon's shade falls well below it (with the low sun's levels it was about 15% darker on
+// screen, too faint)
+const float MOON_SHADE_LEVEL = 0.3;
+const float MOON_SUN_LEVEL = 1.1;
 const float SUN_TERM_LOW = 0.2;
 const float SUN_TERM_HIGH = 0.8;
 const float FACING_MAX = 1.5;
@@ -118,11 +123,13 @@ float sunShare(float direct, float skyLight) {
 
 //The shade and sun levels for the sun term t (slot 10 .w)
 float shadeLevel(float sunTerm) {
-    return mix(LOW_SUN_SHADE_LEVEL, SHADE_LEVEL, clamp(sunTerm, 0.0, 1.0));
+    return sunTerm < 0.0 ? mix(LOW_SUN_SHADE_LEVEL, MOON_SHADE_LEVEL, clamp(-sunTerm, 0.0, 1.0))
+            : mix(LOW_SUN_SHADE_LEVEL, SHADE_LEVEL, clamp(sunTerm, 0.0, 1.0));
 }
 
 float sunLevel(float sunTerm) {
-    return mix(LOW_SUN_SUN_LEVEL, SUN_LEVEL, clamp(sunTerm, 0.0, 1.0));
+    return sunTerm < 0.0 ? mix(LOW_SUN_SUN_LEVEL, MOON_SUN_LEVEL, clamp(-sunTerm, 0.0, 1.0))
+            : mix(LOW_SUN_SUN_LEVEL, SUN_LEVEL, clamp(sunTerm, 0.0, 1.0));
 }
 
 //The factor on a pixel's sky-lit light. direct = F*V (or plantSun); sunTerm is slot 10 .w; sunWeight 0 gives 1 (the vanilla look)

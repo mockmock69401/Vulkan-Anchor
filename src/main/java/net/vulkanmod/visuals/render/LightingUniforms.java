@@ -123,6 +123,16 @@ public final class LightingUniforms {
      */
     public static Values compute(PostProcessSettings s, LightingChoice choice, AtmosphereFrame frame, long serial, boolean lodValid, float skyExposure,
                                  boolean vanillaCopies, boolean hasSky) {
+        return compute(s, choice, frame, serial, lodValid, skyExposure, vanillaCopies, hasSky, 0);
+    }
+
+    /**
+     * 2026-11-18: moonStrength is MoonShadowMath.strength (the moonlight setting and the moon's phase; 0: no moon shading). With the sun
+     * below the horizon lighting.comp's light (sunView) is the moon and the sun weight the moon's (MoonShadowMath.weight), so the moon
+     * casts the shadows; the light's colour, the sun term (the low sun's levels at night) and the exposures stay the sun's.
+     */
+    public static Values compute(PostProcessSettings s, LightingChoice choice, AtmosphereFrame frame, long serial, boolean lodValid, float skyExposure,
+                                 boolean vanillaCopies, boolean hasSky, float moonStrength) {
         if (frame == null || frame.serial() != serial) return off(1, 0, s.blockLightColour(), s.blockGlow(), s.oreGlow(), s.blockReflections());
         if (choice.serial() != serial || !choice.any()) {
             float up = hasSky ? SunMath.dayFactor(SunMath.sunDirection(frame.timeOfDay()).y, 0) : 0;
@@ -130,16 +140,17 @@ public final class LightingUniforms {
         }
         Vector3f sun = SunMath.sunDirection(frame.timeOfDay());
         Matrix4f modelView = new Matrix4f(frame.invModelView()).invert();
-        Vector3f view = modelView.transformDirection(new Vector3f(sun)).normalize();
+        Vector3f view = modelView.transformDirection(MoonShadowMath.lightDirection(frame.timeOfDay())).normalize();
         Vector3f up = modelView.transformDirection(new Vector3f(0, 1, 0)).normalize();
         Vector3f east = modelView.transformDirection(new Vector3f(1, 0, 0)).normalize();
         float day = SunMath.dayFactor(sun.y, frame.rain());
-        float sunDay = day * Math.max(0, Math.min(1, skyExposure));
-        float sunWeight = choice.sun() ? s.sunShading() * sunDay : 0;
+        float exposure = Math.max(0, Math.min(1, skyExposure));
+        float sunDay = day * exposure;
+        float sunWeight = choice.sun() ? s.sunShading() * MoonShadowMath.weight(frame.timeOfDay(), frame.rain(), hasSky ? moonStrength : 0) * exposure : 0;
         return new Values(true, frame.invVanillaProjection(), frame.invLodProjection(), new Matrix4f(frame.invVanillaProjection()).invert(),
                 new float[]{view.x, view.y, view.z}, lodValid, choice.ao() ? s.aoStrength() : 0, sunWeight, new float[]{up.x, up.y, up.z},
                 vanillaCopies, choice.water() ? s.waterDepth() : 0, WaterMath.ambient(day), (float) (frame.cameraY() - Math.floor(frame.cameraY())),
-                lightSun(ColourMath.sunLight(sun.y, s.sunWarmth()), ColourMath.skyShade(s.sunWarmth(), sun.y), choice.sun() ? s.lightColour() : 0, choice.sun() ? sunDay : 0), LightingMath.sunHeightTerm(sun.y),
+                lightSun(ColourMath.sunLight(sun.y, s.sunWarmth()), ColourMath.skyShade(s.sunWarmth(), sun.y), choice.sun() ? s.lightColour() : 0, choice.sun() ? sunDay : 0), LightingMath.lightTerm(sun.y),
                 SunMath.dayFactor(sun.y, 0), SunMath.dayFactor(sun.y, 0) * Math.max(0, Math.min(1, skyExposure)), new float[]{east.x, east.y, east.z},
                 s.blockLightColour(), choice.sun() && hasSky ? moonStrength(s.lightColour(), sun.y) : 0, s.blockGlow(), s.oreGlow(), s.blockReflections());
     }

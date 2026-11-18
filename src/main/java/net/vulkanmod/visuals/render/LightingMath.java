@@ -25,6 +25,12 @@ public final class LightingMath {
     public static final float SHADE_LEVEL = 0.65f, SUN_LEVEL = 2.88f;
     /** The same with a low sun (sun term 0): round 1's levels, which the sunset (S2) matched with. */
     public static final float LOW_SUN_SHADE_LEVEL = 0.55f, LOW_SUN_SUN_LEVEL = 1.1f;
+    /**
+     * 2026-11-18 (moon shadows, MoonShadowMath): the levels by moonlight, which a sun term of -1 selects (LightingUniforms sends it while
+     * the sun is below the horizon). The moonlit ground keeps about the night's brightness and the shade falls well below it: with the
+     * low sun's levels the moon's shadows were about 15% darker on screen than the snow around them, too faint next to the references.
+     */
+    public static final float MOON_SHADE_LEVEL = 0.3f, MOON_SUN_LEVEL = 1.1f;
     /** The sun term (sunHeightTerm) runs from 0 at sin(elevation) SUN_TERM_LOW to 1 at SUN_TERM_HIGH. */
     public static final float SUN_TERM_LOW = 0.2f, SUN_TERM_HIGH = 0.8f;
     /** The relative facing's cap (lightOut.g). */
@@ -121,12 +127,18 @@ public final class LightingMath {
         return smoothstep(SUN_TERM_LOW, SUN_TERM_HIGH, sunHeight);
     }
 
+    /** 2026-11-18: a negative term moves from the low sun's levels to the moon's (-1). */
     public static float shadeLevel(float sunTerm) {
-        return mix(LOW_SUN_SHADE_LEVEL, SHADE_LEVEL, clamp01(sunTerm));
+        return sunTerm < 0 ? mix(LOW_SUN_SHADE_LEVEL, MOON_SHADE_LEVEL, clamp01(-sunTerm)) : mix(LOW_SUN_SHADE_LEVEL, SHADE_LEVEL, clamp01(sunTerm));
     }
 
     public static float sunLevel(float sunTerm) {
-        return mix(LOW_SUN_SUN_LEVEL, SUN_LEVEL, clamp01(sunTerm));
+        return sunTerm < 0 ? mix(LOW_SUN_SUN_LEVEL, MOON_SUN_LEVEL, clamp01(-sunTerm)) : mix(LOW_SUN_SUN_LEVEL, SUN_LEVEL, clamp01(sunTerm));
+    }
+
+    /** 2026-11-18: the term the composite gets: sunHeightTerm by day, -1 (the moon's levels) with the sun below the horizon. */
+    public static float lightTerm(float sunHeight) {
+        return sunHeight < 0 ? -1 : sunHeightTerm(sunHeight);
     }
 
     static float clamp01(float v) {
