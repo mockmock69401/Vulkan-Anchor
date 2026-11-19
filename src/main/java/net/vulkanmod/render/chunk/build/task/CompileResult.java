@@ -1,5 +1,6 @@
 package net.vulkanmod.render.chunk.build.task;
 
+import net.vulkanmod.render.chunk.build.ObeBlockEntities;
 import net.minecraft.client.renderer.chunk.VisibilitySet;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.vulkanmod.interfaces.VisibilitySetExtended;
@@ -160,5 +161,7 @@ public class CompileResult {
         this.renderSection.setVisibility(((VisibilitySetExtended)visibilitySet).getVisibility());
         this.renderSection.setCompletelyEmpty(compiledSection.isCompletelyEmpty);
         this.renderSection.setContainsBlockEntities(!blockEntities.isEmpty());
+        //2026-11-19: Optimized Block Entities switches this section's block entities to the mode its mesh was built for
+        ObeBlockEntities.sectionCompiled(this.renderSection.xOffset(), this.renderSection.yOffset(), this.renderSection.zOffset());
     }
 }

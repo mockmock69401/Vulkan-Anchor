@@ -22,6 +22,7 @@ import net.minecraft.server.level.BlockDestructionProgress;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.vulkanmod.render.chunk.build.ObeBlockEntities;
 import net.minecraft.world.phys.Vec3;
 import net.vulkanmod.Initializer;
 import net.vulkanmod.compat.sable.aeronautics.AeronauticsWorldLayers;
@@ -479,11 +480,16 @@ public class WorldRenderer {
         var blockEntitiesSections = this.sectionGraph.getBlockEntitiesSections();
         final int blockEntitySectionCount = blockEntitiesSections.size();
         final boolean blockEntityCulling = Initializer.CONFIG.blockEntityCulling;
+        final boolean obe = ObeBlockEntities.active();
         for (int sectionIdx = 0; sectionIdx < blockEntitySectionCount; sectionIdx++) {
             RenderSection renderSection = blockEntitiesSections.get(sectionIdx);
             List<BlockEntity> list = renderSection.getCompiledSection().getBlockEntities();
             if (!list.isEmpty()) {
                 for (BlockEntity blockEntity : list) {
+                    //2026-11-19: Optimized Block Entities draws it in the mesh, or it has nothing to show
+                    if (obe && ObeBlockEntities.skipEntity(blockEntity)) {
+                        continue;
+                    }
                     BlockPos blockPos = blockEntity.getBlockPos();
                     if (blockEntityCulling) {
                         double dx = (double) blockPos.getX() + 0.5 - camX;

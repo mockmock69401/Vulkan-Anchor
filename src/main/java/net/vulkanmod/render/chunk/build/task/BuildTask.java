@@ -7,6 +7,8 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.chunk.VisGraph;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
+import net.vulkanmod.render.chunk.build.ObeBlockEntities;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -135,6 +137,8 @@ public class BuildTask extends ChunkTask {
 
             BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
             RandomSource randomSource = builderResources.randomSource;
+            boolean obe = ObeBlockEntities.active();
+            SectionPos sectionPos = SectionPos.of(startBlockPos);
 
             for (int y = 0; y < 16; ++y) {
                 if (this.cancelled.get() || this.section.getBuildRevision() != this.buildRevision) {
@@ -149,8 +153,9 @@ public class BuildTask extends ChunkTask {
                             visGraph.setOpaque(blockPos);
                         }
 
+                        BlockEntity blockEntity = null;
                         if (blockState.hasBlockEntity()) {
-                            BlockEntity blockEntity = this.region.getBlockEntity(blockPos);
+                            blockEntity = this.region.getBlockEntity(blockPos);
                             if (blockEntity != null) {
                                 this.handleBlockEntity(compileResult, blockEntity);
                             }
@@ -169,8 +174,11 @@ public class BuildTask extends ChunkTask {
                             liquidRenderer.renderLiquid(blockState, fluidState, blockPos, bufferBuilder);
                         }
 
-                        if (blockState.getRenderShape() == RenderShape.MODEL) {
+                        //2026-11-19: Optimized Block Entities' block entities drawn as models (ObeBlockEntities)
+                        RenderShape shape = obe ? ObeBlockEntities.renderShape(blockState, blockEntity, sectionPos) : blockState.getRenderShape();
+                        if (shape == RenderShape.MODEL) {
                             BakedModel model = Minecraft.getInstance().getBlockRenderer().getBlockModel(blockState);
+                            if (obe) model = ObeBlockEntities.model(blockState, blockPos, model, blockEntity);
                             ModelData modelData = getModelData(blockPos, blockState, model);
                             randomSource.setSeed(blockState.getSeed(blockPos));
                             ChunkRenderTypeSet renderTypes = model.getRenderTypes(blockState, randomSource, modelData);
