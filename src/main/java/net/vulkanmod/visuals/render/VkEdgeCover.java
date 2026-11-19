@@ -56,7 +56,7 @@ public final class VkEdgeCover {
     static final int MAX_QUADS = 1 << 17;
     /** A frame slot's first buffer (about 21000 quads). */
     static final long INITIAL_BYTES = 1 << 20;
-    /** The grid is searched for new faces every this many frames; faces whose hole was built go every frame. */
+    /** The grid is searched for new faces once every this many frames, a share of it each frame; faces whose hole was built go every frame. */
     static final int SCAN_FRAMES = 4;
     /** The quads' origin moves when the camera is this far (blocks) from it, and every face is rebuilt. */
     static final int ORIGIN_REACH = 1024;
@@ -75,6 +75,11 @@ public final class VkEdgeCover {
     private final LooseUniformWriter loose;
     private final long atlasSampler = VkSamplers.nearestClamp(), lightSampler = VkSamplers.linearClamp();
     private final Map<EdgeCover.Face, Built> built = new HashMap<>();
+    /** The faces the scan cycle's parts found so far (scan). */
+    private Map<EdgeCover.Face, RenderSection> scanFaces = new HashMap<>();
+    /** The scan part's memos (Holes), kept between parts. */
+    private final IdentityHashMap<RenderSection, Boolean> holeMemo = new IdentityHashMap<>();
+    private final it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap readyMemo = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
     private final Map<Integer, Slot> slots = new HashMap<>();
     /**
      * A 1x1 depth bound in place of the LOD depth when there is none (never read: the compare flag is 0). It is its own image, kept
@@ -126,6 +131,12 @@ public final class VkEdgeCover {
     private void clear() {
         if (!this.built.isEmpty()) this.version++;
         this.built.clear();
+        this.scanFaces.clear();
+    }
+
+    /** The first grid index part (0 .. SCAN_FRAMES) of a scan cycle searches; part SCAN_FRAMES gives the end. */
+    static int scanStart(int length, int part) {
+        return (int) ((long) length * part / SCAN_FRAMES);
     }
 
     //2026-10-30 (audit): the level the faces were built in (a dimension change with no frame without a level kept them up to a scan)
@@ -171,7 +182,7 @@ public final class VkEdgeCover {
                     this.version++;
                 }
             }
-            if (this.frame++ % SCAN_FRAMES == 0) this.scan(grid, graph, level, cx, cz);
+            this.scan(grid, graph, level, cx, cz, this.frame++ % SCAN_FRAMES);
             this.write(deferred);
         } catch (RuntimeException | LinkageError e) {
             this.disabled = true;
@@ -180,11 +191,23 @@ public final class VkEdgeCover {
         }
     }
 
-    /** The grid's faces next to holes: those gone are dropped, new ones built within the time budget. */
-    private void scan(SectionGrid grid, net.vulkanmod.render.chunk.graph.SectionGraph graph, ClientLevel level, int cx, int cz) {
-        Holes holes = new Holes((short) graph.getLastFrame(), level, cx >> 4, cz >> 4, Minecraft.getInstance().options.getEffectiveRenderDistance());
-        Map<EdgeCover.Face, RenderSection> faces = new HashMap<>();
-        for (RenderSection s : grid.sections) {
+    /**
+     * One part of the search for the grid's faces next to holes: part (0 .. SCAN_FRAMES - 1) searches that share of the grid. The last
+     * part drops the faces gone and builds new ones within the time budget. 2026-11-19 (frame-drop test, render distance 24): the whole
+     * grid at once cost 0.6-1.4 ms on one frame in four, which the frame waits for; a share a frame spreads the same search evenly.
+     */
+    private void scan(SectionGrid grid, net.vulkanmod.render.chunk.graph.SectionGraph graph, ClientLevel level, int cx, int cz, int part) {
+        //The memos are this part's (the traversal's frame changes between parts), their tables kept: rebuilt and grown every scan they
+        // were most of the render thread's own garbage at render distance 24
+        this.holeMemo.clear();
+        this.readyMemo.clear();
+        Holes holes = new Holes((short) graph.getLastFrame(), level, cx >> 4, cz >> 4, Minecraft.getInstance().options.getEffectiveRenderDistance(),
+                this.holeMemo, this.readyMemo);
+        Map<EdgeCover.Face, RenderSection> faces = this.scanFaces;
+        RenderSection[] sections = grid.sections;
+        int from = scanStart(sections.length, part), to = scanStart(sections.length, part + 1);
+        for (int i = from; i < to; i++) {
+            RenderSection s = sections[i];
             if (s == null || !s.isCompiled() || s.isCompletelyEmpty()) continue;
             //Gate L-move: a section VulkanMod draws: built and its chunk render-ready (a section the ring moved keeps a stale build)
             if (!holes.ready(s.xOffset() >> 4, s.zOffset() >> 4)) continue;
@@ -194,6 +217,8 @@ public final class VkEdgeCover {
             this.face(faces, holes, s, s.adjNorth, EdgeCover.NEG_Z);
             this.face(faces, holes, s, s.adjSouth, EdgeCover.POS_Z);
         }
+        if (part < SCAN_FRAMES - 1) return;
+        this.scanFaces = new HashMap<>();
         if (this.built.keySet().retainAll(faces.keySet())) this.version++;
         if (faces.isEmpty()) return;
         LevelBlocks blocks = new LevelBlocks(level);
@@ -335,11 +360,7 @@ public final class VkEdgeCover {
      */
     private record Holes(short frame, ClientLevel level, int camChunkX, int camChunkZ, int renderDistance,
                          IdentityHashMap<RenderSection, Boolean> memo, it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap readyMemo) {
-        Holes(short frame, ClientLevel level, int camChunkX, int camChunkZ, int renderDistance) {
-            this(frame, level, camChunkX, camChunkZ, renderDistance, new IdentityHashMap<>(), new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap());
-        }
-
-        /** VulkanMod draws the chunk's sections (its ChunkStatusMap: data, light and neighbours ready). Once a scan a chunk. */
+        /** VulkanMod draws the chunk's sections (its ChunkStatusMap: data, light and neighbours ready). Once a scan part a chunk. */
         boolean ready(int cx, int cz) {
             long key = net.minecraft.world.level.ChunkPos.asLong(cx, cz);
             if (this.readyMemo.containsKey(key)) return this.readyMemo.get(key);

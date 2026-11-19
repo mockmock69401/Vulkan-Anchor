@@ -33,6 +33,19 @@ class EdgeCoverWiringTest {
         assertEquals(2, VkEdgeCover.QUADS);
     }
 
+    /** 2026-11-19: a scan cycle's parts search the whole grid once, each section in one part, in about equal shares. */
+    @Test
+    void theScanPartsCoverTheGridOnce() {
+        for (int length : new int[]{0, 1, 3, 4, 7, 57624, 49 * 49 * 24 + 1}) {
+            assertEquals(0, VkEdgeCover.scanStart(length, 0));
+            assertEquals(length, VkEdgeCover.scanStart(length, VkEdgeCover.SCAN_FRAMES));
+            for (int part = 0; part < VkEdgeCover.SCAN_FRAMES; part++) {
+                int share = VkEdgeCover.scanStart(length, part + 1) - VkEdgeCover.scanStart(length, part);
+                assertTrue(share >= length / VkEdgeCover.SCAN_FRAMES && share <= length / VkEdgeCover.SCAN_FRAMES + 1, length + " part " + part);
+            }
+        }
+    }
+
     @Test
     void theShaderBuildsSixVerticesAQuadAndRepeatsTheTexture() throws Exception {
         String vert = read("assets/vulkanmod/visuals/shaders/post/edge_cover.vert");
