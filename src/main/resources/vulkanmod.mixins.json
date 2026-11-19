@@ -190,6 +190,7 @@
     "visuals.FogRendererUnderwaterMixin",
     "visuals.LevelRendererFrameTimesMixin",
     "visuals.LevelRendererEntityShadowMixin",
+    "visuals.EntityRenderDispatcherShadowMixin",
     "visuals.MouseHandlerLatencyMixin",
     "visuals.ScreenshotFrameGenMixin",
     "visuals.ParticleTagMixin",

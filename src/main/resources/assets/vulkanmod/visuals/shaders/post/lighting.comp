@@ -60,6 +60,10 @@ layout(location = 18) uniform vec4 entityParams;//x 1 when the entity map was dr
 // the sharp lookups as before), y the widest half width and the blocker search's radius (blocks), z the frame's index (0..63), which
 // turns the taps
 layout(location = 19) uniform vec4 softParams;
+//2026-11-19 (ShadowMath.fillParams): x how far from the camera (blocks, on both horizontal axes) the close and near maps surely hold the
+// vanilla casters, 0 = off; y the band before it over which the far map's casters beyond fade in; z the least distance (blocks toward
+// the sun) of a far blocker that counts, w the band over which it comes in
+layout(location = 20) uniform vec4 fillParams;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -392,17 +396,74 @@ float cascade(sampler2D mapA, sampler2D mapB, mat4 mA, mat4 mB, float weightB, v
     return v;
 }
 
+//2026-11-19 (the user: near mountains, the shadows of forests outside the chunks appeared all at once as they came in): the close and
+// near maps take the vanilla terrain only within the shadow distance, so a tree past it cast nothing into them and its shadow, on
+// ground inside them, popped in once the tree crossed. The far map holds the terrain out to the render distance: where its blocker over
+// pos lies past fillParams.x (its distance toward the sun from the depths of the lookup's gather, ShadowMath.fillReach), the far map's
+// visibility is taken (the bilinear lookup, pcf, of the same gather; the sun-step's second map mixed in), else 1. The callers keep the
+// darker of it and the finer map's. A blocker within fillParams.z blocks of pos (the far map's own coarse ground) does not count.
+float farGather(sampler2D map, mat4 m, vec3 p, out float ref, out vec4 d, out vec2 f) {
+    vec3 clip = (m*vec4(p, 1.0)).xyz;
+    if (!insideMap(clip)) {
+        return -1.0;
+    }
+    ref = clip.z - shadowBias.w;
+    vec2 size = vec2(textureSize(map, 0));
+    vec2 t = (clip.xy*0.5 + 0.5)*size - 0.5;
+    f = fract(t);
+    d = textureGather(map, (floor(t) + 1.0)/size, 0);
+    vec4 lit = step(vec4(ref), d);
+    return mix(mix(lit.w, lit.z, f.x), mix(lit.x, lit.y, f.x), f.y);
+}
+
+float farFill(vec3 pos, vec3 n) {
+    if (fillParams.x <= 0.0 || shadowParams.y < 0.5) {
+        return 1.0;
+    }
+    vec3 p = pos + n*shadowBias.z;
+    float ref;
+    vec4 d;
+    vec2 f;
+    float v = farGather(shadowFarMap, shadowFar, p, ref, d, f);
+    if (v < 0.0 || v >= 1.0) {
+        return 1.0;
+    }
+    vec4 blocked = 1.0 - step(vec4(ref), d);
+    float zScale = length(vec3(shadowFar[0][2], shadowFar[1][2], shadowFar[2][2]));
+    float above = (ref - dot(blocked, d)/max(dot(blocked, vec4(1.0)), 1.0))/max(zScale, 1e-9);
+    vec3 at = pos + normalize(sunView.xyz)*above;
+    vec3 south = cross(eastView.xyz, upView.xyz);
+    float reach = max(abs(dot(at, eastView.xyz)), abs(dot(at, south)));
+    float w = smoothstep(fillParams.x - fillParams.y, fillParams.x, reach)*smoothstep(fillParams.z, fillParams.z + fillParams.w, above);
+    if (w <= 0.0) {
+        return 1.0;
+    }
+    if (shadowSteps.y > 0.0) {
+        float refB;
+        vec4 dB;
+        vec2 fB;
+        float vB = farGather(shadowFarMapB, shadowFarB, p, refB, dB, fB);
+        if (vB >= 0.0) {
+            v = mix(v, vB, shadowSteps.y);
+        }
+    }
+    return mix(1.0, v, w);
+}
+
 //The sun's visibility at view-space pos: the close cascade (only with the near one), then the near, then the far, each fading into the
 // next across its blend band; what no drawn cascade covers is lit. n is the receiver's normal, along which pos moves by each cascade's
-// normal offset. LightingMath.combineCascades mirrors the order and the blend.
+// normal offset. LightingMath.combineCascades mirrors the order and the blend. The close and near ones take the darker of their own and
+// the far map's casters past their reach (farFill).
 float sunVisibility(vec3 pos, vec3 n, float fade, float wideBlocks) {
     float acc = 0.0;
     float rest = 1.0;
     float edge;
+    float fill = shadowParams.x > 0.5 ? farFill(pos, n) : 1.0;
     if (shadowParams.x > 0.5 && closeParams.x > 0.5) {
         float v = cascade(shadowCloseMap, shadowCloseMapB, shadowClose, shadowCloseB, closeParams.w, pos + n*closeParams.y, n,
                 closeParams.z, fade, wideBlocks, true, edge);
         if (v >= 0.0) {
+            v = min(v, fill);
             float w = 1.0 - bandWeight(edge);
             acc += rest*w*v;
             rest *= 1.0 - w;
@@ -412,6 +473,7 @@ float sunVisibility(vec3 pos, vec3 n, float fade, float wideBlocks) {
         float v = cascade(shadowNearMap, shadowNearMapB, shadowNear, shadowNearB, shadowSteps.x, pos + n*shadowBias.x, n, shadowBias.y,
                 fade, wideBlocks, true, edge);
         if (v >= 0.0) {
+            v = min(v, fill);
             float w = 1.0 - bandWeight(edge);
             acc += rest*w*v;
             rest *= 1.0 - w;
