@@ -14,7 +14,6 @@ public final class SceneCompositeMath {
     public static final float FACE_SHADE_DOWN = 0.5f, FACE_SHADE_UP = 1.0f, FACE_SHADE_NORTH_SOUTH = 0.8f, FACE_SHADE_WEST_EAST = 0.6f;
     /** The share of vanilla's face shade divided out of the sky-lit light at full sun weight. */
     public static final float FACE_UNSHADE = 1.0f;
-    public static final float FACE_AXIS_MIN = 0.999f;
     /** The share of vanilla's face shade baked into Distant Horizons' LOD colours. */
     public static final float LOD_FACE_SHADE_SHARE = 1.0f;
     /**
@@ -132,13 +131,9 @@ public final class SceneCompositeMath {
         return lm.linear(Math.max(0, Math.min(15, block)), Math.max(0, Math.min(15, sky)));
     }
 
-    /** The baked face shade (linear) of a world normal: getShade's value on block faces, 1 for anything else. */
+    /** The baked face shade (linear) of a world normal (faceShadeDisplay). */
     public static float bakedShade(float[] n) {
-        float ax = Math.abs(n[0]), ay = Math.abs(n[1]), az = Math.abs(n[2]);
-        if (ay >= FACE_AXIS_MIN) return PostMath.displayToLinear(n[1] > 0 ? FACE_SHADE_UP : FACE_SHADE_DOWN);
-        if (az >= FACE_AXIS_MIN) return PostMath.displayToLinear(FACE_SHADE_NORTH_SOUTH);
-        if (ax >= FACE_AXIS_MIN) return PostMath.displayToLinear(FACE_SHADE_WEST_EAST);
-        return 1;
+        return PostMath.displayToLinear(faceShadeDisplay(n));
     }
 
     public static float faceUnshade(float shade, float sunWeight) {
@@ -201,13 +196,13 @@ public final class SceneCompositeMath {
         return 1 + LIGHT_GLOW_GAIN * Math.max(strength, 0) * AtmosphereMath.smoothstep(LIGHT_GLOW_LOW, LIGHT_GLOW_HIGH, m);
     }
 
-    /** 2026-11-08: scene_copy.comp faceShadeDisplay: vanilla's face shade (display values) of a world normal, 1 off the axes. */
+    /**
+     * 2026-11-08: scene_copy.comp faceShadeDisplay: vanilla's face shade (display values) of a world normal. 2026-11-19: each axis's shade
+     * weighted by the normal's squared component along it, so it is continuous as a face turns off its axis; 1 for no normal (0, 0, 0).
+     */
     public static float faceShadeDisplay(float[] n) {
-        float ax = Math.abs(n[0]), ay = Math.abs(n[1]), az = Math.abs(n[2]);
-        if (ay >= FACE_AXIS_MIN) return n[1] > 0 ? FACE_SHADE_UP : FACE_SHADE_DOWN;
-        if (az >= FACE_AXIS_MIN) return FACE_SHADE_NORTH_SOUTH;
-        if (ax >= FACE_AXIS_MIN) return FACE_SHADE_WEST_EAST;
-        return 1;
+        float y = n[1] > 0 ? FACE_SHADE_UP : FACE_SHADE_DOWN;
+        return 1 + n[0] * n[0] * (FACE_SHADE_WEST_EAST - 1) + n[2] * n[2] * (FACE_SHADE_NORTH_SOUTH - 1) + n[1] * n[1] * (y - 1);
     }
 
     /**

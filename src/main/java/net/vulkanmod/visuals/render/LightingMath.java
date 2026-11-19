@@ -68,6 +68,16 @@ public final class LightingMath {
     /** leanNormal: below this length the leaned normal is world up. */
     public static final float LEAN_MIN_LENGTH = 1e-4f;
     public static final float NORMAL_SNAP_MIN = 0.8f;
+    /** 2026-11-19: lighting.glsl surfaceNormal's pull toward the block axis: its band near the camera and far (blocks of distance). */
+    public static final float SURFACE_SNAP_NEAR_LOW = 0.97f, SURFACE_SNAP_NEAR_HIGH = 0.99f, SURFACE_SNAP_FAR_HIGH = 0.82f;
+    public static final float SURFACE_SNAP_NEAR = 12.0f, SURFACE_SNAP_FAR = 40.0f;
+
+    /** lighting.glsl surfaceSnapWeight: how far a normal m close to its block axis is pulled to it, dist blocks away (0 none, 1 onto it). */
+    public static float surfaceSnapWeight(float m, float dist) {
+        float far = AtmosphereMath.smoothstep(SURFACE_SNAP_NEAR, SURFACE_SNAP_FAR, dist);
+        return AtmosphereMath.smoothstep(SURFACE_SNAP_NEAR_LOW + (NORMAL_SNAP_MIN - SURFACE_SNAP_NEAR_LOW) * far,
+                SURFACE_SNAP_NEAR_HIGH + (SURFACE_SNAP_FAR_HIGH - SURFACE_SNAP_NEAR_HIGH) * far, m);
+    }
 
     /**
      * lighting.glsl's depthTangent with all four neighbours: whether the tangent goes to side a (a, then a2 beyond it) rather than side b,
