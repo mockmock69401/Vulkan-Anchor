@@ -138,7 +138,7 @@
   "vulkanmod.visuals.hanging_sway": "Hanging Sway",
   "vulkanmod.visuals.hanging_sway.tooltip": "Hanging lanterns, chains and hanging plants (weeping and cave vines, hanging roots) swing in the wind about what they hang from, further in rain. A column fixed at its foot stays still. Percent of the default swing; 0: still",
   "vulkanmod.visuals.far_clouds": "Far Clouds",
-  "vulkanmod.visuals.far_clouds.tooltip": "Draws the clouds out to the far view distance with rounded edges and shading, and mirrors them on water; off restores vanilla's clouds",
+  "vulkanmod.visuals.far_clouds.tooltip": "Draws the clouds out to the far view distance with rounded edges and shading, and mirrors them on water, also with the video settings' Clouds off; off restores vanilla's clouds (when those are on)",
   "vulkanmod.visuals.cloud_style": "Cloud Style",
   "vulkanmod.visuals.cloud_style.tooltip": "Vanilla Shape keeps the far clouds in vanilla's blocky cells; Realistic draws billowing cumulus with rounded bases, shaded undersides and bright edges toward the sun, and thin cirrus streaks high above; Anime draws big soft puffy clouds with white tops and gentle blue-grey undersides, which thin out into the haze toward the horizon. The Realistic and Cinematic colour palettes pick Realistic, the Anime palette Anime; Default and Horror leave the style as you set it. Realistic and Anime cost more",
   "vulkanmod.visuals.cloud_style.0": "Vanilla Shape",
