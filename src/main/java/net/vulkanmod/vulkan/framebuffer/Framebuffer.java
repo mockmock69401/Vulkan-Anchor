@@ -135,6 +135,11 @@ public class Framebuffer {
         Renderer.getInstance().setBoundRenderPass(renderPass);
         Renderer.getInstance().setBoundFramebuffer(this);
 
+        VulkanImage colour = this.getColorAttachment();
+        if (colour != null) {
+            colour.recordRasterWrite();
+        }
+
         Renderer.setViewport(0, 0, this.width, this.height);
         Renderer.setScissor(0, 0, this.width, this.height);
     }

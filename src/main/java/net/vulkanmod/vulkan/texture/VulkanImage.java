@@ -46,6 +46,24 @@ public class VulkanImage {
 
     private int currentLayout;
 
+    /** Level 0 holds rows a render pass drew (requiresGlDownloadFlip). */
+    private boolean rasterRows;
+
+    /** A render pass draws into level 0 (Framebuffer.beginRenderPass). */
+    public void recordRasterWrite() {
+        this.rasterRows = true;
+    }
+
+    /**
+     * 2026-11-19 (Pendulum's MCP screenshot came out upside down): every pass draws with a flipped viewport (Renderer.setViewport), so
+     * a drawn image holds its rows top-down, where GL's glGetTexImage and NativeImage.downloadTexture give a framebuffer's rows
+     * bottom-up and mods flip them back (bindRead, downloadTexture, flipY, as vanilla's Screenshot.takeScreenshot does). Level 0 of a
+     * drawn image downloads in GL's order (ImageUtil.downloadTextureGl); an uploaded image keeps its rows as uploaded, as in GL.
+     */
+    public boolean requiresGlDownloadFlip(int mipLevel) {
+        return mipLevel == 0 && this.rasterRows;
+    }
+
     public VulkanImage(long id, int format, int mipLevels, int width, int height, int formatSize, int usage, long imageView) {
         this.id = id;
         this.mainImageView = imageView;
@@ -196,6 +214,11 @@ public class VulkanImage {
         //2026-10-30 (audit): the bytes from the buffer's position (a PBO offset sets it; memAddress starts there), not its limit
         SubImageRange range = SubImageRange.of(width, height, unpackSkipRows, unpackSkipPixels, unpackRowLength, this.formatSize, buffer.remaining());
         long imageSize = range != null ? range.size() : buffer.remaining();
+
+        //an upload over the whole of level 0 replaces drawn rows with uploaded ones (requiresGlDownloadFlip)
+        if (mipLevel == 0 && xOffset == 0 && yOffset == 0 && width == this.width && height == this.height) {
+            this.rasterRows = false;
+        }
 
         if (net.vulkanmod.compat.observer.CompatProfiler.ENABLED) {
             net.vulkanmod.compat.observer.CompatProfiler.textureUploadBytes += imageSize;

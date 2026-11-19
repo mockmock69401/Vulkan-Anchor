@@ -74,7 +74,7 @@ public abstract class MNativeImage {
     public void m_85045_(int level, boolean removeAlpha) {
         RenderSystem.assertOnRenderThread();
 
-        ImageUtil.downloadTexture(VTextureSelector.getBoundTexture(0), this.f_84964_);
+        ImageUtil.downloadTextureGl(VTextureSelector.getBoundTexture(0), this.f_84964_);
 
         if (removeAlpha && this.f_84960_.hasAlpha()) {
             if (this.f_84960_ != NativeImage.Format.RGBA) {

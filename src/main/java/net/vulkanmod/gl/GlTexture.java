@@ -414,7 +414,7 @@ public class GlTexture {
             ptr = pixels;
         }
 
-        ImageUtil.downloadTexture(image, ptr);
+        ImageUtil.downloadTextureGl(image, ptr);
     }
 
     public static void setVulkanImage(int id, VulkanImage vulkanImage) {

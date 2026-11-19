@@ -6,6 +6,7 @@ import net.vulkanmod.vulkan.queue.CommandPool;
 import net.vulkanmod.vulkan.util.VUtil;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
+import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.vulkan.*;
 
 import java.nio.LongBuffer;
@@ -35,6 +36,15 @@ public abstract class ImageUtil {
     }
 
     public static void downloadTexture(VulkanImage image, long ptr) {
+        downloadTexture(image, ptr, false);
+    }
+
+    /** As downloadTexture, in GL's row order: a drawn image's rows bottom-up (VulkanImage.requiresGlDownloadFlip). */
+    public static void downloadTextureGl(VulkanImage image, long ptr) {
+        downloadTexture(image, ptr, image.requiresGlDownloadFlip(0));
+    }
+
+    private static void downloadTexture(VulkanImage image, long ptr, boolean reverseRows) {
         try (MemoryStack stack = stackPush()) {
             int prevLayout = image.getCurrentLayout();
             CommandPool.CommandBuffer commandBuffer = DeviceManager.getGraphicsQueue().beginCommands();
@@ -56,9 +66,17 @@ public abstract class ImageUtil {
             long fence = DeviceManager.getGraphicsQueue().submitCommands(commandBuffer);
             vkWaitForFences(DeviceManager.vkDevice, fence, true, VUtil.UINT64_MAX);
 
-            MemoryManager.MapAndCopy(pStagingAllocation.get(0),
-                    (data) -> VUtil.memcpy(data.getByteBuffer(0, (int) imageSize), ptr)
-            );
+            MemoryManager.MapAndCopy(pStagingAllocation.get(0), (data) -> {
+                if (!reverseRows) {
+                    VUtil.memcpy(data.getByteBuffer(0, (int) imageSize), ptr);
+                    return;
+                }
+                long source = data.get(0);
+                long rowBytes = (long) image.width * image.formatSize;
+                for (int row = 0; row < image.height; row++) {
+                    MemoryUtil.memCopy(source + (image.height - 1L - row) * rowBytes, ptr + row * rowBytes, rowBytes);
+                }
+            });
 
             MemoryManager.freeBuffer(pStagingBuffer.get(0), pStagingAllocation.get(0));
         }
