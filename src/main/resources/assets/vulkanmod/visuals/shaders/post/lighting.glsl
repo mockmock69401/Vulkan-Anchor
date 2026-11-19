@@ -234,6 +234,39 @@ vec3 snapNormal(vec3 n, vec3 east, vec3 up) {
     return worldToView(axis, east, up);
 }
 
+//2026-11-19 (the user, in the Tensura pack: by day the player's head changed brightness in steps as the player turned): snapNormal's
+// hard 0.8 turned a mob's face from its own normal to the block axis at once as it turned past 37 degrees (its sun facing, the shadow
+// lookup's offset and the face shade divided out with it), and a face just off the axis looked up the shadow along the axis: its own
+// cube's edge cut a diagonal shadow across it. surfaceNormal pulls the rebuilt normal toward its axis by a weight that rises smoothly
+// with its closeness to the axis (dot with it): from SURFACE_SNAP_NEAR_LOW to SURFACE_SNAP_NEAR_HIGH within SURFACE_SNAP_NEAR blocks,
+// where the depth rebuilds a face's normal within a few degrees; from snapNormal's NORMAL_SNAP_MIN to SURFACE_SNAP_FAR_HIGH past
+// SURFACE_SNAP_FAR blocks, where its noise needs the wide snap (as before), the bands blended between
+const float SURFACE_SNAP_NEAR_LOW = 0.97;
+const float SURFACE_SNAP_NEAR_HIGH = 0.99;
+const float SURFACE_SNAP_FAR_HIGH = 0.82;
+const float SURFACE_SNAP_NEAR = 12.0;
+const float SURFACE_SNAP_FAR = 40.0;
+
+//The weight surfaceNormal pulls a normal m close to its block axis (its largest world component) toward it, dist blocks away
+float surfaceSnapWeight(float m, float dist) {
+    float far = smoothstep(SURFACE_SNAP_NEAR, SURFACE_SNAP_FAR, dist);
+    return smoothstep(mix(SURFACE_SNAP_NEAR_LOW, NORMAL_SNAP_MIN, far), mix(SURFACE_SNAP_NEAR_HIGH, SURFACE_SNAP_FAR_HIGH, far), m);
+}
+
+//A rebuilt view-space normal n of a surface dist blocks away, pulled toward its block axis (surfaceSnapWeight); the lighting pass and the
+// composite light a pixel by it
+vec3 surfaceNormal(vec3 n, vec3 east, vec3 up, float dist) {
+    vec3 w = vec3(dot(n, east), dot(n, up), dot(n, cross(east, up)));
+    vec3 a = abs(w);
+    float m = max(a.x, max(a.y, a.z));
+    float k = surfaceSnapWeight(m, dist);
+    if (k <= 0.0) {
+        return n;
+    }
+    vec3 axis = worldToView(a.x == m ? vec3(sign(w.x), 0.0, 0.0) : (a.y == m ? vec3(0.0, sign(w.y), 0.0) : vec3(0.0, 0.0, sign(w.z))), east, up);
+    return k >= 1.0 ? axis : normalize(mix(n, axis, k));
+}
+
 //A full-resolution pixel's view position from a depth (row 0 at the top), as viewpos.glsl's viewPosition(invProj, pixelUvGl(p), depth)
 vec3 depthViewPosition(mat4 invProj, ivec2 p, ivec2 size, float depth) {
     vec2 uvGl = vec2((float(p.x) + 0.5)/float(size.x), 1.0 - (float(p.y) + 0.5)/float(size.y));

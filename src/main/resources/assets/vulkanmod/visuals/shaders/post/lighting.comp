@@ -559,7 +559,7 @@ void main() {
                 kind = lodWater(lodPacked) ? lodLength : -lodLength;
             }
         } else {
-            n = snapNormal(depthNormal(mainDepth, invVanillaProj, p, fullSize, view), eastView.xyz, upView.xyz);
+            n = surfaceNormal(depthNormal(mainDepth, invVanillaProj, p, fullSize, view), eastView.xyz, upView.xyz, length(view));
             if (vanillaTranslucent) {
                 bool resolved = vanillaStride <= KIND_STRIDE_MAX;
                 vec3 kindNormal = resolved && vanillaStride > 1.0

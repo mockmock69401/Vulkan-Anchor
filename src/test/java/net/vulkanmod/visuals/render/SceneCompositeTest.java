@@ -784,7 +784,8 @@ class SceneCompositeTest {
         assertEquals(1f, SceneCompositeMath.lightSourceShare(new float[]{0.6f, 0.48f, 0.18f}, west), 1e-6f);
         assertEquals(1f, SceneCompositeMath.lightSourceShare(new float[]{0.5f, 0.4f, 0.15f}, down), 1e-6f);
         assertEquals(0f, SceneCompositeMath.lightSourceShare(new float[]{0.46f, 0.46f, 0.46f}, west), 0f);
-        assertEquals(1f, SceneCompositeMath.faceShadeDisplay(new float[]{0.7f, 0.7f, 0}), 0f);
+        assertEquals(0.5f * 0.6f + 0.5f * 1f, SceneCompositeMath.faceShadeDisplay(new float[]{(float) Math.sqrt(0.5), (float) Math.sqrt(0.5), 0}), 1e-6f);
+        assertEquals(1f, SceneCompositeMath.faceShadeDisplay(new float[]{0, 0, 0}), 0f, "no normal (plants, clouds)");
         //A lit furnace by day: its stone is lit as stone (the sun reaches it), its fire glows whatever the sun does
         float[][] s = noonLit();
         float[] sunlit = {1, 1, 0, 1}, shaded = {1, 0, 0, 0};
@@ -982,6 +983,23 @@ class SceneCompositeTest {
         assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)"));
     }
 
+    /**
+     * 2026-11-19 (the user, in the Tensura pack: by day the player's head changed brightness in steps as the player turned): the face
+     * shade divided out turns smoothly with a face turning off its axis; until then it dropped from the axis's to none at acos(0.999).
+     */
+    @Test
+    void theFaceShadeTurnsSmoothlyWithAMobsFace() {
+        float before = SceneCompositeMath.faceShadeDisplay(EAST);
+        for (int step = 1; step <= 90; step++) {
+            double a = Math.toRadians(step);
+            float now = SceneCompositeMath.faceShadeDisplay(new float[]{(float) Math.cos(a), 0, (float) Math.sin(a)});
+            assertTrue(Math.abs(now - before) < 0.01f, "step " + step + ": " + before + " -> " + now);
+            before = now;
+        }
+        assertEquals(0.8f, before, 1e-5f, "a quarter turn ends on the north-south shade");
+        assertTrue(COMP.replace("\r\n", "\n").contains("float bakedShade(vec3 n) {\n    return displayToLinear(faceShadeDisplay(n));"));
+    }
+
     /** Vanilla's baked face shade comes out of the sky-lit light under the sun weight (W5's facing replaces it); weight 0 keeps it. */
     @Test
     void vanillasFaceShadeIsNotAppliedOnTopOfW5sFacing() {
@@ -989,7 +1007,7 @@ class SceneCompositeTest {
         assertEquals(PostMath.displayToLinear(0.8f), SceneCompositeMath.bakedShade(NORTH), 1e-6f);
         assertEquals(PostMath.displayToLinear(0.5f), SceneCompositeMath.bakedShade(new float[]{0, -1, 0}), 1e-6f);
         assertEquals(1f, SceneCompositeMath.bakedShade(UP));
-        assertEquals(1f, SceneCompositeMath.bakedShade(dir(1, 1, 0)), "not a block face");
+        assertEquals(PostMath.displayToLinear(0.8f), SceneCompositeMath.bakedShade(dir(1, 1, 0)), 1e-6f, "east and up weighted alike");
         assertEquals(1f, SceneCompositeMath.faceUnshade(0.3f, 0));
         float[][] s = noonLit();
         float[] stone = {0.5f, 0.5f, 0.5f, 1};
@@ -1749,7 +1767,7 @@ class SceneCompositeTest {
             assertTrue(Pattern.compile("const\\s+(float|int)\\s+" + f.getName() + "\\b").matcher(COMP).find(), f.getName() + " missing in the shader");
         }
         //It assembles the other packages' exports and reimplements none of them
-        for (String call : new String[]{"vanillaToScene(", "lightingAt(", "sunShadingAt(", "shadeLevel(lighting.w)", "sunLevel(lighting.w)", "sunShare(", "isPlant(", "isEmissive(", "snapNormal(depthNormal(",
+        for (String call : new String[]{"vanillaToScene(", "lightingAt(", "sunShadingAt(", "shadeLevel(lighting.w)", "sunLevel(lighting.w)", "sunShare(", "isPlant(", "isEmissive(", "surfaceNormal(depthNormal(",
                 "lodFaceNormal(", "waterColour(", "reflectionMark(", "sunDisc(", "skyColour(", "sunGlow(", "vanillaStars(", "hazeAmount(", "applyHazeOpen(", "glowLobeOpen(", "sunOpenShare(",
                 "cloudOver(", "farCloudMarch(", "pixelLight(", "relightGain(", "relightCapped(", "liftedSky(", "waterSky(", "sideSky(", "scenePositionFrom("}) {
             assertTrue(COMP.contains(call), call);

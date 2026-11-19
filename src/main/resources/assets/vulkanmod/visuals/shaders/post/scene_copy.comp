@@ -293,8 +293,6 @@ const float FACE_SHADE_UP = 1.0;
 const float FACE_SHADE_NORTH_SOUTH = 0.8;
 const float FACE_SHADE_WEST_EAST = 0.6;
 const float FACE_UNSHADE = 1.0;
-//A normal counts as a block face when within acos(FACE_AXIS_MIN) of an axis (snapNormal gives exact axes; mobs keep their own shading)
-const float FACE_AXIS_MIN = 0.999;
 //The share of vanilla's face shade baked into Distant Horizons' LOD colours (1: as vanilla's terrain)
 const float LOD_FACE_SHADE_SHARE = 1.0;
 //B14: separate exposures. By day a camera without sky light (underground) sees sky-lit surfaces at UNDERGROUND_SKY_EXPOSURE (they do not
@@ -416,19 +414,19 @@ vec3 lightmapLinear(float block, float sky) {
     return vanillaToScene(texture(lightmapTex, (l + 0.5)/16.0).rgb);
 }
 
-//The baked face shade (linear) for a world normal: block faces get getShade's value, anything else 1
+//2026-11-08: vanilla's face shade (display values, ClientLevel.getShade) of a world normal. 2026-11-19 (the user, in the Tensura pack:
+// by day the player's head changed brightness in steps as the player turned): each axis's shade weighted by the normal's squared
+// component along it (as Forge weights a rotated quad's diffuse light), so a mob's face turning off its axis keeps the
+// divided-out shade it had there and loses it smoothly; until then only a normal within acos(0.999) of an axis had one, anything else 1.
+// 1 for no normal (plants, clouds: vec3(0.0))
+float faceShadeDisplay(vec3 n) {
+    vec3 q = n*n;
+    return 1.0 + q.x*(FACE_SHADE_WEST_EAST - 1.0) + q.z*(FACE_SHADE_NORTH_SOUTH - 1.0) + q.y*((n.y > 0.0 ? FACE_SHADE_UP : FACE_SHADE_DOWN) - 1.0);
+}
+
+//The baked face shade (linear) for a world normal (faceShadeDisplay)
 float bakedShade(vec3 n) {
-    vec3 a = abs(n);
-    if (a.y >= FACE_AXIS_MIN) {
-        return displayToLinear(n.y > 0.0 ? FACE_SHADE_UP : FACE_SHADE_DOWN);
-    }
-    if (a.z >= FACE_AXIS_MIN) {
-        return displayToLinear(FACE_SHADE_NORTH_SOUTH);
-    }
-    if (a.x >= FACE_AXIS_MIN) {
-        return displayToLinear(FACE_SHADE_WEST_EAST);
-    }
-    return 1.0;
+    return displayToLinear(faceShadeDisplay(n));
 }
 
 //The factor that takes the face shade back out of the sky-lit light, by the sun weight (1 at weight 0)
@@ -476,21 +474,6 @@ vec3 blockLightFactor(vec3 blockLit, vec3 blockFloor, vec3 blockOnly, vec3 full,
 //2026-10-28: a light source's gain on its texel colour (display values) at the block glow strength
 float lightGlow(vec3 colour, float strength) {
     return 1.0 + LIGHT_GLOW_GAIN*max(strength, 0.0)*smoothstep(LIGHT_GLOW_LOW, LIGHT_GLOW_HIGH, max(colour.r, max(colour.g, colour.b)));
-}
-
-//2026-11-08: vanilla's face shade (display values, ClientLevel.getShade) of a world normal: bakedShade before its conversion to linear
-float faceShadeDisplay(vec3 n) {
-    vec3 a = abs(n);
-    if (a.y >= FACE_AXIS_MIN) {
-        return n.y > 0.0 ? FACE_SHADE_UP : FACE_SHADE_DOWN;
-    }
-    if (a.z >= FACE_AXIS_MIN) {
-        return FACE_SHADE_NORTH_SOUTH;
-    }
-    if (a.x >= FACE_AXIS_MIN) {
-        return FACE_SHADE_WEST_EAST;
-    }
-    return 1.0;
 }
 
 //2026-11-08: the share of a light source's texel that is light (0: lit as any block, 1: its glow alone). base: the texel's colour before the
@@ -1058,7 +1041,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     if (fromLod) {
         normalView = lodFaceNormal(texelFetch(lodLight, lodTexel(p, size), 0).r, east, up);
     } else if (!plant && !cloud) {
-        normalView = snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), east, up);
+        normalView = surfaceNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), east, up, dist);
     }
     vec3 normalWorld = toWorld*normalView;
     //W5's lighting, read only when the pass ran (slot 10 .z)

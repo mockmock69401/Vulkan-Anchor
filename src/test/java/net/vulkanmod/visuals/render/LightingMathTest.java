@@ -246,8 +246,30 @@ class LightingMathTest {
         //The pass uses the shared helpers (the composite calls the same ones)
         assertTrue(COMP.contains("uint lodPacked = texelFetch(lodLight, lt, 0).r;"));
         assertTrue(COMP.contains("n = lodFaceNormal(lodPacked, eastView.xyz, upView.xyz);"));
-        assertTrue(COMP.contains("n = snapNormal(depthNormal(mainDepth, invVanillaProj, p, fullSize, view), eastView.xyz, upView.xyz);"));
+        assertTrue(COMP.contains("n = surfaceNormal(depthNormal(mainDepth, invVanillaProj, p, fullSize, view), eastView.xyz, upView.xyz, length(view));"));
         assertFalse(COMP.contains("vec3 depthNormal("), "defined once, in lighting.glsl");
+    }
+
+    /**
+     * 2026-11-19 (the user, in the Tensura pack: by day the player's head changed brightness in steps as the player turned): near the
+     * camera only a normal within a few degrees of its block axis is pulled onto it, smoothly; far away the wide snap stays.
+     */
+    @Test
+    void aTurningFaceIsPulledToItsAxisSmoothly() {
+        float before = LightingMath.surfaceSnapWeight(1f, 3f);
+        assertEquals(1f, before, 0f, "a block face near the camera is its axis");
+        for (int step = 1; step <= 450; step++) {
+            float m = (float) Math.cos(Math.toRadians(step * 0.1));
+            float now = LightingMath.surfaceSnapWeight(m, 3f);
+            assertTrue(now <= before && before - now < 0.05f, "step " + step + ": " + before + " -> " + now);
+            before = now;
+        }
+        assertEquals(0f, LightingMath.surfaceSnapWeight((float) Math.cos(Math.toRadians(20)), 3f), 0f, "a mob's face 20 degrees off keeps its own normal");
+        assertEquals(1f, LightingMath.surfaceSnapWeight((float) Math.cos(Math.toRadians(30)), 100f), 0f, "far away the wide snap stays");
+        assertEquals(0f, LightingMath.surfaceSnapWeight(0.79f, 100f), 0f);
+        assertTrue(GLSL.contains("return k >= 1.0 ? axis : normalize(mix(n, axis, k));"));
+        String copy = ShaderFiles.read("post/scene_copy.comp");
+        assertTrue(copy.contains("normalView = surfaceNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), east, up, dist);"), "the composite rebuilds the pass's normal");
     }
 
     @Test
