@@ -502,8 +502,25 @@ public class DefaultMainPass implements MainPass {
         }
     }
 
+    /**
+     * 2026-11-19 (Pendulum's MCP screenshot): mods read the window between frames, from a client tick, with mainTarget.bindRead()
+     * and NativeImage.downloadTexture. Between frames Renderer.getCommandBuffer() is the last frame's buffer, already ended, and
+     * recording the end of the pass and the barrier into it crashed the driver. Outside a frame the image is only selected:
+     * ImageUtil.downloadTexture moves it to the copy layout and back in its own command buffer, as ordinary targets do
+     * (GlTexture.transitionReadOnly).
+     */
     @Override
     public void bindAsTexture() {
+        if (!Renderer.isRecording()) {
+            if (this.uiLayer) {
+                VTextureSelector.bindTexture(this.uiFramebuffers[this.uiSlot].getColorAttachment());
+            } else {
+                ensureMainFramebuffer();
+                VTextureSelector.bindTexture(this.mainFramebuffer.getColorAttachment());
+            }
+            return;
+        }
+
         if (this.uiLayer) {
             VkCommandBuffer commandBuffer = Renderer.getCommandBuffer();
             if (isUiPass(Renderer.getInstance().getBoundRenderPass()))
