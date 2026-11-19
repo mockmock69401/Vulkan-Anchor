@@ -26,7 +26,9 @@ public final class VkBindings {
         }
     }
 
-    private final List<Entry> entries = new ArrayList<>();
+    //2026-11-19: room for the largest pass's bindings (the composite declares up to 30), so a dispatch's list is not grown and copied
+    // on the way (JFR, render distance 24: the growth was a tenth of the render thread's own garbage)
+    private final List<Entry> entries = new ArrayList<>(32);
 
     public VkBindings storage(int glBinding, VkGpuBuffer buffer) {
         return this.add(new Entry(VulkanShaderMeta.Kind.STORAGE_BUFFER, glBinding, buffer.handle(), 0, VK_WHOLE_SIZE, 0, 0));
