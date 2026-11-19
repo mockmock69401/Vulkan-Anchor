@@ -24,7 +24,6 @@ import net.vulkanmod.vulkan.texture.VulkanImage;
 import org.apache.commons.lang3.Validate;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
-import org.lwjgl.PointerBuffer;
 import org.lwjgl.vulkan.*;
 
 import java.io.InputStream;
@@ -46,7 +45,6 @@ import static org.lwjgl.vulkan.VK10.*;
 public abstract class Pipeline {
 
     private static final VkDevice DEVICE = Vulkan.getVkDevice();
-    private static final java.nio.file.Path CACHE_PATH = java.nio.file.Path.of("config", "vulkanmod_pipeline_cache.bin");
     protected static final long PIPELINE_CACHE = createPipelineCache();
     public static final List<Pipeline> PIPELINES = new LinkedList<>();
 
@@ -56,9 +54,9 @@ public abstract class Pipeline {
             cacheCreateInfo.sType(VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO);
 
             ByteBuffer initialData = null;
-            if (java.nio.file.Files.exists(CACHE_PATH)) {
+            if (java.nio.file.Files.exists(PipelineCacheFile.PATH)) {
                 try {
-                    byte[] bytes = java.nio.file.Files.readAllBytes(CACHE_PATH);
+                    byte[] bytes = java.nio.file.Files.readAllBytes(PipelineCacheFile.PATH);
                     if (bytes.length > 0) {
                         initialData = MemoryUtil.memAlloc(bytes.length);
                         initialData.put(bytes);
@@ -87,35 +85,15 @@ public abstract class Pipeline {
     }
 
     public static void destroyPipelineCache() {
-        try (MemoryStack stack = stackPush()) {
-            PointerBuffer pDataSize = stack.mallocPointer(1);
-            int result = vkGetPipelineCacheData(DEVICE, PIPELINE_CACHE, pDataSize, null);
-
-            if (result == VK_SUCCESS && pDataSize.get(0) > 0) {
-                long dataSize = pDataSize.get(0);
-                ByteBuffer dataBuffer = MemoryUtil.memAlloc((int) dataSize);
-
-                result = vkGetPipelineCacheData(DEVICE, PIPELINE_CACHE, pDataSize, dataBuffer);
-                if (result == VK_SUCCESS) {
-                    byte[] bytes = new byte[(int) dataSize];
-                    dataBuffer.get(bytes);
-
-                    try {
-                        if (!java.nio.file.Files.exists(CACHE_PATH.getParent())) {
-                            java.nio.file.Files.createDirectories(CACHE_PATH.getParent());
-                        }
-                        java.nio.file.Files.write(CACHE_PATH, bytes);
-                    } catch (Exception e) {
-                        System.err.println("[VulkanMod] Failed to write pipeline cache: " + e.getMessage());
-                    }
-                }
-                MemoryUtil.memFree(dataBuffer);
-            }
-        } catch (Exception e) {
-            System.err.println("[VulkanMod] Error destroying pipeline cache: " + e.getMessage());
-        }
-
+        //A background write still reading the cache keeps it (the game is closing: the driver frees it with the device)
+        if (!PipelineCacheFile.awaitWrite()) return;
+        PipelineCacheFile.write(DEVICE, PIPELINE_CACHE);
         vkDestroyPipelineCache(DEVICE, PIPELINE_CACHE, null);
+    }
+
+    /** Once a frame: writes the cache to disk in the background once new pipelines have settled (PipelineCacheFile). */
+    public static void savePipelineCacheWhenSettled() {
+        PipelineCacheFile.tick(DEVICE, PIPELINE_CACHE);
     }
 
     public static void recreateDescriptorSets(int frames) {

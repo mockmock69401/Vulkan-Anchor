@@ -204,6 +204,7 @@ public class GraphicsPipeline extends Pipeline {
             if (vkCreateGraphicsPipelines(DeviceManager.vkDevice, PIPELINE_CACHE, pipelineInfo, null, pGraphicsPipeline) != VK_SUCCESS) {
                 throw new RuntimeException("Failed to create graphics pipeline");
             }
+            PipelineCacheFile.created();
             if (net.vulkanmod.visuals.dev.FrameRecorder.ON) {
                 net.vulkanmod.visuals.dev.FrameRecorder.time(net.vulkanmod.visuals.dev.FrameRecorder.PIPELINE, pipelineStart);
                 net.vulkanmod.visuals.dev.FrameRecorder.add(net.vulkanmod.visuals.dev.FrameRecorder.PIPELINES, 1);
