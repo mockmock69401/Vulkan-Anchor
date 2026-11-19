@@ -228,7 +228,7 @@ class VisualsRendererWiringTest {
         List<String> load = calls(SYSTEM, "loadCloudMask");
         assertTrue(load.contains("NativeImage.read") && load.contains("NativeImage.getPixelRGBA") && load.contains("CloudMath.mask"), load.toString());
         List<String> frame = calls(SYSTEM, "cloudFrame");
-        assertTrue(frame.contains("DimensionSpecialEffects.getCloudHeight") && frame.contains("Options.getCloudsType")
+        assertTrue(frame.contains("DimensionSpecialEffects.getCloudHeight") && !frame.contains("Options.getCloudsType")
                 && frame.contains("LevelRendererTicksAccessor.visuals$getTicks") && frame.contains("ClientLevel.getCloudColor")
                 && frame.contains("CloudMath.offset"), frame.toString());
         assertTrue(calls(SYSTEM, "captureAtmosphere").contains("AtmosphereFrame.withClouds"), calls(SYSTEM, "captureAtmosphere").toString());

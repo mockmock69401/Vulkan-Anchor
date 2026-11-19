@@ -4,7 +4,6 @@ import net.vulkanmod.visuals.dev.FrameRecorder;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.CloudStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
@@ -697,12 +696,16 @@ public final class VisualsRenderer {
 
     private static final OwnClouds OWN_CLOUDS = new OwnClouds();
 
-    /** P7h design 3.3, 3.5: vanilla's cloud layer this frame; null when the options turn clouds off, the dimension has none or draws its own. */
+    /**
+     * P7h design 3.3, 3.5: vanilla's cloud layer this frame; null when the dimension has none or draws its own. 2026-11-19 (the user, in the
+     * Tensura pack: no clouds ever appeared): the far clouds setting alone turns them on or off. Until then vanilla's Clouds option off
+     * (the pack ships its options with renderClouds false) hid them too, while the shader settings showed the clouds on.
+     */
     private static CloudFrame cloudFrame(ClientLevel level, float partialTick, double cameraX, double cameraZ) {
         try {
             DimensionSpecialEffects effects = level.effects();
             float height = effects.getCloudHeight();
-            if (Float.isNaN(height) || OWN_CLOUDS.get(effects.getClass()) || Minecraft.getInstance().options.getCloudsType() == CloudStatus.OFF) return null;
+            if (Float.isNaN(height) || OWN_CLOUDS.get(effects.getClass())) return null;
             int ticks = ((LevelRendererTicksAccessor) Minecraft.getInstance().levelRenderer).visuals$getTicks();
             Vec3 colour = level.getCloudColor(partialTick);
             float[] offset = CloudMath.offset(cameraX, cameraZ, ticks, partialTick);
