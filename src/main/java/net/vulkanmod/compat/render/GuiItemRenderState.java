@@ -31,7 +31,7 @@ public final class GuiItemRenderState {
         int depth = TOOLTIP_OVERLAY_DEPTH.get();
 
         if (depth <= 1) {
-            TOOLTIP_OVERLAY_DEPTH.remove();
+            TOOLTIP_OVERLAY_DEPTH.set(0);
         } else {
             TOOLTIP_OVERLAY_DEPTH.set(depth - 1);
         }
@@ -43,11 +43,11 @@ public final class GuiItemRenderState {
 
     public static void restoreDeferredDrawState() {
         RenderStateSnapshot snapshot = DEFERRED_DRAW_STATE.get();
-        DEFERRED_DRAW_STATE.remove();
-
-        if (snapshot != null) {
-            snapshot.restore();
-        }
+        if (snapshot == null) return;
+        //2026-11-19 (Tensura, 1% lows with modded mobs): set(null), not remove(). BufferSourceM restores after every batch the level
+        // ends, and a removed entry is made again (an allocation) by the next get: thousands a frame
+        DEFERRED_DRAW_STATE.set(null);
+        snapshot.restore();
     }
 
     public static void prepare() {

@@ -28,7 +28,7 @@ public final class GuiEntityRenderState {
     public static void endHudEntityPreview() {
         int depth = HUD_ENTITY_PREVIEW_DEPTH.get();
         if (depth <= 1) {
-            HUD_ENTITY_PREVIEW_DEPTH.remove();
+            HUD_ENTITY_PREVIEW_DEPTH.set(0);
             return;
         }
 
@@ -64,10 +64,10 @@ public final class GuiEntityRenderState {
 
     public static void restoreDeferredDrawState() {
         RenderStateSnapshot snapshot = DEFERRED_DRAW_STATE.get();
-        DEFERRED_DRAW_STATE.remove();
-
-        if (snapshot != null) {
-            snapshot.restore();
-        }
+        if (snapshot == null) return;
+        //2026-11-19 (Tensura, 1% lows with modded mobs): set(null), not remove(). BufferSourceM restores after every batch the level
+        // ends, and a removed entry is made again (an allocation) by the next get: thousands a frame
+        DEFERRED_DRAW_STATE.set(null);
+        snapshot.restore();
     }
 }
