@@ -51,11 +51,67 @@ public final class RelightMath {
         return Math.max(lifted, 15 * clamp01(waterSky));
     }
 
-    /** The ring's sky levels (-1 unknown): the brightest known / 15, 0 when none is known. */
-    public static float side(int[] skyLevels) {
+    /** lightvolume.glsl's LIGHT_SIDE_OPEN_LOW and _HIGH: the share of the horizon seen open over which the side sky fades in. */
+    public static final float SIDE_OPEN_LOW = 0.125f, SIDE_OPEN_HIGH = 0.375f;
+
+    /**
+     * The side sky from the 8 directions' levels (sideSeen; -1 unknown counts as 0): the brightest / 15, faded in by the share of the
+     * horizon seen open (their mean / 15) from SIDE_OPEN_LOW to SIDE_OPEN_HIGH (smoothstep). 2026-11-19: the brightest alone lifted a
+     * cave pool's cells to full sky light through one doorway, in blocky patches; the mean alone darkened water under a roof open on
+     * two sides and stepped from cell to cell.
+     */
+    public static float side(int[] directionLevels) {
+        int sum = 0, best = 0;
+        for (int s : directionLevels) {
+            sum += Math.max(s, 0);
+            best = Math.max(best, s);
+        }
+        float t = clamp01((sum / (15f * SIDE_DIRECTIONS) - SIDE_OPEN_LOW) / (SIDE_OPEN_HIGH - SIDE_OPEN_LOW));
+        return best / 15f * t * t * (3 - 2 * t);
+    }
+
+    /** The ring's directions: +x, -x, +z, -z and the four diagonals. */
+    public static final int SIDE_DIRECTIONS = 8;
+
+    /** lightvolume.glsl's LIGHT_SIDE_STEPS: cells read along each of the 8 directions out to the far ring (the near ring is the middle one). */
+    public static final int SIDE_STEPS = 4;
+
+    /** lightvolume.glsl's LIGHT_SIDE_GRID: the world grid (blocks) whose corners the side sky is read at. */
+    public static final int SIDE_GRID = 4;
+
+    /**
+     * lightvolume.glsl's sideSky blends sideSkyCell (side of the 8 directions' sideSeen) at the 4 corners of the SIDE_GRID-block grid
+     * cell around the surface point bilinearly: under a roof open on one side one block's value lay on the water in patches.
+     */
+    public static float sideBlend(float s00, float s10, float s01, float s11, float tx, float tz) {
+        float a = s00 + (s10 - s00) * tx, b = s01 + (s11 - s01) * tx;
+        return a + (b - a) * tz;
+    }
+
+    /** Cell j (0..SIDE_STEPS-1) along a far-ring offset (x, z), as the shader's integer division gives it. */
+    public static int[] sideCell(int[] far, int j) {
+        return new int[]{far[0] * (j + 1) / SIDE_STEPS, far[1] * (j + 1) / SIDE_STEPS};
+    }
+
+    /**
+     * 2026-11-19 (cave water hazy through the rock): the sky level a direction's ring cells give, from the water's own sky level and
+     * the sky levels (-1 unknown) of its SIDE_STEPS cells (sideCell) along the far-ring offset far. The walk out from the water stops
+     * at an unknown cell or where the level jumps by more than the Manhattan distance between two cells (vanilla's sky light changes
+     * by at most 1 per block of open air: a jump is a wall); a ring cell counts only when reached. 0 when none is.
+     */
+    public static int sideSeen(float sky, int[] levels, int[] far) {
         int best = 0;
-        for (int s : skyLevels) best = Math.max(best, s);
-        return best / 15f;
+        float prev = sky;
+        int[] last = {0, 0};
+        for (int j = 0; j < SIDE_STEPS; j++) {
+            if (levels[j] < 0) break;
+            int[] at = sideCell(far, j);
+            if (Math.abs(levels[j] - prev) > Math.abs(at[0] - last[0]) + Math.abs(at[1] - last[1])) break;
+            if (j == SIDE_STEPS / 2 - 1 || j == SIDE_STEPS - 1) best = Math.max(best, levels[j]);
+            prev = levels[j];
+            last = at;
+        }
+        return best;
     }
 
     /** The 16 ring offsets (x, z): at SIDE_NEAR then SIDE_FAR, +x, -x, +z, -z, then the four diagonals. */

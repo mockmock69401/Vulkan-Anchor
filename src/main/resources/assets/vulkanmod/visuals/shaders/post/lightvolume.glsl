@@ -130,22 +130,74 @@ vec3 pixelLight(ivec2 p, ivec2 size, vec3 world, vec3 n) {
     return faceLightAt(lightFrac.xyz + world, dot(n, n) > 0.25 ? n : -world);
 }
 
-//Design 3.5: the brightest known sky light in a ring 16 and 32 blocks out, one block above the water surface (world), /15
-float sideSky(vec3 world) {
-    ivec3 b = ivec3(lightCamera.xyz) + ivec3(floor(lightFrac.xyz + world)) + ivec3(0, 1, 0);
+//Design 3.5: the brightest known sky light in a ring 16 and 32 blocks out, one block above the water surface, /15.
+// 2026-11-19 (the user: cave water and its floor hazy and washed out, a torch shrank the haze): a ring cell counts only where the air
+// toward it is open. The ring went through the rock of a cave near the surface to the open air outside, so the cave's pool was lit as
+// under the open sky and, too dark in vanilla's light to scale, got its scattering floor (gate G7l): a milky veil that only a torch's
+// light switched off. From a cell b one block above the water, each of the 8 directions is walked out from the water's own sky level
+// in LIGHT_SIDE_STEPS cells to the far ring (the near ring is the middle one); the walk stops at an unknown cell or where the sky level
+// jumps by more than the Manhattan distance m between two cells: vanilla's sky light changes by at most 1 per block of open air, so a
+// jump is a wall (rock, dark air beside open air). A ring cell counts only when the walk reaches it. Each direction gives the brightest
+// ring cell it reached; the side sky is the brightest of them, faded in by the share of the horizon seen open (their mean /15) from
+// LIGHT_SIDE_OPEN_LOW to LIGHT_SIDE_OPEN_HIGH: a doorway's one direction lifted a cave pool's cells one by one to full sky light, in
+// blocky patches, while an island's shade on the sea or a roof open on two sides sees enough of it to stay as lit as before (the mean
+// alone darkened those). RelightMath.sideSeen and side mirror this
+const int LIGHT_SIDE_STEPS = 4;
+const float LIGHT_SIDE_OPEN_LOW = 0.125;
+const float LIGHT_SIDE_OPEN_HIGH = 0.375;
+float sideSkyCell(ivec3 b, float sky) {
+    int d = LIGHT_SIDE_FAR;
+    int k = LIGHT_SIDE_DIAGONAL_FAR;
+    ivec2 o[8] = ivec2[8](ivec2(d, 0), ivec2(-d, 0), ivec2(0, d), ivec2(0, -d), ivec2(k, k), ivec2(k, -k), ivec2(-k, k), ivec2(-k, -k));
+    int sum = 0;
     int best = 0;
-    for (int r = 0; r < 2; r++) {
-        int d = r == 0 ? LIGHT_SIDE_NEAR : LIGHT_SIDE_FAR;
-        int k = r == 0 ? LIGHT_SIDE_DIAGONAL_NEAR : LIGHT_SIDE_DIAGONAL_FAR;
-        ivec2 o[8] = ivec2[8](ivec2(d, 0), ivec2(-d, 0), ivec2(0, d), ivec2(0, -d), ivec2(k, k), ivec2(k, -k), ivec2(-k, k), ivec2(-k, -k));
-        for (int i = 0; i < 8; i++) {
-            int v = lightByte(b + ivec3(o[i].x, 0, o[i].y));
-            if (v >= 0) {
-                best = max(best, v & 15);
+    for (int i = 0; i < 8; i++) {
+        int seen = 0;
+        float prev = sky;
+        ivec2 last = ivec2(0);
+        for (int j = 0; j < LIGHT_SIDE_STEPS; j++) {
+            ivec2 at = o[i]*(j + 1)/LIGHT_SIDE_STEPS;
+            int v = lightByte(b + ivec3(at.x, 0, at.y));
+            if (v < 0) {
+                break;
             }
+            float level = float(v & 15);
+            ivec2 m = abs(at - last);
+            if (abs(level - prev) > float(m.x + m.y)) {
+                break;
+            }
+            if (j == LIGHT_SIDE_STEPS/2 - 1 || j == LIGHT_SIDE_STEPS - 1) {
+                seen = max(seen, v & 15);
+            }
+            prev = level;
+            last = at;
         }
+        sum += seen;
+        best = max(best, seen);
     }
-    return float(best)/15.0;
+    return float(best)/15.0*smoothstep(LIGHT_SIDE_OPEN_LOW, LIGHT_SIDE_OPEN_HIGH, float(sum)/(15.0*8.0));
+}
+
+//The side sky at the water surface (world): sideSkyCell at the 4 corners of the LIGHT_SIDE_GRID-block world grid cell around it,
+// bilinear between them. Under a roof open on one side the share of the horizon seen open changes from block to block (a diagonal
+// reaches out or meets a wall), so one cell's value, and even a blend of the 4 nearest blocks', lay on the water in patches; over the
+// wider grid it is a gradient. Each corner walks from the water's own sky level, so a corner beyond a thin wall still breaks at the
+// wall's jump. Water that sees the sky overhead (sky light 15) gets nothing from the ring and reads no cells
+const int LIGHT_SIDE_GRID = 4;
+float sideSky(vec3 world, float sky) {
+    if (sky >= 15.0) {
+        return 0.0;
+    }
+    vec3 q = lightFrac.xyz + world;
+    vec2 f = (q.xz - 0.5)/float(LIGHT_SIDE_GRID);
+    ivec2 c = ivec2(floor(f));
+    vec2 t = f - vec2(c);
+    ivec3 b = ivec3(lightCamera.xyz) + ivec3(c.x*LIGHT_SIDE_GRID, int(floor(q.y)) + 1, c.y*LIGHT_SIDE_GRID);
+    float s00 = sideSkyCell(b, sky);
+    float s10 = sideSkyCell(b + ivec3(LIGHT_SIDE_GRID, 0, 0), sky);
+    float s01 = sideSkyCell(b + ivec3(0, 0, LIGHT_SIDE_GRID), sky);
+    float s11 = sideSkyCell(b + ivec3(LIGHT_SIDE_GRID, 0, LIGHT_SIDE_GRID), sky);
+    return mix(mix(s00, s10, t.x), mix(s01, s11, t.x), t.y);
 }
 
 float skyVisibility(float sky) {
