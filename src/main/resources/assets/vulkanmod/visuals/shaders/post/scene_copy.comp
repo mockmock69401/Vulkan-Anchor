@@ -241,6 +241,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/caustics.glsl>
 #import <vulkanmod:visuals/post/wetground.glsl>
 #import <vulkanmod:visuals/post/footprint.glsl>
+#import <vulkanmod:visuals/post/snowglow.glsl>
 #import <vulkanmod:visuals/post/wetclimate.glsl>
 #import <vulkanmod:visuals/post/blockreflect.glsl>
 #import <vulkanmod:visuals/post/ao.glsl>
@@ -1267,6 +1268,12 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         //Session 25: footprints in snow and sand (footprint.glsl) on the top faces of solid terrain near the camera
         if (footParams.x > 0.0 && !plant && !cloud && !fromLod && kind == 0.0 && normalWorld.y > 0.7) {
             lit *= footprintShade(world, dist, sunPart, atmosphereSun.y >= 0.0 ? atmosphereSun.xyz : -atmosphereSun.xyz);
+        }
+        //2026-11-18 (snowglow.glsl): at night snow under the moon glows softly, never darker (the moon's weight: none by day or at new moon)
+        if (passRan && known && lighting.w < 0.0 && lighting.y > 0.0 && !plant && !cloud && !emissive && kind == 0.0
+                && dot(normalWorld, normalWorld) > 0.25) {
+            vec3 base = hasAlbedo ? albedo : min(colour.rgb/max(lightmapDisplay(block, sky), vec3(SNOW_LIGHTMAP_MIN)), vec3(1.0));
+            lit *= moonSnowGlow(base, normalWorld, dir, -a.sun.xyz, directShare, lighting.y*skyLight);
         }
         //Session 20: caustics (caustics.glsl) on what lies under water and gets the sun: the floor seen through the surface from above (its
         // depth below the surface along the view), or with the camera under an open surface whatever lies below that surface's height
