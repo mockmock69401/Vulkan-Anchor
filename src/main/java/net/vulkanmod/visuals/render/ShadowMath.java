@@ -118,6 +118,44 @@ public final class ShadowMath {
         return Math.min(nearReach(shadowDistanceChunks), Math.max(SHADOW_DISTANCE_MIN, renderDistanceChunks) * 16f);
     }
 
+    /**
+     * 2026-11-19 (the user: near mountains, the shadows of forests outside the chunks appeared all at once as they came in): the close
+     * and near maps take the vanilla terrain only out to nearReach, so lighting.comp's farFill takes the far map's shadow where its
+     * blocker lies farther from the camera. Within fillReach a block surely casts into them: the sections within nearReach (+ half a
+     * section) of the camera that drew a map, which may since have moved NEAR_MAX_MOVE blocks. The far blockers fade in over FILL_BAND
+     * blocks before it; one within FILL_ABOVE far texels of its receiver (toward the sun) is the far map's own coarse ground and does
+     * not count, coming in over another FILL_ABOVE.
+     */
+    public static final float FILL_BAND = 8, FILL_ABOVE = 2;
+    /** lighting.comp's fillParams location. */
+    public static final int FILL_SLOT = 20;
+
+    /** How far from the camera (blocks, on both horizontal axes) the close and near maps surely hold the vanilla casters. */
+    public static float fillReach(float nearReach) {
+        return Math.max(nearReach - NEAR_MAX_MOVE, 0);
+    }
+
+    /**
+     * fillParams: {fillReach, FILL_BAND, the far blocker's least distance and its band (blocks)}; all 0 (off) without the vanilla
+     * casters or the far maps, where the near maps hold all there is.
+     */
+    public static float[] fillParams(boolean vanillaOn, boolean farOn, int shadowDistanceChunks, int renderDistanceChunks) {
+        if (!vanillaOn || !farOn) return new float[4];
+        float farTexel = 2 * FAR_RADIUS / Math.min(FAR_WIDTH, FAR_HEIGHT);
+        return new float[]{fillReach(nearReach(shadowDistanceChunks, renderDistanceChunks)), FILL_BAND, FILL_ABOVE * farTexel, FILL_ABOVE * farTexel};
+    }
+
+    /** lighting.comp's farFill weight for a far blocker at reach blocks from the camera (Chebyshev, horizontal) and above blocks toward the sun. */
+    public static float fillWeight(float[] params, float reach, float above) {
+        if (!(params[0] > 0)) return 0;
+        return smoothstep(params[0] - params[1], params[0], reach) * smoothstep(params[2], params[2] + params[3], above);
+    }
+
+    private static float smoothstep(float a, float b, float x) {
+        float t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+        return t * t * (3 - 2 * t);
+    }
+
     /** A cascade: projection (Vulkan depth 0..1) and light view (rotation), the texel and depth range in blocks, the camera it was centred on. */
     public record Cascade(Matrix4f projection, Matrix4f view, float radius, float texel, float depthRange, double cameraX, double cameraY,
                           double cameraZ) {

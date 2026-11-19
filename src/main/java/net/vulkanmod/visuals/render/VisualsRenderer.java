@@ -321,6 +321,8 @@ public final class VisualsRenderer {
                     moonStrength(settings, level)) : null;
             //2026-10-29: the entities drawn after this cast into the entity shadow map when this frame has sun shadows
             EntityShadowCapture.beginFrame(serial, this.shadowFrame != null && this.entityShadows != null && VisualsConfig.get().entityShadows, modelView);
+            //2026-11-19: and vanilla's round entity shadow is left out while the maps shade
+            VanillaBlobShadows.frame(serial, this.shadowFrame != null);
 
             List<VisualsExtension> ext = VisualsExtensions.all();
             long mainDepth = this.mainDepthViews.get(main.identity(), this.deferred, serial);

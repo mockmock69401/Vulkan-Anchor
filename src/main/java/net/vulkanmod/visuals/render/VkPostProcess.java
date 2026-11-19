@@ -906,6 +906,13 @@ public final class VkPostProcess {
         shadow.write(this.lightingUniforms);
         shadow.writeSteps(this.lightingUniforms);
         shadow.writeClose(this.lightingUniforms);
+        //2026-11-19: the far map's casters past the near maps' reach (ShadowMath.fillParams)
+        if (this.lightingUniforms.has(ShadowMath.FILL_SLOT)) {
+            VisualsConfig c = VisualsConfig.get();
+            float[] fill = ShadowMath.fillParams(c.sunShadows && c.vanillaShadows, shadow.far(), c.shadowDistance,
+                    net.minecraft.client.Minecraft.getInstance().options.getEffectiveRenderDistance());
+            this.lightingUniforms.putVec4(ShadowMath.FILL_SLOT, fill[0], fill[1], fill[2], fill[3]);
+        }
         //Session 20: Soft Shadows (SoftShadowMath; 0 = the sharp lookups)
         if (this.lightingUniforms.has(SoftShadowMath.SLOT)) {
             float[] soft = SoftShadowMath.params(VisualsConfig.get().softShadows, VkFrames.serial());
