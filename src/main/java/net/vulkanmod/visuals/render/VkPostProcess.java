@@ -41,6 +41,8 @@ public final class VkPostProcess {
     static final int SHAFT_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
     /** Session 14 follow-up: the half-size clouds' march and aurora (and its view distance, up to 60000 blocks: rgba16f's range). */
     static final int SKY_HALF_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
+    //2026-11-20: the reflected sky map (ReflectSkyMap: its clouds' colour and cover, the sky's colour)
+    static final int SKY_MAP_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
     static final int LIGHT_FORMAT = VK_FORMAT_R16G16B16A16_SFLOAT;
     /**
      * The format of the LOD light attachment: each LOD fragment's light in the low byte (sky in the low nibble, block in the high) and,
@@ -100,6 +102,8 @@ public final class VkPostProcess {
     REFLECTION_TERRAIN_ALBEDO = 13,
     //2026-11-16 (shader roadmap session 26): the reflection reads the wakes' trails at 14 (WakeMath, Wakes)
     REFLECTION_WAKES = WakeMath.BINDING,
+    //2026-11-20: the reflected sky map, read at 15 and written by the pass's first dispatch at 16 (ReflectSkyMap)
+    REFLECTION_SKY_MAP = ReflectSkyMap.BINDING_READ, REFLECTION_SKY_MAP_OUT = ReflectSkyMap.BINDING_WRITE, REFLECTION_SKY_MAP_TILES = ReflectSkyMap.BINDING_TILES,
     //2026-11-09: the lighting reads the terrain's albedo image at 17 for its water marks (TerrainLightTarget, GENERAL)
     LIGHTING_TERRAIN_ALBEDO = 17,
     //2026-11-09 (session 6): weather.comp writes the overlay at 0 and reads the depths at 1, 2, the precipitation map at 3, the light volume
@@ -268,6 +272,16 @@ public final class VkPostProcess {
     //P7l design 3.3: bound in place of the light volume (16 bytes) and of the LOD light (1x1) when there is none
     private final VkGpuBuffer lightStandIn;
     private final VkImage2D lodLightStandIn;
+    /**
+     * 2026-11-20 (frame-drop follow-up): the reflected sky map (ReflectSkyMap: the reflection's first dispatch writes it, the pass reads it),
+     * the 1x1 storage image bound in its write slot while the pass reads it, and this frame's skyMapParams (all 0: no map this frame).
+     */
+    private final VkImage2D skyMap, skyMapStandIn;
+    private float[] skyMapParams = new float[4];
+    /** The map's tiles (ReflectSkyMap.BINDING_TILES), cleared whole before its first frame; the frames' parity flips each frame it is on. */
+    private final VkGpuBuffer skyMapTiles;
+    private boolean skyMapTilesCleared;
+    private int skyMapParity;
     private byte[] cloudMapData;
     private boolean cloudMapReal;
     private long cloudMapSerial = -1;
@@ -287,8 +301,8 @@ public final class VkPostProcess {
         VkGraphicsProgram finalDraw = null;
         VkComputeProgram lighting = null, lightingBlur = null, reflection = null, volumetric = null, volumetricBlur = null;
         VkGpuBuffer copyUniformBuffer = null, lightingUniformBuffer = null, reflectionUniformBuffer = null, volumetricUniformBuffer = null;
-        VkImage2D cloudMap = null, lodLightStandIn = null, moonFace = null;
-        VkGpuBuffer lightStandIn = null, sunOpenBuffer = null;
+        VkImage2D cloudMap = null, lodLightStandIn = null, moonFace = null, skyMap = null, skyMapStandIn = null;
+        VkGpuBuffer lightStandIn = null, sunOpenBuffer = null, skyMapTiles = null;
         VkAmbientOcclusion ao = null;
         long nearest = 0, linear = 0, moonSampler = 0;
         try {
@@ -308,6 +322,9 @@ public final class VkPostProcess {
             lightStandIn = VkGpuBuffer.device(16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
             sunOpenBuffer = VkGpuBuffer.device(16, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
             lodLightStandIn = VkImage2D.create(LOD_LIGHT_FORMAT, 1, 1, 1, VK_IMAGE_USAGE_SAMPLED_BIT);
+            skyMap = VkImage2D.create(SKY_MAP_FORMAT, 2 * ReflectSkyMap.COLUMNS, ReflectSkyMap.ROWS, 1, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+            skyMapStandIn = VkImage2D.create(SKY_MAP_FORMAT, 1, 1, 1, VK_IMAGE_USAGE_STORAGE_BIT);
+            skyMapTiles = VkGpuBuffer.device(12L * ReflectSkyMap.tiles(), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
             this.copyUniforms = new LooseUniformWriter(copy.meta());
             if (this.copyUniforms.inUniformBuffer()) {
                 copyUniformBuffer = VkGpuBuffer.device(this.copyUniforms.buffer().remaining(), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
@@ -354,6 +371,9 @@ public final class VkPostProcess {
             if (lightStandIn != null) lightStandIn.free();
             if (sunOpenBuffer != null) sunOpenBuffer.free();
             if (lodLightStandIn != null) lodLightStandIn.free();
+            if (skyMap != null) skyMap.free();
+            if (skyMapStandIn != null) skyMapStandIn.free();
+            if (skyMapTiles != null) skyMapTiles.free();
             if (ao != null) ao.free();
             throw e;
         }
@@ -397,6 +417,9 @@ public final class VkPostProcess {
         this.moonSampler = moonSampler;
         this.lightStandIn = lightStandIn;
         this.lodLightStandIn = lodLightStandIn;
+        this.skyMap = skyMap;
+        this.skyMapStandIn = skyMapStandIn;
+        this.skyMapTiles = skyMapTiles;
         this.ao = ao;
         VkSmaa smaa = null;
         try {
@@ -938,6 +961,12 @@ public final class VkPostProcess {
             this.reflectionUniforms.putVec4(WakeMath.SLOT, wake[0], wake[1], wake[2], wake[3]);
         }
         this.sky.writeReflection(this.reflectionUniforms);
+        //2026-11-20: the reflected sky map's window and mirror image (ReflectSkyMap), none while the reflections are off or the camera is in water
+        this.skyMapParams = reflection.on() ? skyMapParams(reflection, this.skyMapParity ^ 1) : new float[4];
+        if (this.skyMapParams[3] > 0.5f) this.skyMapParity ^= 1;
+        if (this.reflectionUniforms.has(ReflectSkyMap.SLOT)) {
+            this.reflectionUniforms.putVec4(ReflectSkyMap.SLOT, this.skyMapParams[0], this.skyMapParams[1], this.skyMapParams[2], this.skyMapParams[3]);
+        }
         light.write(this.reflectionUniforms, LightVolumeUniforms.REFLECTION_FIRST);
         if (this.reflectionUniformBuffer != null) upload.upload(this.reflectionUniformBuffer, 0, this.reflectionUniforms.buffer());
         this.lightingOn = lighting.on();
@@ -1203,10 +1232,28 @@ public final class VkPostProcess {
         }
     }
 
+    /** This frame's skyMapParams from the reflection's view (ReflectSkyMap): all 0 when no level water below the horizon can be seen. */
+    private static float[] skyMapParams(ReflectionUniforms.Values reflection, int parity) {
+        net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getInstance();
+        net.minecraft.client.multiplayer.ClientLevel level = mc.level;
+        if (level == null || mc.gameRenderer.getMainCamera().getFluidInCamera() != net.minecraft.world.level.material.FogType.NONE) return new float[4];
+        net.minecraft.world.phys.Vec3 camera = mc.gameRenderer.getMainCamera().getPosition();
+        double surface = ReflectSkyMap.surfaceBelow(level, camera.x, camera.y, camera.z);
+        float mirror = Double.isNaN(surface) ? Float.NaN : ReflectSkyMap.mirrorY(surface, camera.y);
+        return ReflectSkyMap.params(ReflectSkyMap.window(ReflectSkyMap.viewDirections(reflection.invVanillaProjection(), reflection.invView())), mirror, parity);
+    }
+
     private void computeReflection(VkCommandBuffer cmd, Depths depths, VkGpuBuffer data, VkGpuBuffer ready, long lodLight, long terrainLight,
                                    long terrainNormal, long terrainAlbedo) {
         if (!this.reflectionOn) return;
         this.scene.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                VK_ACCESS_SHADER_WRITE_BIT);
+        boolean mapOn = this.skyMapParams[3] > 0.5f;
+        if (mapOn) {
+            this.skyMap.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_SHADER_WRITE_BIT);
+        }
+        this.skyMapStandIn.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
                 VK_ACCESS_SHADER_WRITE_BIT);
         VkBindings bindings = new VkBindings().storageImage(DST, this.scene.view()).sampled(SRC, this.sceneLit, this.nearest)
                 .sampledView(MAIN_DEPTH, depths.main(), this.nearest).sampledView(LOD_DEPTH, depths.lod(), this.nearest)
@@ -1215,7 +1262,8 @@ public final class VkPostProcess {
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight)
                 .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal).sampled(REFLECTION_MOON_FACE, this.moonFace, this.moonSampler)
                 .storage(REFLECTION_SUN_OPEN, this.sunOpenBuffer).storageImage(REFLECTION_TERRAIN_ALBEDO, terrainAlbedo)
-                .storage(REFLECTION_WAKES, this.wakeBuffer != null ? this.wakeBuffer : this.lightStandIn);
+                .storage(REFLECTION_WAKES, this.wakeBuffer != null ? this.wakeBuffer : this.lightStandIn)
+                .storage(REFLECTION_SKY_MAP_TILES, this.skyMapTiles);
         if (this.reflectionUniformBuffer != null) bindings.uniform(LOOSE_UNIFORMS, this.reflectionUniformBuffer);
         VkComputeProgram program = this.tintedOn && this.reflectionTinted != null
                 ? (this.leanOn && this.reflectionLeanTinted != null ? this.reflectionLeanTinted : this.reflectionTinted)
@@ -1234,8 +1282,29 @@ public final class VkPostProcess {
             VisualsLog.info("Visuals reflection pass: postReflection " + used);
             this.reflectionUsed = used;
         }
-        program.dispatchWithPush(cmd, bindings, this.reflectionUniformBuffer == null ? this.reflectionUniforms.buffer() : null,
-                groups(this.width), groups(this.height), 1);
+        ByteBuffer push = this.reflectionUniformBuffer == null ? this.reflectionUniforms.buffer() : null;
+        //2026-11-20: the reflected sky map first (two layers of work groups: its clouds and its sky), then the pass reads it
+        if (mapOn) {
+            //This frame's share of read flags cleared (the whole buffer before the first map), after the last frame's pass wrote it
+            memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                    VK_ACCESS_TRANSFER_WRITE_BIT);
+            if (!this.skyMapTilesCleared) {
+                vkCmdFillBuffer(cmd, this.skyMapTiles.handle(), 0, VK_WHOLE_SIZE, 0);
+                this.skyMapTilesCleared = true;
+            } else {
+                int parity = this.skyMapParams[3] > 1.5f ? 1 : 0;
+                vkCmdFillBuffer(cmd, this.skyMapTiles.handle(), ReflectSkyMap.readShareOffset(parity), 4L * ReflectSkyMap.tiles(), 0);
+            }
+            memoryBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+            VkBindings map = bindings.copy().sampled(REFLECTION_SKY_MAP, this.sceneLit, this.nearest).storageImage(REFLECTION_SKY_MAP_OUT, this.skyMap.view());
+            program.dispatchWithPush(cmd, map, push, groups(ReflectSkyMap.COLUMNS), groups(ReflectSkyMap.ROWS), 2);
+            toRead(cmd, this.skyMap);
+            memoryBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                    VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT);
+        }
+        bindings.sampled(REFLECTION_SKY_MAP, mapOn ? this.skyMap : this.sceneLit, this.linear).storageImage(REFLECTION_SKY_MAP_OUT, this.skyMapStandIn.view());
+        program.dispatchWithPush(cmd, bindings, push, groups(this.width), groups(this.height), 1);
         toRead(cmd, this.scene);
     }
 
@@ -1461,6 +1530,9 @@ public final class VkPostProcess {
         MemoryUtil.memFree(this.wakeBytes);
         this.lightStandIn.free();
         this.lodLightStandIn.free();
+        this.skyMap.free();
+        this.skyMapStandIn.free();
+        this.skyMapTiles.free();
         if (this.scene != null) destroy(this.images());
         this.scene = null;
         this.sceneLit = null;

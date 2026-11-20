@@ -84,6 +84,15 @@ layout(location = 33) uniform vec4 auroraTintMid;
 layout(location = 34) uniform vec4 auroraTintTop;
 //2026-11-16 (session 26): the wakes (wake.glsl's wakeParams; WakeMath.SLOT)
 layout(location = 35) uniform vec4 wakeParams;
+//2026-11-20 (frame-drop follow-up): the reflected sky map (ReflectSkyMap; skyMapAt below). A first dispatch of this pass with two
+// layers of work groups (gl_NumWorkGroups.z 2) writes it to skyMapOut; the pass proper reads it at skyMap. skyMapParams (ReflectSkyMap.SLOT):
+// x the map's first azimuth (radians), y its azimuth span, z the height of the camera's mirror image (camera relative), w 1 = on
+layout(binding = 15) uniform sampler2D skyMap;
+layout(binding = 16, rgba16f) uniform writeonly restrict image2D skyMapOut;
+layout(location = 36) uniform vec4 skyMapParams;
+//The map's tiles (8 x 8 texels, ReflectSkyMap.TILE): which this frame made with their neighbours (the first share), and which a frame's pass
+// read, two shares by the frame's parity (skyMapParams.w 1 or 2): a frame makes only the tiles the frame before read (skyMapTexel)
+layout(binding = 17, std430) restrict buffer SkyMapTiles { uint skyMapTiles[]; };
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -620,8 +629,153 @@ vec3 wetReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
     return mix(own, reflection, clamp(f, 0.0, 1.0)) + reflection*rainShine;
 }
 
+// ---- the reflected sky map (2026-11-20, frame-drop follow-up; the user: "반사속 하늘과 구름 계산을 계속 줄여봐줘") ----
+//
+// What a level surface (water, an ice sheet) mirrors where its ray finds nothing on screen is the sky, the aurora and the far clouds in
+// the ray's direction. They were computed for every such pixel (the clouds' march 8..12 samples, the aurora's 6): over the sea at 2560x1440
+// about 0.5..0.8 ms of this pass. The map holds them by direction instead, once a frame, and the pixels read it. A level mirror's rays all
+// leave from the camera's mirror image under its surface, so one map made from there is what the water mirrors: the clouds' march starts
+// at that point (skyMapParams.z, the surface under the camera; ReflectSkyMap), and a pixel on water at another height looks the clouds up
+// along the direction that meets the cloud layer's middle at the same place (skyMapCloudDirection). The sun's glow and glint stay per pixel
+// (sharp; they take the pixel's own open share). Columns: SKY_MAP_COLUMNS azimuths over the map's window (ReflectSkyMap: the view's below
+// the horizon, with a margin for the ripples; all around when the view looks steeply down); rows: elevations 0..90 degrees as the square of
+// the row (dense at the horizon, where a sea mirrors most of what it shows). The left half holds the clouds (cloudOver's colour and
+// cover), the right half the sky's colour with the aurora. A ray outside the window takes the per-pixel path as before.
+const float SKY_MAP_HALF_PI = 1.5707963;
+const float SKY_MAP_TAU = 6.2831853;
+const int SKY_MAP_TILE = 8;
+
+//The direction at map coordinates uv (0..1 over the window's azimuths and the elevation's square root), world space
+vec3 skyMapDirection(vec2 uv) {
+    float az = skyMapParams.x + uv.x*skyMapParams.y;
+    float e = SKY_MAP_HALF_PI*uv.y*uv.y;
+    return vec3(sin(az)*cos(e), sin(e), cos(az)*cos(e));
+}
+
+//The map's coordinates of direction r (y >= 0), x beyond 1 outside the window
+vec2 skyMapCoordinates(vec3 r) {
+    float u = mod(atan(r.x, r.z) - skyMapParams.x, SKY_MAP_TAU)/skyMapParams.y;
+    return vec2(u, sqrt(asin(clamp(r.y, 0.0, 1.0))/SKY_MAP_HALF_PI));
+}
+
+//The tiles of a map with cells texels in each half
+ivec2 skyMapTileCount(ivec2 cells) {
+    return (cells + SKY_MAP_TILE - 1)/SKY_MAP_TILE;
+}
+
+//Where this frame's pass flags the tiles it reads (skyMapTiles), and where the frame before flagged its own
+int skyMapReadShare(int tiles, bool thisFrame) {
+    bool odd = skyMapParams.w > 1.5;
+    return tiles*((odd == thisFrame) ? 2 : 1);
+}
+
+//The first dispatch: one texel of the map (work group layer 0 the clouds, 1 the sky and the aurora; a work group is a tile). Only the
+// tiles the frame before read, and their neighbours (a texel's bilinear lookup reaches into them), are made: a view with no water
+// below the horizon costs the map nothing, and a turn's new directions take the per-pixel path for a frame
+void skyMapTexel() {
+    ivec2 q = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 cells = ivec2(imageSize(skyMapOut).x/2, imageSize(skyMapOut).y);
+    ivec2 tiles = skyMapTileCount(cells);
+    ivec2 tile = ivec2(gl_WorkGroupID.xy);
+    int before = skyMapReadShare(tiles.x*tiles.y, false);
+    bool read = skyMapTiles[before + tile.y*tiles.x + tile.x] != 0u;
+    bool needed = read;
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            ivec2 n = clamp(tile + ivec2(dx, dy), ivec2(0), tiles - 1);
+            needed = needed || skyMapTiles[before + n.y*tiles.x + n.x] != 0u;
+        }
+    }
+    int layer = int(gl_WorkGroupID.z);
+    //A tile the pass may read this frame: made, and its neighbours too
+    if (layer == 0 && gl_LocalInvocationIndex == 0u) {
+        skyMapTiles[tile.y*tiles.x + tile.x] = read ? 1u : 0u;
+    }
+    if (!needed || any(greaterThanEqual(q, cells))) {
+        return;
+    }
+    vec3 r = skyMapDirection((vec2(q) + 0.5)/vec2(cells));
+    Atmosphere a = Atmosphere(atmosphereSun, atmosphereSunLight, atmosphereMoonLight, atmosphereDepth, atmosphereAmbient, atmosphereGlow, atmosphereFog,
+            atmosphereFogTint, atmosphereOvercastTint, atmosphereMoonTint);
+    vec4 texel = vec4(0.0);
+    if (layer == 0) {
+        if (cloudShape.w > 0.5 && atmosphereSky(a)) {
+            texel = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(vec3(0.0, skyMapParams.z, 0.0), r,
+                    interleavedGradientNoise(vec2(q))), r, 1.0);
+        }
+    } else {
+        vec3 sky = skyColour(a, r);
+#ifndef REFLECT_LEAN
+        if (auroraParams.x > 0.0) {
+#ifdef ATMOSPHERE_TINTS
+            sky += aurora(r, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, AURORA_REFLECTION_STEPS,
+                    fract(interleavedGradientNoise(vec2(q)) + auroraParams.w));
+#else
+            sky += aurora(r, auroraParams, vec3(1.0), vec3(1.0), vec3(1.0), AURORA_REFLECTION_STEPS, fract(interleavedGradientNoise(vec2(q)) + auroraParams.w));
+#endif
+        }
+#endif
+        texel = vec4(sky, 1.0);
+    }
+    imageStore(skyMapOut, ivec2(q.x + layer*cells.x, q.y), texel);
+}
+
+//Where the map's clouds for a ray from the mirror image at height mirrorY (camera relative) along r lie: the direction from the map's own
+// mirror image to where the ray meets the cloud layer's middle (r itself when it never does)
+vec3 skyMapCloudDirection(vec3 r, float mirrorY) {
+    float mid = cloudShape.x + 0.5*cloudShape.y;
+    if (!(r.y > 0.0) || !(mid > mirrorY) || abs(mirrorY - skyMapParams.z) < 0.5) {
+        return r;
+    }
+    vec3 at = vec3(0.0, mirrorY, 0.0) + r*((mid - mirrorY)/r.y);
+    return normalize(at - vec3(0.0, skyMapParams.z, 0.0));
+}
+
+//The map's sky (with the aurora) and clouds (colour, cover) for ray r off a level surface at height surfaceY (camera relative); false
+// where the map does not hold them (off, outside its window)
+bool skyMapAt(vec3 r, float surfaceY, out vec3 sky, out vec4 cloud) {
+    sky = vec3(0.0);
+    cloud = vec4(0.0);
+    if (!(skyMapParams.w > 0.5) || !(r.y >= 0.0)) {
+        return false;
+    }
+    vec2 uv = skyMapCoordinates(r);
+    vec2 uc = skyMapCoordinates(skyMapCloudDirection(r, 2.0*surfaceY));
+    if (uv.x > 1.0 || uc.x > 1.0) {
+        return false;
+    }
+    vec2 size = vec2(textureSize(skyMap, 0));
+    vec2 cells = vec2(floor(size.x*0.5), size.y);
+    vec2 ts = clamp(uv*cells, vec2(0.5), cells - 0.5);
+    vec2 tc = clamp(uc*cells, vec2(0.5), cells - 0.5);
+    //The tiles read are flagged for the next frame's map; a tile this frame's map did not make takes the per-pixel path
+    ivec2 tiles = skyMapTileCount(ivec2(cells));
+    ivec2 ks = min(ivec2(ts)/SKY_MAP_TILE, tiles - 1);
+    ivec2 kc = min(ivec2(tc)/SKY_MAP_TILE, tiles - 1);
+    int is = ks.y*tiles.x + ks.x;
+    int ic = kc.y*tiles.x + kc.x;
+    int flags = skyMapReadShare(tiles.x*tiles.y, true);
+    if (skyMapTiles[flags + is] == 0u) {
+        skyMapTiles[flags + is] = 1u;
+    }
+    if (skyMapTiles[flags + ic] == 0u) {
+        skyMapTiles[flags + ic] = 1u;
+    }
+    if (skyMapTiles[is] == 0u || skyMapTiles[ic] == 0u) {
+        return false;
+    }
+    cloud = textureLod(skyMap, tc/size, 0.0);
+    sky = textureLod(skyMap, vec2(ts.x + cells.x, ts.y)/size, 0.0).rgb;
+    return true;
+}
+
 void main() {
     ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    //The first dispatch writes the reflected sky map
+    if (gl_NumWorkGroups.z > 1u) {
+        skyMapTexel();
+        return;
+    }
     ivec2 size = imageSize(sceneOut);
     if (any(greaterThanEqual(p, size))) {
         return;
@@ -761,10 +915,22 @@ void main() {
     vec3 reflection = vec3(0.0);
     if (w < 1.0) {
         float sunVisibility = sunVisibilityAt(p, size, dist, toView*nGeom);
-        vec3 sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w), celestial);
+        //2026-11-20: a level surface takes its sky, aurora and clouds from the reflected sky map (skyMapAt), its sun's glow and glint as
+        // reflectedSky gives them
+        vec3 mapSky;
+        vec4 mapCloud;
+        bool mapped = nGeom.y > 0.99 && skyMapAt(r, world.y, mapSky, mapCloud);
+        vec3 sky;
+        if (mapped) {
+            float open = clamp((1.0 - blocked)*(1.0 - w), 0.0, 1.0);
+            sky = mapSky + (sunGlow(a, r) + discGlint(a, r, ripple, sunVisibility, celestial))*open;
+            sky = sky*(1.0 - mapCloud.a) + mapCloud.rgb;
+        } else {
+            sky = reflectedSky(a, r, ripple, sunVisibility, (1.0 - blocked)*(1.0 - w), celestial);
+        }
         //Session 5: the aurora in the water (AURORA_REFLECTION_STEPS samples), under the reflected clouds
 #ifndef REFLECT_LEAN
-        if (auroraParams.x > 0.0) {
+        if (!mapped && auroraParams.x > 0.0) {
 #ifdef ATMOSPHERE_TINTS
             sky += aurora(r, auroraParams, auroraTintLow.rgb, auroraTintMid.rgb, auroraTintTop.rgb, AURORA_REFLECTION_STEPS,
                     fract(interleavedGradientNoise(vec2(p)) + auroraParams.w));
@@ -773,7 +939,7 @@ void main() {
 #endif
         }
 #endif
-        if (cloudShape.w > 0.5 && atmosphereSky(a)) {
+        if (!mapped && cloudShape.w > 0.5 && atmosphereSky(a)) {
             vec4 cloud = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), reflectedCloudMarch(world, r, interleavedGradientNoise(vec2(p))), r, 1.0);
             sky = sky*(1.0 - cloud.a) + cloud.rgb;
         }

@@ -30,10 +30,13 @@ class LeanReflectionTest {
         //VkPostProcess uses the lean program only with the full one's uniforms and bindings (one writer, one buffer)
         assertEquals(meta("postReflection"), meta("postReflection.LEAN"));
         String text = ShaderFiles.read("post/reflection.comp");
-        //Exactly two branches are left out, each the whole of the feature's use in the pass
-        assertEquals(2, text.split("#ifndef REFLECT_LEAN", -1).length - 1);
+        //Exactly three branches are left out, each the whole of the feature's use in the pass: the clouds' march, the aurora where a ray
+        // takes the per-pixel sky and (2026-11-20) the aurora in the reflected sky map
+        assertEquals(3, text.split("#ifndef REFLECT_LEAN", -1).length - 1);
         assertTrue(text.contains("#ifndef REFLECT_LEAN\n    if (cloudRealistic()) {\n        return realMarch(") || text.contains("#ifndef REFLECT_LEAN\r\n    if (cloudRealistic()) {"));
         assertTrue(text.contains("#ifndef REFLECT_LEAN\n        if (auroraParams.x > 0.0) {") || text.contains("#ifndef REFLECT_LEAN\r\n        if (auroraParams.x > 0.0) {"));
+        assertTrue(text.contains("#ifndef REFLECT_LEAN\n        if (!mapped && auroraParams.x > 0.0) {")
+                || text.contains("#ifndef REFLECT_LEAN\r\n        if (!mapped && auroraParams.x > 0.0) {"));
         assertTrue(converted("postReflection.LEAN").contains("#define REFLECT_LEAN"));
         assertFalse(converted("postReflection").contains("#define REFLECT_LEAN"));
     }
