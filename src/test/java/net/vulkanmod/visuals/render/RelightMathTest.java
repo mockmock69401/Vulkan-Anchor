@@ -46,6 +46,19 @@ class RelightMathTest {
         assertEquals(7f, RelightMath.waterLiftedSky(7, 0.1f), 0f);
     }
 
+    /** 2026-11-20: water whose sky light is already full (sunlit, lifted to 15) keeps 15 whatever it sees sideways, so the shader skips the walk. */
+    @Test
+    void fullSkyLightSkipsTheSideWalk() {
+        for (float sky = 0; sky <= 15; sky += 0.5f) {
+            for (float side = -0.5f; side <= 1.5f; side += 0.25f) {
+                assertEquals(15f, RelightMath.waterLiftedSky(15, RelightMath.waterSky(sky, side)), 0f);
+            }
+        }
+        assertEquals(15f, RelightMath.liftedSky(9, RelightMath.lift(1, 1)), 0f);
+        String comp = net.vulkanmod.visuals.vk.shader.ShaderFiles.read("post/scene_copy.comp");
+        assertTrue(comp.contains("if (water && !fromLod && lightMode.z > 0.5 && skyT < 15.0) {"));
+    }
+
     /** 2026-11-19: the ring counts only through open air: a cave pool behind rock does not see the open air outside it. */
     @Test
     void theSideSkyNeedsOpenAirOnTheWay() {
