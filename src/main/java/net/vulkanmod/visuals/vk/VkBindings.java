@@ -61,6 +61,13 @@ public final class VkBindings {
         return this.add(new Entry(VulkanShaderMeta.Kind.IMAGE, glBinding, 0, 0, 0, imageView, 0));
     }
 
+    /** 2026-11-20: a copy holding the same entries (the reflection's sky map dispatch differs from the pass in two of them). */
+    public VkBindings copy() {
+        VkBindings c = new VkBindings();
+        c.entries.addAll(this.entries);
+        return c;
+    }
+
     VkBindings add(Entry entry) {
         this.entries.add(entry);
         return this;

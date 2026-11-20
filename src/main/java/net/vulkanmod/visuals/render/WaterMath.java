@@ -41,6 +41,10 @@ public final class WaterMath {
     public static final float DISC_RAIN_HIDE = 1.25f;
     public static final float MOON_DISC_LUMINANCE = 0.6f, MOON_RED = 0.92f, MOON_GREEN = 0.98f, MOON_BLUE = 1.12f;
     public static final float GLINT_POWER = 800.0f, GLINT_PEAK = 0.5f;
+    /** 2026-11-20: reflection.comp's reflected sky map (ReflectSkyMap): its elevations span a quarter turn, its azimuths a whole one. */
+    public static final float SKY_MAP_HALF_PI = 1.5707963f, SKY_MAP_TAU = 6.2831853f;
+    /** 2026-11-20: the reflected sky map's tile (ReflectSkyMap.TILE). */
+    public static final int SKY_MAP_TILE = ReflectSkyMap.TILE;
     /** 2026-11-09 (session 5): the round discs (water.glsl's shape section; CelestialUniforms writes the slot). */
     public static final float CELESTIAL_ROUND = 1.0f, SUN_ROUND_RADIUS = 0.06f, MOON_ROUND_RADIUS = 0.056f, SUN_LIMB_DARKENING = 0.6f;
     /** 2026-11-11 (session 10 follow-up): the round sun keeps session 5's light at any size (water.glsl sunShape). */
