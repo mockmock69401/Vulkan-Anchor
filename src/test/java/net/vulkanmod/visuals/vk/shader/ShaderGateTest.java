@@ -3,7 +3,6 @@ package net.vulkanmod.visuals.vk.shader;
 import net.vulkanmod.visuals.vk.GlslForVulkan;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -19,14 +18,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ShaderGateTest {
     @Test
     void everyProgramCompilesForVulkan() {
-        List<String> failures = new ArrayList<>();
-        for (ShaderCatalog.Program p : ShaderCatalog.visuals().allVariants()) {
-            for (ShaderCatalog.Stage s : p.stages()) {
-                GlslForVulkan.Converted c = GlslForVulkan.toVulkan(p.source(s, ShaderSource.classpath()), p.defines());
-                String err = ShadercTestUtil.compile(p.name() + ":" + s.id(), c.source(), ShadercTestUtil.kind(s.kind()), true);
-                if (err != null) failures.add(p.name() + " " + s.id() + "\n" + err.lines().limit(6).reduce("", (a, b) -> a + "\n  " + b));
-            }
-        }
+        List<String> failures = ShadercTestUtil.failures(ShadercTestUtil.distinctStages(ShaderCatalog.visuals()), j -> {
+            ShaderCatalog.Program p = j.program();
+            ShaderCatalog.Stage s = j.stage();
+            GlslForVulkan.Converted c = GlslForVulkan.toVulkan(p.source(s, ShaderSource.classpath()), p.defines());
+            String err = ShadercTestUtil.compile(p.name() + ":" + s.id(), c.source(), ShadercTestUtil.kind(s.kind()), true);
+            return err == null ? null : j.label() + " " + s.id() + "\n" + err.lines().limit(6).reduce("", (a, b) -> a + "\n  " + b);
+        });
         assertTrue(failures.isEmpty(), failures.size() + " stage(s) fail:\n" + String.join("\n\n", failures));
     }
 
