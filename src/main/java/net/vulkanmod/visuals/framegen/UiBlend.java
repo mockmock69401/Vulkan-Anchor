@@ -28,6 +28,16 @@ public final class UiBlend {
         return withAlpha(blendState, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ONE);
     }
 
+    /**
+     * The colour write mask to use inside the UI layer: a draw that writes any colour also writes alpha, the layer's coverage. Vanilla
+     * masks alpha out where the main framebuffer's alpha means nothing, as RenderTarget.blitToScreen does (Gnetum composes its cached HUD
+     * that way); in the layer such a draw's colour would go in with no coverage and the compose pass would add the world under it.
+     */
+    public static int colorMask(int mask) {
+        int rgb = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+        return (mask & rgb) != 0 ? mask | VK_COLOR_COMPONENT_A_BIT : mask;
+    }
+
     /** False when {@link #remap} does not know a blending state (it then only takes its coverage away). */
     public static boolean handled(int blendState) {
         return !enable(blendState) || isAlphaBlend(blendState) || isAdditive(blendState);

@@ -147,5 +147,29 @@ class UiBlendTest {
         List<String> calls = Bytecode.calls("net/vulkanmod/vulkan/shader/PipelineState", "getCurrentPipelineState");
         assertTrue(calls.contains("MainPass.isUiLayerPass"), calls.toString());
         assertTrue(calls.contains("UiBlend.remap"), calls.toString());
+        assertTrue(calls.contains("UiBlend.colorMask"), calls.toString());
+    }
+
+    //2026-11-20 (the user, Tensura pack, frame generation on: the HUD grew brighter in sunlight, normal in F2's screenshot): Gnetum
+    // composes its cached HUD with RenderTarget.blitToScreen, which masks alpha out (colorMask(true, true, true, false)); in the UI layer
+    // the HUD's colour then went in with no coverage and the compose pass added the whole world under it
+    @Test
+    void aDrawThatWritesColourAlsoWritesCoverage() {
+        int rgb = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT;
+        int all = rgb | VK_COLOR_COMPONENT_A_BIT;
+        assertEquals(all, UiBlend.colorMask(rgb));
+        assertEquals(all, UiBlend.colorMask(all));
+        assertEquals(VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_A_BIT, UiBlend.colorMask(VK_COLOR_COMPONENT_R_BIT));
+        //nothing written, or alpha alone: as it was
+        assertEquals(0, UiBlend.colorMask(0));
+        assertEquals(VK_COLOR_COMPONENT_A_BIT, UiBlend.colorMask(VK_COLOR_COMPONENT_A_BIT));
+
+        //Gnetum's composite: premultiplied ONE, ONE_MINUS_SRC_ALPHA (both pairs) over the transparent layer; with coverage written the
+        // compose pass gives the HUD over the world as vanilla's blit gives it over the world
+        int gnetum = UiBlend.remap(state(VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA));
+        float[] hud = {0.1f, 0.1f, 0.1f, 0.5f};//a half-covering dark panel, premultiplied
+        float[] ui = blend(gnetum, hud, new float[]{0f, 0f, 0f, 0f});
+        float world = 0.9f;
+        assertEquals(0.1f + world*0.5f, ui[0] + world*(1f - ui[3]), 1e-6f);
     }
 }
