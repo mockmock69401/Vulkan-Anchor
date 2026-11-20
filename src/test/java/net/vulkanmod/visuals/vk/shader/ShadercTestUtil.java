@@ -2,9 +2,41 @@ package net.vulkanmod.visuals.vk.shader;
 
 import org.lwjgl.util.shaderc.Shaderc;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Function;
+
 /** Compiles GLSL with shaderc for an OpenGL or Vulkan target; returns null on success, else the error text. */
 public final class ShadercTestUtil {
     private ShadercTestUtil() {
+    }
+
+    public record Job(String label, ShaderCatalog.Program program, ShaderCatalog.Stage stage) {
+    }
+
+    /**
+     * Every stage of every program, once per platform variant that can compile differently: all four when the stage
+     * mentions IS_INTEL or IS_WINDOWS, else only the plain one, since unread defines change nothing.
+     */
+    public static List<Job> distinctStages(ShaderCatalog catalog) {
+        List<Job> jobs = new ArrayList<>();
+        for (ShaderCatalog.Program p : catalog.all()) {
+            for (ShaderCatalog.Stage s : p.stages()) {
+                String plain = p.source(s, ShaderSource.classpath());
+                if (plain.contains("IS_INTEL") || plain.contains("IS_WINDOWS")) {
+                    for (ShaderCatalog.Platform platform : ShaderCatalog.Platform.ALL) jobs.add(new Job(p.name() + " " + platform, p.withPlatform(platform), s));
+                } else {
+                    jobs.add(new Job(p.name(), p, s));
+                }
+            }
+        }
+        return jobs;
+    }
+
+    /** Runs the check on every job across cores and returns its failures in job order; the check returns null on success. */
+    public static List<String> failures(List<Job> jobs, Function<Job, String> check) {
+        return jobs.parallelStream().map(check).filter(Objects::nonNull).toList();
     }
 
     public static int kind(ShaderCatalog.StageKind stage) {

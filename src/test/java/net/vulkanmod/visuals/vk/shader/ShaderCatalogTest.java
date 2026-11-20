@@ -4,7 +4,6 @@ import net.vulkanmod.visuals.render.CloudMath;
 import net.vulkanmod.visuals.vk.GlslForVulkan;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -98,13 +97,11 @@ class ShaderCatalogTest {
     /** The catalog reproduces the GL path: every program compiles for OpenGL, as it does in game. */
     @Test
     void everyProgramCompilesForOpenGl() {
-        List<String> failures = new ArrayList<>();
-        for (ShaderCatalog.Program p : ShaderCatalog.visuals().allVariants()) {
-            for (ShaderCatalog.Stage s : p.stages()) {
-                String err = ShadercTestUtil.compile(p.name() + ":" + s.id(), withDepthRangeStandIn(p.source(s, ShaderSource.classpath())), ShadercTestUtil.kind(s.kind()), false);
-                if (err != null) failures.add(p.name() + " " + s.id() + "\n" + err.lines().limit(5).reduce("", (a, b) -> a + "\n  " + b));
-            }
-        }
+        List<String> failures = ShadercTestUtil.failures(ShadercTestUtil.distinctStages(ShaderCatalog.visuals()), j -> {
+            ShaderCatalog.Stage s = j.stage();
+            String err = ShadercTestUtil.compile(j.program().name() + ":" + s.id(), withDepthRangeStandIn(j.program().source(s, ShaderSource.classpath())), ShadercTestUtil.kind(s.kind()), false);
+            return err == null ? null : j.label() + " " + s.id() + "\n" + err.lines().limit(5).reduce("", (a, b) -> a + "\n  " + b);
+        });
         assertTrue(failures.isEmpty(), String.join("\n\n", failures));
     }
 
