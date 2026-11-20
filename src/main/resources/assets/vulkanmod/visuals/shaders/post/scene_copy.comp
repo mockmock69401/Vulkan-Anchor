@@ -1140,8 +1140,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
             if (passRan) {
                 skyT = liftedSky(sky, clamp(visibility, 0.0, 1.0)*clamp(lightFrac.w, 0.0, 1.0));
             }
-            //B12: water that sees the sky sideways keeps that sky light (2026-11-19: only through open air, not through a cave's rock)
-            if (water && !fromLod && lightMode.z > 0.5) {
+            //B12: water that sees the sky sideways keeps that sky light (2026-11-19: only through open air, not through a cave's rock).
+            // 2026-11-20 (the user, in the Tensura pack: the frame rate low): skipped where the sky light is already full (sunlit water,
+            // lifted to 15), which it cannot raise (waterSky is at most 1); its walk reads 128 light cells, 0.6 ms over a sunlit sea
+            if (water && !fromLod && lightMode.z > 0.5 && skyT < 15.0) {
                 skyT = max(skyT, 15.0*waterSky(sky, sideSky(world, sky)));
             }
             //B16: the held light, where the light volume is known
