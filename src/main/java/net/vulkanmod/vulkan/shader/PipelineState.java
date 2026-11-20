@@ -24,12 +24,13 @@ public class PipelineState {
     public static PipelineState getCurrentPipelineState(RenderPass renderPass) {
         int assemblyRasterState = getAssemblyRasterState();
         int blendState = getBlendState();
-        // frame generation UI layer: alpha accumulates premultiplied coverage (FG design 4)
+        int currentColorMask = VRenderSystem.getColorMask();
+        // frame generation UI layer: alpha accumulates premultiplied coverage (FG design 4), written by every draw that writes colour
         if (Renderer.getInstance().getMainPass().isUiLayerPass(renderPass)) {
             FrameGen.reportBlend(blendState);
             blendState = UiBlend.remap(blendState);
+            currentColorMask = UiBlend.colorMask(currentColorMask);
         }
-        int currentColorMask = VRenderSystem.getColorMask();
         int depthState = getDepthState();
         int stencilState = getStencilState();
         int logicOp = getLogicOpState();
