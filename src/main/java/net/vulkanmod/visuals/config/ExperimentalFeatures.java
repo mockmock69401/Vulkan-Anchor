@@ -5,6 +5,7 @@ import net.vulkanmod.visuals.config.VisualsOptionLayout.Impact;
 import net.vulkanmod.visuals.config.VisualsOptionLayout.Item;
 import net.vulkanmod.visuals.config.VisualsOptionLayout.Kind;
 import net.vulkanmod.visuals.render.FootprintMath;
+import net.vulkanmod.visuals.render.SkyEventMath;
 import net.vulkanmod.visuals.render.StormMath;
 
 import java.util.ArrayList;
@@ -26,9 +27,9 @@ import java.util.function.ToIntFunction;
 public final class ExperimentalFeatures {
     /** The page's key (vulkanmod.visuals.page.experimental). */
     public static final String PAGE = "experimental";
-    /** The blocks, in order: the weather's particles; what the world does when the player touches it. */
-    public static final String WEATHER = "experimental_weather", INTERACTION = "experimental_interaction";
-    public static final List<String> BLOCKS = List.of(WEATHER, INTERACTION);
+    /** The blocks, in order: the weather's particles; what the world does when the player touches it; the night sky (2026-11-21). */
+    public static final String WEATHER = "experimental_weather", INTERACTION = "experimental_interaction", SKY = "experimental_sky";
+    public static final List<String> BLOCKS = List.of(WEATHER, INTERACTION, SKY);
 
     /** A setting on the page: its block, the layout item, and the config field's reader and writer (in the item's units). */
     public record Entry(String block, Item item, ToIntFunction<VisualsConfig> get, ObjIntConsumer<VisualsConfig> set) {
@@ -57,7 +58,17 @@ public final class ExperimentalFeatures {
                     c -> c.waterWakeStrength, (c, v) -> c.waterWakeStrength = v),
             toggle(INTERACTION, "lens_water", Impact.NONE, null, c -> c.lensWater, (c, on) -> c.lensWater = on),
             percent(INTERACTION, "lens_water_strength", 0, 200, Impact.NONE, "lens_water",
-                    c -> c.lensWaterStrength, (c, v) -> c.lensWaterStrength = v));
+                    c -> c.lensWaterStrength, (c, v) -> c.lensWaterStrength = v),
+            //2026-11-21: the stars twinkle, now and then flaring; meteors streak down the night sky (SkyEventMath; each on / off, its
+            // strength, the meteors' amount and brightness, percent of the default)
+            toggle(SKY, "star_twinkle", Impact.NONE, null, c -> c.starTwinkle, (c, on) -> c.starTwinkle = on),
+            percent(SKY, "star_twinkle_strength", 0, SkyEventMath.TWINKLE_MAX, Impact.NONE, "star_twinkle",
+                    c -> c.starTwinkleStrength, (c, v) -> c.starTwinkleStrength = v),
+            toggle(SKY, "meteors", Impact.NONE, null, c -> c.meteors, (c, on) -> c.meteors = on),
+            percent(SKY, "meteor_amount", 0, SkyEventMath.METEOR_AMOUNT_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorAmount, (c, v) -> c.meteorAmount = v),
+            percent(SKY, "meteor_brightness", 0, SkyEventMath.METEOR_BRIGHTNESS_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorBrightness, (c, v) -> c.meteorBrightness = v));
 
     private ExperimentalFeatures() {
     }

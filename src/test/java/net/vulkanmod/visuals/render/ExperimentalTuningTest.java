@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
 import org.joml.Matrix4f;
@@ -39,7 +40,7 @@ class ExperimentalTuningTest {
         assertEquals(o[1], none[1], EPS);
 
         Matrix4f inv = new Matrix4f().perspective((float) Math.toRadians(70), 16 / 9f, 0.05f, 1000).invert();
-        PostProcessSettings on = PostProcessSettings.from(new VisualsConfig());
+        PostProcessSettings on = PostProcessSettings.from(PostOn.defaults());
         WeatherUniforms.Values calm = WeatherUniforms.compute(on, 0.3f, 1, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, false, true, null);
         WeatherUniforms.Values def = blizzard(on, inv, StormMath.Tuning.DEFAULT);
         WeatherUniforms.Values noExtra = blizzard(on, inv, StormMath.tuning(100, 100, 100, 0));

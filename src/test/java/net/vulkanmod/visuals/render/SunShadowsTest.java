@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import org.junit.jupiter.api.Test;
 
@@ -7,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /** P7j design 3.4: the lightmap follows the last post-processed frame's shadows. Review focus 4. */
 class SunShadowsTest {
-    private static final PostProcessSettings DEFAULTS = PostProcessSettings.from(new VisualsConfig());
+    private static final PostProcessSettings DEFAULTS = PostProcessSettings.from(PostOn.defaults());
 
     @Test
     void theFlagFlattensTheSkyAndClamps() {
@@ -30,7 +31,7 @@ class SunShadowsTest {
         assertEquals(0f, SunShadows.strength(DEFAULTS, sun, 42, false));
         assertEquals(0f, SunShadows.strength(DEFAULTS, sun, 43, true));
         assertEquals(0f, SunShadows.strength(DEFAULTS, LightingChoice.of(42, DEFAULTS, true, true, false, false), 42, true));
-        VisualsConfig off = new VisualsConfig();
+        VisualsConfig off = PostOn.defaults();
         off.sunShadows = false;
         assertEquals(0f, SunShadows.strength(PostProcessSettings.from(off), sun, 42, true));
     }

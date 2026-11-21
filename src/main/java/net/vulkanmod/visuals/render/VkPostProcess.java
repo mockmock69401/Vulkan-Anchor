@@ -879,6 +879,11 @@ public final class VkPostProcess {
         if (this.copyUniforms.has(AnimeStarMath.ANIME_SLOT)) {
             this.copyUniforms.putVec4(AnimeStarMath.ANIME_SLOT, this.animeStars[0], this.animeStars[1], this.animeStars[2], this.animeStars[3]);
         }
+        //2026-11-21: the night sky's events (SkyEventMath: the stars' twinkle, meteors; Experimental > Sky)
+        if (this.copyUniforms.has(SkyEventMath.SLOT)) {
+            float[] events = SkyEventMath.params(animeConfig, skyDrawn);
+            this.copyUniforms.putVec4(SkyEventMath.SLOT, events[0], events[1], events[2], events[3]);
+        }
         //Session 19: the End galaxy's map, a chunk a frame while it is wanted
         if (this.dimension.galaxy() > 0 || (GalaxyMap.ready() != null && !this.galaxyUploaded())) this.uploadGalaxy(upload);
         if (this.smaa != null) this.smaa.prepare(upload);

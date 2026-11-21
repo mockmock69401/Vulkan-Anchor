@@ -68,9 +68,10 @@ class VisualsConfigTest {
                 checked++;
             } else if (item.kind() == VisualsOptionLayout.Kind.SWITCH) {
                 //FG design 7 / FSR design 7: the two frame generation switches are the ones that start off; session 9: and the parallax
-                //Session 14 follow-up: and Half-resolution Weather & Sky (the presets below High turn it on)
+                //Session 14 follow-up: and Half-resolution Weather & Sky (the presets below High turn it on); 2026-11-21: and the post-process
+                // itself (a new install starts with it off, for slower computers)
                 assertEquals(item.key().equals("frame_generation") || item.key().equals("fsr_frame_generation") || item.key().equals("pbr_parallax")
-                        || item.key().equals("half_res_effects") ? 0 : 1,
+                        || item.key().equals("half_res_effects") || item.key().equals(VisualsOptionLayout.ENABLED) ? 0 : 1,
                         VisualsOptionLayout.get(c, item), item.key());
                 checked++;
             }

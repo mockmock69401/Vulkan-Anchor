@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.render.AtmosphereMath.Atmosphere;
 import net.vulkanmod.visuals.vk.GlslForVulkan;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** W6: water colour, reflectivity, ripples, the discs, the reflection's uniforms (WaterMath, RippleMath and ReflectionUniforms mirror the shaders). */
 class WaterTest {
     private static final long SERIAL = 21;
-    private static final PostProcessSettings SETTINGS = PostProcessSettings.from(new VisualsConfig());
+    private static final PostProcessSettings SETTINGS = PostProcessSettings.from(PostOn.defaults());
     private static final Matrix4f PROJ = new Matrix4f().perspective((float) Math.toRadians(70), 16f / 9f, 0.05f, 1000f, true);
     private static final float NOON = 0, MIDNIGHT = 0.5f;
     /** The sun at height 0.17 in the west (S2's sunset, about 10 degrees up). */
@@ -38,7 +39,7 @@ class WaterTest {
     private static final String COMP = ShaderFiles.read("post/reflection.comp");
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> change) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         change.accept(c);
         return PostProcessSettings.from(c);
     }

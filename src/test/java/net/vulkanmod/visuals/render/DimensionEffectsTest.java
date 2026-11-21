@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,7 @@ class DimensionEffectsTest {
     private static final String FINAL = ShaderFiles.read("post/postfinal.glsl");
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         edit.accept(c);
         return PostProcessSettings.from(c);
     }
@@ -208,9 +209,9 @@ class DimensionEffectsTest {
         assertEquals(0, DimensionUniforms.compute(settings(c -> c.enabled = false), DimensionUniforms.Kind.END, 70, 1).galaxy());
         //The time wraps
         assertEquals(5, DimensionUniforms.compute(s, DimensionUniforms.Kind.HOT, 0, HeatMath.HEAT_TIME_WRAP + 5).seconds(), 1e-2f);
-        assertEquals(100, new VisualsConfig().netherHeatHaze);
-        assertEquals(100, new VisualsConfig().portalGlow);
-        assertEquals(100, new VisualsConfig().endGalaxy);
+        assertEquals(100, PostOn.defaults().netherHeatHaze);
+        assertEquals(100, PostOn.defaults().portalGlow);
+        assertEquals(100, PostOn.defaults().endGalaxy);
     }
 
     @Test

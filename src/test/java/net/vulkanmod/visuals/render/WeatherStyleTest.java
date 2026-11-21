@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
 import org.joml.Matrix4f;
@@ -24,7 +25,7 @@ class WeatherStyleTest {
     private static final WeatherMath.Light WHITE_LIGHT = (x, y, z, snow) -> WHITE;
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         edit.accept(c);
         return PostProcessSettings.from(c);
     }
@@ -60,7 +61,7 @@ class WeatherStyleTest {
 
     @Test
     void theDefaultsAreTheRoundTunedLookAndEachKindHasItsOwnAmount() {
-        WeatherUniforms.Values d = rainy(PostProcessSettings.from(new VisualsConfig()));
+        WeatherUniforms.Values d = rainy(PostProcessSettings.from(PostOn.defaults()));
         assertArrayEquals(new float[]{WeatherMath.WEATHER_TYPE_ROUND, WeatherMath.WEATHER_TYPE_ROUND, 1, 1}, d.style(), 0);
         //The model with the default style is the model before the setting (the overload without it)
         for (float az = 0; az < 360; az += 7) {
@@ -87,7 +88,7 @@ class WeatherStyleTest {
 
     @Test
     void whileBothKindsAreRoundTheVariantWithoutTheSpritesIsDispatched() {
-        assertTrue(rainy(PostProcessSettings.from(new VisualsConfig())).roundOnly(), "the defaults: the round-only variant");
+        assertTrue(rainy(PostProcessSettings.from(PostOn.defaults())).roundOnly(), "the defaults: the round-only variant");
         assertFalse(rainy(settings(c -> c.snowType = 1)).roundOnly());
         assertFalse(rainy(settings(c -> c.rainType = 2)).roundOnly());
         assertTrue(rainy(settings(c -> c.rainSize = 200)).roundOnly(), "a size is no type");
@@ -100,7 +101,7 @@ class WeatherStyleTest {
 
     @Test
     void theBrightnessScalesEachKindsColourApartFromIt() {
-        WeatherUniforms.Values d = rainy(PostProcessSettings.from(new VisualsConfig()));
+        WeatherUniforms.Values d = rainy(PostProcessSettings.from(PostOn.defaults()));
         assertArrayEquals(ShaderColours.DEFAULT.tint(ShaderColours.Colour.RAIN), d.rainTint(), 0, "100: the colour exactly");
         WeatherUniforms.Values b = rainy(settings(c -> {
             c.snowBrightness = 50;

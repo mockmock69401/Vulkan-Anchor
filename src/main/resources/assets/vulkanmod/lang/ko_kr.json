@@ -500,5 +500,16 @@
   "vulkanmod.visuals.lens_water": "화면에 맺힌 물",
   "vulkanmod.visuals.lens_water.tooltip": "물 밖으로 나오면 화면에 맺힌 물이 풍경을 일렁이게 하다가 1초쯤 만에 흘러내립니다",
   "vulkanmod.visuals.lens_water_strength": "화면에 맺힌 물 세기",
-  "vulkanmod.visuals.lens_water_strength.tooltip": "화면에 맺힌 물이 그림을 휘게 하는 정도입니다. 기본 세기의 퍼센트이며 화면에 맺힌 물이 켜져 있어야 합니다"
+  "vulkanmod.visuals.lens_water_strength.tooltip": "화면에 맺힌 물이 그림을 휘게 하는 정도입니다. 기본 세기의 퍼센트이며 화면에 맺힌 물이 켜져 있어야 합니다",
+  "vulkanmod.visuals.block.experimental_sky": "하늘",
+  "vulkanmod.visuals.star_twinkle": "별 반짝임",
+  "vulkanmod.visuals.star_twinkle.tooltip": "밤에 별빛이 별마다 제각각 밝아졌다 어두워지고, 가끔 확 밝게 빛납니다. 대기를 지나는 별빛처럼 지평선 가까운 별일수록 더 반짝입니다. 모든 별 모양에 적용됩니다",
+  "vulkanmod.visuals.star_twinkle_strength": "별 반짝임 세기",
+  "vulkanmod.visuals.star_twinkle_strength.tooltip": "별이 반짝이는 정도와 확 빛날 때의 밝기입니다. 기본 세기의 퍼센트이며 별 반짝임이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteors": "유성",
+  "vulkanmod.visuals.meteors.tooltip": "맑은 밤하늘에 이따금 별똥별이 1초쯤 긴 꼬리를 그리며 떨어집니다. 구름 뒤에서는 가려집니다",
+  "vulkanmod.visuals.meteor_amount": "유성 빈도",
+  "vulkanmod.visuals.meteor_amount.tooltip": "유성이 떨어지는 빈도입니다. 100이면 1분에 4개쯤, 400이면 16개쯤입니다. 기본값의 퍼센트이며 0이면 떨어지지 않습니다. 유성이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteor_brightness": "유성 밝기",
+  "vulkanmod.visuals.meteor_brightness.tooltip": "유성의 머리와 꼬리의 밝기입니다. 기본 밝기의 퍼센트이며 유성이 켜져 있어야 합니다"
 }

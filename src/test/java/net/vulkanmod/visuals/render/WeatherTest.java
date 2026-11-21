@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
 import org.joml.Matrix4f;
@@ -33,7 +34,7 @@ class WeatherTest {
     private static final float[] SNOW = WeatherUniforms.motion(WeatherUniforms.SNOW_FALL, new float[3], WeatherMath.SNOW_PERIOD, 3.7, WeatherUniforms.SNOW_EXPOSURE);
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         edit.accept(c);
         return PostProcessSettings.from(c);
     }
@@ -303,7 +304,7 @@ class WeatherTest {
     @Test
     void theStrengthFollowsRainAndThunderAndTheSettings() {
         Matrix4f inv = new Matrix4f().perspective((float) Math.toRadians(70), 16 / 9f, 0.05f, 512).invert();
-        PostProcessSettings on = PostProcessSettings.from(new VisualsConfig());
+        PostProcessSettings on = PostProcessSettings.from(PostOn.defaults());
         assertTrue(on.shaderWeather(), "on by default");
         assertFalse(WeatherUniforms.compute(on, 0, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null).on(), "clear");
         assertFalse(WeatherUniforms.compute(settings(c -> c.shaderWeather = false), 1, 0, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, true, true, null).on());
@@ -345,7 +346,7 @@ class WeatherTest {
         ShaderWeather.set(true);
         FrameFlags.resetForSkippedPost();
         assertFalse(ShaderWeather.replacesVanilla());
-        assertTrue(WeatherUniforms.wanted(PostProcessSettings.from(new VisualsConfig())));
+        assertTrue(WeatherUniforms.wanted(PostProcessSettings.from(PostOn.defaults())));
         assertFalse(WeatherUniforms.wanted(settings(c -> c.shaderWeather = false)));
         assertFalse(WeatherUniforms.wanted(null));
     }
