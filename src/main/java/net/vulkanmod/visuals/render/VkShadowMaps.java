@@ -118,6 +118,7 @@ public final class VkShadowMaps {
         ShadowMath.Cascade pending;
         long pendingStep;
         int drawSlot = -1;//the map this frame draws whole, -1 for none
+        long wholeNanos = Long.MIN_VALUE;//when it last planned a whole draw (System.nanoTime), for ShadowMath.refreshDue
         //The refresh being drawn a slice a frame into the spare image (slices > 1): the map it replaces (-1: none), its next slice,
         // sun step and cascade, the serials of the frames that drew its slices; and the slice this frame draws (-1: none)
         int jobSlot = -1, jobSlice;
@@ -259,11 +260,14 @@ public final class VkShadowMaps {
         this.sunProgress = ShadowSteps.progress(frame.timeOfDay());
         this.sunPerFrame = fresh ? ShadowSteps.advance(this.timeOfDay, frame.timeOfDay()) : 0f;
         this.timeOfDay = frame.timeOfDay();
-        this.plan(this.near, fresh, frame.near(), ShadowMath.NEAR_MAX_MOVE, Math.floorMod(frameId, ShadowMath.NEAR_INTERVAL) == ShadowMath.NEAR_PHASE,
+        long now = System.nanoTime();
+        this.plan(this.near, fresh, frame.near(), ShadowMath.NEAR_MAX_MOVE, ShadowMath.refreshDue(frameId, ShadowMath.NEAR_PHASE, now, this.near.wholeNanos),
                 ShadowMath.NEAR_RADIUS);
         this.plan(this.far, fresh, frame.far(), ShadowMath.FAR_MAX_MOVE, frame.farDue(), ShadowMath.FAR_RADIUS);
-        this.plan(this.close, fresh, frame.close(), ShadowMath.CLOSE_MAX_MOVE, Math.floorMod(frameId, ShadowMath.NEAR_INTERVAL) == ShadowMath.CLOSE_PHASE,
+        this.plan(this.close, fresh, frame.close(), ShadowMath.CLOSE_MAX_MOVE, ShadowMath.refreshDue(frameId, ShadowMath.CLOSE_PHASE, now, this.close.wholeNanos),
                 ShadowMath.CLOSE_RADIUS);
+        if (this.near.drawSlot >= 0) this.near.wholeNanos = now;
+        if (this.close.drawSlot >= 0) this.close.wholeNanos = now;
         if (TRACE) {
             VisualsLog.info("shadowTrace maps frame " + frame.serial() + " fresh " + fresh + " tod " + frame.timeOfDay() + " step " + this.sunStep + " progress "
                     + this.sunProgress + " near " + trace(this.near) + " far " + trace(this.far) + " close " + trace(this.close));

@@ -55,6 +55,12 @@ public final class ShadowMath {
      * where it was drawn; the sun's turn is the steps' (ShadowSteps).
      */
     public static final int NEAR_INTERVAL = 4, NEAR_PHASE = 2;
+    /**
+     * 2026-11-21 (the user's 1% lows, Luxium's "redraw on an interval" idea): the near and close refreshes (blocks placed or broken,
+     * entities moved) come at most this often, at 150 fps every 8 frames instead of every 4. Below 60 fps NEAR_INTERVAL frames already
+     * take longer; the sun's step draws (ShadowSteps) are not refreshes and keep their pace.
+     */
+    public static final long REFRESH_MIN_NANOS = 50_000_000L;
     public static final float NEAR_MAX_MOVE = 8, FAR_MAX_MOVE = 64;
     /** The receiver moves this many texels along its normal before the lookup and is compared with this many texels of depth bias. */
     public static final float NORMAL_OFFSET_TEXELS = 1.5f, BIAS_TEXELS = 1.0f;
@@ -210,5 +216,14 @@ public final class ShadowMath {
     /** A cascade drawn around the camera then, read with positions relative to the camera now (the far cascade is a few frames old). */
     public static Matrix4f rebase(Matrix4f viewProjection, double thenX, double thenY, double thenZ, double nowX, double nowY, double nowZ) {
         return new Matrix4f(viewProjection).translate((float) (nowX - thenX), (float) (nowY - thenY), (float) (nowZ - thenZ));
+    }
+
+    /**
+     * Whether a near or close cascade refreshes this frame: its phase of NEAR_INTERVAL, and REFRESH_MIN_NANOS since its last whole draw
+     * (lastDrawNanos; Long.MIN_VALUE: never drawn).
+     */
+    public static boolean refreshDue(int frameId, int phase, long nowNanos, long lastDrawNanos) {
+        if (Math.floorMod(frameId, NEAR_INTERVAL) != phase) return false;
+        return lastDrawNanos == Long.MIN_VALUE || nowNanos - lastDrawNanos >= REFRESH_MIN_NANOS;
     }
 }
