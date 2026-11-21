@@ -62,6 +62,8 @@ public class Initializer {
 
 	private void onInitializeClient(FMLClientSetupEvent event) {
 		LOGGER.info("== VulkanMod ==");
+		net.vulkanmod.compat.XaeroBranchCacheReset.runOnce(FMLPaths.GAMEDIR.get(), FMLPaths.CONFIGDIR.get(),
+				net.neoforged.fml.ModList.get().isLoaded("xaeroworldmap"));
 		VisualsConfig.load();
 		VisualsSettingsPage.register();
 		VisualsPilot.install();
