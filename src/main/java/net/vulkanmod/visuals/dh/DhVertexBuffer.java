@@ -94,6 +94,12 @@ public class DhVertexBuffer implements AutoCloseable {
     /** The bounds of the vertices quadCount counts; null when there are none. */
     private Bounds bounds;
     private boolean uploadedBefore, closed;
+    /**
+     * 2026-11-21 (the user's 1% lows, JFR: a Draw per buffer per pass per frame was a tenth of the render thread's garbage): the last
+     * draw DhFrameCapture made of this buffer, handed out again while its corner and view stay (a record: whoever kept it is unaffected).
+     * Only under DhFrameCapture's lock.
+     */
+    private DhFrameCapture.Draw lastDraw;
 
     public DhVertexBuffer(String name, DhStaging.Gpu gpu) {
         this.name = name;
@@ -223,6 +229,15 @@ public class DhVertexBuffer implements AutoCloseable {
      */
     public synchronized long handle() {
         return this.closed || this.buffer == null ? 0 : this.buffer.handle();
+    }
+
+    /** This buffer's draw at a container corner, the last one again when nothing changed (DhFrameCapture.collect). */
+    DhFrameCapture.Draw draw(long originX, long originY, long originZ, boolean inView) {
+        DhFrameCapture.Draw d = this.lastDraw;
+        if (d == null || d.originX() != originX || d.originY() != originY || d.originZ() != originZ || d.inView() != inView) {
+            this.lastDraw = d = new DhFrameCapture.Draw(this, originX, originY, originZ, inView);
+        }
+        return d;
     }
 
     public String name() {

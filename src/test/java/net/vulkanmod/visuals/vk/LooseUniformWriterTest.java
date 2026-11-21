@@ -67,6 +67,22 @@ class LooseUniformWriterTest {
         assertEquals(0.5f, w.buffer().getFloat(0));
     }
 
+    /** 2026-11-21: buffer() hands out one kept view; every call gives the whole block again, after a reader moved it or new values. */
+    @Test
+    void theKeptViewIsTheWholeBlockOnEveryCall() {
+        LooseUniformWriter w = new LooseUniformWriter(stage("postBlit", 1));
+        w.putVec4(0, 0.5f, 0, 0, 0);
+        ByteBuffer b = w.buffer();
+        b.getFloat();
+        b.getFloat();
+        assertEquals(24, b.remaining());
+        w.putVec4(0, 0.25f, 0, 0, 0);
+        ByteBuffer again = w.buffer();
+        assertEquals(0, again.position());
+        assertEquals(32, again.remaining());
+        assertEquals(0.25f, again.getFloat(0));
+    }
+
     @Test
     void theEdgeCoverMatrixAndCameraFractionFillOnePushBlock() {
         LooseUniformWriter w = new LooseUniformWriter(stage("edgeCover", 0));

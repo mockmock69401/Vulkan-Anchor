@@ -137,18 +137,29 @@ public final class VkVanillaShadows {
      * VulkanMod draws (ChunkStatusMap.chunkRenderReady, as the edge cover checks): a section over a chunk not ready can hold an old
      * build, which VulkanMod does not draw and so should not cast either.
      */
-    private static List<VanillaShadowCasters.Section> sections(RenderSection[] grid, double camX, double camZ, float casterRadius) {
-        List<VanillaShadowCasters.Section> out = new ArrayList<>();
+    private List<VanillaShadowCasters.Section> sections(RenderSection[] grid, double camX, double camZ, float casterRadius) {
+        //2026-11-21 (the user's 1% lows, JFR): a view per section and a new list per cascade drawn were 2% of the render thread's garbage;
+        // the list is this object's (draw uses it before it returns) and a grid slot's view is kept while it holds the same section
+        if (this.views.length != grid.length) this.views = new SectionView[grid.length];
+        List<VanillaShadowCasters.Section> out = this.casters;
+        out.clear();
         float reach = casterRadius + 16;
         net.vulkanmod.render.chunk.ChunkStatusMap ready = net.vulkanmod.render.chunk.ChunkStatusMap.INSTANCE;
-        for (RenderSection s : grid) {
+        for (int i = 0; i < grid.length; i++) {
+            RenderSection s = grid[i];
             if (s == null || !s.isCompiled() || s.isCompletelyEmpty()) continue;
             if (Math.abs(s.xOffset() + 8 - camX) > reach || Math.abs(s.zOffset() + 8 - camZ) > reach) continue;
             if (ready != null && !ready.chunkRenderReady(s.xOffset() >> 4, s.zOffset() >> 4)) continue;
-            out.add(new SectionView(s));
+            SectionView v = this.views[i];
+            if (v == null || v.section() != s) this.views[i] = v = new SectionView(s);
+            out.add(v);
         }
         return out;
     }
+
+    /** sections()'s list and kept views (by grid index). */
+    private final List<VanillaShadowCasters.Section> casters = new ArrayList<>();
+    private SectionView[] views = new SectionView[0];
 
     private record SectionView(RenderSection section) implements VanillaShadowCasters.Section {
         @Override
