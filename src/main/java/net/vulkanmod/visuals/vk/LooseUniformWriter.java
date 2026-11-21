@@ -13,11 +13,17 @@ import java.nio.ByteOrder;
 public final class LooseUniformWriter {
     private final VulkanShaderMeta meta;
     private final ByteBuffer buffer;
+    /**
+     * 2026-11-21 (the user's 1% lows, JFR): buffer()'s view, kept. A new duplicate every push and upload was 3% of the render thread's
+     * garbage; every caller copies the block at once (vkCmdPushConstants, the upload stream), so one view a writer serves them all.
+     */
+    private final ByteBuffer view;
 
     public LooseUniformWriter(VulkanShaderMeta meta) {
         if (meta.pushSize() == 0) throw new IllegalArgumentException("shader has no loose uniforms");
         this.meta = meta;
         this.buffer = ByteBuffer.allocateDirect(meta.pushSize()).order(ByteOrder.nativeOrder());
+        this.view = this.buffer.duplicate().order(ByteOrder.nativeOrder());
     }
 
     public boolean inUniformBuffer() {
@@ -25,8 +31,9 @@ public final class LooseUniformWriter {
     }
 
     public boolean has(int glLocation) {
-        for (VulkanShaderMeta.PushMember m : this.meta.push()) {
-            if (m.location() == glLocation) return true;
+        java.util.List<VulkanShaderMeta.PushMember> push = this.meta.push();
+        for (int i = 0; i < push.size(); i++) {
+            if (push.get(i).location() == glLocation) return true;
         }
         return false;
     }
@@ -54,9 +61,9 @@ public final class LooseUniformWriter {
         return this;
     }
 
-    /** The whole block, position 0, limit pushSize. */
+    /** The whole block, position 0, limit pushSize: the writer's one view, reset on every call; copy it before the next. */
     public ByteBuffer buffer() {
-        return this.buffer.duplicate().order(ByteOrder.nativeOrder()).position(0).limit(this.meta.pushSize());
+        return this.view.limit(this.meta.pushSize()).position(0);
     }
 
     private int offsetOf(int glLocation, String type) {

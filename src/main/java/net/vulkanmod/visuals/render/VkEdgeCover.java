@@ -79,7 +79,6 @@ public final class VkEdgeCover {
     private Map<EdgeCover.Face, RenderSection> scanFaces = new HashMap<>();
     /** The scan part's memos (Holes), kept between parts. */
     private final IdentityHashMap<RenderSection, Boolean> holeMemo = new IdentityHashMap<>();
-    private final it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap readyMemo = new it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap();
     private final Map<Integer, Slot> slots = new HashMap<>();
     /**
      * A 1x1 depth bound in place of the LOD depth when there is none (never read: the compare flag is 0). It is its own image, kept
@@ -200,9 +199,8 @@ public final class VkEdgeCover {
         //The memos are this part's (the traversal's frame changes between parts), their tables kept: rebuilt and grown every scan they
         // were most of the render thread's own garbage at render distance 24
         this.holeMemo.clear();
-        this.readyMemo.clear();
         Holes holes = new Holes((short) graph.getLastFrame(), level, cx >> 4, cz >> 4, Minecraft.getInstance().options.getEffectiveRenderDistance(),
-                this.holeMemo, this.readyMemo);
+                this.holeMemo);
         Map<EdgeCover.Face, RenderSection> faces = this.scanFaces;
         RenderSection[] sections = grid.sections;
         int from = scanStart(sections.length, part), to = scanStart(sections.length, part + 1);
@@ -359,15 +357,14 @@ public final class VkEdgeCover {
      * comes from the level's chunk: VulkanMod's isCompletelyEmpty is true for every section it has not built yet (gate GEC).
      */
     private record Holes(short frame, ClientLevel level, int camChunkX, int camChunkZ, int renderDistance,
-                         IdentityHashMap<RenderSection, Boolean> memo, it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap readyMemo) {
-        /** VulkanMod draws the chunk's sections (its ChunkStatusMap: data, light and neighbours ready). Once a scan part a chunk. */
+                         IdentityHashMap<RenderSection, Boolean> memo) {
+        /**
+         * VulkanMod draws the chunk's sections (its ChunkStatusMap: data, light and neighbours ready). 2026-11-21: the map memoises
+         * its answers in an array now; this part's own hash memo of them cost more than it saved.
+         */
         boolean ready(int cx, int cz) {
-            long key = net.minecraft.world.level.ChunkPos.asLong(cx, cz);
-            if (this.readyMemo.containsKey(key)) return this.readyMemo.get(key);
             net.vulkanmod.render.chunk.ChunkStatusMap map = net.vulkanmod.render.chunk.ChunkStatusMap.INSTANCE;
-            boolean r = map != null && map.chunkRenderReady(cx, cz);
-            this.readyMemo.put(key, r);
-            return r;
+            return map != null && map.chunkRenderReady(cx, cz);
         }
 
         /**

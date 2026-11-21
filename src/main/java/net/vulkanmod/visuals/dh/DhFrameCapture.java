@@ -4,6 +4,7 @@ import com.seibel.distanthorizons.api.methods.events.sharedParameterObjects.DhAp
 import org.joml.Matrix4f;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -49,6 +50,9 @@ public final class DhFrameCapture {
                         List<Draw> transparent) {}
 
     private Frame current;
+    /** The current frame's lists behind its read-only views, and the last frame's sizes. */
+    private ArrayList<Draw> opaqueOut, transparentOut;
+    private int lastOpaque, lastTransparent;
     private long droppedSerial = Long.MIN_VALUE;
     /** The last serial take handed out; a call for it or an earlier one comes after its frame was drawn. */
     private long takenSerial = Long.MIN_VALUE;
@@ -80,20 +84,30 @@ public final class DhFrameCapture {
             return;
         }
         if (this.current == null || this.current.serial() != serial) {
+            //Sized as the last frame's lists, so they are not grown and copied on the way (2026-11-21: JFR, the 1% lows)
+            ArrayList<Draw> opaque = new ArrayList<>(this.lastOpaque + 16), transparent = new ArrayList<>(this.lastTransparent + 16);
             this.current = new Frame(serial, DhDepth.toVulkan(DhDepth.fromDh(param.dhProjectionMatrix)), DhDepth.fromDh(param.dhModelViewMatrix),
-                    param.nearClipPlane, param.farClipPlane, param.worldYOffset, new ArrayList<>(), new ArrayList<>());
+                    param.nearClipPlane, param.farClipPlane, param.worldYOffset, Collections.unmodifiableList(opaque),
+                    Collections.unmodifiableList(transparent));
+            this.opaqueOut = opaque;
+            this.transparentOut = transparent;
         }
-        if (containers != null) collect(serial, containers, opaquePass, opaquePass ? this.current.opaque() : this.current.transparent());
+        if (containers != null) collect(serial, containers, opaquePass, opaquePass ? this.opaqueOut : this.transparentOut);
+        this.lastOpaque = this.opaqueOut.size();
+        this.lastTransparent = this.transparentOut.size();
     }
 
-    /** The frame stored for serial, handed out once; null when there is none (another serial, dropped, or taken). */
+    /**
+     * The frame stored for serial, handed out once; null when there is none (another serial, dropped, or taken). 2026-11-21 (the user's
+     * 1% lows): handed out as stored, without copying its lists: nothing here touches them again (a later call for the serial is
+     * dropped, a new serial starts new lists), and the lists are read-only views.
+     */
     public synchronized Frame take(long serial) {
         Frame f = this.current;
         if (f == null || f.serial() != serial) return null;
         this.current = null;
         this.takenSerial = serial;
-        return new Frame(f.serial(), f.dhProjectionVk(), f.dhModelView(), f.near(), f.far(), f.worldYOffset(), List.copyOf(f.opaque()),
-                List.copyOf(f.transparent()));
+        return f;
     }
 
     /** Calls dropped because their frame had already been taken (ruling R21). */
@@ -119,7 +133,7 @@ public final class DhFrameCapture {
             if (buffers == null) continue;
             boolean inView = this.sections.find(corner.x(), corner.z(), corner.detailLevel(), serial) != DhCasterFrustum.OUT_OF_VIEW;
             for (Object w : buffers) {
-                if (w instanceof DhVertexBuffer b) out.add(new Draw(b, corner.x(), corner.y(), corner.z(), inView));
+                if (w instanceof DhVertexBuffer b) out.add(b.draw(corner.x(), corner.y(), corner.z(), inView));
             }
         }
     }

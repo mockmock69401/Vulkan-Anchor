@@ -126,6 +126,28 @@ class DhFrameCaptureTest {
         return p;
     }
 
+    /** 2026-11-21 (the 1% lows): a buffer at the same corner gets the same draw every frame; a taken frame's lists stay as they were. */
+    @Test
+    void anUnchangedBufferKeepsItsDrawAndATakenFrameKeepsItsLists() {
+        DhApiVertexBuffer b = this.buffer(), c = this.buffer();
+        FakeContainer at = new FakeContainer(512, -64, -1024, new IDhApiVertexBufferWrapper[]{b}, null);
+        this.capture.store(5, param(99.1f, 9216f), true, DhTerrain.view(new ListOf<>(List.of(at))));
+        DhFrameCapture.Frame first = this.capture.take(5);
+        this.capture.store(6, param(99.1f, 9216f), true, DhTerrain.view(new ListOf<>(List.of(at,
+                new FakeContainer(0, -64, 0, new IDhApiVertexBufferWrapper[]{c}, null)))));
+        DhFrameCapture.Frame second = this.capture.take(6);
+        assertSame(first.opaque().get(0), second.opaque().get(0), "same buffer, same corner: the same draw");
+        assertEquals(1, first.opaque().size(), "the taken frame is not touched by the next one");
+        assertEquals(2, second.opaque().size());
+        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class, () -> second.opaque().add(second.opaque().get(0)));
+        //Moved to another corner: a new draw with the new corner
+        this.capture.store(7, param(99.1f, 9216f), true, DhTerrain.view(new ListOf<>(List.of(
+                new FakeContainer(528, -64, -1024, new IDhApiVertexBufferWrapper[]{b}, null)))));
+        DhFrameCapture.Draw moved = this.capture.take(7).opaque().get(0);
+        assertEquals(528, moved.originX());
+        assertEquals(512, first.opaque().get(0).originX(), "the first frame's draw keeps its corner");
+    }
+
     @Test
     void theFrameIsKeptForItsSerialOnly() {
         DhApiVertexBuffer b = this.buffer();
