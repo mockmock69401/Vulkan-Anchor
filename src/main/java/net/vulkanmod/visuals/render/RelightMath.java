@@ -74,6 +74,12 @@ public final class RelightMath {
         return best / 15f * t * t * (3 - 2 * t);
     }
 
+    /**
+     * lightvolume.glsl's LIGHT_SIDE_FULL_SUM: the directions' level sum at which the open share reaches SIDE_OPEN_HIGH (15 x 8 x 0.375),
+     * where side is exactly its brightest / 15; with a brightest of 15 that is 1 and the walk's later directions cannot change it.
+     */
+    public static final int SIDE_FULL_SUM = 45;
+
     /** The ring's directions: +x, -x, +z, -z and the four diagonals. */
     public static final int SIDE_DIRECTIONS = 8;
 
@@ -112,6 +118,7 @@ public final class RelightMath {
             int[] at = sideCell(far, j);
             if (Math.abs(levels[j] - prev) > Math.abs(at[0] - last[0]) + Math.abs(at[1] - last[1])) break;
             if (j == SIDE_STEPS / 2 - 1 || j == SIDE_STEPS - 1) best = Math.max(best, levels[j]);
+            if (best == 15) break;
             prev = levels[j];
             last = at;
         }
