@@ -182,6 +182,18 @@ class VkShadowMapsWiringTest {
         }
     }
 
+    /** 2026-11-21: the near and close refreshes keep their phase and come at most every REFRESH_MIN_NANOS; a first draw is never held. */
+    @Test
+    void theNearAndCloseRefreshesWaitTheirMinimumTime() {
+        long ms = 1_000_000L, last = 1_000 * ms;
+        assertTrue(ShadowMath.refreshDue(ShadowMath.NEAR_PHASE, ShadowMath.NEAR_PHASE, 5 * ms, Long.MIN_VALUE), "never drawn");
+        assertFalse(ShadowMath.refreshDue(ShadowMath.NEAR_PHASE + 1, ShadowMath.NEAR_PHASE, last + 500 * ms, last), "off its phase");
+        assertFalse(ShadowMath.refreshDue(ShadowMath.NEAR_PHASE + 4, ShadowMath.NEAR_PHASE, last + 27 * ms, last), "4 frames at 150 fps");
+        assertTrue(ShadowMath.refreshDue(ShadowMath.NEAR_PHASE + 8, ShadowMath.NEAR_PHASE, last + 53 * ms, last), "8 frames at 150 fps");
+        assertTrue(ShadowMath.refreshDue(ShadowMath.CLOSE_PHASE + 4, ShadowMath.CLOSE_PHASE, last + 67 * ms, last), "4 frames at 60 fps, as before");
+        assertEquals(50 * ms, ShadowMath.REFRESH_MIN_NANOS);
+    }
+
     /**
      * Performance (2026-10-21): a sliced refresh carries on only while its slices were drawn one frame after another, none of their
      * frames was dropped and the camera stayed within the map's reach; the far cascade's refresh is spread over its interval.
