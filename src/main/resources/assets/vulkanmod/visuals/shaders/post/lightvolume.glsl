@@ -141,10 +141,15 @@ vec3 pixelLight(ivec2 p, ivec2 size, vec3 world, vec3 n) {
 // ring cell it reached; the side sky is the brightest of them, faded in by the share of the horizon seen open (their mean /15) from
 // LIGHT_SIDE_OPEN_LOW to LIGHT_SIDE_OPEN_HIGH: a doorway's one direction lifted a cave pool's cells one by one to full sky light, in
 // blocky patches, while an island's shade on the sea or a roof open on two sides sees enough of it to stay as lit as before (the mean
-// alone darkened those). RelightMath.sideSeen and side mirror this
+// alone darkened those). RelightMath.sideSeen and side mirror this.
+// 2026-11-21 (the user, Sunlit: a frozen ocean at night 133 fps, the snow beside it 203): water by ice is smooth-lit just under 15, and
+// at night no sun lifts it to 15, so every water pixel walked all 128 cells (2 ms of the frame). The walk now ends once its answer is
+// fixed, with the same result: a direction stops at a ring cell of 15 (nothing can raise it), and the cell stops once its brightest
+// is 15 and LIGHT_SIDE_FULL_SUM of the open share is in (the smoothstep is then exactly 1): open sea reads 6 cells per corner, not 32
 const int LIGHT_SIDE_STEPS = 4;
 const float LIGHT_SIDE_OPEN_LOW = 0.125;
 const float LIGHT_SIDE_OPEN_HIGH = 0.375;
+const int LIGHT_SIDE_FULL_SUM = 45;
 float sideSkyCell(ivec3 b, float sky) {
     int d = LIGHT_SIDE_FAR;
     int k = LIGHT_SIDE_DIAGONAL_FAR;
@@ -169,11 +174,17 @@ float sideSkyCell(ivec3 b, float sky) {
             if (j == LIGHT_SIDE_STEPS/2 - 1 || j == LIGHT_SIDE_STEPS - 1) {
                 seen = max(seen, v & 15);
             }
+            if (seen == 15) {
+                break;
+            }
             prev = level;
             last = at;
         }
         sum += seen;
         best = max(best, seen);
+        if (best == 15 && sum >= LIGHT_SIDE_FULL_SUM) {
+            break;
+        }
     }
     return float(best)/15.0*smoothstep(LIGHT_SIDE_OPEN_LOW, LIGHT_SIDE_OPEN_HIGH, float(sum)/(15.0*8.0));
 }

@@ -117,6 +117,29 @@ class RelightMathTest {
         assertTrue(glsl.contains("float sideSky(vec3 world, float sky) {"));
         assertTrue(glsl.contains("return mix(mix(s00, s10, t.x), mix(s01, s11, t.x), t.y);"));
         assertTrue(glsl.contains("const int LIGHT_SIDE_GRID = " + RelightMath.SIDE_GRID + ";"));
+        assertTrue(glsl.contains("const int LIGHT_SIDE_FULL_SUM = " + RelightMath.SIDE_FULL_SUM + ";"));
+        assertTrue(glsl.contains("if (best == 15 && sum >= LIGHT_SIDE_FULL_SUM) {"));
+    }
+
+    /**
+     * 2026-11-21 (Sunlit frozen ocean at night): the walk ends once its answer is fixed. A direction's walk past a ring cell of 15 cannot
+     * raise it, and once the brightest is 15 and the sum is SIDE_FULL_SUM the side is exactly 1 whatever the other directions give.
+     */
+    @Test
+    void theSideWalkEndsOnlyWhereItsAnswerIsFixed() {
+        assertEquals(RelightMath.SIDE_OPEN_HIGH, RelightMath.SIDE_FULL_SUM / (15f * RelightMath.SIDE_DIRECTIONS), 0f);
+        int[] east = {32, 0};
+        for (int far = 0; far <= 15; far++) {
+            assertEquals(15, RelightMath.sideSeen(15, new int[]{15, 15, 15, far}, east));
+        }
+        for (int a = 0; a <= 15; a++) {
+            for (int b = 0; b <= 15; b++) {
+                assertEquals(1f, RelightMath.side(new int[]{15, 15, 15, a, b, 0, 0, 0}), 0f);
+                assertEquals(1f, RelightMath.side(new int[]{15, 15, 15, a, b, a, b, 15}), 0f);
+            }
+        }
+        //short of the sum the later directions still count
+        assertTrue(RelightMath.side(new int[]{15, 15, 14, 0, 0, 0, 0, 0}) < 1f);
     }
 
     @Test
