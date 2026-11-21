@@ -537,7 +537,9 @@ public class GlTexture {
                 GlPixelStore.getInteger(GlPixelStore.GL_PACK_ROW_LENGTH),
                 GlPixelStore.getInteger(GlPixelStore.GL_PACK_SKIP_ROWS),
                 GlPixelStore.getInteger(GlPixelStore.GL_PACK_SKIP_PIXELS),
-                GlPixelStore.getInteger(GlPixelStore.GL_PACK_ALIGNMENT), destinationBytes);
+                GlPixelStore.getInteger(GlPixelStore.GL_PACK_ALIGNMENT), destinationBytes,
+                GlPixelPack.permutation(image.format, format, type,
+                        GlPixelStore.getInteger(GlPixelStore.GL_PACK_SWAP_BYTES) != 0, ByteOrder.nativeOrder()));
     }
 
     public static void setVulkanImage(int id, VulkanImage vulkanImage) {

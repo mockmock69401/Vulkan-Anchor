@@ -3,6 +3,7 @@ package net.vulkanmod.vulkan.texture;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Minecraft;
 import net.vulkanmod.gl.GlFramebuffer;
+import net.vulkanmod.gl.GlPixelPack;
 import net.vulkanmod.vulkan.Renderer;
 import net.vulkanmod.vulkan.Synchronization;
 import net.vulkanmod.vulkan.device.DeviceManager;
@@ -56,6 +57,13 @@ public abstract class ImageUtil {
     public static void downloadTextureGl(VulkanImage image, int level, long ptr,
                                          int rowLength, int skipRows, int skipPixels, int alignment,
                                          long destinationBytes) {
+        downloadTextureGl(image, level, ptr, rowLength, skipRows, skipPixels, alignment, destinationBytes, null);
+    }
+
+    /** {@code bytePermutation} (GlPixelPack), when not null, reorders each 4-byte pixel into the caller's GL format and type. */
+    public static void downloadTextureGl(VulkanImage image, int level, long ptr,
+                                         int rowLength, int skipRows, int skipPixels, int alignment,
+                                         long destinationBytes, int[] bytePermutation) {
         if (level < 0 || level >= image.mipLevels || level >= 32)
             throw new IllegalArgumentException("Invalid texture download mip level");
         if (rowLength < 0 || skipRows < 0 || skipPixels < 0 || destinationBytes < 0
@@ -79,6 +87,8 @@ public abstract class ImageUtil {
         }
         downloadTextureRegion(image, output, level, 0, 0, width, height, image.aspect, image.formatSize,
                 rowStride, image.requiresGlDownloadFlip(level));
+        if (bytePermutation != null && image.formatSize == 4)
+            GlPixelPack.apply(output, width, height, rowStride, bytePermutation);
     }
 
     public static void downloadTextureRegion(VulkanImage image, long ptr, int x, int y, int width, int height, int aspectMask, int bytesPerPixel) {
