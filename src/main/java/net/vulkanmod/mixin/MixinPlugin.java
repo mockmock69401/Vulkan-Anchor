@@ -41,6 +41,9 @@ public class MixinPlugin implements IMixinConfigPlugin {
             SABLE_MIXIN_PACKAGE + "VeilMultiBindLegacySamplerMixin",
             SABLE_MIXIN_PACKAGE + "VeilFirstPersonRendererMixin",
             SABLE_MIXIN_PACKAGE + "VeilRenderSystemMixin");
+    private static final String CONTINUITY_MIXIN_PACKAGE = "net.vulkanmod.mixin.compatibility.continuity.";
+    private static final String CONTINUITY_REDIRECT_HANDLER_MIXIN = CONTINUITY_MIXIN_PACKAGE + "ContinuityRedirectHandlerM";
+    private static final String CONTINUITY_REDIRECT_HANDLER = "me.pepperbell.continuity.client.resource.ResourceRedirectHandler";
 
     private static final String CHUNK_MIXIN_PACKAGE = "net.vulkanmod.mixin.chunk.";
     private static final String SECTION_LAYER_MIXIN = CHUNK_MIXIN_PACKAGE + "SectionLayerMixin";
@@ -122,6 +125,11 @@ public class MixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.startsWith(ESSENTIAL_MIXIN_PACKAGE)) {
             return ESSENTIAL_UI_3D_PLAYER_MIXIN.equals(mixinClassName)
                     && ESSENTIAL_UI_3D_PLAYER.equals(targetClassName);
+        }
+
+        if (mixinClassName.startsWith(CONTINUITY_MIXIN_PACKAGE)) {
+            return CONTINUITY_REDIRECT_HANDLER_MIXIN.equals(mixinClassName)
+                    && CONTINUITY_REDIRECT_HANDLER.equals(targetClassName);
         }
 
         if (SUFFIXED_DH_MIXINS.contains(mixinClassName)) {
