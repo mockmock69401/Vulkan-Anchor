@@ -16,6 +16,15 @@ class RelightMathTest {
     }
 
     @Test
+    void aCaveWithoutSkyLightIsNotLiftedByTheSun() {
+        assertEquals(0f, RelightMath.liftedSky(0, RelightMath.lift(1, 1)), 0f);
+        assertEquals(0.5f + 14.5f * 0.5f, RelightMath.liftedSky(0.5f, RelightMath.lift(1, 1)), 1e-6f);
+        assertEquals(15f, RelightMath.liftedSky(1, RelightMath.lift(1, 1)), 0f);
+        String glsl = net.vulkanmod.visuals.vk.shader.ShaderFiles.read("post/lightvolume.glsl");
+        assertTrue(glsl.contains("return sky + (15.0 - sky)*clamp(lift, 0.0, 1.0)*clamp(sky, 0.0, 1.0);"));
+    }
+
+    @Test
     void theGainStopsAtFour() {
         assertEquals(2f, RelightMath.gain(0.25f, 0.5f), 1e-6f);
         assertEquals(RelightMath.MAX_GAIN, RelightMath.gain(0.01f, 1f), 0f);
