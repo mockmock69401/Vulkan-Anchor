@@ -20,8 +20,12 @@ public final class RelightMath {
         return clamp01(sunVisible) * clamp01(strength);
     }
 
+    /**
+     * 2026-11-21 (the user, Tensura pack: bright lines along a cave's ledges): no lift where vanilla's sky light is 0 (no open air to
+     * the sky, so the sun visibility there is the shadow map's error), faded in to sky light 1. lightvolume.glsl mirrors this.
+     */
     public static float liftedSky(float sky, float lift) {
-        return sky + (15 - sky) * clamp01(lift);
+        return sky + (15 - sky) * clamp01(lift) * clamp01(sky);
     }
 
     /** Linear lightmap colours, one channel. */

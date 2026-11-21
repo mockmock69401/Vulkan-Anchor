@@ -209,8 +209,13 @@ float waterSky(float sky, float side) {
     return max(skyVisibility(sky), clamp(side, 0.0, 1.0));
 }
 
+//Sky Light Ambient: the sky light lifted toward 15 by lift (where the sun reaches). 2026-11-21 (the user, Tensura pack: thin bright
+// lines along ledges and pillar edges deep in a cave, no light source or water there): none where vanilla's sky light is 0, faded in
+// to its first level. Sky light 0 means no open air reaches the sky, so the sun cannot; there the sun visibility is the shadow map's
+// error alone (a face the rays run along, its blocker within the bias), and the lift took those faces from 0 to 15, lit as open sky
+// and, at that sky light, past the direct sun's sky gate too. RelightMath.liftedSky mirrors this
 float liftedSky(float sky, float lift) {
-    return sky + (15.0 - sky)*clamp(lift, 0.0, 1.0);
+    return sky + (15.0 - sky)*clamp(lift, 0.0, 1.0)*clamp(sky, 0.0, 1.0);
 }
 
 float skyShare(float sky) {
