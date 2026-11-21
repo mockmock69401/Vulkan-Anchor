@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.config.VisualsOptionLayout;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
@@ -366,7 +367,7 @@ class RealisticCloudTest {
     }
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         edit.accept(c);
         return PostProcessSettings.from(c);
     }
@@ -476,7 +477,7 @@ class RealisticCloudTest {
         assertEquals(100, VisualsOptionLayout.defaultValue(coverage));
         assertEquals(1, VisualsOptionLayout.defaultValue(quality), "medium");
         assertEquals(PostProcessSettings.CLOUD_COVERAGE_MAX, coverage.max());
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         VisualsOptionLayout.set(c, quality, 9);
         assertEquals(CloudMath.QUALITY_MAX, c.cloudQuality);
         VisualsOptionLayout.set(c, coverage, 150);

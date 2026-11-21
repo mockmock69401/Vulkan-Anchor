@@ -24,10 +24,13 @@ class ExperimentalFeaturesTest {
     void thePageIsLastWithItsWeatherAndInteractionBlocks() {
         VisualsOptionLayout.Page page = VisualsOptionLayout.PAGES.get(VisualsOptionLayout.PAGES.size() - 1);
         assertEquals(ExperimentalFeatures.PAGE, page.key());
-        assertEquals(List.of(ExperimentalFeatures.WEATHER, ExperimentalFeatures.INTERACTION), page.blocks().stream().map(VisualsOptionLayout.Block::key).toList());
+        assertEquals(List.of(ExperimentalFeatures.WEATHER, ExperimentalFeatures.INTERACTION, ExperimentalFeatures.SKY), page.blocks().stream().map(VisualsOptionLayout.Block::key).toList());
         assertEquals(List.of("sandstorm_grain_size", "sandstorm_grain_amount", "blizzard_flake_size", "blizzard_flake_amount"),
                 page.blocks().get(0).items().stream().map(VisualsOptionLayout.Item::key).toList());
         assertEquals(List.of("footprint_depth", "footprint_duration", "water_wakes", "water_wake_strength", "lens_water", "lens_water_strength"), page.blocks().get(1).items().stream().map(VisualsOptionLayout.Item::key).toList());
+        //2026-11-21: the night sky's events
+        assertEquals(List.of("star_twinkle", "star_twinkle_strength", "meteors", "meteor_amount", "meteor_brightness"),
+                page.blocks().get(2).items().stream().map(VisualsOptionLayout.Item::key).toList());
         //each greys out with the effect it tunes
         assertEquals("storm_weather", VisualsOptionLayout.item("sandstorm_grain_size").requires());
         assertEquals("footprints", VisualsOptionLayout.item("footprint_duration").requires());

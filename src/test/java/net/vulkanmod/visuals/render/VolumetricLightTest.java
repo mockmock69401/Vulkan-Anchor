@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.GlslForVulkan;
 import net.vulkanmod.visuals.vk.LooseUniformWriter;
@@ -32,7 +33,7 @@ class VolumetricLightTest {
     private static final float NOON = 0, SUNSET = (float) (Math.acos(0.1) / (2 * Math.PI)), MIDNIGHT = 0.5f;
 
     private static PostProcessSettings settings(int lightShafts) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.lightShafts = lightShafts;
         return PostProcessSettings.from(c);
     }

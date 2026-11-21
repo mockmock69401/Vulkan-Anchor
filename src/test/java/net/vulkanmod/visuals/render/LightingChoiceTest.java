@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import org.junit.jupiter.api.Test;
 
@@ -9,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** P7d design 3.3: the lighting is on only when the post-process will apply it this frame. */
 class LightingChoiceTest {
-    private static final PostProcessSettings DEFAULTS = PostProcessSettings.from(new VisualsConfig());
+    private static final PostProcessSettings DEFAULTS = PostProcessSettings.from(PostOn.defaults());
 
     @Test
     void onWithTheDefaults() {
@@ -24,14 +25,14 @@ class LightingChoiceTest {
         assertFalse(LightingChoice.of(7, DEFAULTS, true, false, false, true).ao(), "no atmosphere capture");
         assertFalse(LightingChoice.of(7, DEFAULTS, true, true, true, true).ao(), "fog covers everything");
         assertFalse(LightingChoice.of(7, DEFAULTS, true, true, false, false).sun(), "no sky light");
-        VisualsConfig off = new VisualsConfig();
+        VisualsConfig off = PostOn.defaults();
         off.enabled = false;
         assertFalse(LightingChoice.of(7, PostProcessSettings.from(off), true, true, false, true).sun(), "post-process off");
     }
 
     @Test
     void eachEffectFollowsItsStrength() {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.aoStrength = 0;
         LightingChoice choice = LightingChoice.of(7, PostProcessSettings.from(c), true, true, false, true);
         assertFalse(choice.ao());
@@ -43,7 +44,7 @@ class LightingChoiceTest {
     @Test
     void waterFollowsItsStrengthAndCountsForThePass() {
         assertTrue(LightingChoice.of(7, DEFAULTS, true, true, false, true).water());
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.aoStrength = 0;
         c.sunShading = 0;
         LightingChoice waterOnly = LightingChoice.of(7, PostProcessSettings.from(c), true, true, false, true);
@@ -60,7 +61,7 @@ class LightingChoiceTest {
     @Test
     void reflectionsFollowTheirStrengthAndCountForThePass() {
         assertTrue(LightingChoice.of(7, DEFAULTS, true, true, false, true).reflections());
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.aoStrength = 0;
         c.sunShading = 0;
         c.waterDepth = 0;

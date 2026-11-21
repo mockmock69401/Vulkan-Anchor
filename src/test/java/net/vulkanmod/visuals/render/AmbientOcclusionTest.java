@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import net.vulkanmod.visuals.Bytecode;
@@ -393,7 +394,7 @@ class AmbientOcclusionTest {
             assertFalse(json.get(PostProcessSettings.KEY_PREFIX + "ao_strength.tooltip").getAsString().isBlank(), lang);
         }
         //The setting through the item, the settings, the lighting values and the clean writer to the composite's slot 10 .x
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         VisualsOptionLayout.set(c, item, 40);
         assertEquals(40, c.aoStrength);
         PostProcessSettings s = PostProcessSettings.from(c);
@@ -413,7 +414,7 @@ class AmbientOcclusionTest {
 
     @Test
     void offOrAtZeroThePassesDoNotRunAndTheImageIsUnchanged() throws Exception {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         PostProcessSettings on = PostProcessSettings.from(c);
         assertTrue(AmbientOcclusion.runs(LightingUniforms.compute(on, LightingChoice.of(SERIAL, on, true, true, false, true), frame(), SERIAL, false, 1, true)));
         c.aoStrength = 0;
@@ -488,8 +489,8 @@ class AmbientOcclusionTest {
             assertEquals(want, have, programs[i]);
         }
         assertEquals(0, meta("postAoBlur").pushSize());
-        LightingUniforms.Values v = LightingUniforms.compute(PostProcessSettings.from(new VisualsConfig()),
-                LightingChoice.of(SERIAL, PostProcessSettings.from(new VisualsConfig()), true, true, false, true), frame(), SERIAL, true, 1, true);
+        LightingUniforms.Values v = LightingUniforms.compute(PostProcessSettings.from(PostOn.defaults()),
+                LightingChoice.of(SERIAL, PostProcessSettings.from(PostOn.defaults()), true, true, false, true), frame(), SERIAL, true, 1, true);
         LooseUniformWriter depth = new LooseUniformWriter(meta("postAoDepth"));
         for (int loc = 0; loc <= AmbientOcclusion.DEPTH_SIZE; loc++) assertTrue(depth.has(loc), "postAoDepth location " + loc);
         AmbientOcclusion.writeDepth(depth, v, W, H);

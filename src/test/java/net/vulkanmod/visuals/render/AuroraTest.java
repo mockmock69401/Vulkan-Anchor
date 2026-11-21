@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
 import org.junit.jupiter.api.Test;
@@ -20,10 +21,10 @@ class AuroraTest {
     private static final String GLSL = ShaderFiles.read("post/aurora.glsl");
     private static final String COPY = ShaderFiles.read("post/scene_copy.comp");
     private static final String REFLECTION = ShaderFiles.read("post/reflection.comp");
-    private static final PostProcessSettings SETTINGS = PostProcessSettings.from(new VisualsConfig());
+    private static final PostProcessSettings SETTINGS = PostProcessSettings.from(PostOn.defaults());
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         edit.accept(c);
         return PostProcessSettings.from(c);
     }
@@ -164,8 +165,8 @@ class AuroraTest {
     @Test
     void theUniformsFollowTheModeTheNightTheWeatherAndTheClimate() {
         float midnight = -1, noon = 1, dusk = -0.1f;
-        assertEquals(CelestialUniforms.AURORA_NIGHT_AND_END, new VisualsConfig().aurora, "auroras on by default");
-        assertEquals(CelestialUniforms.SHAPE_SQUARE, new VisualsConfig().celestialShape, "square by default (as before)");
+        assertEquals(CelestialUniforms.AURORA_NIGHT_AND_END, PostOn.defaults().aurora, "auroras on by default");
+        assertEquals(CelestialUniforms.SHAPE_SQUARE, PostOn.defaults().celestialShape, "square by default (as before)");
         float night = CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, 0, 0, 1);
         assertEquals(1, night, 1e-6f);
         assertEquals(0, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, noon, 0, 0, 1), 0);

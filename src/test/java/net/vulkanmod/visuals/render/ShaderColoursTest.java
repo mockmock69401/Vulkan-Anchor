@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.config.VisualsOptionLayout;
 import net.vulkanmod.visuals.config.VisualsPresets;
@@ -36,7 +37,7 @@ class ShaderColoursTest {
     }
 
     private static VisualsConfig with(Colour colour, int rgb) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.setColour(colour, rgb);
         return c;
     }
@@ -51,7 +52,7 @@ class ShaderColoursTest {
         }
         assertTrue(DEFAULTS.allDefault());
         assertEquals("defaults", DEFAULTS.describe());
-        assertSame(DEFAULTS, ShaderColours.of(new VisualsConfig().colours()), "the defaults reuse the instance");
+        assertSame(DEFAULTS, ShaderColours.of(PostOn.defaults().colours()), "the defaults reuse the instance");
     }
 
     @Test
@@ -90,7 +91,7 @@ class ShaderColoursTest {
     @Test
     void theDefaultsChangeNoUniform() {
         //the default colours' atmosphere is the one before session 8 in its first 28 floats, and the tints are (1, 1, 1, 0)
-        PostProcessSettings s = settings(new VisualsConfig());
+        PostProcessSettings s = settings(PostOn.defaults());
         for (float time : new float[]{NOON, 0.1f, DUSK, 0.26f, MIDNIGHT, DAWN}) {
             for (float rain : new float[]{0, 1}) {
                 float[] b = AtmosphereUniforms.block(s, frame(time, rain), true);
@@ -110,7 +111,7 @@ class ShaderColoursTest {
     @Test
     void theSkyColoursMoveTheSkyByTheSunsHeight() {
         //noon: the day sky's tint, not the sunset's; a sunset (sun in the west, low): the sunset's, not the sunrise's
-        PostProcessSettings def = settings(new VisualsConfig());
+        PostProcessSettings def = settings(PostOn.defaults());
         PostProcessSettings purple = settings(with(Colour.DAY_SKY, 0x9070F0));
         PostProcessSettings pink = settings(with(Colour.SUNSET, 0xFF60A0));
         PostProcessSettings morning = settings(with(Colour.SUNRISE, 0xFF60A0));
@@ -132,7 +133,7 @@ class ShaderColoursTest {
     void theFogOvercastAndMoonTintsReachTheStructAndItsMirror() {
         PostProcessSettings s = settings(with(Colour.FOG, 0xFFC0C0));
         float[] b = AtmosphereUniforms.block(s, frame(NOON, 0), true);
-        AtmosphereMath.Atmosphere a = AtmosphereMath.Atmosphere.of(b), d = AtmosphereMath.Atmosphere.of(AtmosphereUniforms.block(settings(new VisualsConfig()), frame(NOON, 0), true));
+        AtmosphereMath.Atmosphere a = AtmosphereMath.Atmosphere.of(b), d = AtmosphereMath.Atmosphere.of(AtmosphereUniforms.block(settings(PostOn.defaults()), frame(NOON, 0), true));
         assertTrue(a.fogTint()[0] > 1 && a.fogTint()[2] < 1);
         float[] dir = {1, 0, 0};
         float[] fog = AtmosphereMath.fogColour(a, dir), fogDef = AtmosphereMath.fogColour(d, dir);
@@ -144,7 +145,7 @@ class ShaderColoursTest {
         assertArrayEquals(new float[]{1, 1, 1}, AtmosphereMath.hazeTint(d, 3, 16), 0, "exactly 1 at the default");
         //the moon disc
         AtmosphereMath.Atmosphere m = AtmosphereMath.Atmosphere.of(AtmosphereUniforms.block(settings(with(Colour.MOON, 0xFF8040)), frame(MIDNIGHT, 0), true));
-        AtmosphereMath.Atmosphere md = AtmosphereMath.Atmosphere.of(AtmosphereUniforms.block(settings(new VisualsConfig()), frame(MIDNIGHT, 0), true));
+        AtmosphereMath.Atmosphere md = AtmosphereMath.Atmosphere.of(AtmosphereUniforms.block(settings(PostOn.defaults()), frame(MIDNIGHT, 0), true));
         float[] moon = WaterMath.moonRadiance(m), moonDef = WaterMath.moonRadiance(md);
         assertTrue(moon[0] / moon[2] > moonDef[0] / moonDef[2] * 2, "an orange moon");
     }
@@ -152,7 +153,7 @@ class ShaderColoursTest {
     @Test
     void theOtherColoursReachTheirSlots() {
         //aurora: the Overworld's three, or the End's in all three
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.setColour(Colour.AURORA_MAIN, 0xFF8000);
         c.setColour(Colour.AURORA_END, 0x40FF40);
         ShaderColours colours = ShaderColours.of(c.colours());
@@ -167,9 +168,9 @@ class ShaderColoursTest {
         assertArrayEquals(plain, AuroraMath.aurora(dir, params, new float[]{1, 1, 1}, new float[]{1, 1, 1}, new float[]{1, 1, 1}, 12, 0.5f), 0);
         //underwater: the light slot, exactly as before at the default
         AtmosphereFrame wet = frame(NOON, 0).withCameraFluid(AtmosphereFrame.CameraFluid.WATER);
-        float[] l = UnderwaterUniforms.compute(settings(new VisualsConfig()), wet, 1, true, 3, 1, true).light();
+        float[] l = UnderwaterUniforms.compute(settings(PostOn.defaults()), wet, 1, true, 3, 1, true).light();
         float[] g = UnderwaterUniforms.compute(settings(with(Colour.UNDERWATER, 0x30C060)), wet, 1, true, 3, 1, true).light();
-        assertArrayEquals(l, UnderwaterUniforms.light(settings(new VisualsConfig()), wet, true), 0);
+        assertArrayEquals(l, UnderwaterUniforms.light(settings(PostOn.defaults()), wet, true), 0);
         assertTrue(g[1] / g[2] > l[1] / l[2] * 1.5f, "a green underwater");
     }
 
@@ -182,7 +183,7 @@ class ShaderColoursTest {
         float[] sun = ColourMath.sunLight(0.6f, 1), shade = ColourMath.skyShade(1, 0.6f);
         assertEquals(ShaderColours.display(sun[0], sun[1], sun[2]), Colour.SUNLIGHT.defaultRgb(), ShaderColours.hex(ShaderColours.display(sun[0], sun[1], sun[2])));
         assertEquals(ShaderColours.display(shade[0], shade[1], shade[2]), Colour.SHADE_LIGHT.defaultRgb());
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.setColour(Colour.SUNLIGHT, 0xFF8040);
         c.setColour(Colour.SHADE_LIGHT, 0x80C0FF);
         ShaderColours picked = ShaderColours.of(c.colours());
@@ -206,7 +207,7 @@ class ShaderColoursTest {
         assertArrayEquals(ShaderColours.defaults(), read.colours());
         assertEquals(VisualsConfig.currentRevision(), read.revision);
         assertEquals(VisualsPresets.HIGH, read.preset, "a revision 6 file keeps its preset");
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.setColour(Colour.SUNSET, 0xFF3366);
         c.setColour(Colour.WATER, 0x00FF80);
         Path f = dir.resolve("new.json");
@@ -222,7 +223,7 @@ class ShaderColoursTest {
         }
         //each colour has its own field
         Set<Integer> seen = new HashSet<>();
-        VisualsConfig k = new VisualsConfig();
+        VisualsConfig k = PostOn.defaults();
         for (Colour col : Colour.values()) {
             k.setColour(col, col.ordinal() + 1);
             seen.add(k.colour(col));
@@ -244,7 +245,7 @@ class ShaderColoursTest {
                     Colour c = Colour.byKey(item.key());
                     assertNotNull(c, item.key());
                     assertEquals(c.defaultRgb(), VisualsOptionLayout.defaultValue(item));
-                    VisualsConfig cfg = new VisualsConfig();
+                    VisualsConfig cfg = PostOn.defaults();
                     VisualsOptionLayout.set(cfg, item, 0x123456);
                     assertEquals(0x123456, cfg.colour(c));
                     assertEquals(0x123456, VisualsOptionLayout.get(cfg, item));

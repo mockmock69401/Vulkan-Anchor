@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.config.VisualsOptionLayout;
 import org.junit.jupiter.api.Test;
@@ -108,7 +109,7 @@ class AnimeStarTest {
         assertEquals(2, StarMath.TYPE_ANIME);
         assertEquals(StarMath.TYPE_ANIME, StarMath.TYPE_MAX);
         assertEquals(StarMath.TYPE_MAX, VisualsOptionLayout.item("star_type").max());
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         assertEquals(StarMath.TYPE_VANILLA, c.starType);
         assertArrayEquals(new float[4], AnimeStarMath.params(c, true, true), "the default draws no anime stars");
         for (String lang : new String[]{"en_us", "ko_kr"}) {
@@ -118,7 +119,7 @@ class AnimeStarTest {
 
     @Test
     void theSlotFollowsTheStarSettings() {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.starType = StarMath.TYPE_ANIME;
         assertArrayEquals(new float[]{1, 1, 1, 1}, AnimeStarMath.params(c, true, true), EPS);
         assertArrayEquals(new float[]{1, 1, 1, 0}, AnimeStarMath.params(c, true, false), EPS, "the stars alone until the map is up");

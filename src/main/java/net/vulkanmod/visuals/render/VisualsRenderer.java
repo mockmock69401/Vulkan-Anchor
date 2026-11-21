@@ -504,6 +504,8 @@ public final class VisualsRenderer {
                     VisualsConfig.get().hangingSway / 100f);
             //Session 20: the caustics keep time with the ripples' flow
             CausticMath.setClock(flow);
+            //2026-11-21: the stars' twinkle and the meteors too (SkyEventMath)
+            SkyEventMath.setClock(flow);
             //Session 25: the camera's desert share (the desert's night sky, stars and clear sky)
             BiomeSky.update(level, cameraX, cameraY, cameraZ, flow, level.getThunderLevel(partialTick));
             //Session 25: the players' footprints in snow and sand

@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.shader.ShaderFiles;
 import org.joml.Matrix4f;
@@ -360,7 +361,7 @@ class AnimeCloudTest {
     }
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         edit.accept(c);
         return PostProcessSettings.from(c);
     }

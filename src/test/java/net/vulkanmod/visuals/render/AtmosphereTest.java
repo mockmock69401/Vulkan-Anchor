@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.PostOn;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.vk.GlslForVulkan;
 import net.vulkanmod.visuals.vk.LooseUniformWriter;
@@ -60,7 +61,7 @@ class AtmosphereTest {
     }
 
     private static PostProcessSettings settings(java.util.function.Consumer<VisualsConfig> edit) {
-        VisualsConfig c = new VisualsConfig();
+        VisualsConfig c = PostOn.defaults();
         c.fogStrength = 100;
         edit.accept(c);
         return PostProcessSettings.from(c);

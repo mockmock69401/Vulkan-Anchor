@@ -138,7 +138,7 @@ class StormTest {
     @Test
     void aBlizzardThickensTheSnowAndBlowsItSideways() {
         Matrix4f inv = new Matrix4f().perspective((float) Math.toRadians(70), 16 / 9f, 0.05f, 1000).invert();
-        PostProcessSettings on = PostProcessSettings.from(new net.vulkanmod.visuals.config.VisualsConfig());
+        PostProcessSettings on = PostProcessSettings.from(net.vulkanmod.visuals.config.PostOn.defaults());
         WeatherUniforms.Values calm = WeatherUniforms.compute(on, 1, 1, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, false, true, null);
         WeatherUniforms.Values storm = WeatherUniforms.compute(on, 1, 1, false, inv, inv, new Matrix4f(), false, 1440, 0, 70, 0, null, 0, false, true, null,
                 new WeatherUniforms.Storm(0, 1, new float[]{10, 0}, new float[2], new float[2], false));

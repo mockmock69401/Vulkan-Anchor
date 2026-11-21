@@ -721,5 +721,16 @@
   "vulkanmod.visuals.lens_water": "Water on the Lens",
   "vulkanmod.visuals.lens_water.tooltip": "Coming up out of the water, a sheet of water on the screen warps the view and runs off in about a second",
   "vulkanmod.visuals.lens_water_strength": "Lens Water Strength",
-  "vulkanmod.visuals.lens_water_strength.tooltip": "How strongly the water on the lens bends the picture. Percent of the default; needs Water on the Lens"
+  "vulkanmod.visuals.lens_water_strength.tooltip": "How strongly the water on the lens bends the picture. Percent of the default; needs Water on the Lens",
+  "vulkanmod.visuals.block.experimental_sky": "Sky",
+  "vulkanmod.visuals.star_twinkle": "Star Twinkle",
+  "vulkanmod.visuals.star_twinkle.tooltip": "At night each star's light swells and dips on its own and now and then flares brighter, as starlight does through the air; stars low in the sky twinkle more. Works with every star type",
+  "vulkanmod.visuals.star_twinkle_strength": "Twinkle Strength",
+  "vulkanmod.visuals.star_twinkle_strength.tooltip": "How strongly the stars twinkle and how bright their flares get. Percent of the default; needs Star Twinkle",
+  "vulkanmod.visuals.meteors": "Meteors",
+  "vulkanmod.visuals.meteors.tooltip": "Shooting stars streak down the clear night sky now and then, each for about a second, behind the clouds",
+  "vulkanmod.visuals.meteor_amount": "Meteor Amount",
+  "vulkanmod.visuals.meteor_amount.tooltip": "How often meteors fall: 100 is about four a minute, 400 about sixteen. Percent of the default; 0: none; needs Meteors",
+  "vulkanmod.visuals.meteor_brightness": "Meteor Brightness",
+  "vulkanmod.visuals.meteor_brightness.tooltip": "How bright the meteors' heads and trails are. Percent of the default; needs Meteors"
 }

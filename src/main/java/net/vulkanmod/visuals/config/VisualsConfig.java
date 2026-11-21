@@ -388,7 +388,11 @@ public class VisualsConfig {
     // the look ships at these values
     /** 2026-11-10 (session 4): VisualsPresets' level (POTATO..ULTRA) or CUSTOM. The defaults below are the High level's values. */
     public int preset = VisualsPresets.DEFAULT;
-    public boolean enabled = true;
+    /**
+     * 2026-11-21 (the user: "저사양 컴퓨터에서 돌아가는 걸 고려해서 postprocessing 기본 옵션을 끔 으로 설정해줘"): a new install (no settings
+     * file, or Reset to defaults) starts with the post-process off; a saved file keeps its value.
+     */
+    public boolean enabled = false;
     public int exposure = 100;
     public int toneStrength = 100;
     public int contrast = 100;
@@ -536,6 +540,16 @@ public class VisualsConfig {
     public int waterWakeStrength = 100;
     public boolean lensWater = true;
     public int lensWaterStrength = 100;
+    /**
+     * 2026-11-21 (the user: "유성(별똥별) 옵션과 별빛이 불규칙하게 더 빛나는 (star scintillation) 옵션도 추가해줘. 실험적 기능에 넣어놔", Experimental >
+     * Sky): the stars' twinkle (SkyEventMath, skyevents.glsl starTwinkle) and meteors (meteors), each on / off with its strength, and the
+     * meteors' amount and brightness (percent of the default; an amount of 100 %: SkyEventMath.METEORS_A_MINUTE a minute).
+     */
+    public boolean starTwinkle = true;
+    public int starTwinkleStrength = 100;
+    public boolean meteors = true;
+    public int meteorAmount = 100;
+    public int meteorBrightness = 100;
     public int snowType = 0;
     public int snowSize = 100;
     public int snowAmount = 100;
