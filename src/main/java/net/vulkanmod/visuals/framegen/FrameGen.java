@@ -84,6 +84,11 @@ public final class FrameGen {
     private static boolean appliedSetting;
     /** Setting up failed, or the pacer died: frame generation stays off until the game restarts. */
     private static boolean broken;
+    /**
+     * The last recreation wanted frame generation but its start found no compose textures: the first recreation runs during the game's
+     * first resource load, before the GUI sprite atlas exists. beginFrame starts the pacer once both textures are there.
+     */
+    private static boolean startPending;
 
     /** The resources, created when frame generation is first wanted and freed when it is turned off. */
     static FrameGenTargets targets;
@@ -189,7 +194,10 @@ public final class FrameGen {
         if (deferred != null) deferred.tick(VkFrames.completedSerial());
         //a grab deferred before this frame pauses it; one made inside a frame waits for the next
         screenshotFrame = !grabs.isEmpty();
-        if (!paced) return;
+        if (!paced) {
+            if (startPending && texture(Textures.VIGNETTE) != null && texture(Textures.ICONS) != null) startWhenTexturesArrive();
+            return;
+        }
         drainLog();
         SwapChain sc = Vulkan.getSwapChain();
         Minecraft mc = Minecraft.getInstance();
@@ -209,6 +217,18 @@ public final class FrameGen {
         resetFrame();
         //beginFrame runs before Renderer's pending-recreation check, so this recreation happens before the frame records
         if (!paced) Renderer.scheduleSwapChainUpdate();
+    }
+
+    /**
+     * The compose textures a recreation lacked are loaded: the pacer starts now, as restartPacer does (before the frame latches paced).
+     * Another failure does not retry every frame: a broken start goes through a recreation that frees it, any other waits for the next.
+     */
+    private static void startWhenTexturesArrive() {
+        startPending = false;
+        if (!wanted()) return;
+        paced = startPacer();
+        resetFrame();
+        if (!paced && broken) Renderer.scheduleSwapChainUpdate();
     }
 
     /**
@@ -614,6 +634,7 @@ public final class FrameGen {
         if (pacer != null) pacer.stop();
         dropBurst();
         paced = false;
+        startPending = false;
     }
 
     /**
@@ -632,11 +653,13 @@ public final class FrameGen {
         paced = createResources() && startPacer();
         //a failed start marked frame generation broken: the device is idle here, so what it built goes now
         if (!paced && broken) freeResources();
+        startPending = !paced && !broken && pacer != null && (texture(Textures.VIGNETTE) == null || texture(Textures.ICONS) == null);
     }
 
     /** Minecraft.close, before Reforged waits for the device: the pacer must not present into a destroyed swapchain. */
     public static void shutdown() {
         paced = false;
+        startPending = false;
         if (pacer == null) return;
         try {
             pacer.stop();
