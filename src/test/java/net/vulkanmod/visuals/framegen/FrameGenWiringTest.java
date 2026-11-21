@@ -256,6 +256,29 @@ class FrameGenWiringTest {
     }
 
     /**
+     * 2026-11-21: with the setting on at launch the first recreation runs during the first resource load, before the GUI sprite atlas
+     * exists, so the start finds no compose textures. The pacer then starts in a later beginFrame, once both textures are loaded,
+     * instead of waiting for the next swapchain recreation.
+     */
+    @Test void aStartWithoutComposeTexturesRetriesWhenTheyArrive() throws Exception {
+        String fg = "net/vulkanmod/visuals/framegen/FrameGen";
+        List<String> after = Bytecode.calls(fg, "afterSwapchainRecreate");
+        assertTrue(Bytecode.inOrder(after, List.of("FrameGen.startPacer", "FrameGen.texture")), after.toString());
+        List<String> begin = Bytecode.calls(fg, "beginFrame");
+        assertTrue(Bytecode.inOrder(begin, List.of("FrameGen.texture", "FrameGen.texture", "FrameGen.startWhenTexturesArrive")), begin.toString());
+        List<String> retry = Bytecode.calls(fg, "startWhenTexturesArrive");
+        assertTrue(Bytecode.inOrder(retry, List.of("FrameGen.wanted", "FrameGen.startPacer", "FrameGen.resetFrame")), retry.toString());
+        //startPending is set only after the recreation's start, and cleared when a recreation begins and when the game closes
+        for (String m : List.of("afterSwapchainRecreate", "beforeSwapchainRecreate", "shutdown", "startWhenTexturesArrive")) {
+            boolean writes = false;
+            for (AbstractInsnNode insn : Bytecode.method(fg, m).instructions) {
+                if (insn instanceof FieldInsnNode f && f.name.equals("startPending") && f.getOpcode() == org.objectweb.asm.Opcodes.PUTSTATIC) writes = true;
+            }
+            assertTrue(writes, m + " does not write startPending");
+        }
+    }
+
+    /**
      * Final review I3, M6: the UI layer's framebuffers live per swapchain size; when they are replaced, and when frame generation turns
      * off, the main pass lets go of the UI passes and unbinds the UI layer's GL ids.
      */
