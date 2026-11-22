@@ -73,13 +73,14 @@ public final class GlIntegerState {
             case GL11.GL_COLOR_WRITEMASK -> getInteger(pname, 0);
             case GL11.GL_DEPTH_WRITEMASK -> VRenderSystem.depthMask ? GL11.GL_TRUE : GL11.GL_FALSE;
             case GL11.GL_DEPTH_FUNC -> VRenderSystem.depthFun;
-            case GL_STENCIL_FUNC -> VRenderSystem.stencilFunc;
-            case GL_STENCIL_REF -> VRenderSystem.stencilRef;
-            case GL_STENCIL_VALUE_MASK -> VRenderSystem.stencilFuncMask;
-            case GL_STENCIL_FAIL -> VRenderSystem.stencilFailOp;
-            case GL_STENCIL_PASS_DEPTH_FAIL -> VRenderSystem.stencilDepthFailOp;
-            case GL_STENCIL_PASS_DEPTH_PASS -> VRenderSystem.stencilPassOp;
-            case GL_STENCIL_WRITEMASK -> VRenderSystem.stencilWriteMask;
+            // One stencil state for both faces (the *Separate calls set it for both), so the back-face queries answer the same
+            case GL_STENCIL_FUNC, GL_STENCIL_BACK_FUNC -> VRenderSystem.stencilFunc;
+            case GL_STENCIL_REF, GL_STENCIL_BACK_REF -> VRenderSystem.stencilRef;
+            case GL_STENCIL_VALUE_MASK, GL_STENCIL_BACK_VALUE_MASK -> VRenderSystem.stencilFuncMask;
+            case GL_STENCIL_FAIL, GL_STENCIL_BACK_FAIL -> VRenderSystem.stencilFailOp;
+            case GL_STENCIL_PASS_DEPTH_FAIL, GL_STENCIL_BACK_PASS_DEPTH_FAIL -> VRenderSystem.stencilDepthFailOp;
+            case GL_STENCIL_PASS_DEPTH_PASS, GL_STENCIL_BACK_PASS_DEPTH_PASS -> VRenderSystem.stencilPassOp;
+            case GL_STENCIL_WRITEMASK, GL_STENCIL_BACK_WRITEMASK -> VRenderSystem.stencilWriteMask;
             case GL_STENCIL_CLEAR_VALUE -> VRenderSystem.clearStencilValue;
             case GL11.GL_CULL_FACE_MODE -> switch (VRenderSystem.cullFace) {
                 case org.lwjgl.vulkan.VK10.VK_CULL_MODE_FRONT_BIT -> GL11.GL_FRONT;
@@ -155,6 +156,13 @@ public final class GlIntegerState {
     private static final int GL_STENCIL_PASS_DEPTH_PASS = 0x0B96;
     private static final int GL_STENCIL_REF = 0x0B97;
     private static final int GL_STENCIL_WRITEMASK = 0x0B98;
+    private static final int GL_STENCIL_BACK_FUNC = 0x8800;
+    private static final int GL_STENCIL_BACK_FAIL = 0x8801;
+    private static final int GL_STENCIL_BACK_PASS_DEPTH_FAIL = 0x8802;
+    private static final int GL_STENCIL_BACK_PASS_DEPTH_PASS = 0x8803;
+    private static final int GL_STENCIL_BACK_REF = 0x8CA3;
+    private static final int GL_STENCIL_BACK_VALUE_MASK = 0x8CA4;
+    private static final int GL_STENCIL_BACK_WRITEMASK = 0x8CA5;
     private static final int GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT = 0x8A34;
     private static final int GL_MAX_UNIFORM_LOCATIONS = 0x826E;
     private static final int GL_MAX_VERTEX_ATTRIB_RELATIVE_OFFSET = 0x82D9;

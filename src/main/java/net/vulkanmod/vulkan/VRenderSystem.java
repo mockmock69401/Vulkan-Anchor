@@ -331,13 +331,47 @@ public abstract class VRenderSystem {
         GlStateManager.DEPTH.func = depthFun;
     }
 
+    /**
+     * 2026-11-22 (Tensura 1.1.3c): GL ignores a call with an invalid enum (GL_INVALID_ENUM) and keeps the state it had. Cosmic Entropy
+     * restores a stencil function of 0 every frame; storing it made the next pipeline throw "unknown stencil compare function: 0".
+     */
     public static void stencilFunc(int func, int ref, int mask) {
+        if (!isStencilFunc(func)) {
+            warnInvalidStencil("glStencilFunc", func);
+            return;
+        }
         stencilFunc = func;
         stencilRef = ref;
         stencilFuncMask = mask;
     }
 
+    public static boolean isStencilFunc(int func) {
+        return func >= GL11.GL_NEVER && func <= GL11.GL_ALWAYS;
+    }
+
+    public static boolean isStencilOp(int op) {
+        return switch (op) {
+            case GL11.GL_ZERO, GL11.GL_KEEP, GL11.GL_REPLACE, GL11.GL_INCR, GL11.GL_DECR, GL11.GL_INVERT,
+                    GL14.GL_INCR_WRAP, GL14.GL_DECR_WRAP -> true;
+            default -> false;
+        };
+    }
+
+    private static final java.util.Set<String> warnedInvalidStencil = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Once per call and value: a mod that does this does it every frame. */
+    private static void warnInvalidStencil(String call, int value) {
+        if (warnedInvalidStencil.add(call + value)) {
+            org.apache.logging.log4j.LogManager.getLogger("VulkanMod")
+                    .warn("Ignored {} with the invalid value {} (GL_INVALID_ENUM in GL), the stencil state stays as it was", call, value);
+        }
+    }
+
     public static void stencilOp(int sfail, int dpfail, int dppass) {
+        if (!isStencilOp(sfail) || !isStencilOp(dpfail) || !isStencilOp(dppass)) {
+            warnInvalidStencil("glStencilOp", !isStencilOp(sfail) ? sfail : !isStencilOp(dpfail) ? dpfail : dppass);
+            return;
+        }
         stencilFailOp = sfail;
         stencilDepthFailOp = dpfail;
         stencilPassOp = dppass;
