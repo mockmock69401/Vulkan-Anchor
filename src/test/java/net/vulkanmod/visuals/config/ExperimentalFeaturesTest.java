@@ -1,5 +1,7 @@
 package net.vulkanmod.visuals.config;
 
+import net.vulkanmod.visuals.render.CloudLevelMath;
+
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.vulkanmod.visuals.render.PostProcessSettings;
@@ -24,7 +26,8 @@ class ExperimentalFeaturesTest {
     void thePageIsLastWithItsWeatherAndInteractionBlocks() {
         VisualsOptionLayout.Page page = VisualsOptionLayout.PAGES.get(VisualsOptionLayout.PAGES.size() - 1);
         assertEquals(ExperimentalFeatures.PAGE, page.key());
-        assertEquals(List.of(ExperimentalFeatures.WEATHER, ExperimentalFeatures.INTERACTION, ExperimentalFeatures.SKY), page.blocks().stream().map(VisualsOptionLayout.Block::key).toList());
+        assertEquals(List.of(ExperimentalFeatures.WEATHER, ExperimentalFeatures.INTERACTION, ExperimentalFeatures.SKY, ExperimentalFeatures.CLOUDS),
+                page.blocks().stream().map(VisualsOptionLayout.Block::key).toList());
         assertEquals(List.of("sandstorm_grain_size", "sandstorm_grain_amount", "blizzard_flake_size", "blizzard_flake_amount"),
                 page.blocks().get(0).items().stream().map(VisualsOptionLayout.Item::key).toList());
         assertEquals(List.of("footprint_depth", "footprint_duration", "water_wakes", "water_wake_strength", "lens_water", "lens_water_strength"), page.blocks().get(1).items().stream().map(VisualsOptionLayout.Item::key).toList());
@@ -32,6 +35,11 @@ class ExperimentalFeaturesTest {
         assertEquals(List.of("star_twinkle", "star_twinkle_strength", "meteors", "meteor_amount", "meteor_brightness", "meteor_curve",
                         "meteor_duration", "meteor_ease_x1", "meteor_ease_y1", "meteor_ease_x2", "meteor_ease_y2"),
                 page.blocks().get(2).items().stream().map(VisualsOptionLayout.Item::key).toList());
+        //2026-11-22: the clouds' heights, greyed out with the far clouds
+        assertEquals(List.of("cloud_level_low", "cloud_level_high", "cloud_level_spread"),
+                page.blocks().get(3).items().stream().map(VisualsOptionLayout.Item::key).toList());
+        assertEquals("far_clouds", VisualsOptionLayout.item("cloud_level_low").requires());
+        assertEquals(VisualsOptionLayout.Kind.BLOCKS, VisualsOptionLayout.item("cloud_level_high").kind());
         //each greys out with the effect it tunes
         assertEquals("storm_weather", VisualsOptionLayout.item("sandstorm_grain_size").requires());
         assertEquals("footprints", VisualsOptionLayout.item("footprint_duration").requires());
@@ -53,6 +61,9 @@ class ExperimentalFeaturesTest {
             int expected = switch (item.key()) {
                 case "meteor_ease_x1", "meteor_ease_y1" -> 0;
                 case "meteor_ease_x2" -> 58;
+                //2026-11-22: the clouds' heights in blocks (CloudLevelMath's defaults)
+                case "cloud_level_low" -> CloudLevelMath.LOW_DEFAULT;
+                case "cloud_level_high" -> CloudLevelMath.HIGH_DEFAULT;
                 default -> item.kind() == VisualsOptionLayout.Kind.SWITCH ? 1 : 100;
             };
             assertEquals(expected, VisualsOptionLayout.defaultValue(item), item.key());

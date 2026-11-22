@@ -189,7 +189,39 @@ public final class CloudMath {
     public static final int QUALITY_MAX = 2;
 
     /** The realistic layer as the shader has it: cloudShape (base relative to the camera, thickness, LOD distance), cloudOffset xy, the coverage (cloudOffset.w). */
-    public record Realistic(float base, float thickness, float lodDistance, float offsetX, float offsetZ, float cover) {
+    public record Realistic(float base, float thickness, float lodDistance, float offsetX, float offsetZ, float cover, float levelLow,
+                            float levelHigh, float levelCell) {
+        /** A layer without levels (cloudLevel off: every cloud on the layer's base). */
+        public Realistic(float base, float thickness, float lodDistance, float offsetX, float offsetZ, float cover) {
+            this(base, thickness, lodDistance, offsetX, offsetZ, cover, 0, 0, 0);
+        }
+
+        /** This layer with cloudLevel's slot (CloudLevelMath.params: lowest and highest offset, the lattice's cell, 1 = on). */
+        public Realistic withLevel(float[] level) {
+            return level[3] > 0.5f ? new Realistic(this.base, this.thickness, this.lodDistance, this.offsetX, this.offsetZ, this.cover, level[0],
+                    level[1], level[2]) : new Realistic(this.base, this.thickness, this.lodDistance, this.offsetX, this.offsetZ, this.cover);
+        }
+    }
+
+    /**
+     * 2026-11-22 (clouds.glsl cloudLevelAt): the clouds' level at map position (mx, mz) in blocks above (below: negative) the layer's usual
+     * base: a lattice of r.levelCell blocks whose cells hold a hashed share of the range from levelLow to levelHigh, blended over
+     * CLOUD_LEVEL_EDGE of a cell either side of the cells' edges; 0 without levels.
+     */
+    public static float levelAt(Realistic r, float mx, float mz) {
+        if (!(r.levelCell > 0)) return 0;
+        int n = (int) Math.floor(MAP * CLOUD_CELL / r.levelCell + 0.5);
+        float ux = mx / r.levelCell - 0.5f, uz = mz / r.levelCell - 0.5f;
+        int ix = (int) Math.floor(ux), iz = (int) Math.floor(uz);
+        float fx = smoothstep(0.5f - CloudLevelMath.CLOUD_LEVEL_EDGE, 0.5f + CloudLevelMath.CLOUD_LEVEL_EDGE, ux - ix);
+        float fz = smoothstep(0.5f - CloudLevelMath.CLOUD_LEVEL_EDGE, 0.5f + CloudLevelMath.CLOUD_LEVEL_EDGE, uz - iz);
+        float v = mix(mix(levelValue(ix, iz, n), levelValue(ix + 1, iz, n), fx), mix(levelValue(ix, iz + 1, n), levelValue(ix + 1, iz + 1, n), fx), fz);
+        return mix(r.levelLow, r.levelHigh, v);
+    }
+
+    /** cloudLevelValue: a level lattice point's share of the range, 0..1 (its hash's low 16 bits). */
+    static float levelValue(int x, int z, int n) {
+        return (animeHash(x, CloudLevelMath.CLOUD_LEVEL_SEED, z, n) & 0xFFFF) / 65535f;
     }
 
     /** farCloudMarch's counts: (samples, light samples, erosion octaves) for quality 1..3 (cloudOffset.z's whole part). */
@@ -274,7 +306,12 @@ public final class CloudMath {
 
     /** realDensity: the cumulus density 0..1 at camera-relative (x, y, z). */
     public static float realDensity(byte[] map, Realistic r, float x, float y, float z, int octaves) {
-        float ly = realHeight(x, y, z) - r.base, h = ly / r.thickness, f = Math.min(r.cover, 1);
+        return realDensityOn(map, r, x, y, z, octaves, levelAt(r, r.offsetX + x, r.offsetZ + z));
+    }
+
+    /** realDensityOn: realDensity for a point standing on level lv (levelAt). */
+    public static float realDensityOn(byte[] map, Realistic r, float x, float y, float z, int octaves, float lv) {
+        float ly = realHeight(x, y, z) - r.base - lv, h = ly / r.thickness, f = Math.min(r.cover, 1);
         if (!(h > 0 && h < 1) || !(f > 0)) return 0;
         float mx = r.offsetX + x, mz = r.offsetZ + z;
         float s = (noise(map, mx, mz, 1) - 1 + f) / f;
@@ -330,7 +367,7 @@ public final class CloudMath {
 
     /** realInterval: the ray's first span inside the curved layer, cut to [0, min(maxDist, REAL_REACH)]; null when there is none. */
     public static float[] realInterval(Realistic r, float[] origin, float[] dir, float maxDist) {
-        float bottom = r.base, top = r.base + r.thickness, h = realHeight(origin[0], origin[1], origin[2]);
+        float bottom = r.base + Math.min(r.levelLow, 0), top = r.base + r.thickness + Math.max(r.levelHigh, 0), h = realHeight(origin[0], origin[1], origin[2]);
         float[] lo = realLevel(origin, dir, bottom), hi = realLevel(origin, dir, top);
         float t0, t1;
         if (h < bottom) {
@@ -377,13 +414,14 @@ public final class CloudMath {
                 if (i >= n || trans < 0.01f) break;
                 float t = span[0] + (i + jitter) * dt;
                 float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
-                float d = realDensity(map, r, px, py, pz, octaves);
+                float lv = levelAt(r, r.offsetX + px, r.offsetZ + pz);
+                float d = realDensityOn(map, r, px, py, pz, octaves, lv);
                 if (d <= 0) continue;
                 float fade = 1 - smoothstep(CLOUD_FADE_START, 1, (float) Math.sqrt(px * px + pz * pz) / REAL_REACH);
                 float sigma = d * REAL_DENSITY;
                 float a = (1 - (float) Math.exp(-sigma * dt)) * fade;
-                float h = clamp01((realHeight(px, py, pz) - r.base) / r.thickness);
-                float od = lights > 0 ? lightDepth(map, r, px, py, pz, lightDir, lights) : REAL_FLAT_DEPTH * (1 - h);
+                float h = clamp01((realHeight(px, py, pz) - r.base - lv) / r.thickness);
+                float od = lights > 0 ? lightDepth(map, r, px, py, pz, lightDir, lights, lv) : REAL_FLAT_DEPTH * (1 - h);
                 od *= level;
                 float s = 0, share = 1, depth = 1;
                 for (int k = 0; k < REAL_OCTAVES; k++) {
@@ -423,10 +461,15 @@ public final class CloudMath {
 
     /** realMarch's light march: the optical depth toward lightDir from (x, y, z), lights samples REAL_LIGHT_STEP x 1, 4, 9, 16 blocks out (segment midpoints). */
     public static float lightDepth(byte[] map, Realistic r, float x, float y, float z, float[] lightDir, int lights) {
+        return lightDepth(map, r, x, y, z, lightDir, lights, levelAt(r, r.offsetX + x, r.offsetZ + z));
+    }
+
+    /** lightDepth with every light sample on the sample's level lv (as the shader: they stay within REAL_LIGHT_STEP x 16 blocks). */
+    public static float lightDepth(byte[] map, Realistic r, float x, float y, float z, float[] lightDir, int lights, float lv) {
         float od = 0, prev = 0;
         for (int j = 1; j <= Math.min(lights, REAL_LIGHT_HIGH); j++) {
             float reach = REAL_LIGHT_STEP * j * j, m = 0.5f * (reach + prev);
-            od += realDensity(map, r, x + lightDir[0] * m, y + lightDir[1] * m, z + lightDir[2] * m, 0) * (reach - prev);
+            od += realDensityOn(map, r, x + lightDir[0] * m, y + lightDir[1] * m, z + lightDir[2] * m, 0, lv) * (reach - prev);
             prev = reach;
         }
         return od * REAL_DENSITY;
@@ -449,6 +492,8 @@ public final class CloudMath {
     public static final float ANIME_WRAP = 0.8f, ANIME_SHADE_FROM = 0, ANIME_SHADE_TO = 1, ANIME_SHADOW = 0.4f, ANIME_FLAT = 0.6f;
     public static final float ANIME_CREASE_SHADE = 0.25f, ANIME_LOW_LIT = 0.65f, ANIME_LOW_REACH = 0.6f, ANIME_AMBIENT_LOW = 0.6f;
     public static final float ANIME_SILVER = 0.15f, ANIME_SILVER_G = 0.5f;
+    /** animeCells: the highest top of a group where no puff stands. */
+    public static final float ANIME_NONE = -1e6f;
     /** CPU side: the anime layer's base ANIME_LIFT above vanilla's, ANIME_THICKNESS thick at cloud size 100% (in proportion to the size). */
     public static final float ANIME_LIFT = 32, ANIME_THICKNESS = 140;
 
@@ -493,27 +538,29 @@ public final class CloudMath {
         return c + 0.5f + ANIME_PUFF_JITTER * ((h & 0xFF) / 127.5f - 1);
     }
 
-    /** animeShape: (bottom, top, puffs) above the layer's base in blocks at map position (mx, mz); top below bottom where no cloud stands. */
+    /** animeShape at every height: (bottom, top, puffs) above the layer's base in blocks at map position (mx, mz); top below bottom where no cloud stands. */
     public static float[] animeShape(byte[] map, Realistic r, float mx, float mz) {
-        return animeShape(map, r, mx, mz, -1);
+        return animeShape(map, r, mx, mz, Float.NaN);
     }
 
     /**
-     * animeShape for a sample h blocks above the base (negative: none): the puffs (rounded domes on a lattice, blended where they meet) in
-     * the column at (mx, mz), (bottom, top, puffs) with puffs how near the column is to a puff's middle (1) from every puff's edge (0);
-     * (0, -1, 0) where no puff reaches. Above the highest top any puff could give: none, before the lattice.
+     * animeShape for a sample h blocks above the usual base (NaN: every puff): the puffs (rounded domes on a lattice, blended where they
+     * meet) in the column at (mx, mz), (bottom, top, puffs) with puffs how near the column is to a puff's middle (1) from every puff's edge
+     * (0); (0, -1, 0) where no puff reaches. Above the highest top any puff could give: none, before the lattice. 2026-11-22: each puff on
+     * the level at its centre (levelAt), and only the puffs whose heights come within a blend of h (clouds.glsl animeAdd).
      */
     public static float[] animeShape(byte[] map, Realistic r, float mx, float mz, float h) {
         float[] none = {0, -1, 0};
         float f = Math.min(r.cover, 1);
         if (!(f > 0)) return none;
         float cell = animeCell(ANIME_PUFF_CELL, animeScale(r));
-        if (h >= 0 && h >= Math.min(((ANIME_PUFF_HIGH + ANIME_PUFF_TALL) * ANIME_PUFF_MAX + 0.75f * ANIME_PUFF_BLEND) * cell, r.thickness)) return none;
+        if (h >= Math.min(((ANIME_PUFF_HIGH + ANIME_PUFF_TALL) * ANIME_PUFF_MAX + 0.75f * ANIME_PUFF_BLEND) * cell, r.thickness) + Math.max(r.levelHigh, 0)) return none;
         int n = (int) Math.round(PERIOD / cell);
         float ux = mx / cell, uz = mz / cell;
         int ix = (int) Math.floor(ux), iz = (int) Math.floor(uz);
         int ox = ux - ix < 0.5f ? -1 : 0, oz = uz - iz < 0.5f ? -1 : 0;
-        float bottom = 0, top = -1, puffs = 0;
+        float bottom = 0, top = -1, puffs = 0, floor = 0;
+        float kb = ANIME_PUFF_BLEND * cell;
         for (int b = 0; b < 2; b++) {
             for (int a = 0; a < 2; a++) {
                 int cx = ix + ox + a, cz = iz + oz + b;
@@ -528,22 +575,26 @@ public final class CloudMath {
                 if (q2 <= 0) continue;
                 float lift = mix(1 - ANIME_TOWER, 1, channel(map, tx, tz, 3));
                 float q = rad * (float) Math.pow(q2 / (rad * rad), ANIME_PUFF_PROFILE), cy = rad * mix(ANIME_PUFF_LOW, ANIME_PUFF_HIGH, Math.min(s, 1)) * lift;
-                float lo = Math.max(cy - q * ANIME_PUFF_TALL, 0), hi = cy + q * ANIME_PUFF_TALL;
+                float lv = levelAt(r, px * cell, pz * cell);
+                float lo = Math.max(cy - q * ANIME_PUFF_TALL, 0) + lv, hi = cy + q * ANIME_PUFF_TALL + lv;
+                if (h < lo - kb || h > hi + kb) continue;
                 puffs = Math.max(puffs, q / rad);
                 if (top < bottom) {
                     bottom = lo;
                     top = hi;
+                    floor = lv;
                 } else {
-                    //A smooth union (polynomial smooth max and min over ANIME_PUFF_BLEND cells): no crease where two puffs meet
-                    float kb = ANIME_PUFF_BLEND * cell;
+                    //A smooth union (polynomial smooth max and min over ANIME_PUFF_BLEND cells): no crease where two puffs meet; the bottom
+                    // never under the lower puff's level
                     float ht = Math.max(kb - Math.abs(top - hi), 0) / kb, hb = Math.max(kb - Math.abs(bottom - lo), 0) / kb;
+                    floor = Math.min(floor, lv);
                     top = Math.max(top, hi) + ht * ht * kb * 0.25f;
-                    bottom = Math.max(Math.min(bottom, lo) - hb * hb * kb * 0.25f, 0);
+                    bottom = Math.max(Math.min(bottom, lo) - hb * hb * kb * 0.25f, floor);
                 }
             }
         }
         if (!(top > bottom)) return none;
-        return new float[]{bottom, Math.min(top, r.thickness), puffs};
+        return new float[]{bottom, Math.min(top, r.thickness + Math.max(r.levelHigh, 0)), puffs};
     }
 
     /** True where camera-relative (x, y, z) is inside an anime cloud. */
@@ -554,7 +605,7 @@ public final class CloudMath {
     /** animeDepth: how far camera-relative (x, y, z) is inside its column's pillow, in blocks (min of the distances to bottom and top; at most 0 outside). */
     public static float animeDepth(byte[] map, Realistic r, float x, float y, float z) {
         float h = y - r.base;
-        if (!(h > 0 && h < r.thickness)) return 0;
+        if (!(h > Math.min(r.levelLow, 0) && h < r.thickness + Math.max(r.levelHigh, 0))) return 0;
         float[] bt = animeShape(map, r, r.offsetX + x, r.offsetZ + z, h);
         return Math.max(Math.min((h - bt[0]) * (ANIME_SOFT / ANIME_SOFT_BASE), bt[1] - h), 0);
     }
@@ -565,9 +616,9 @@ public final class CloudMath {
      * bright arcs).
      */
     public static float[] animeNormal(byte[] map, Realistic r, float x, float y, float z) {
-        float mx = r.offsetX + x, mz = r.offsetZ + z, e = ANIME_NORMAL_STEP * animeScale(r);
-        float[] c = animeShape(map, r, mx, mz), px = animeShape(map, r, mx + e, mz), nx = animeShape(map, r, mx - e, mz),
-                pz = animeShape(map, r, mx, mz + e), nz = animeShape(map, r, mx, mz - e);
+        float mx = r.offsetX + x, mz = r.offsetZ + z, e = ANIME_NORMAL_STEP * animeScale(r), h = y - r.base;
+        float[] c = animeShape(map, r, mx, mz, h), px = animeShape(map, r, mx + e, mz, h), nx = animeShape(map, r, mx - e, mz, h),
+                pz = animeShape(map, r, mx, mz + e, h), nz = animeShape(map, r, mx, mz - e, h);
         float w = smoothstep(0, 1, clamp01((y - r.base - c[0]) / Math.max(c[1] - c[0], 1e-3f)));
         float[] top = unit(new float[]{-(px[1] - nx[1]), 2 * e, -(pz[1] - nz[1])});
         return unit(new float[]{top[0] * w, mix(-1, top[1], w), top[2] * w});
@@ -628,8 +679,8 @@ public final class CloudMath {
         if (!(wsum > 0)) return new float[4];
         float t = tsum / wsum;
         float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
-        float[] c = animeShape(map, r, r.offsetX + px, r.offsetZ + pz);
-        float hc = clamp01((py - r.base) / r.thickness);
+        float[] c = animeShape(map, r, r.offsetX + px, r.offsetZ + pz, py - r.base);
+        float hc = clamp01((py - r.base - levelAt(r, r.offsetX + px, r.offsetZ + pz)) / r.thickness);
         float[] l = animeLight(animeNormal(map, r, px, py, pz), c[1] > c[0] ? c[2] : 1, hc, lightDir);
         float cov = 1 - trans;
         //The silver lining: thin cloud (low coverage) toward the light glows with its forward scattering

@@ -1,7 +1,8 @@
 //Visuals P7h far clouds (design 2026-10-12 P7h 3.1, 3.2). CloudMath.java mirrors this for the tests: change both together.
 // The including shader declares sampler2D cloudMap (clouds.png, 1 on cloud cells), vec4 cloudShape (the layer's bottom relative
 // to the camera, its thickness, the LOD distance, 1 = on) and vec4 cloudOffset (the camera's x, z on the cloud map in blocks,
-// vanilla's drift included). Positions are relative to the camera, y up
+// vanilla's drift included); 2026-11-22 also vec4 cloudLevel (CloudUniforms.level: the levels' lowest and highest offset in blocks, the
+// level lattice's cell in blocks, 1 = on). Positions are relative to the camera, y up
 const float CLOUD_MAP = 256.0;
 const float CLOUD_CELL = 12.0;
 //Design 3.1: the cells blend over CLOUD_ROUND cells either side of their boundary; the top and bottom thin over CLOUD_EDGE blocks;
@@ -50,10 +51,9 @@ float cloudDensity(vec3 p) {
     return smoothstep(0.5 - CLOUD_SOFT, 0.5 + CLOUD_SOFT, cloudCover(p.xz)*v);
 }
 
-//Design 3.2: the ray's span inside the layer, cut to [0, maxDist] and to the LOD distance horizontally; y <= x: none
-vec2 cloudInterval(vec3 origin, vec3 dir, float maxDist) {
-    float bottom = cloudShape.x;
-    float top = cloudShape.x + cloudShape.y;
+//Design 3.2: the ray's span between heights bottom and top (relative to the camera), cut to [0, maxDist] and to the LOD distance
+// horizontally; y <= x: none
+vec2 cloudIntervalBetween(vec3 origin, vec3 dir, float maxDist, float bottom, float top) {
     float t0 = 0.0;
     float t1 = maxDist;
     if (abs(dir.y) < 0.000001) {
@@ -68,6 +68,11 @@ vec2 cloudInterval(vec3 origin, vec3 dir, float maxDist) {
     }
     t1 = min(t1, cloudShape.z/max(length(dir.xz), CLOUD_MIN_HORIZONTAL));
     return vec2(t0, t1);
+}
+
+//The ray's span inside the layer (cloudIntervalBetween its bottom and top)
+vec2 cloudInterval(vec3 origin, vec3 dir, float maxDist) {
+    return cloudIntervalBetween(origin, dir, maxDist, cloudShape.x, cloudShape.x + cloudShape.y);
 }
 
 //Design 3.2: front to back through the layer, each sample shaded toward lightDir and faded by its horizontal distance;
@@ -206,6 +211,60 @@ const int REAL_PRIME_X = 73856093;
 const int REAL_PRIME_Y = 19349663;
 const int REAL_PRIME_Z = 83492791;
 
+//The 32-bit hash of lattice cell c (x, z) on layer y, wrapped into n cells (realCorner's, unscaled)
+uint animeHash(ivec2 c, int y, int n) {
+    ivec2 w = c - n*ivec2(floor(vec2(c)/float(n)));
+    uint h = (uint(w.x)*uint(REAL_PRIME_X)) ^ (uint(y)*uint(REAL_PRIME_Y)) ^ (uint(w.y)*uint(REAL_PRIME_Z));
+    h ^= h >> 16u;
+    h *= 0x7feb352du;
+    h ^= h >> 15u;
+    h *= 0x846ca68bu;
+    h ^= h >> 16u;
+    return h;
+}
+
+//2026-11-22 (the user: "the clouds keep to one height, and from high up they look flat; spread them lower and at different heights",
+// with the range on the Experimental page): the realistic and anime clouds stand at different levels. Each cell of a lattice of
+// cloudLevel.z blocks (CLOUD_LEVEL_CELL at cloud size 100%, times the size; whole cells to the map's period, so the offset's wrap never
+// shows) holds a level from its hash, evenly from cloudLevel.x (blocks below the layer's usual base, negative) to cloudLevel.y (above);
+// a cell's clouds stand on its level and the levels blend over CLOUD_LEVEL_EDGE of a cell either side of the cells' edges, so a clump
+// mostly lies on one flat base and the next clump may sit a hundred blocks higher or lower. The field moves with the clouds (the map's
+// position). cloudLevel.w 0 (off, or a zero range): every level 0, the layer as before
+const float CLOUD_LEVEL_CELL = 384.0;
+const float CLOUD_LEVEL_EDGE = 0.2;
+const int CLOUD_LEVEL_SEED = 7;
+
+//A level lattice point's share of the range, 0..1 (its hash's low 16 bits)
+float cloudLevelValue(ivec2 k, int n) {
+    return float(animeHash(k, CLOUD_LEVEL_SEED, n) & 0xFFFFu)/65535.0;
+}
+
+//The last lattice square's corner values (x the corner k, y k + (1, 0), z k + (0, 1), w k + (1, 1)): a march's samples and puffs stay
+// in one square for hundreds of blocks, so its four hashes are taken once there, not at every sample (they cost the composite up to
+// 0.8 ms at 2560 x 1440)
+ivec2 cloudLevelKey = ivec2(0x7FFFFFFF);
+vec4 cloudLevelCorners = vec4(0.0);
+
+//The clouds' level at m (blocks on the cloud map): blocks above (below: negative) the layer's usual base
+float cloudLevelAt(vec2 m) {
+    if (!(cloudLevel.w > 0.5)) {
+        return 0.0;
+    }
+    vec2 u = m/cloudLevel.z - 0.5;
+    vec2 i = floor(u);
+    vec2 f = smoothstep(vec2(0.5 - CLOUD_LEVEL_EDGE), vec2(0.5 + CLOUD_LEVEL_EDGE), u - i);
+    ivec2 k = ivec2(i);
+    if (k != cloudLevelKey) {
+        int n = int(floor(CLOUD_MAP*CLOUD_CELL/cloudLevel.z + 0.5));
+        cloudLevelKey = k;
+        cloudLevelCorners = vec4(cloudLevelValue(k, n), cloudLevelValue(k + ivec2(1, 0), n), cloudLevelValue(k + ivec2(0, 1), n),
+                cloudLevelValue(k + ivec2(1, 1), n));
+    }
+    vec4 c = cloudLevelCorners;
+    return mix(cloudLevel.x, cloudLevel.y, mix(mix(c.x, c.y, f.x), mix(c.z, c.w, f.x), f.y));
+}
+
+
 //Session 11: cloudOffset.z's whole part from ANIME_Z on is the anime style (ANIME_Z plus its quality 0..2)
 const int ANIME_Z = 4;
 
@@ -329,8 +388,9 @@ vec2 realLevel(vec3 origin, vec3 dir, float y) {
 
 //2026-11-16: the ray's first span inside the curved layer, cut to [0, min(maxDist, REAL_REACH)]; y <= x: none
 vec2 realInterval(vec3 origin, vec3 dir, float maxDist) {
-    float bottom = cloudShape.x;
-    float top = cloudShape.x + cloudShape.y;
+    //2026-11-22: from the lowest level's base to the highest level's top
+    float bottom = cloudShape.x + min(cloudLevel.x, 0.0);
+    float top = cloudShape.x + cloudShape.y + max(cloudLevel.y, 0.0);
     float h = realHeight(origin);
     vec2 lo = realLevel(origin, dir, bottom);
     vec2 hi = realLevel(origin, dir, top);
@@ -355,10 +415,10 @@ vec2 realInterval(vec3 origin, vec3 dir, float maxDist) {
     return vec2(max(t0, 0.0), min(t1, min(maxDist, REAL_REACH)));
 }
 
-//The cumulus density 0..1 at camera-relative p: the weather over its coverage, the tower's height profile, eroded by the noise
-// (2026-11-16: in the curved layer, realHeight)
-float realDensity(vec3 p, int octaves) {
-    float y = realHeight(p) - cloudShape.x;
+//The cumulus density 0..1 at camera-relative p standing on level lv (cloudLevelAt): the weather over its coverage, the tower's height
+// profile, eroded by the noise (2026-11-16: in the curved layer, realHeight)
+float realDensityOn(vec3 p, int octaves, float lv) {
+    float y = realHeight(p) - cloudShape.x - lv;
     float h = y/cloudShape.y;
     float f = min(cloudOffset.w, 1.0);
     if (!(h > 0.0 && h < 1.0) || !(f > 0.0)) {
@@ -382,6 +442,11 @@ float realDensity(vec3 p, int octaves) {
     }
     float e = REAL_ERODE*er;
     return max((d - e)/(1.0 - e), 0.0);
+}
+
+//realDensityOn at p's own level
+float realDensity(vec3 p, int octaves) {
+    return realDensityOn(p, octaves, cloudLevelAt(cloudOffset.xy + p.xz));
 }
 
 //Henyey-Greenstein scaled so an even phase is 1
@@ -423,14 +488,16 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
             }
             float t = span.x + (float(i) + jitter)*dt;
             vec3 p = origin + dir*t;
-            float d = realDensity(p, octaves);
+            //2026-11-22: the sample's level, which its light samples (at most REAL_LIGHT_STEP x 16 blocks off) share
+            float lv = cloudLevelAt(cloudOffset.xy + p.xz);
+            float d = realDensityOn(p, octaves, lv);
             if (d <= 0.0) {
                 continue;
             }
             float fade = 1.0 - smoothstep(CLOUD_FADE_START, 1.0, length(p.xz)/REAL_REACH);
             float sigma = d*REAL_DENSITY;
             float a = (1.0 - exp(-sigma*dt))*fade;
-            float h = clamp((realHeight(p) - cloudShape.x)/cloudShape.y, 0.0, 1.0);
+            float h = clamp((realHeight(p) - cloudShape.x - lv)/cloudShape.y, 0.0, 1.0);
             float od = 0.0;
             if (lights > 0) {
                 float prev = 0.0;
@@ -439,7 +506,7 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
                         break;
                     }
                     float reach = REAL_LIGHT_STEP*float(j*j);
-                    od += realDensity(p + lightDir*(0.5*(reach + prev)), 0)*(reach - prev);
+                    od += realDensityOn(p + lightDir*(0.5*(reach + prev)), 0, lv)*(reach - prev);
                     prev = reach;
                 }
                 od *= REAL_DENSITY;
@@ -511,7 +578,9 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
 // takes the clouds at ANIME_HAZE of their distance (their white tops and lavender bases stay); the fade, not the haze, takes them out
 // before the horizon. The cloud size scales the whole cloud alike (2026-11-16, the user: the size changed how many clumps there were, not
 // how big): the weather's clumps, the layer's thickness, so the puffs, and every length in blocks above (the soft top and base, the step,
-// the normal's step, the fade's shrink; the density over it, so a cloud is as opaque at every size)
+// the normal's step, the fade's shrink; the density over it, so a cloud is as opaque at every size). 2026-11-22: each puff stands on the
+// level at its centre (cloudLevelAt), and a column at height h unites only the puffs whose heights come within a blend of h, so two
+// puffs at different levels side by side stay two clouds (one interval per column would have joined them into a wall)
 //The layer thickness at cloud size 100% (CloudMath.ANIME_THICKNESS; the size setting scales cloudShape.y from it in proportion)
 const float ANIME_THICKNESS = 140.0;
 const float ANIME_PUFF_CELL = 104.0;
@@ -559,18 +628,6 @@ float animeCell(float base, float k) {
     return CLOUD_MAP*CLOUD_CELL/max(1.0, floor(CLOUD_MAP*CLOUD_CELL/(base*k) + 0.5));
 }
 
-//The 32-bit hash of lattice cell c (x, z) on layer y, wrapped into n cells (realCorner's, unscaled)
-uint animeHash(ivec2 c, int y, int n) {
-    ivec2 w = c - n*ivec2(floor(vec2(c)/float(n)));
-    uint h = (uint(w.x)*uint(REAL_PRIME_X)) ^ (uint(y)*uint(REAL_PRIME_Y)) ^ (uint(w.y)*uint(REAL_PRIME_Z));
-    h ^= h >> 16u;
-    h *= 0x7feb352du;
-    h ^= h >> 15u;
-    h *= 0x846ca68bu;
-    h ^= h >> 16u;
-    return h;
-}
-
 //The cloud size's scale: the layer's thickness over ANIME_THICKNESS (CloudMath.animeThickness), 1 at size 100%
 float animeScale() {
     return cloudShape.y/ANIME_THICKNESS;
@@ -589,36 +646,43 @@ ivec2 animeCorner(vec2 u) {
 
 //The puff of lattice cell k (n cells to the period, cell blocks, coverage f): (centre x, z in cells, radius in blocks, its centre's height
 // over its radius); radius 0 where none stands (the weather at its centre's texel is clear). The weather and the tower lift are that
-// one texel's
-vec4 animePuff(ivec2 k, int n, float cell, float f) {
+// one texel's; lv the level it stands on (cloudLevelAt its centre)
+vec4 animePuff(ivec2 k, int n, float cell, float f, out float lv) {
     uint hc = animeHash(k, 0, n);
     vec2 p = vec2(k) + 0.5 + ANIME_PUFF_JITTER*(vec2(float(hc & 0xFFu), float((hc >> 8u) & 0xFFu))/127.5 - 1.0);
     vec4 t = texelFetch(cloudMap, ivec2(mod(floor(p*cell/CLOUD_CELL), CLOUD_MAP)), 0);
     float s = f > 0.0 ? (t.g - 1.0 + f)/f : 0.0;
+    lv = 0.0;
     if (!(s > 0.0)) {
         return vec4(p, 0.0, 0.0);
     }
+    lv = cloudLevelAt(p*cell);
     float r = cell*mix(ANIME_PUFF_MIN, ANIME_PUFF_MAX, float((hc >> 16u) & 0xFFu)/255.0)*mix(ANIME_PUFF_SHRINK, 1.0, min(s/ANIME_EDGE, 1.0));
     return vec4(p, r, mix(ANIME_PUFF_LOW, ANIME_PUFF_HIGH, min(s, 1.0))*mix(1.0 - ANIME_TOWER, 1.0, t.a));
 }
 
-//The 2 x 2 puffs from lattice cell o; returns the highest top they can give (blocks above the base; negative: none stands)
-float animeCells(ivec2 o, float cell, out vec4 c[4]) {
+//The 2 x 2 puffs from lattice cell o and their levels; returns the highest top they can give (blocks above the usual base; ANIME_NONE:
+// none stands), bottom the lowest level among them (no puff reaches below its level)
+const float ANIME_NONE = -1e6;
+float animeCells(ivec2 o, float cell, out vec4 c[4], out float lv[4], out float bottom) {
     float f = min(cloudOffset.w, 1.0);
     int n = int(floor(CLOUD_MAP*CLOUD_CELL/cell + 0.5));
-    float top = -1.0;
+    float top = ANIME_NONE;
+    bottom = -ANIME_NONE;
     for (int j = 0; j < 4; j++) {
-        c[j] = animePuff(o + ivec2(j & 1, j >> 1), n, cell, f);
+        c[j] = animePuff(o + ivec2(j & 1, j >> 1), n, cell, f, lv[j]);
         if (c[j].z > 0.0) {
-            top = max(top, c[j].z*(c[j].w + ANIME_PUFF_TALL));
+            top = max(top, c[j].z*(c[j].w + ANIME_PUFF_TALL) + lv[j]);
+            bottom = min(bottom, lv[j]);
         }
     }
-    return top < 0.0 ? top : top + 0.75*ANIME_PUFF_BLEND*cell;
+    return top <= ANIME_NONE ? top : top + 0.75*ANIME_PUFF_BLEND*cell;
 }
 
-//Puff c (animePuff) added to a column's (bottom, top, puffs) at u (cells; top below bottom: none yet): the smooth union (a polynomial
-// smooth max and min over ANIME_PUFF_BLEND cells)
-void animeAdd(vec2 u, float cell, vec4 c, inout vec3 col) {
+//Puff c (animePuff) on level lv added to a column's (bottom, top, puffs, lowest level) at u (cells; top below bottom: none yet) for a point h blocks
+// above the usual base: the smooth union (a polynomial smooth max and min over ANIME_PUFF_BLEND cells, its bottom never under the lower
+// puff's level); left out when its heights stay a blend away from h (2026-11-22: a puff on another level)
+void animeAdd(vec2 u, float cell, vec4 c, float lv, float h, inout vec4 col) {
     float r = c.z;
     vec2 d = (u - c.xy)*cell;
     float q2 = r*r - dot(d, d);
@@ -627,39 +691,43 @@ void animeAdd(vec2 u, float cell, vec4 c, inout vec3 col) {
     }
     float q = r*pow(q2/(r*r), ANIME_PUFF_PROFILE);
     float cy = r*c.w;
-    float lo = max(cy - q*ANIME_PUFF_TALL, 0.0);
-    float hi = cy + q*ANIME_PUFF_TALL;
+    float lo = max(cy - q*ANIME_PUFF_TALL, 0.0) + lv;
+    float hi = cy + q*ANIME_PUFF_TALL + lv;
+    float kb = ANIME_PUFF_BLEND*cell;
+    if (h < lo - kb || h > hi + kb) {
+        return;
+    }
     col.z = max(col.z, q/r);
     if (col.y < col.x) {
-        col.xy = vec2(lo, hi);
+        col = vec4(lo, hi, col.z, lv);
     } else {
-        float kb = ANIME_PUFF_BLEND*cell;
         float ht = max(kb - abs(col.y - hi), 0.0)/kb;
         float hb = max(kb - abs(col.x - lo), 0.0)/kb;
+        col.w = min(col.w, lv);
         col.y = max(col.y, hi) + ht*ht*kb*0.25;
-        col.x = max(min(col.x, lo) - hb*hb*kb*0.25, 0.0);
+        col.x = max(min(col.x, lo) - hb*hb*kb*0.25, col.w);
     }
 }
 
-//A column's (bottom, top, puffs) after its puffs: top capped at the layer's; (0, -1, 0) where none stands
-vec3 animeColumn(vec3 col) {
-    return col.y > col.x ? vec3(col.x, min(col.y, cloudShape.y), col.z) : vec3(0.0, -1.0, 0.0);
+//A column's (bottom, top, puffs) after its puffs: top capped at the highest level's layer top; (0, -1, 0) where none stands
+vec3 animeColumn(vec4 col) {
+    return col.y > col.x ? vec3(col.x, min(col.y, cloudShape.y + max(cloudLevel.y, 0.0)), col.z) : vec3(0.0, -1.0, 0.0);
 }
 
 //(bottom, top, puffs) above the layer's base in blocks at u (cells on the cloud map) from the 2 x 2 puffs c (animeCells) on its side:
-// their smooth union in that column, puffs how near the column is to a puff's middle (1) from every puff's edge (0); top below bottom
-// where no puff stands
-vec3 animeUnion(vec2 u, float cell, vec4 c[4]) {
-    vec3 col = vec3(0.0, -1.0, 0.0);
+// their smooth union in that column for a point h blocks above the usual base (animeAdd), puffs how near the column is to a puff's
+// middle (1) from every puff's edge (0); top below bottom where no puff stands
+vec3 animeUnion(vec2 u, float cell, vec4 c[4], float lv[4], float h) {
+    vec4 col = vec4(0.0, -1.0, 0.0, 0.0);
     for (int j = 0; j < 4; j++) {
-        animeAdd(u, cell, c[j], col);
+        animeAdd(u, cell, c[j], lv[j], h, col);
     }
     return animeColumn(col);
 }
 
-//The highest top any puff can give, in blocks above the layer's base
+//The highest top any puff can give, in blocks above the layer's usual base (on the highest level)
 float animeTopBound(float cell) {
-    return min(((ANIME_PUFF_HIGH + ANIME_PUFF_TALL)*ANIME_PUFF_MAX + 0.75*ANIME_PUFF_BLEND)*cell, cloudShape.y);
+    return min(((ANIME_PUFF_HIGH + ANIME_PUFF_TALL)*ANIME_PUFF_MAX + 0.75*ANIME_PUFF_BLEND)*cell, cloudShape.y) + max(cloudLevel.y, 0.0);
 }
 
 //How far a point h blocks above the base is inside column bt (bottom, top), in blocks under the top (above the bottom counted ANIME_SOFT /
@@ -681,20 +749,22 @@ vec3 animeNormal(vec3 p, out vec3 c) {
     ivec2 o = ivec2(floor(u)) - 1;
     float ns = ANIME_NORMAL_STEP*animeScale();
     float e = ns/cell;
-    vec3 col[5];
+    float h = p.y - cloudShape.x;
+    vec4 col[5];
     for (int k = 0; k < 5; k++) {
-        col[k] = vec3(0.0, -1.0, 0.0);
+        col[k] = vec4(0.0, -1.0, 0.0, 0.0);
     }
     for (int j = 0; j < 9; j++) {
-        vec4 puff = animePuff(o + ivec2(j % 3, j/3), n, cell, f);
+        float lv;
+        vec4 puff = animePuff(o + ivec2(j % 3, j/3), n, cell, f, lv);
         if (!(puff.z > 0.0)) {
             continue;
         }
-        animeAdd(u, cell, puff, col[0]);
-        animeAdd(u + vec2(e, 0.0), cell, puff, col[1]);
-        animeAdd(u - vec2(e, 0.0), cell, puff, col[2]);
-        animeAdd(u + vec2(0.0, e), cell, puff, col[3]);
-        animeAdd(u - vec2(0.0, e), cell, puff, col[4]);
+        animeAdd(u, cell, puff, lv, h, col[0]);
+        animeAdd(u + vec2(e, 0.0), cell, puff, lv, h, col[1]);
+        animeAdd(u - vec2(e, 0.0), cell, puff, lv, h, col[2]);
+        animeAdd(u + vec2(0.0, e), cell, puff, lv, h, col[3]);
+        animeAdd(u - vec2(0.0, e), cell, puff, lv, h, col[4]);
     }
     c = animeColumn(col[0]);
     float px = animeColumn(col[1]).y;
@@ -726,7 +796,9 @@ float animeFade(float d) {
 // coverage. Without shaded (the water's reflection, blurred anyway) the light skips the puffs' normal: the surface turns from straight down
 // at the layer's base (through the side) to straight up at its top. Returns (sunlit weight, sky-lit weight, coverage, distance)
 vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter, int samples, bool shaded) {
-    vec2 span = cloudInterval(origin, dir, min(maxDist, ANIME_FADE_FAR/max(length(dir.xz), CLOUD_MIN_HORIZONTAL)));
+    //2026-11-22: from the lowest level's base to the highest level's top
+    vec2 span = cloudIntervalBetween(origin, dir, min(maxDist, ANIME_FADE_FAR/max(length(dir.xz), CLOUD_MIN_HORIZONTAL)),
+            cloudShape.x + min(cloudLevel.x, 0.0), cloudShape.x + cloudShape.y + max(cloudLevel.y, 0.0));
     if (cloudShape.w < 0.5 || span.y <= span.x) {
         return vec4(0.0);
     }
@@ -742,9 +814,12 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
     // sample, and samples above the group's highest top (or in a group with none) skip the union
     float cell = animePuffCell();
     float bound = animeTopBound(cell);
+    float floorH = min(cloudLevel.x, 0.0);
     ivec2 key = ivec2(0x7FFFFFFF);
     vec4 c[4];
-    float groupTop = -1.0;
+    float lv[4];
+    float groupTop = ANIME_NONE;
+    float groupBottom = -ANIME_NONE;
     for (int i = 0; i < ANIME_SAMPLES_HIGH; i++) {
         if (i >= n || trans < 0.01) {
             break;
@@ -752,7 +827,7 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
         float t = span.x + (float(i) + jitter)*dt;
         vec3 p = origin + dir*t;
         float h = p.y - cloudShape.x;
-        if (!(h > 0.0 && h < bound)) {
+        if (!(h > floorH && h < bound)) {
             continue;
         }
         vec2 m = cloudOffset.xy + p.xz;
@@ -760,12 +835,13 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
         ivec2 o = animeCorner(u);
         if (o != key) {
             key = o;
-            groupTop = animeCells(o, cell, c);
+            groupTop = animeCells(o, cell, c, lv, groupBottom);
         }
-        if (!(h < groupTop)) {
+        //2026-11-22: samples above the group's highest top or under its lowest level skip the union
+        if (!(h < groupTop && h > groupBottom)) {
             continue;
         }
-        float d = animeDepth(h, animeUnion(u, cell, c));
+        float d = animeDepth(h, animeUnion(u, cell, c, lv, h));
         if (d <= 0.0) {
             continue;
         }
@@ -781,7 +857,8 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
     }
     float t = tsum/wsum;
     vec3 p = origin + dir*t;
-    float hc = clamp((p.y - cloudShape.x)/cloudShape.y, 0.0, 1.0);
+    //The height in the layer above the point's own level
+    float hc = clamp((p.y - cloudShape.x - cloudLevelAt(cloudOffset.xy + p.xz))/cloudShape.y, 0.0, 1.0);
     vec3 col = vec3(0.0, 1.0, 1.0);
     float y = 2.0*smoothstep(0.0, 1.0, hc) - 1.0;
     vec3 nrm = shaded ? animeNormal(p, col) : vec3(0.0, y, sqrt(max(1.0 - y*y, 0.0)));
