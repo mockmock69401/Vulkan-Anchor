@@ -152,6 +152,16 @@ const float FAN_SIDE_LOW = -0.3;
 const float FAN_SIDE_HIGH = 0.1;
 //2026-11-15 (session 25): vanillaStars' cap on the star weight (a desert's stars weigh up to 2.5 at the default: BiomeSkyMath.starBoost)
 const float STAR_GATE_MAX = 4.0;
+//2026-11-22 (the user: "하늘 수평선 기준 아래 공허방향 공간이 너무 단색으로만 보여. 높은 곳에서 먼 공간을 내려다보면 공허 공간 하늘 색이 텅
+// 비어보이는 느낌이 들어"): the sky below the horizon (skyBelow), where no terrain is drawn (past the render distance, seen from high
+// up). The horizon's haze dims and greys downward: at depth d (the sine of the angle below the horizon) its colour keeps
+// e^(-d / BELOW_SCALE) of itself, the rest becoming BELOW_DEEP of it at BELOW_SAT of its saturation. The sun's and moon's glow there
+// fades BELOW_GLOW_SPREAD times slower, to BELOW_GLOW_DEEP of itself, so their light still bleeds down under them
+const float BELOW_SCALE = 0.3;
+const float BELOW_DEEP = 0.5;
+const float BELOW_SAT = 0.7;
+const float BELOW_GLOW_SPREAD = 1.5;
+const float BELOW_GLOW_DEEP = 0.3;
 //Overcast light (rain): the sky's colour is replaced by its luminance times this tint (luminance 1)
 const float OVERCAST_RED = 0.96;
 const float OVERCAST_GREEN = 1.0;
@@ -407,6 +417,20 @@ vec3 sunGlow(Atmosphere a, vec3 dir) {
         return vec3(0.0);
     }
     return glowAlong(a, dir, skyAirMass(dir.y));
+}
+
+//2026-11-22: the sky seen along dir with its colour sky (skyColour) and its glow (sunGlow, or the glow a fogged surface takes):
+// sky + glow above the horizon; below it the haze's colour dims and greys downward and the glow fades slower (BELOW_SCALE). Continuous
+// at the horizon. Outside ATMOSPHERE_SKY sky + glow
+vec3 skyBelow(Atmosphere a, vec3 dir, vec3 sky, vec3 glow) {
+    float d = -dir.y;
+    if (!(d > 0.0) || !atmosphereSky(a)) {
+        return sky + glow;
+    }
+    float keep = exp(-d/BELOW_SCALE);
+    float keepGlow = exp(-d/(BELOW_SCALE*BELOW_GLOW_SPREAD));
+    vec3 deep = mix(vec3(luminance(sky)), sky, BELOW_SAT)*BELOW_DEEP;
+    return mix(deep, sky, keep) + glow*mix(BELOW_GLOW_DEEP, 1.0, keepGlow);
 }
 
 //The distance the haze acts over for a view distance d (see HAZE_ONSET)

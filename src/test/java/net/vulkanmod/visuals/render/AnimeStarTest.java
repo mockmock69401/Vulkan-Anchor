@@ -97,7 +97,7 @@ class AnimeStarTest {
         int tint = c.indexOf("stars *= vanillaStarTint(");
         int animeTint = c.indexOf("anime *= starTint.rgb;");
         int added = c.indexOf("stars += anime;");
-        int sky = c.indexOf("vec3 sky = skyColour(a, dir)");
+        int sky = c.indexOf("vec3 sky = skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir))");
         //2026-11-17 (session 15 follow-up): the plain star colour, not vanillaStarTint's (its white square around vanilla's moon showed on the band)
         assertTrue(tint > 0 && tint < anime && anime < animeTint && animeTint < added && added < sky,
                 "the anime stars take the star colour and go under the far clouds");

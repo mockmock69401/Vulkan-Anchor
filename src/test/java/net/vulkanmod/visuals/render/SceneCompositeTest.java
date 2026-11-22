@@ -980,7 +980,8 @@ class SceneCompositeTest {
         // vanillaMoonKept 1 (vanilla's moon is kept through vanillaStars)
         //Session 12: the stars (times the picked star colour in the .TINTED build) in the same place of the sum
         assertTrue(COMP.contains("vec3 stars = vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial);"));
-        assertTrue(COMP.contains("vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraScreen(dir, p);"));
+        assertTrue(COMP.contains("vec3 sky = skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir)) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars"
+                + "\n                + auroraScreen(dir, p);"));
         assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)"));
     }
 
