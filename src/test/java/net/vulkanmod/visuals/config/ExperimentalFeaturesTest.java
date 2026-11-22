@@ -29,7 +29,8 @@ class ExperimentalFeaturesTest {
                 page.blocks().get(0).items().stream().map(VisualsOptionLayout.Item::key).toList());
         assertEquals(List.of("footprint_depth", "footprint_duration", "water_wakes", "water_wake_strength", "lens_water", "lens_water_strength"), page.blocks().get(1).items().stream().map(VisualsOptionLayout.Item::key).toList());
         //2026-11-21: the night sky's events
-        assertEquals(List.of("star_twinkle", "star_twinkle_strength", "meteors", "meteor_amount", "meteor_brightness"),
+        assertEquals(List.of("star_twinkle", "star_twinkle_strength", "meteors", "meteor_amount", "meteor_brightness", "meteor_curve",
+                        "meteor_duration", "meteor_ease_x1", "meteor_ease_y1", "meteor_ease_x2", "meteor_ease_y2"),
                 page.blocks().get(2).items().stream().map(VisualsOptionLayout.Item::key).toList());
         //each greys out with the effect it tunes
         assertEquals("storm_weather", VisualsOptionLayout.item("sandstorm_grain_size").requires());
@@ -48,7 +49,13 @@ class ExperimentalFeaturesTest {
         for (ExperimentalFeatures.Entry e : ExperimentalFeatures.ENTRIES) {
             VisualsOptionLayout.Item item = VisualsOptionLayout.item(e.item().key());
             //session 26: the switches (wakes, lens water) default to on
-            assertEquals(item.kind() == VisualsOptionLayout.Kind.SWITCH ? 1 : 100, VisualsOptionLayout.defaultValue(item), item.key());
+            //2026-11-22: the meteors' speed curve is a cubic bezier's control points (0..100), not a percent of a default: ease-out
+            int expected = switch (item.key()) {
+                case "meteor_ease_x1", "meteor_ease_y1" -> 0;
+                case "meteor_ease_x2" -> 58;
+                default -> item.kind() == VisualsOptionLayout.Kind.SWITCH ? 1 : 100;
+            };
+            assertEquals(expected, VisualsOptionLayout.defaultValue(item), item.key());
             VisualsConfig c = new VisualsConfig();
             int v = Math.max(item.min(), Math.min(item.max(), 137));
             VisualsOptionLayout.set(c, item, v);

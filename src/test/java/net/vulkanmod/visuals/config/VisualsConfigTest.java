@@ -55,6 +55,9 @@ class VisualsConfigTest {
     private static final java.util.Map<String, Integer> TUNED_DEFAULTS = java.util.Map.of("saturation", 94, "grade_strength", 0,
             "bloom_strength", 35, "fog_strength", 35, "sun_glow", 50, "sunset_light", 50, "light_shafts", 50, "moonlight", 50, "light_colour", 70,
             "block_light_colour", 70);
+    /** 2026-11-22: the meteors' speed curve, a cubic bezier's control points (ease-out), not percentages of a default. */
+    private static final java.util.Map<String, Integer> SPEED_CURVE_DEFAULTS = java.util.Map.of("meteor_ease_x1", 0, "meteor_ease_y1", 0,
+            "meteor_ease_x2", 58, "meteor_ease_y2", 100);
 
     @Test
     void percentagesDefaultToTheTunedLookAndSwitchesToOn() {
@@ -63,7 +66,8 @@ class VisualsConfigTest {
         Set<String> tuned = new HashSet<>();
         for (var item : items()) {
             if (item.kind() == VisualsOptionLayout.Kind.PERCENT) {
-                assertEquals(TUNED_DEFAULTS.getOrDefault(item.key(), 100), VisualsOptionLayout.get(c, item), item.key());
+                int want = SPEED_CURVE_DEFAULTS.getOrDefault(item.key(), TUNED_DEFAULTS.getOrDefault(item.key(), 100));
+                assertEquals(want, VisualsOptionLayout.get(c, item), item.key());
                 if (TUNED_DEFAULTS.containsKey(item.key())) tuned.add(item.key());
                 checked++;
             } else if (item.kind() == VisualsOptionLayout.Kind.SWITCH) {

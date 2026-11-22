@@ -550,6 +550,17 @@ public class VisualsConfig {
     public boolean meteors = true;
     public int meteorAmount = 100;
     public int meteorBrightness = 100;
+    /**
+     * 2026-11-22 (the user: "떨어지는 유성 궤적을 하늘에 맞게 약간 둥근 궤적을 그리게 하고, 베지어 곡선으로 속도 조절 가능하게 만들어줘. 지속시간도
+     * 추가하고, 실험적 기능에 넣어줘", Experimental > Sky): how much a meteor's path bends toward the ground (percent; 0: straight), how long
+     * it lasts (percent of its own life), and its speed's cubic bezier, x1 y1 x2 y2 in percent as CSS cubic-bezier (default ease-out).
+     */
+    public int meteorCurve = 100;
+    public int meteorDuration = 100;
+    public int meteorEaseX1 = 0;
+    public int meteorEaseY1 = 0;
+    public int meteorEaseX2 = 58;
+    public int meteorEaseY2 = 100;
     public int snowType = 0;
     public int snowSize = 100;
     public int snowAmount = 100;

@@ -527,5 +527,17 @@
   "vulkanmod.visuals.meteor_amount": "Meteor Amount",
   "vulkanmod.visuals.meteor_amount.tooltip": "How often meteors fall: 100 is about four a minute, 400 about sixteen. Percent of the default; 0: none; needs Meteors",
   "vulkanmod.visuals.meteor_brightness": "Meteor Brightness",
-  "vulkanmod.visuals.meteor_brightness.tooltip": "How bright the meteors' heads and trails are. Percent of the default; needs Meteors"
+  "vulkanmod.visuals.meteor_brightness.tooltip": "How bright the meteors' heads and trails are. Percent of the default; needs Meteors",
+  "vulkanmod.visuals.meteor_curve": "Meteor Curve",
+  "vulkanmod.visuals.meteor_curve.tooltip": "How much a meteor crossing the sky sideways bends down toward the horizon as it falls. 0: a straight streak; 200: twice the default bend; needs Meteors",
+  "vulkanmod.visuals.meteor_duration": "Meteor Duration",
+  "vulkanmod.visuals.meteor_duration.tooltip": "How long each meteor lasts: 100 is about half a second to a second, 300 three times as long (it travels the same path, slower). Percent of the default; needs Meteors",
+  "vulkanmod.visuals.meteor_ease_x1": "Meteor Speed Curve X1",
+  "vulkanmod.visuals.meteor_ease_x1.tooltip": "The speed curve is a cubic bezier like CSS cubic-bezier(X1, Y1, X2, Y2), each 0 to 100: X is the time, Y how far the meteor has gone. X1 is the first control point's time; needs Meteors",
+  "vulkanmod.visuals.meteor_ease_y1": "Meteor Speed Curve Y1",
+  "vulkanmod.visuals.meteor_ease_y1.tooltip": "The first control point's distance. Y1 above X1 makes the meteor start fast, below it start slow. Default 0, 0, 58, 100 (ease-out: it slows as it burns out); 0, 0, 100, 100 is a steady speed; needs Meteors",
+  "vulkanmod.visuals.meteor_ease_x2": "Meteor Speed Curve X2",
+  "vulkanmod.visuals.meteor_ease_x2.tooltip": "The second control point's time (0 to 100); needs Meteors",
+  "vulkanmod.visuals.meteor_ease_y2": "Meteor Speed Curve Y2",
+  "vulkanmod.visuals.meteor_ease_y2.tooltip": "The second control point's distance. Y2 above X2 makes the meteor slow down at the end, below it speed up; needs Meteors"
 }

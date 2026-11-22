@@ -216,6 +216,10 @@ layout(location = 76) uniform vec4 animeStarParams;
 //2026-11-21: SkyEventMath's slot, the night sky's events (skyevents.glsl, Experimental > Sky): x the stars' twinkle (0: off), y meteors a
 // minute (0: off), z the time in seconds, w the meteors' brightness
 layout(location = 77) uniform vec4 skyEvents;
+//2026-11-22: SkyEventMath's meteor slots (skyevents.glsl, Experimental > Sky): meteorShape x the bend's curvature (0: straight), y the
+// life's factor; meteorEase the speed's cubic bezier (x1, y1, x2, y2)
+layout(location = 78) uniform vec4 meteorShape;
+layout(location = 79) uniform vec4 meteorEase;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -1033,7 +1037,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
             stars += anime;
         }
         //2026-11-21 (Experimental > Sky): meteors, at night (the stars' weight), under the far clouds
-        stars += meteors(dir, skyEvents, starGate.x, pixelAngle);
+        stars += meteors(dir, skyEvents, meteorShape, meteorEase, starGate.x, pixelAngle);
         vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraScreen(dir, p);
         return vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0);
     }
