@@ -238,6 +238,18 @@ bool relightCapped(vec3 vanillaLinear, vec3 targetLinear) {
     return any(greaterThan(targetLinear/max(vanillaLinear, vec3(1e-4)), vec3(LIGHT_MAX_GAIN)));
 }
 
+//2026-11-22 (the user, Mosslorn: "어두운 곳을 지나갈 때 물 조명이 이상하게 보여"): the floor came in at once where the gain crossed the cap, so
+// shaded water lit from the side (B12) under a building over the street was flat, untextured grey in patches with straight edges
+// along the cap's crossing, beside the textured water just under it. The floor fades in from the cap to LIGHT_WATER_FLOOR_FULL times
+// it (the largest channel's ratio): dim water keeps its texture, near-black water (an island's core) still gets the whole floor.
+// RelightMath.floorWeight mirrors this
+const float LIGHT_WATER_FLOOR_FULL = 4.0;
+
+float relightFloorWeight(vec3 vanillaLinear, vec3 targetLinear) {
+    vec3 r = targetLinear/max(vanillaLinear, vec3(1e-4));
+    return smoothstep(LIGHT_MAX_GAIN, LIGHT_MAX_GAIN*LIGHT_WATER_FLOOR_FULL, max(r.r, max(r.g, r.b)));
+}
+
 //Linear lightmap colours: vanilla's to the target, per channel, at most LIGHT_MAX_GAIN
 vec3 relightGain(vec3 vanillaLinear, vec3 targetLinear) {
     return min(targetLinear/max(vanillaLinear, vec3(1e-4)), vec3(LIGHT_MAX_GAIN));

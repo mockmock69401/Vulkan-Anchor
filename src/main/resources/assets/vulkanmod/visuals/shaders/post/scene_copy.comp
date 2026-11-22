@@ -1178,7 +1178,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         vec3 skyOnly = vec3(0.0);
         vec3 blockOnly = vec3(0.0);
         vec3 gain = vec3(1.0);
-        bool capped = false;
+        float floorWeight = 0.0;
         //The scene at the new light (sky lift, side sky, held light) before the shading
         vec3 relit = scene;
         if (known) {
@@ -1187,7 +1187,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
                 relit = vanillaToScene(albedo*lightmapDisplay(blockT, skyT));
             } else {
                 gain = relightGain(lightNow, lightSky);
-                capped = relightCapped(lightNow, lightSky);
+                floorWeight = relightFloorWeight(lightNow, lightSky);
                 if (blockT > block) {
                     vec3 held = min(lightAll/max(lightSky, vec3(1e-4)), vec3(HELD_MAX_GAIN));
                     vec3 base = scene*gain;
@@ -1300,9 +1300,12 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         if (exposureMode(ATMOSPHERE_NO_SKY)) {
             lit *= looked(NO_SKY_EXPOSURE, look);
         }
-        if (water && capped) {
-            //Gate G7l: water whose vanilla light was too dark to scale keeps its body's scattering floor
-            lit = max(lit, lightAll*perLight*LIGHT_WATER_ALBEDO);
+        if (water && floorWeight > 0.0) {
+            //Gate G7l: water whose vanilla light was too dark to scale keeps its body's scattering floor. 2026-11-22: faded in past
+            // the cap (relightFloorWeight), and only as much as there is a body to scatter it: the share of the light the water over
+            // the floor takes (1 - waterTransmittance). Water a block or two over its floor shows the floor, textured, not a flat grey
+            vec3 bodyShare = vec3(1.0) - waterTransmittance(kind*waterParams.x);
+            lit = mix(lit, max(lit, lightAll*perLight*LIGHT_WATER_ALBEDO), floorWeight*bodyShare);
         }
         if (water) {
             //W6: the water's colour over its depth, lit by what a white texel here receives (before the haze); 2026-11-10 (session 8): the

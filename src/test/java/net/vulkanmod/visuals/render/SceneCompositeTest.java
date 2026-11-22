@@ -172,6 +172,12 @@ class SceneCompositeTest {
         return surface(rgba, normal, lt, -1, light, 0, false, 40);
     }
 
+    //Water in the shade under a roof (sky light 2) that sees the sky sideways, kind blocks of water over its floor
+    private static SceneCompositeMath.Pixel sidewaysAt(float[] rgba, float kind) {
+        return new SceneCompositeMath.Pixel(rgba, false, dir(0.3f, -0.4f, -1), 40, false, UP, new float[]{1, 0, kind, 0}, -1, new float[]{2, 0, 1}, 1, 0,
+                false, new float[3]);
+    }
+
     private static SceneCompositeMath.Pixel skyPixel(float[] rgba, float[] d) {
         return new SceneCompositeMath.Pixel(rgba, true, d, -1, false, NONE, null, -1, new float[3], 0, 0, false, new float[3]);
     }
@@ -914,6 +920,15 @@ class SceneCompositeTest {
         SceneCompositeMath.Pixel sideways = new SceneCompositeMath.Pixel(water, false, dir(0.3f, -0.4f, -1), 40, false, UP, shadowed, -1,
                 new float[]{2, 0, 1}, 1, 0, false, new float[3]);
         assertTrue(SceneCompositeMath.composite(sideways, s, LIGHTMAP)[2] > SceneCompositeMath.composite(covered, s, LIGHTMAP)[2] * 1.5f);
+        //2026-11-22 (the user, Mosslorn: under a building over the street the canal's water was flat grey in straight-edged patches):
+        // shallow water there (vanilla's light far too dark to scale, lifted from the side) keeps its texture: two texels a third apart
+        // stay apart. Deep water still takes more of the body's floor, its texels evened out more
+        //(the texels as vanilla draws them at that sky light: dark)
+        float[] dimWater = {0.02f, 0.04f, 0.08f, 1}, darker = {0.013f, 0.027f, 0.053f, 1};
+        float[] shallowA = SceneCompositeMath.composite(sidewaysAt(dimWater, 1), s, LIGHTMAP), shallowB = SceneCompositeMath.composite(sidewaysAt(darker, 1), s, LIGHTMAP);
+        assertTrue(shallowB[2] < shallowA[2] * 0.85f, shallowA[2] + " vs " + shallowB[2]);
+        float[] deepA = SceneCompositeMath.composite(sidewaysAt(dimWater, 40), s, LIGHTMAP), deepB = SceneCompositeMath.composite(sidewaysAt(darker, 40), s, LIGHTMAP);
+        assertTrue(deepB[2] / deepA[2] > shallowB[2] / shallowA[2] + 0.05f, deepB[2] / deepA[2] + " vs " + shallowB[2] / shallowA[2]);
         //The composite never darkens water by its reflectivity itself (no Fresnel or reflectivity call)
         assertFalse(COMP.contains("reflectivity("));
         assertTrue(COMP.contains("lit = waterColour(lit, kind*waterParams.x, lightAll*perLight*ao*waterParams.y*waterTint.rgb);"));
@@ -1771,7 +1786,7 @@ class SceneCompositeTest {
         //It assembles the other packages' exports and reimplements none of them
         for (String call : new String[]{"vanillaToScene(", "lightingAt(", "sunShadingAt(", "shadeLevel(lighting.w)", "sunLevel(lighting.w)", "sunShare(", "isPlant(", "isEmissive(", "surfaceNormal(depthNormal(",
                 "lodFaceNormal(", "waterColour(", "reflectionMark(", "sunDisc(", "skyColour(", "sunGlow(", "vanillaStars(", "hazeAmount(", "applyHazeOpen(", "glowLobeOpen(", "sunOpenShare(",
-                "cloudOver(", "farCloudMarch(", "pixelLight(", "relightGain(", "relightCapped(", "liftedSky(", "waterSky(", "sideSky(", "scenePositionFrom("}) {
+                "cloudOver(", "farCloudMarch(", "pixelLight(", "relightGain(", "relightFloorWeight(", "liftedSky(", "waterSky(", "sideSky(", "scenePositionFrom("}) {
             assertTrue(COMP.contains(call), call);
         }
         for (String own : new String[]{"vec3 skyColour(", "vec3 sunGlow(", "void haze(", "float sunShading(", "float sunShadingAt(", "vec3 waterColour(", "vec3 sunDisc(",

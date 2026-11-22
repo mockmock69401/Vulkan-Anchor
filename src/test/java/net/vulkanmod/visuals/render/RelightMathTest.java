@@ -187,4 +187,39 @@ class RelightMathTest {
         assertTrue(RelightMath.capped(0.01f, 1f));
         assertTrue(RelightMath.capped(0f, 0.2f));
     }
+
+    /**
+     * 2026-11-22 (the user, Mosslorn: shaded water under a building over the street turned flat grey in straight-edged patches): the
+     * floor fades in past the cap instead of switching on, so water just past it keeps its texture, and near-black water still gets
+     * the whole floor. The shader's function is the same.
+     */
+    @Test
+    void theWaterFloorFadesInPastTheCap() throws Exception {
+        float[] target = {1, 1, 1};
+        //Up to the cap: none; at the cap's crossing it starts from 0 (no step), whole from WATER_FLOOR_FULL times the cap
+        assertEquals(0f, RelightMath.floorWeight(new float[]{0.5f, 0.5f, 0.5f}, target), 0f);
+        assertEquals(0f, RelightMath.floorWeight(new float[]{0.25f, 0.25f, 0.25f}, target), 0f);
+        assertEquals(0f, RelightMath.floorWeight(new float[]{0.2499f, 0.2499f, 0.2499f}, target), 1e-3f);
+        float full = 1 / (RelightMath.MAX_GAIN * RelightMath.WATER_FLOOR_FULL);
+        assertEquals(1f, RelightMath.floorWeight(new float[]{full, full, full}, target), 1e-5f);
+        assertEquals(1f, RelightMath.floorWeight(new float[]{0, 0, 0}, target), 0f);
+        //Dim water a little past the cap keeps most of its own colour; it never decreases as vanilla gets darker
+        float dim = RelightMath.floorWeight(new float[]{0.18f, 0.18f, 0.18f}, target);
+        assertTrue(dim > 0 && dim < 0.1f, "dim: " + dim);
+        float prev = 0;
+        for (float v = 0.3f; v >= 0.001f; v *= 0.9f) {
+            float w = RelightMath.floorWeight(new float[]{v, v, v}, target);
+            assertTrue(w >= prev - 1e-6f && w >= 0 && w <= 1, v + " -> " + w);
+            prev = w;
+        }
+        //The largest channel's ratio decides
+        assertEquals(RelightMath.floorWeight(new float[]{0.01f, 0.01f, 0.01f}, target), RelightMath.floorWeight(new float[]{0.5f, 0.01f, 0.5f}, target), 0f);
+        String glsl = net.vulkanmod.visuals.vk.shader.ShaderFiles.read("post/lightvolume.glsl");
+        assertTrue(glsl.contains("const float LIGHT_WATER_FLOOR_FULL = " + RelightMath.WATER_FLOOR_FULL + ";"));
+        assertTrue(glsl.contains("return smoothstep(LIGHT_MAX_GAIN, LIGHT_MAX_GAIN*LIGHT_WATER_FLOOR_FULL, max(r.r, max(r.g, r.b)));"));
+        String comp = net.vulkanmod.visuals.vk.shader.ShaderFiles.read("post/scene_copy.comp");
+        assertTrue(comp.contains("vec3 bodyShare = vec3(1.0) - waterTransmittance(kind*waterParams.x);"));
+        assertTrue(comp.contains("lit = mix(lit, max(lit, lightAll*perLight*LIGHT_WATER_ALBEDO), floorWeight*bodyShare);"));
+        assertFalse(comp.contains("relightCapped("));
+    }
 }

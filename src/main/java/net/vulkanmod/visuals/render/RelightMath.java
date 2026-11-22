@@ -38,6 +38,21 @@ public final class RelightMath {
         return targetLinear / Math.max(vanillaLinear, 1e-4f) > MAX_GAIN;
     }
 
+    /** lightvolume.glsl's LIGHT_WATER_FLOOR_FULL: the floor is whole from this many times MAX_GAIN (the largest channel's ratio). */
+    public static final float WATER_FLOOR_FULL = 4f;
+
+    /**
+     * 2026-11-22 (the user, Mosslorn: shaded water under a building over the street was flat grey in straight-edged patches): the
+     * water floor's weight, 0 up to the cap and 1 from WATER_FLOOR_FULL times it, smooth between, by the largest channel's ratio of
+     * the target to vanilla's linear light. lightvolume.glsl's relightFloorWeight mirrors this.
+     */
+    public static float floorWeight(float[] vanillaLinear, float[] targetLinear) {
+        float r = 0;
+        for (int i = 0; i < 3; i++) r = Math.max(r, targetLinear[i] / Math.max(vanillaLinear[i], 1e-4f));
+        float t = clamp01((r - MAX_GAIN) / (MAX_GAIN * WATER_FLOOR_FULL - MAX_GAIN));
+        return t * t * (3 - 2 * t);
+    }
+
     public static float skyShare(float sky) {
         return clamp01(sky / 15f);
     }
