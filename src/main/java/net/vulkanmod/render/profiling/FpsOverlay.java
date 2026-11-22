@@ -2,6 +2,7 @@ package net.vulkanmod.render.profiling;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.vulkanmod.Initializer;
@@ -26,9 +27,16 @@ public final class FpsOverlay {
 
     public static void install() {
         NeoForge.EVENT_BUS.addListener((RenderGuiEvent.Post event) -> render(event.getGuiGraphics()));
+        NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre event) -> frame());
     }
 
-    /** At the start of every rendered frame (Renderer.beginFrame). */
+    /**
+     * At the start of every rendered frame: NeoForge's RenderFrameEvent.Pre, after the frame's fence and swapchain waits.
+     * 2026-11-22 (the user's map test: 82 / 68 here against Sodium's 153 / 138 in Anchor FPS): this was counted at the top of
+     * Renderer.beginFrame, before those waits, where VSync paces the frames, so the time the CPU waited for a free frame in the
+     * queue counted as a slow frame. Anchor FPS and other overlays count at the render tick event's start, and so does this now.
+     * Measured on the same frames (Forge build): 145 / 109 at the old point, 191 / 144 at the new one, 171 / 123 between present calls.
+     */
     public static void frame() {
         if (Initializer.CONFIG.fpsOverlay == OFF) {
             lastFrame = 0;
