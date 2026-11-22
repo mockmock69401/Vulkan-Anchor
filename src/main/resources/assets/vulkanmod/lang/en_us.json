@@ -310,7 +310,7 @@
   "vulkanmod.visuals.sunset_light": "Sunset Light",
   "vulkanmod.visuals.sunset_light.tooltip": "Sunrise and sunset colour on the terrain",
   "vulkanmod.visuals.light_shafts": "Light Shafts",
-  "vulkanmod.visuals.light_shafts.tooltip": "Sunbeams in the air. With Sun Shadows: volumetric light through the shadow maps wherever terrain or trees block the sun, thinner in rain; without: rays only while the sun is on screen",
+  "vulkanmod.visuals.light_shafts.tooltip": "Sunbeams in the air. With Sun Shadows: volumetric light through the shadow maps wherever terrain or trees block the sun, thinner in rain, and at night moonbeams while the moon is on screen (brighter at full moon and with more Moonlight); without: rays only while the sun is on screen",
   "vulkanmod.visuals.moonlight": "Moonlight",
   "vulkanmod.visuals.moonlight.tooltip": "At night: light on terrain under the open sky and the moon's light in the sky; caves stay dark. 0 adds no moonlight",
   "vulkanmod.visuals.sun_shading": "Sun Shading",

@@ -474,6 +474,67 @@ class AtmosphereTest {
         assertEquals(0f, AtmosphereUniforms.compute(SETTINGS, frame(morning, 0, 0, false, FOG, 80, aside), SERIAL, true, false).shafts(), 0f);
     }
 
+    /** A camera looking along the moon (world: opposite the sun), so the moon sits straight ahead. */
+    private static Matrix4f lookingAtMoon(float timeOfDay) {
+        Vector3f moon = SunMath.sunDirection(timeOfDay).normalize().negate();
+        return new Matrix4f().lookAlong(moon, new Vector3f(0, 1, 0).add(0.001f, 0, 0.001f));
+    }
+
+    private static float[] shaftParams(AtmosphereUniforms.Values v) {
+        LooseUniformWriter w = new LooseUniformWriter(meta("shafts.MASK"));
+        v.writeShafts(w);
+        ByteBuffer b = w.buffer();
+        int o = offsetOf("shafts.MASK", 0);
+        return new float[]{b.getFloat(o), b.getFloat(o + 4), b.getFloat(o + 8), b.getFloat(o + 12)};
+    }
+
+    @Test
+    void atNightTheShaftsWalkTowardTheMoonWhileItIsOnScreen() {
+        float evening = 0.35f;//moon height cos(0.85 * 2 pi) ~ 0.59, in the east
+        float full = MoonShadowMath.strength(MoonShadowMath.MOONLIGHT_DEFAULT, 0);
+        AtmosphereFrame f = frame(evening, 0, 0, false, FOG, 80, lookingAtMoon(evening));
+        AtmosphereUniforms.Values v = AtmosphereUniforms.compute(SETTINGS, f, SERIAL, true, false, full);
+        assertTrue(v.shafts() > 0);
+        assertTrue(v.moonShafts());
+        float[] c = v.shaftLight();
+        assertFiniteNonNegative(c, "moon shaft light");
+        assertTrue(c[2] > c[0], "moonbeams are cool");
+        assertEquals(AtmosphereUniforms.MOON_SHAFT_AMOUNT, lum(c), 1e-3f);
+        //The moon straight ahead is at the screen centre, with the moon's threshold and window
+        assertArrayEquals(new float[]{0.5f, 0.5f, AtmosphereUniforms.MOON_SHAFT_THRESHOLD, AtmosphereUniforms.MOON_SHAFT_WINDOW}, shaftParams(v), 1e-4f);
+        //Without the moon strength (old callers, other dimensions) nothing changes at night
+        assertEquals(0f, AtmosphereUniforms.compute(SETTINGS, f, SERIAL, true, false).shafts(), 0f);
+        //Half moon: dimmer; new moon, setting 0, the moon behind the camera or far aside, the moon below the horizon: off
+        assertTrue(lum(AtmosphereUniforms.compute(SETTINGS, f, SERIAL, true, false, MoonShadowMath.strength(0.5f, 2)).shaftLight()) < lum(c));
+        Matrix4f behind = new Matrix4f().rotateY((float) Math.PI).mul(lookingAtMoon(evening));
+        Matrix4f aside = new Matrix4f().rotateY(1.2f).mul(lookingAtMoon(evening));
+        List<AtmosphereUniforms.Values> off = List.of(
+                AtmosphereUniforms.compute(SETTINGS, f, SERIAL, true, false, MoonShadowMath.strength(0.5f, 4)),
+                AtmosphereUniforms.compute(settings(x -> x.lightShafts = 0), f, SERIAL, true, false, full),
+                AtmosphereUniforms.compute(SETTINGS, frame(evening, 0, 0, false, FOG, 80, behind), SERIAL, true, false, full),
+                AtmosphereUniforms.compute(SETTINGS, frame(evening, 0, 0, false, FOG, 80, aside), SERIAL, true, false, full),
+                AtmosphereUniforms.compute(SETTINGS, frame(0.24f, 0, 0, false, FOG, 80, lookingAtMoon(0.24f)), SERIAL, true, false, full));
+        for (AtmosphereUniforms.Values x : off) {
+            assertEquals(0f, x.shafts(), 0f);
+            assertArrayEquals(new float[3], x.shaftLight(), 0f);
+        }
+        //Rain thins them
+        AtmosphereUniforms.Values rain = AtmosphereUniforms.compute(SETTINGS, frame(evening, 1, 0, false, FOG, 80, lookingAtMoon(evening)), SERIAL, true, false, full);
+        assertTrue(lum(rain.shaftLight()) < 0.25f * lum(c) && lum(rain.shaftLight()) > 0);
+        //By day the sun's shafts are untouched by the moon strength, and keep the sun's mask (params z, w 0)
+        float morning = 0.85f;
+        AtmosphereFrame day = frame(morning, 0, 0, false, FOG, 80, lookingAt(morning));
+        AtmosphereUniforms.Values sun = AtmosphereUniforms.compute(SETTINGS, day, SERIAL, true, false, full);
+        assertFalse(sun.moonShafts());
+        assertArrayEquals(AtmosphereUniforms.compute(SETTINGS, day, SERIAL, true, false).shaftLight(), sun.shaftLight(), 0f);
+        float[] params = shaftParams(sun);
+        assertEquals(0f, params[2], 0f);
+        assertEquals(0f, params[3], 0f);
+        //The moon's threshold keeps its disc (WaterMath.MOON_DISC_LUMINANCE) and stays below the sun's
+        assertTrue(AtmosphereUniforms.MOON_SHAFT_THRESHOLD < WaterMath.MOON_DISC_LUMINANCE);
+        assertTrue(AtmosphereUniforms.MOON_SHAFT_THRESHOLD < AtmosphereMath.SHAFT_THRESHOLD);
+    }
+
     // ---- 7. constants and slots ----
 
     @Test

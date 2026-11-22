@@ -151,12 +151,24 @@ public final class AtmosphereUniforms {
     /** Full rain keeps 1 - SHAFT_RAIN_CUT of the shafts, a thunderstorm a further 1 - SHAFT_THUNDER_CUT. */
     public static final float SHAFT_RAIN_CUT = 0.8f, SHAFT_THUNDER_CUT = 0.5f;
 
+    // ---- 2026-11-22: moonbeams (the user: "moonlight light shafts too, like the first picture") ----
+    // With the sun below the horizon the same screen-space shafts walk toward the moon: rays fanning out from the moon through whatever
+    // stands in front of it. Tried first: the volumetric pass through the moon's cascades, which at night only laid an even grey veil
+    // over the scene (2026-11-22 run mb-after1).
+    /** Moonbeam colour (luminance per unit of the shaft image) at full moon with the moonlight setting at its default; ColourMath.MOON_LIGHT's hue. */
+    public static final float MOON_SHAFT_AMOUNT = 2.5f;
+    /**
+     * The moonbeams' mask keeps sky luminance above MOON_SHAFT_THRESHOLD (the moon's disc, WaterMath.MOON_DISC_LUMINANCE, and the bright
+     * glow around it; not the night sky) within MOON_SHAFT_WINDOW screen heights of the moon (stars and aurora farther out cast none).
+     */
+    public static final float MOON_SHAFT_THRESHOLD = 0.15f, MOON_SHAFT_WINDOW = 0.4f;
+
     /**
      * One frame's atmosphere. block holds the struct Atmosphere (BLOCK_FLOATS floats); shafts and the sun's screen position (row 0 at
      * the top, 0..1 across the screen) are the screen-space shafts'; shaftColour is their colour with shafts applied.
      */
     public record Values(boolean lodValid, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f invView, float[] block,
-                         float shafts, float[] shaftColour, float sunX, float sunY, float[] vanilla, float[] look, float[] border) {
+                         float shafts, float[] shaftColour, float sunX, float sunY, float[] vanilla, float[] look, float[] border, boolean moonShafts) {
         /**
          * 0 by day .. 1 at night: the sun's light fading out from SUN_FADE_HIGH to SUN_FADE_LOW sun height. Also by the sun's height under
          * an environmental fog in a dimension with sky light (ATMOSPHERE_FOG); always 0 without sky light (ATMOSPHERE_NO_SKY) and without a
@@ -171,7 +183,10 @@ public final class AtmosphereUniforms {
             return this.shafts > 0 ? this.shaftColour.clone() : new float[3];
         }
 
-        /** > 0 when the screen-space shafts run: the sun above the horizon and on or near the screen, the setting above 0. */
+        /**
+         * > 0 when the screen-space shafts run: the sun above the horizon and on or near the screen, the setting above 0; 2026-11-22: or at
+         * night the moon (moonShafts; sunX, sunY are then the moon's screen position).
+         */
         @Override
         public float shafts() {
             return this.shafts;
@@ -233,9 +248,13 @@ public final class AtmosphereUniforms {
             for (int s = RESERVED_FIRST; s <= RESERVED_LAST; s++) if (w.has(s)) w.putVec4(s, 0, 0, 0, 0);
         }
 
-        /** shafts.comp's location 0: xy the sun's screen position (row 0 at the top). */
+        /**
+         * shafts.comp's location 0: xy the light's screen position (row 0 at the top); for the moon z the mask's threshold and w its window
+         * radius in screen heights (0, 0: the sun's AtmosphereMath.SHAFT_THRESHOLD, no window).
+         */
         public void writeShafts(LooseUniformWriter w) {
-            w.putVec4(0, this.sunX, this.sunY, 0, 0);
+            if (this.moonShafts) w.putVec4(0, this.sunX, this.sunY, MOON_SHAFT_THRESHOLD, MOON_SHAFT_WINDOW);
+            else w.putVec4(0, this.sunX, this.sunY, 0, 0);
         }
     }
 
@@ -258,9 +277,18 @@ public final class AtmosphereUniforms {
     }
 
     public static Values compute(PostProcessSettings settings, AtmosphereFrame frame, long serial, boolean hasSky, boolean lodSizeMatches) {
+        return compute(settings, frame, serial, hasSky, lodSizeMatches, 0);
+    }
+
+    /**
+     * 2026-11-22: moonStrength is MoonShadowMath.strength (the moonlight setting and the moon's phase; 0: no moonbeams). With the sun
+     * below the horizon and the moon on or near the screen the screen-space shafts walk toward the moon instead.
+     */
+    public static Values compute(PostProcessSettings settings, AtmosphereFrame frame, long serial, boolean hasSky, boolean lodSizeMatches,
+                                 float moonStrength) {
         if (frame == null || frame.serial() != serial) {
             return new Values(false, new Matrix4f(), new Matrix4f(), new Matrix4f(), new float[BLOCK_FLOATS], 0, new float[3], 0.5f, 0.5f, new float[12],
-                    new float[4], new float[3]);
+                    new float[4], new float[3], false);
         }
         float[] block = block(settings, frame, hasSky);
         float[] look = look(settings, frame, block);
@@ -268,17 +296,28 @@ public final class AtmosphereUniforms {
         float[] screen = sunScreen(frame);
         float shafts = shafts(settings, frame, block, screen);
         float[] colour = new float[3];
+        boolean moon = false;
         if (shafts > 0) {
             float h = sunDirection(frame).y;
             float[] tint = ColourMath.sunLight(h);
             float low = (1 - clamp01(h)) * (1 - clamp01(h));
             float amount = (SHAFT_NOON + (SHAFT_LOW - SHAFT_NOON) * low) * shafts;
             for (int i = 0; i < 3; i++) colour[i] = Math.max(0, tint[i] * amount);
+        } else if (moonStrength > 0 && Float.isFinite(moonStrength)) {
+            float[] moonScreen = lightScreen(frame, new Vector3f(sunDirection(frame)).negate());
+            float m = moonShafts(settings, frame, block, moonScreen);
+            float amount = MOON_SHAFT_AMOUNT * Math.min(moonStrength, 1) / MoonShadowMath.MOON_SHADOW * m;
+            if (amount > 0) {
+                shafts = m;
+                screen = moonScreen;
+                moon = true;
+                for (int i = 0; i < 3; i++) colour[i] = Math.max(0, ColourMath.MOON_LIGHT[i] * amount);
+            }
         }
         boolean lodValid = lodSizeMatches && frame.lodDrawn();
         return new Values(lodValid, frame.invVanillaProjection(), frame.invLodProjection(), frame.invModelView(), block,
                 shafts, colour, screen[0], screen[1], vanillaColours(frame, block), look, border(lodValid, block[3], frame.skyFogEnd(),
-                block[3] == AtmosphereMath.ATMOSPHERE_SKY ? weatherFog(frame.rain(), frame.thunder(), settings.weatherFog()) : 0));
+                block[3] == AtmosphereMath.ATMOSPHERE_SKY ? weatherFog(frame.rain(), frame.thunder(), settings.weatherFog()) : 0), moon);
     }
 
     /** 2026-10-28: the weather fog's 1 / range per block (BORDER .w): WEATHER_FOG_RAIN x rain x the setting, thunder adding its share. */
@@ -565,8 +604,12 @@ public final class AtmosphereUniforms {
 
     /** The sun's screen position (x right, y down from the top, 0..1 across the screen); far off screen (-10) when it is behind the camera. */
     static float[] sunScreen(AtmosphereFrame f) {
+        return lightScreen(f, sunDirection(f));
+    }
+
+    /** A direction's screen position (x right, y down from the top, 0..1 across the screen); far off screen (-10) when it is behind the camera. */
+    static float[] lightScreen(AtmosphereFrame f, Vector3f sun) {
         if (f.viewProjection() == null) return new float[]{-10, -10};
-        Vector3f sun = sunDirection(f);
         Vector4f clip = f.viewProjection().transform(new Vector4f(sun.x, sun.y, sun.z, 0));
         if (!(clip.w > 1e-6f) || !Float.isFinite(clip.x) || !Float.isFinite(clip.y)) return new float[]{-10, -10};
         float x = 0.5f + 0.5f * clip.x / clip.w, y = 0.5f - 0.5f * clip.y / clip.w;
@@ -577,6 +620,23 @@ public final class AtmosphereUniforms {
     static float shafts(PostProcessSettings s, AtmosphereFrame f, float[] block, float[] screen) {
         if (s == null || !s.enabled() || !(s.lightShafts() > 0) || block[3] != AtmosphereMath.ATMOSPHERE_SKY) return 0;
         float h = sunDirection(f).y;
+        float height = AtmosphereMath.smoothstep(0, SHAFT_HORIZON_FADE, h);
+        if (!(h > 0) || !(height > 0)) return 0;
+        float out = Math.max(Math.max(-screen[0], screen[0] - 1), Math.max(-screen[1], screen[1] - 1));
+        float edge = 1 - AtmosphereMath.smoothstep(0, SHAFT_MARGIN, Math.max(out, 0));
+        float weather = (1 - SHAFT_RAIN_CUT * clamp01(f.rain())) * (1 - SHAFT_THUNDER_CUT * clamp01(f.thunder()));
+        float v = height * edge * weather;
+        return v > 0 && Float.isFinite(v) ? v : 0;
+    }
+
+    /**
+     * 2026-11-22: how strongly the moonbeams run (0 = not at all): the sun below the horizon, the moon above it (faded in over
+     * SHAFT_HORIZON_FADE) and on or within SHAFT_MARGIN of the screen (screen: its position), the setting above 0, sky mode; thinner in
+     * rain as the sun's. The moon's phase and the moonlight setting scale the colour (compute), not this.
+     */
+    static float moonShafts(PostProcessSettings s, AtmosphereFrame f, float[] block, float[] screen) {
+        if (s == null || !s.enabled() || !(s.lightShafts() > 0) || block[3] != AtmosphereMath.ATMOSPHERE_SKY) return 0;
+        float h = -sunDirection(f).y;
         float height = AtmosphereMath.smoothstep(0, SHAFT_HORIZON_FADE, h);
         if (!(h > 0) || !(height > 0)) return 0;
         float out = Math.max(Math.max(-screen[0], screen[0] - 1), Math.max(-screen[1], screen[1] - 1));
