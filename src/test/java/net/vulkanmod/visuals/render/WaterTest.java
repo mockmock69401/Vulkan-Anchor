@@ -592,6 +592,10 @@ class WaterTest {
         //Both solid callers set the floor before their march; the water's march keeps the default
         assertEquals(2, COMP.split("reflectThickMin = REFLECT_SOLID_THICK_MIN;", -1).length - 1);
         assertTrue(COMP.contains("float reflectThickMin = REFLECT_THICK_MIN;"));
+        //Session 16c: both solid callers keep the pixel's own colour, not the sky, where their ray ran behind ground in front of them (a
+        // pit's facing wall: the obsidian pit's pale edges)
+        assertEquals(2, COMP.replace("\r\n", "\n").split(java.util.regex.Pattern.quote(
+                "hitColour, pathLength, blocked);\n        if (blocked > 0.5) {\n            reflection = own;\n        }"), -1).length - 1);
     }
 
     @Test
