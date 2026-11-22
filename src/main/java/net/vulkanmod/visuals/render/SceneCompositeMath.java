@@ -571,7 +571,7 @@ public final class SceneCompositeMath {
             float[] lightNow = skyT == sky ? lightSky : lightmapLinear(lm, block, sky);
             float[] dark = new float[3], skyOnly = new float[3], blockOnly = new float[3];
             float[] gain = {1, 1, 1};
-            boolean capped = false;
+            float floorWeight = 0;
             float[] relit = scene;
             if (known) {
                 if (hasAlbedo) {
@@ -582,8 +582,8 @@ public final class SceneCompositeMath {
                 } else {
                     for (int i = 0; i < 3; i++) {
                         gain[i] = RelightMath.gain(lightNow[i], lightSky[i]);
-                        capped |= RelightMath.capped(lightNow[i], lightSky[i]);
                     }
+                    floorWeight = RelightMath.floorWeight(lightNow, lightSky);
                     if (blockT > block) {
                         float[] held = new float[3];
                         for (int i = 0; i < 3; i++) held[i] = Math.min(lightAll[i] / Math.max(lightSky[i], 1e-4f), HELD_MAX_GAIN);
@@ -641,8 +641,9 @@ public final class SceneCompositeMath {
             lit = new float[3];
             for (int i = 0; i < 3; i++) lit[i] = relit[i] * perLight[i] * ao[i];
             if (exposureMode(look, AtmosphereMath.ATMOSPHERE_NO_SKY)) lit = scale(lit, looked(NO_SKY_EXPOSURE, weight));
-            if (isWater && capped) {
-                for (int i = 0; i < 3; i++) lit[i] = Math.max(lit[i], lightAll[i] * perLight[i] * RelightMath.WATER_ALBEDO);
+            if (isWater && floorWeight > 0) {
+                float[] t = WaterMath.waterTransmittance(kind * water[0]);
+                for (int i = 0; i < 3; i++) lit[i] = mix(lit[i], Math.max(lit[i], lightAll[i] * perLight[i] * RelightMath.WATER_ALBEDO), floorWeight * (1 - t[i]));
             }
             if (isWater) lit = WaterMath.waterColour(lit, kind * water[0], mul(scale(mul(mul(lightAll, perLight), ao), water[1]), slots[WATER_TINT]));
         }
