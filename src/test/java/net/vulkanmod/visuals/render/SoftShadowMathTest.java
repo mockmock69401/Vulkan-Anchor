@@ -48,7 +48,7 @@ class SoftShadowMathTest {
     void theNearMapsTexelsAndThePixelsFootprintAreFiltered() {
         float close = 2 * ShadowMath.CLOSE_RADIUS / ShadowMath.CLOSE_HEIGHT;
         float near = 2 * ShadowMath.NEAR_RADIUS / ShadowMath.NEAR_HEIGHT;
-        assertEquals(1 / 16f, close, 1e-6);
+        assertEquals(1 / 32f, close, 1e-6);
         assertTrue(close < SoftShadowMath.AA_TEXEL_MIN && near > SoftShadowMath.AA_TEXEL_MIN);
         //blocks per pixel per block of distance at 1440 rows, fov 70
         float perBlock = 2 / (1.4281480f * 1440);

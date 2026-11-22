@@ -205,7 +205,7 @@ float softTurn = 0.0;
 // cascade (32 blocks) the near map's texel (0.16 blocks) is coarser than a fleck too, and the soft filter, narrower than a texel there,
 // fell back to the 2 x 2 lookup. So the filter covers at least the pixel's footprint on its receiver, an ellipse SOFT_AA_PIXELS pixels
 // across and that over the facing along the view (the facing at least SOFT_AA_COS_MIN, the half width at most SOFT_AA_ALONG_MAX), and
-// SOFT_AA_TEXELS texels of a map whose texel exceeds SOFT_AA_TEXEL_MIN (the close map's 1/16 block does not). Its taps lie on the
+// SOFT_AA_TEXELS texels of a map whose texel exceeds SOFT_AA_TEXEL_MIN (the close map's 1/32 block does not). Its taps lie on the
 // receiver's plane; at the least width they do not turn, so the shadow is a smooth function of the position, and they turn fully from
 // twice it (the penumbra's own width). Near the camera the footprint is under the close map's texel: the sharp lookup as before.
 // SoftShadowMath mirrors the constants.

@@ -29,8 +29,13 @@ public final class ShadowMath {
      * texel's weight against the whole box). The close map is CLOSE_WIDTH texels across map x (a quarter of its texel along y, which
      * does not slide) and its box CLOSE_SPREAD_TEXELS of them wide (the near cascade's 0.47 blocks): a twentieth of the swing.
      * shadow.glsl mirrors CLOSE_SPREAD: change both together.
+     * 2026-11-22 (the user, Patrix 32x in the "map test" pack: a staircase along a leaf's shadow on a grey block): along map y the close
+     * texel was 1/16 block (1024 over 64 blocks). Where a caster nearly touches its receiver the soft width is under a texel and the
+     * lookup is the 2 x 2 bilinear one, so an edge running across map y came out in 1/16-block steps. CLOSE_HEIGHT 2048 (1/32 block)
+     * draws the leaves' own outline; 4096 looked the same for twice the memory. The texel, and with it the bias and normal offset,
+     * halve with it (the coarser axis). The two close maps take 128 MB instead of 64.
      */
-    public static final int CLOSE_WIDTH = 8192, CLOSE_HEIGHT = 1024;
+    public static final int CLOSE_WIDTH = 8192, CLOSE_HEIGHT = 2048;
     /**
      * Distant wobble (CTE2, 2026-10-22: shadows past the close cascade undulated as the day ran, most with a low sun): the same slide
      * through the near map's 0.16-block and the far map's 1.5-block texels. Their maps are NEAR_WIDTH / FAR_WIDTH texels across map x
