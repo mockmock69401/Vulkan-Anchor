@@ -27,7 +27,7 @@ public final class SoftShadowMath {
      * 2026-11-16 (the user: "나뭇잎 그림자가 일정 거리 밖에서 자글자글해보이는 현상이 있어"): the filter's least half widths, so the leaves' flecks
      * do not alias into a crawling speckle: the pixel's footprint on its receiver, AA_PIXELS pixels across and that over the facing (at
      * least AA_COS_MIN) along the view, at most AA_ALONG_MAX blocks; and AA_TEXELS texels of a map whose texel exceeds AA_TEXEL_MIN blocks
-     * (the near map's 0.16; the close map's 1/16 block, a leaf's pixel, keeps the sharp lookup). At the least width the taps do not turn;
+     * (the near map's 0.16; the close map's 1/32 block, under a leaf's pixel, keeps the sharp lookup). At the least width the taps do not turn;
      * they turn fully from twice it.
      */
     public static final float AA_TEXELS = 1.5f, AA_TEXEL_MIN = 0.07f, AA_PIXELS = 1.5f, AA_COS_MIN = 0.08f, AA_ALONG_MAX = 1.5f;
