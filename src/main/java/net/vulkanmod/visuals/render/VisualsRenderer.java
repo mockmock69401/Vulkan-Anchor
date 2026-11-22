@@ -839,7 +839,8 @@ public final class VisualsRenderer {
                     mc.options.getEffectiveRenderDistance(), plan.lighting());
             //The extensions' LOD inputs of this frame; Task 4: none when the atmosphere does not take the LOD depth this frame
             LodInputs lod = this.lodSerial == serial ? this.lod : null;
-            AtmosphereUniforms.Values atmosphere = AtmosphereUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, lod != null && lod.sizeMatches());
+            AtmosphereUniforms.Values atmosphere = AtmosphereUniforms.compute(settings, this.atmosphere, serial, hasSkyLight, lod != null && lod.sizeMatches(),
+                    moonStrength(settings, level));
             if (!atmosphere.lodValid()) lod = null;
             //2026-10-30 (audit): after the LOD inputs not drawn this frame are dropped (the far clouds and the shafts used their reach)
             float farSections = farSections(lod);

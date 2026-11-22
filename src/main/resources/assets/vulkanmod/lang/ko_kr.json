@@ -28,7 +28,7 @@
   "vulkanmod.visuals.sunset_light": "노을빛",
   "vulkanmod.visuals.sunset_light.tooltip": "해 뜰 때와 질 때 지형에 비치는 색",
   "vulkanmod.visuals.light_shafts": "빛줄기",
-  "vulkanmod.visuals.light_shafts.tooltip": "공기 중의 햇살. 태양 그림자가 켜져 있으면 지형이나 나무가 해를 가리는 곳마다 그림자 맵을 통한 볼류메트릭 라이트(비 올 땐 옅게), 꺼져 있으면 해가 화면에 있을 때만 보이는 빛줄기",
+  "vulkanmod.visuals.light_shafts.tooltip": "공기 중의 햇살. 태양 그림자가 켜져 있으면 지형이나 나무가 해를 가리는 곳마다 그림자 맵을 통한 볼류메트릭 라이트(비 올 땐 옅게)와 밤에 달이 화면에 있을 때의 달빛 줄기(보름달일수록, 달빛 설정이 높을수록 밝게), 꺼져 있으면 해가 화면에 있을 때만 보이는 빛줄기",
   "vulkanmod.visuals.moonlight": "달빛",
   "vulkanmod.visuals.moonlight.tooltip": "밤에 하늘이 트인 지형을 비추는 빛과 하늘의 달빛. 동굴은 어둡게 유지됩니다. 0이면 달빛을 더하지 않습니다",
   "vulkanmod.visuals.sun_shading": "햇빛 음영",
