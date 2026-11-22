@@ -215,7 +215,6 @@ public class Renderer {
     }
 
     public void beginFrame() {
-        net.vulkanmod.render.profiling.FpsOverlay.frame();
         net.vulkanmod.vulkan.shader.Pipeline.savePipelineCacheWhenSettled();
         net.vulkanmod.render.target.MainTargets.onFrameStart(Minecraft.getInstance().getMainRenderTarget());
         if (net.vulkanmod.visuals.dev.FrameRecorder.ON) net.vulkanmod.visuals.dev.FrameRecorder.mark(net.vulkanmod.visuals.dev.FrameRecorder.M_BEGIN_START);

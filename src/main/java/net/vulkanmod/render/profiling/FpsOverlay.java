@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
 import net.vulkanmod.Initializer;
 
 /**
@@ -26,9 +27,18 @@ public final class FpsOverlay {
 
     public static void install() {
         MinecraftForge.EVENT_BUS.addListener((RenderGuiEvent.Post event) -> render(event.getGuiGraphics()));
+        MinecraftForge.EVENT_BUS.addListener((TickEvent.RenderTickEvent event) -> {
+            if (event.phase == TickEvent.Phase.START) frame();
+        });
     }
 
-    /** At the start of every rendered frame (Renderer.beginFrame). */
+    /**
+     * At the start of every rendered frame: Forge's RenderTickEvent START, after the frame's fence and swapchain waits.
+     * 2026-11-22 (the user's map test: 82 / 68 here against Sodium's 153 / 138 in Anchor FPS): this was counted at the top of
+     * Renderer.beginFrame, before those waits, where VSync paces the frames, so the time the CPU waited for a free frame in the
+     * queue counted as a slow frame. Anchor FPS and other overlays count at RenderTickEvent START, and so does this now. Measured on
+     * the same frames: 145 / 109 at the old point, 191 / 144 at the new one, and 171 / 123 between present calls.
+     */
     public static void frame() {
         if (Initializer.CONFIG.fpsOverlay == OFF) {
             lastFrame = 0;
