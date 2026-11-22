@@ -68,7 +68,20 @@ public final class ExperimentalFeatures {
             percent(SKY, "meteor_amount", 0, SkyEventMath.METEOR_AMOUNT_MAX, Impact.NONE, "meteors",
                     c -> c.meteorAmount, (c, v) -> c.meteorAmount = v),
             percent(SKY, "meteor_brightness", 0, SkyEventMath.METEOR_BRIGHTNESS_MAX, Impact.NONE, "meteors",
-                    c -> c.meteorBrightness, (c, v) -> c.meteorBrightness = v));
+                    c -> c.meteorBrightness, (c, v) -> c.meteorBrightness = v),
+            //2026-11-22: the meteors' bend toward the ground, their duration and their speed's cubic bezier (SkyEventMath; percent)
+            percent(SKY, "meteor_curve", 0, SkyEventMath.METEOR_CURVE_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorCurve, (c, v) -> c.meteorCurve = v),
+            percent(SKY, "meteor_duration", SkyEventMath.METEOR_DURATION_MIN, SkyEventMath.METEOR_DURATION_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorDuration, (c, v) -> c.meteorDuration = v),
+            percent(SKY, "meteor_ease_x1", 0, SkyEventMath.METEOR_EASE_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorEaseX1, (c, v) -> c.meteorEaseX1 = v),
+            percent(SKY, "meteor_ease_y1", 0, SkyEventMath.METEOR_EASE_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorEaseY1, (c, v) -> c.meteorEaseY1 = v),
+            percent(SKY, "meteor_ease_x2", 0, SkyEventMath.METEOR_EASE_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorEaseX2, (c, v) -> c.meteorEaseX2 = v),
+            percent(SKY, "meteor_ease_y2", 0, SkyEventMath.METEOR_EASE_MAX, Impact.NONE, "meteors",
+                    c -> c.meteorEaseY2, (c, v) -> c.meteorEaseY2 = v));
 
     private ExperimentalFeatures() {
     }

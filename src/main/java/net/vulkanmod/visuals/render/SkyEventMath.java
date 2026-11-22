@@ -11,11 +11,17 @@ import net.vulkanmod.visuals.config.VisualsConfig;
  * setting x METEORS_A_MINUTE / 100; 0: off), z the time in seconds (the flow clock's, stopped while paused, wrapped at
  * SKY_EVENT_TIME_WRAP), w the meteors' brightness (setting / 100). All 0 with the post-process off or where the composite draws no sky
  * (the Nether, the End). Both show only at night: the composite weighs them with the stars' weight (starGate).
+ * <p>
+ * 2026-11-22 (the user: "떨어지는 유성 궤적을 하늘에 맞게 약간 둥근 궤적을 그리게 하고, 베지어 곡선으로 속도 조절 가능하게 만들어줘. 지속시간도
+ * 추가하고, 실험적 기능에 넣어줘"): the meteors' bend, speed curve and duration. SHAPE_SLOT (meteorShape): x the bend's curvature (the
+ * curve setting / 100 x METEOR_BEND; 0: a straight run), y the life's factor (the duration setting / 100). EASE_SLOT (meteorEase): the
+ * speed's cubic bezier x1, y1, x2, y2 (settings / 100, as CSS cubic-bezier; the default eases out, the head slowing as it burns out).
  */
 public final class SkyEventMath {
-    public static final int SLOT = 77;
+    public static final int SLOT = 77, SHAPE_SLOT = 78, EASE_SLOT = 79;
     /** The settings' ranges (percent). */
     public static final int TWINKLE_MAX = 200, METEOR_AMOUNT_MAX = 400, METEOR_BRIGHTNESS_MAX = 200;
+    public static final int METEOR_CURVE_MAX = 200, METEOR_DURATION_MIN = 25, METEOR_DURATION_MAX = 300, METEOR_EASE_MAX = 100;
     /** The meteors a minute at an amount of 100 %. */
     public static final float METEORS_A_MINUTE = 4.0f;
 
@@ -30,6 +36,7 @@ public final class SkyEventMath {
     public static final float METEOR_WIDTH = 0.9f, METEOR_WIDTH_MIN = 0.0009f, METEOR_FADE = 0.6f, METEOR_LIGHT = 2.4f;
     public static final float METEOR_HORIZON = 0.04f;
     public static final float METEOR_R = 0.86f, METEOR_G = 0.95f, METEOR_B = 1.0f;
+    public static final float METEOR_BEND = 1.2f, METEOR_EASE_STEPS = 12.0f;
     public static final float SKY_EVENT_TIME_WRAP = 3600.0f;
 
     private static volatile double clock;
@@ -51,6 +58,46 @@ public final class SkyEventMath {
     /** skyevents.glsl meteorAt's slot length (seconds) for rate meteors a minute: the lanes together bring rate a minute on average. */
     public static float slotSeconds(float rate) {
         return METEOR_LANES * METEOR_CHANCE * 60f / rate;
+    }
+
+    /** skyevents.glsl bezierAxis: the cubic bezier (0,0) (x1,y1) (x2,y2) (1,1) at t on one axis, p1, p2 its control points' coordinates. */
+    public static float bezierAxis(float t, float p1, float p2) {
+        float r = 1 - t;
+        return 3 * r * r * t * p1 + 3 * r * t * t * p2 + t * t * t;
+    }
+
+    /** skyevents.glsl meteorEased: the head's share of the run at the life's share u for the bezier x1, y1, x2, y2. */
+    public static float meteorEased(float u, float x1, float y1, float x2, float y2) {
+        float lo = 0, hi = 1;
+        for (int i = 0; i < (int) METEOR_EASE_STEPS; i++) {
+            float mid = 0.5f * (lo + hi);
+            if (bezierAxis(mid, x1, x2) < u) lo = mid;
+            else hi = mid;
+        }
+        return Math.max(0, Math.min(1, bezierAxis(0.5f * (lo + hi), y1, y2)));
+    }
+
+    /** The longest meteor life (seconds) at the duration setting's most. */
+    public static float longestLife() {
+        return METEOR_LIFE_MAX * METEOR_DURATION_MAX / 100f;
+    }
+
+    /** SHAPE_SLOT for the settings c (null: the post-process off, no meteors drawn: a straight run of its own life). */
+    public static float[] shape(VisualsConfig c) {
+        if (c == null) return new float[]{0, 1, 0, 0};
+        float curve = Math.max(0, Math.min(METEOR_CURVE_MAX, c.meteorCurve)) / 100f;
+        float life = Math.max(METEOR_DURATION_MIN, Math.min(METEOR_DURATION_MAX, c.meteorDuration)) / 100f;
+        return new float[]{curve * METEOR_BEND, life, 0, 0};
+    }
+
+    /** EASE_SLOT for the settings c (null: the post-process off, no meteors drawn: linear): each control point's coordinate in 0..1. */
+    public static float[] ease(VisualsConfig c) {
+        if (c == null) return new float[]{0, 0, 1, 1};
+        return new float[]{easeOf(c.meteorEaseX1), easeOf(c.meteorEaseY1), easeOf(c.meteorEaseX2), easeOf(c.meteorEaseY2)};
+    }
+
+    private static float easeOf(int percent) {
+        return Math.max(0, Math.min(METEOR_EASE_MAX, percent)) / 100f;
     }
 
     /** The slot for the settings c (null: the post-process off) when the composite draws the sky (sky) at seconds. */

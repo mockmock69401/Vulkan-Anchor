@@ -732,5 +732,17 @@
   "vulkanmod.visuals.meteor_amount": "유성 빈도",
   "vulkanmod.visuals.meteor_amount.tooltip": "유성이 떨어지는 빈도입니다. 100이면 1분에 4개쯤, 400이면 16개쯤입니다. 기본값의 퍼센트이며 0이면 떨어지지 않습니다. 유성이 켜져 있어야 합니다",
   "vulkanmod.visuals.meteor_brightness": "유성 밝기",
-  "vulkanmod.visuals.meteor_brightness.tooltip": "유성의 머리와 꼬리의 밝기입니다. 기본 밝기의 퍼센트이며 유성이 켜져 있어야 합니다"
+  "vulkanmod.visuals.meteor_brightness.tooltip": "유성의 머리와 꼬리의 밝기입니다. 기본 밝기의 퍼센트이며 유성이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteor_curve": "유성 궤적 휨",
+  "vulkanmod.visuals.meteor_curve.tooltip": "하늘을 비스듬히 가로지르는 유성이 떨어지면서 지평선 쪽으로 휘는 정도입니다. 0이면 곧게 떨어지고 200이면 기본의 두 배로 휩니다. 유성이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteor_duration": "유성 지속시간",
+  "vulkanmod.visuals.meteor_duration.tooltip": "유성 하나가 보이는 시간입니다. 100이면 0.5초에서 1초쯤이고 300이면 세 배입니다. 같은 길을 더 천천히 갑니다. 기본값의 퍼센트이며 유성이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteor_ease_x1": "유성 속도 곡선 X1",
+  "vulkanmod.visuals.meteor_ease_x1.tooltip": "속도 곡선은 CSS cubic-bezier(X1, Y1, X2, Y2)와 같은 3차 베지어 곡선이며 각 값은 0에서 100입니다. X는 시간, Y는 유성이 간 거리입니다. X1은 첫째 제어점의 시간입니다. 유성이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteor_ease_y1": "유성 속도 곡선 Y1",
+  "vulkanmod.visuals.meteor_ease_y1.tooltip": "첫째 제어점의 거리입니다. Y1이 X1보다 크면 빠르게 출발하고, 작으면 느리게 출발합니다. 기본값은 0, 0, 58, 100(ease-out, 타면서 느려짐)이고 0, 0, 100, 100은 일정한 속도입니다. 유성이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteor_ease_x2": "유성 속도 곡선 X2",
+  "vulkanmod.visuals.meteor_ease_x2.tooltip": "둘째 제어점의 시간(0에서 100)입니다. 유성이 켜져 있어야 합니다",
+  "vulkanmod.visuals.meteor_ease_y2": "유성 속도 곡선 Y2",
+  "vulkanmod.visuals.meteor_ease_y2.tooltip": "둘째 제어점의 거리입니다. Y2가 X2보다 크면 끝에서 느려지고, 작으면 끝에서 빨라집니다. 유성이 켜져 있어야 합니다"
 }

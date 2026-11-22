@@ -884,6 +884,15 @@ public final class VkPostProcess {
             float[] events = SkyEventMath.params(animeConfig, skyDrawn);
             this.copyUniforms.putVec4(SkyEventMath.SLOT, events[0], events[1], events[2], events[3]);
         }
+        //2026-11-22: the meteors' bend, life and speed curve
+        if (this.copyUniforms.has(SkyEventMath.SHAPE_SLOT)) {
+            float[] shape = SkyEventMath.shape(animeConfig);
+            this.copyUniforms.putVec4(SkyEventMath.SHAPE_SLOT, shape[0], shape[1], shape[2], shape[3]);
+        }
+        if (this.copyUniforms.has(SkyEventMath.EASE_SLOT)) {
+            float[] ease = SkyEventMath.ease(animeConfig);
+            this.copyUniforms.putVec4(SkyEventMath.EASE_SLOT, ease[0], ease[1], ease[2], ease[3]);
+        }
         //Session 19: the End galaxy's map, a chunk a frame while it is wanted
         if (this.dimension.galaxy() > 0 || (GalaxyMap.ready() != null && !this.galaxyUploaded())) this.uploadGalaxy(upload);
         if (this.smaa != null) this.smaa.prepare(upload);
