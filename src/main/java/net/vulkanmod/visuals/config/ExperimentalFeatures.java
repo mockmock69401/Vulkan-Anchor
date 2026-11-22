@@ -4,6 +4,7 @@ import net.vulkanmod.visuals.config.VisualsOptionLayout.Block;
 import net.vulkanmod.visuals.config.VisualsOptionLayout.Impact;
 import net.vulkanmod.visuals.config.VisualsOptionLayout.Item;
 import net.vulkanmod.visuals.config.VisualsOptionLayout.Kind;
+import net.vulkanmod.visuals.render.CloudLevelMath;
 import net.vulkanmod.visuals.render.FootprintMath;
 import net.vulkanmod.visuals.render.SkyEventMath;
 import net.vulkanmod.visuals.render.StormMath;
@@ -27,9 +28,13 @@ import java.util.function.ToIntFunction;
 public final class ExperimentalFeatures {
     /** The page's key (vulkanmod.visuals.page.experimental). */
     public static final String PAGE = "experimental";
-    /** The blocks, in order: the weather's particles; what the world does when the player touches it; the night sky (2026-11-21). */
-    public static final String WEATHER = "experimental_weather", INTERACTION = "experimental_interaction", SKY = "experimental_sky";
-    public static final List<String> BLOCKS = List.of(WEATHER, INTERACTION, SKY);
+    /**
+     * The blocks, in order: the weather's particles; what the world does when the player touches it; the night sky (2026-11-21); the
+     * clouds' heights (2026-11-22).
+     */
+    public static final String WEATHER = "experimental_weather", INTERACTION = "experimental_interaction", SKY = "experimental_sky",
+            CLOUDS = "experimental_clouds";
+    public static final List<String> BLOCKS = List.of(WEATHER, INTERACTION, SKY, CLOUDS);
 
     /** A setting on the page: its block, the layout item, and the config field's reader and writer (in the item's units). */
     public record Entry(String block, Item item, ToIntFunction<VisualsConfig> get, ObjIntConsumer<VisualsConfig> set) {
@@ -81,7 +86,15 @@ public final class ExperimentalFeatures {
             percent(SKY, "meteor_ease_x2", 0, SkyEventMath.METEOR_EASE_MAX, Impact.NONE, "meteors",
                     c -> c.meteorEaseX2, (c, v) -> c.meteorEaseX2 = v),
             percent(SKY, "meteor_ease_y2", 0, SkyEventMath.METEOR_EASE_MAX, Impact.NONE, "meteors",
-                    c -> c.meteorEaseY2, (c, v) -> c.meteorEaseY2 = v));
+                    c -> c.meteorEaseY2, (c, v) -> c.meteorEaseY2 = v),
+            //2026-11-22: the realistic and anime clouds at different heights (CloudLevelMath): how far below and above the usual cloud
+            // level they go (blocks) and how much of that range they use (percent; 0: all at the usual level)
+            blocks(CLOUDS, "cloud_level_low", 0, CloudLevelMath.RANGE_MAX, Impact.LOW, "far_clouds",
+                    c -> c.cloudLevelLow, (c, v) -> c.cloudLevelLow = v),
+            blocks(CLOUDS, "cloud_level_high", 0, CloudLevelMath.RANGE_MAX, Impact.LOW, "far_clouds",
+                    c -> c.cloudLevelHigh, (c, v) -> c.cloudLevelHigh = v),
+            percent(CLOUDS, "cloud_level_spread", 0, CloudLevelMath.SPREAD_MAX, Impact.LOW, "far_clouds",
+                    c -> c.cloudLevelSpread, (c, v) -> c.cloudLevelSpread = v));
 
     private ExperimentalFeatures() {
     }
@@ -90,6 +103,12 @@ public final class ExperimentalFeatures {
     static Entry percent(String block, String key, int min, int max, Impact impact, String requires, ToIntFunction<VisualsConfig> get,
                          ObjIntConsumer<VisualsConfig> set) {
         return new Entry(block, new Item(key, Kind.PERCENT, min, max, impact, requires), get, set);
+    }
+
+    /** A setting in blocks. */
+    static Entry blocks(String block, String key, int min, int max, Impact impact, String requires, ToIntFunction<VisualsConfig> get,
+                        ObjIntConsumer<VisualsConfig> set) {
+        return new Entry(block, new Item(key, Kind.BLOCKS, min, max, impact, requires), get, set);
     }
 
     /** An on / off setting over a boolean field. */

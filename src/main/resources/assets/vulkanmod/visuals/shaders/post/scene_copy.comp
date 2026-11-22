@@ -110,6 +110,8 @@ layout(location = 13) uniform vec4 cloudOffset;
 layout(location = 14) uniform vec4 cloudLit;
 layout(location = 15) uniform vec4 cloudAmbient;
 layout(location = 16) uniform vec4 cloudLightDir;
+//2026-11-22: clouds.glsl's cloudLevel (CloudUniforms.level): the levels' lowest and highest offset in blocks, the level lattice's cell, 1 = on
+layout(location = 80) uniform vec4 cloudLevel;
 //Clean ShadowUniforms.writeCopy: x 1 when a cascade is drawn (not needed here: W5's sun visibility already says it)
 layout(location = 17) uniform vec4 shadowParams;
 //Clean LightVolumeUniforms (COPY_FIRST 18): lightvolume.glsl's four vec4

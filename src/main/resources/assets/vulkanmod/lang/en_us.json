@@ -744,5 +744,12 @@
   "vulkanmod.visuals.meteor_ease_x2": "Meteor Speed Curve X2",
   "vulkanmod.visuals.meteor_ease_x2.tooltip": "The second control point's time (0 to 100); needs Meteors",
   "vulkanmod.visuals.meteor_ease_y2": "Meteor Speed Curve Y2",
-  "vulkanmod.visuals.meteor_ease_y2.tooltip": "The second control point's distance. Y2 above X2 makes the meteor slow down at the end, below it speed up; needs Meteors"
+  "vulkanmod.visuals.meteor_ease_y2.tooltip": "The second control point's distance. Y2 above X2 makes the meteor slow down at the end, below it speed up; needs Meteors",
+  "vulkanmod.visuals.block.experimental_clouds": "Clouds",
+  "vulkanmod.visuals.cloud_level_low": "Lowest Clouds",
+  "vulkanmod.visuals.cloud_level_low.tooltip": "How far below the usual cloud height the lowest clouds sit, in blocks. Each bank of Realistic or Anime clouds stands at its own height between Lowest Clouds and Highest Clouds, so from high up the sky has depth instead of one flat layer; 0 keeps them from going lower",
+  "vulkanmod.visuals.cloud_level_high": "Highest Clouds",
+  "vulkanmod.visuals.cloud_level_high.tooltip": "How far above the usual cloud height the highest clouds sit, in blocks; 0 keeps them from going higher. Realistic and Anime clouds only",
+  "vulkanmod.visuals.cloud_level_spread": "Height Variety",
+  "vulkanmod.visuals.cloud_level_spread.tooltip": "How much of the range between Lowest Clouds and Highest Clouds the cloud banks use. 100 spreads them over all of it, 0 puts every cloud back at the usual height. A wider range costs a little GPU time"
 }

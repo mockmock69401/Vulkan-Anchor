@@ -561,6 +561,14 @@ public class VisualsConfig {
     public int meteorEaseY1 = 0;
     public int meteorEaseX2 = 58;
     public int meteorEaseY2 = 100;
+    /**
+     * 2026-11-22 (the user: "구름을 더 아래까지 퍼트리고 다양한 높낮이로", Experimental > Clouds): the realistic and anime clouds' levels
+     * (CloudLevelMath): the lowest clouds this many blocks below the layer's usual base, the highest this many above, and the share of that
+     * range the levels use (percent; 0: every cloud on the usual base, as before).
+     */
+    public int cloudLevelLow = net.vulkanmod.visuals.render.CloudLevelMath.LOW_DEFAULT;
+    public int cloudLevelHigh = net.vulkanmod.visuals.render.CloudLevelMath.HIGH_DEFAULT;
+    public int cloudLevelSpread = net.vulkanmod.visuals.render.CloudLevelMath.SPREAD_DEFAULT;
     public int snowType = 0;
     public int snowSize = 100;
     public int snowAmount = 100;

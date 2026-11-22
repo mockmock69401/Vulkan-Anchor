@@ -898,6 +898,14 @@ public final class VkPostProcess {
         if (this.smaa != null) this.smaa.prepare(upload);
         clouds.write(this.copyUniforms, CloudUniforms.COPY_FIRST);
         clouds.write(this.reflectionUniforms, CloudUniforms.REFLECTION_FIRST);
+        //2026-11-22: the clouds' levels (CloudLevelMath; Experimental > Clouds), while the realistic or anime clouds are drawn
+        float[] cloudLevel = CloudLevelMath.params(animeConfig, clouds.on() && clouds.realistic());
+        if (this.copyUniforms.has(CloudLevelMath.SLOT)) {
+            this.copyUniforms.putVec4(CloudLevelMath.SLOT, cloudLevel[0], cloudLevel[1], cloudLevel[2], cloudLevel[3]);
+        }
+        if (this.reflectionUniforms.has(CloudLevelMath.REFLECTION_SLOT)) {
+            this.reflectionUniforms.putVec4(CloudLevelMath.REFLECTION_SLOT, cloudLevel[0], cloudLevel[1], cloudLevel[2], cloudLevel[3]);
+        }
         atmosphere.write(this.copyUniforms);
         lighting.writeCopy(this.copyUniforms);
         shadow.writeCopy(this.copyUniforms);
