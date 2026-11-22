@@ -1038,7 +1038,9 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         //2026-11-21 (Experimental > Sky): meteors, at night (the stars' weight), under the far clouds
         stars += meteors(dir, skyEvents, meteorShape, meteorEase, starGate.x, pixelAngle);
-        vec3 sky = skyColour(a, dir) + sunGlow(a, dir) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars + auroraScreen(dir, p);
+        //2026-11-22: below the horizon the haze dims and greys downward (skyBelow), its glow under the sun and moon fading slower
+        vec3 sky = skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir)) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars
+                + auroraScreen(dir, p);
         return vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0);
     }
     float dist = length(view);
@@ -1392,7 +1394,8 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     lit = applyHazeOpen(a, lit, dir, dist, amount, sunOpen);
     float border = atmosphereSky(a) ? borderAmount(world, fromLod) : 0.0;
     if (border > 0.0) {
-        lit = mix(lit, skyColour(a, dir) + glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y)), border);
+        //2026-11-22: into the sky behind it, below the horizon too (skyBelow), so the terrain's edge meets the sky past it
+        lit = mix(lit, skyBelow(a, dir, skyColour(a, dir), glowLobeOpen(a, dir, sunOpen)*glowGain(skyAirMass(dir.y))), border);
     }
     if (!cloud) {
         lit = weatherFogOver(a, lit, dir, dist, amount);
@@ -1480,7 +1483,7 @@ vec3 particleBehindGuess(ivec2 p, ivec2 size, vec3 behind) {
     vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, uv));
     float depth = texelFetch(beforeTranslucent, p, 0).r;
     if (depth == FAR) {
-        return skyColour(a, dir) + sunGlow(a, dir);
+        return skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir));
     }
     float dist = length(viewPosition(invVanillaProj, uv, depth));
     float amount = hazeAmount(a, 1.0, false);

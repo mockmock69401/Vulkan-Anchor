@@ -59,6 +59,8 @@ public final class AtmosphereMath {
     public static final float VEIL_GAIN = 35.0f, VEIL_RANGE = 300.0f, VEIL_HEIGHT = 200.0f;
     /** Rain's overcast tint (luminance 1). */
     public static final float OVERCAST_RED = 0.96f, OVERCAST_GREEN = 1.0f, OVERCAST_BLUE = 1.08f;
+    /** 2026-11-22: the sky below the horizon (atmosphere.glsl skyBelow): how fast the haze dims and greys downward, and its glow. */
+    public static final float BELOW_SCALE = 0.3f, BELOW_DEEP = 0.5f, BELOW_SAT = 0.7f, BELOW_GLOW_SPREAD = 1.5f, BELOW_GLOW_DEEP = 0.3f;
     /** Numerical guards (see atmosphere.glsl). */
     public static final float SKY_FOG_MIN_SLOPE = 0.001f, FOG_SERIES = 0.001f, HAZE_MAX_DISTANCE = 1000000.0f, MIN_DEPTH = 0.000001f;
 
@@ -237,6 +239,22 @@ public final class AtmosphereMath {
         float tf = (float) Math.exp(-a.fog[0] * Math.exp(-a.fog[2] * a.fog[1]) / (Math.max(a.fog[1], MIN_DEPTH) * Math.max(dir[1], SKY_FOG_MIN_SLOPE)));
         float[] fog = fogColour(a, dir);
         return new float[]{air[0] * tf + fog[0] * (1 - tf), air[1] * tf + fog[1] * (1 - tf), air[2] * tf + fog[2] * (1 - tf)};
+    }
+
+    /** atmosphere.glsl skyBelow: sky + glow above the horizon; below it the haze dims and greys downward, the glow fading slower. */
+    public static float[] skyBelow(Atmosphere a, float[] dir, float[] sky, float[] glow) {
+        float d = -dir[1];
+        if (!(d > 0) || !atmosphereSky(a)) return new float[]{sky[0] + glow[0], sky[1] + glow[1], sky[2] + glow[2]};
+        float keep = (float) Math.exp(-d / BELOW_SCALE);
+        float keepGlow = (float) Math.exp(-d / (BELOW_SCALE * BELOW_GLOW_SPREAD));
+        float l = PostMath.luminance(sky[0], sky[1], sky[2]);
+        float g = BELOW_GLOW_DEEP + (1 - BELOW_GLOW_DEEP) * keepGlow;
+        float[] out = new float[3];
+        for (int i = 0; i < 3; i++) {
+            float deep = (l + (sky[i] - l) * BELOW_SAT) * BELOW_DEEP;
+            out[i] = deep + (sky[i] - deep) * keep + glow[i] * g;
+        }
+        return out;
     }
 
     /** The glow's lobe toward dir (sun and moon). */

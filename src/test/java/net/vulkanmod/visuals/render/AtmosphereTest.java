@@ -151,6 +151,39 @@ class AtmosphereTest {
 
     // ---- 2. the sky by time and weather ----
 
+    /**
+     * 2026-11-22 (the user: the sky below the horizon looked one flat colour from high up): below the horizon the haze dims and greys
+     * downward, the glow fading slower; above it, and at it, the sky is unchanged. By day, at sunset and at night.
+     */
+    @Test
+    void belowTheHorizonTheSkyDimsAndGreysDownward() {
+        for (float t : new float[]{NOON, SUNSET, MIDNIGHT}) {
+            AtmosphereMath.Atmosphere a = sky(t, 0);
+            float[] up = dir(-1, 0.3f, 0);
+            float[] sky = AtmosphereMath.skyColour(a, up), glow = AtmosphereMath.sunGlow(a, up);
+            assertArrayEquals(new float[]{sky[0] + glow[0], sky[1] + glow[1], sky[2] + glow[2]}, AtmosphereMath.skyBelow(a, up, sky, glow), 1e-6f);
+            float last = Float.MAX_VALUE, lastSat = Float.MAX_VALUE;
+            float[] at = AtmosphereMath.skyBelow(a, dir(-1, 0, 0), AtmosphereMath.skyColour(a, dir(-1, 0, 0)), AtmosphereMath.sunGlow(a, dir(-1, 0, 0)));
+            float[] just = dir(-1, -0.002f, 0);
+            float[] justSky = AtmosphereMath.skyColour(a, just), justGlow = AtmosphereMath.sunGlow(a, just);
+            float[] below = AtmosphereMath.skyBelow(a, just, justSky, justGlow);
+            float plain = lum(new float[]{justSky[0] + justGlow[0], justSky[1] + justGlow[1], justSky[2] + justGlow[2]});
+            assertEquals(plain, lum(below), 0.02f * plain + 1e-6f, "continuous at the horizon, t " + t);
+            for (float y = -0.02f; y >= -1f; y -= 0.1f) {
+                float[] d = dir(-1, y, 0);
+                float[] c = AtmosphereMath.skyBelow(a, d, AtmosphereMath.skyColour(a, d), AtmosphereMath.sunGlow(a, d));
+                assertFiniteNonNegative(c, "below t " + t);
+                float l = lum(c);
+                float sat = Math.max(c[0], Math.max(c[1], c[2])) - Math.min(c[0], Math.min(c[1], c[2]));
+                assertTrue(l <= last + 1e-6f && sat <= lastSat + 1e-6f, "dimmer and greyer downward, t " + t + " y " + y);
+                assertTrue(l > 0, "never black, t " + t);
+                last = l;
+                lastSat = sat;
+            }
+            assertTrue(last < 0.8f * lum(at), "the deep is well under the horizon, t " + t);
+        }
+    }
+
     @Test
     void zenithBrightnessFallsFromNoonToRainToSunsetToMidnightAndSunsetIsWarm() {
         float[] up = {0, 1, 0};
