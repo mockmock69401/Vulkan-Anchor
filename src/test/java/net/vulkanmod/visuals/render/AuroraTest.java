@@ -166,7 +166,7 @@ class AuroraTest {
     void theUniformsFollowTheModeTheNightTheWeatherAndTheClimate() {
         float midnight = -1, noon = 1, dusk = -0.1f;
         assertEquals(CelestialUniforms.AURORA_NIGHT_AND_END, PostOn.defaults().aurora, "auroras on by default");
-        assertEquals(CelestialUniforms.SHAPE_SQUARE, PostOn.defaults().celestialShape, "square by default (as before)");
+        assertEquals(CelestialUniforms.SHAPE_ROUND, PostOn.defaults().celestialShape, "round by default (2026-11-23: High, the default level, is round)");
         float night = CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, midnight, 0, 0, 1);
         assertEquals(1, night, 1e-6f);
         assertEquals(0, CelestialUniforms.auroraStrength(SETTINGS, CelestialUniforms.Sky.SUN, noon, 0, 0, 1), 0);

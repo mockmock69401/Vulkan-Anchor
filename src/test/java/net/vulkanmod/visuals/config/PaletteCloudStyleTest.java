@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 2026-11-16 (the user: "only the Anime preset should change the clouds; choosing another preset resets the cloud choice", then "the
  * Realistic and Cinematic presets should pick the realistic clouds"): Realistic and Cinematic pick the realistic clouds, Anime the anime
- * ones, and Default and Horror leave the style as the player set it; the performance presets keep a palette's clouds.
+ * ones, and Default and Horror leave the style as the player set it; the performance presets keep a palette's clouds. 2026-11-23 (the
+ * user: "애니메이션 색상 프리셋에서 현실적 구름 사용"): Anime picks the realistic clouds too.
  */
 class PaletteCloudStyleTest {
     private static final int[] STYLES = {CloudMath.STYLE_VANILLA, CloudMath.STYLE_REALISTIC, CloudMath.STYLE_ANIME};
@@ -23,8 +24,7 @@ class PaletteCloudStyleTest {
 
     private static int expected(int palette, int style) {
         return switch (palette) {
-            case ColourPresets.REALISTIC, ColourPresets.CINEMATIC -> CloudMath.STYLE_REALISTIC;
-            case ColourPresets.ANIME -> CloudMath.STYLE_ANIME;
+            case ColourPresets.REALISTIC, ColourPresets.CINEMATIC, ColourPresets.ANIME -> CloudMath.STYLE_REALISTIC;
             default -> style;
         };
     }
@@ -68,11 +68,11 @@ class PaletteCloudStyleTest {
                 assertEquals(style, c.cloudStyle, "palette " + to);
                 assertEquals(to, ColourPresets.detect(c), "any cloud style is on palette " + to);
             }
-            //anime clouds Anime brought stay too: Default and Horror never change the clouds
+            //the clouds Anime brought stay too: Default and Horror never change the clouds
             VisualsConfig d = new VisualsConfig();
             ColourPresets.apply(d, ColourPresets.ANIME);
             ColourPresets.apply(d, to);
-            assertEquals(CloudMath.STYLE_ANIME, d.cloudStyle);
+            assertEquals(CloudMath.STYLE_REALISTIC, d.cloudStyle);
         }
     }
 
@@ -130,7 +130,8 @@ class PaletteCloudStyleTest {
                 VisualsConfig c = new VisualsConfig();
                 VisualsPresets.apply(c, preset);
                 ColourPresets.apply(c, palette);
-                if (palette != ColourPresets.ANIME) c.cloudStyle = CloudMath.STYLE_VANILLA;
+                //Anime then picked the anime clouds (until revision 27)
+                c.cloudStyle = palette == ColourPresets.ANIME ? CloudMath.STYLE_ANIME : CloudMath.STYLE_VANILLA;
                 c.colourPreset = palette;
                 Path f = dir.resolve("visuals-" + palette + "-" + preset + ".json");
                 c.write(f);

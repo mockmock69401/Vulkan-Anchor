@@ -43,6 +43,9 @@ public final class VisualsPresets {
         v.put("cloud_style", new int[]{0, 0, 0, 0, 1});
         v.put("cloud_quality", new int[]{1, 1, 1, 1, 2});
         v.put("aurora", new int[]{0, 1, 1, 2, 2});
+        //2026-11-23 (the user: "높음 이상인 경우 오로라 밤과 엔드로, 해와 달은 둥글게"): the round sun and moon from High up (a look with no
+        // measurable cost; below High vanilla's squares)
+        v.put("celestial_shape", new int[]{0, 0, 0, 1, 1});
         v.put("shader_weather", new int[]{0, 1, 1, 1, 1});
         //session 14 follow-up: the far clouds and the shader weather at half resolution (on an AMD iGPU at 1280x720: rain 10.5 -> 2.9 ms,
         // realistic clouds 17.3 -> 7.9; RTX 5070 at 1440: about 0.6 ms each)

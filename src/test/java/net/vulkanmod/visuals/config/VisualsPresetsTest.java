@@ -161,7 +161,6 @@ class VisualsPresetsTest {
             }
             VisualsConfig c = new VisualsConfig();
             apply(c, level);
-            c.celestialShape = 1;
             c.waterRippleDensity = 25;
             c.cloudCount = 0;
             c.auroraStrength = 200;

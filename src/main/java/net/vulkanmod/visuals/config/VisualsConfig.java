@@ -74,8 +74,14 @@ public class VisualsConfig {
      * stars and stays on it; any other file keeps its star type.
      * 26 (2026-11-17, session 18): the Anime palette's night sky is a deeper blue (ColourPresets.ANIME_NIGHT_BEFORE_26 before); a file on
      * Anime with the old night sky takes the new one and stays on the palette; any other file keeps its night sky.
+     * 27 (2026-11-23, the user: "높음 이상인 경우 오로라 밤과 엔드로, 해와 달은 둥글게"; "애니메이션 색상 프리셋에서 현실적 구름 사용
+     * (애니메이션 구름은 차후 개선 예정), 달빛은 57%로 낮추기"): the presets set the sun's and moon's shape (round from High up, so the
+     * default is round); a file on a level takes that level's shape and stays on it (any other file keeps its shape). The Anime palette picks the realistic clouds and its moonlight is 57 (was 70); a file on Anime with the old row and
+     * the anime clouds takes both and stays on the palette; any other file keeps its values.
      */
-    private static final int REVISION = 26;
+    private static final int REVISION = 27;
+    /** 2026-11-23: the first revision whose presets set the sun's and moon's shape and whose Anime palette picks the realistic clouds. */
+    static final int ROUND_SKY_REVISION = 27;
     /** 2026-11-17: the first revision with the Anime palette's blue night sky. */
     static final int PALETTE_NIGHT_REVISION = 26;
     /** 2026-11-17: the first revision whose Anime palette includes the anime stars. */
@@ -204,6 +210,10 @@ public class VisualsConfig {
         if (fileRevision < FOOTPRINTS_REVISION && VisualsPresets.isLevel(c.preset)) {
             VisualsOptionLayout.set(c, VisualsOptionLayout.item("footprints"), VisualsPresets.value("footprints", c.preset));
         }
+        //2026-11-23: likewise a level saved before the presets set the sun's and moon's shape
+        if (fileRevision < ROUND_SKY_REVISION && VisualsPresets.isLevel(c.preset)) {
+            VisualsOptionLayout.set(c, VisualsOptionLayout.item("celestial_shape"), VisualsPresets.value("celestial_shape", c.preset));
+        }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
         // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
@@ -236,19 +246,26 @@ public class VisualsConfig {
             if (fileRevision < MOONLIGHT_REVISION) before.put("moonlight", ColourPresets.MOONLIGHT_BEFORE_16);
             ColourPresets.moveNewLooks(c, before);
         }
+        //2026-11-23: a file still on Anime's old row (moonlight 70) takes the new one; first, so the Anime checks below see it
+        if (fileRevision < ROUND_SKY_REVISION) ColourPresets.moveOldRows(c, ColourPresets.LOOK_BEFORE_27, java.util.Map.of());
+        //The cloud style an Anime file saved before 27 had under the old palette counts as the palette's (the anime clouds, assumed for a
+        // file older than 10, which the old palette gave them on load); the block after the stars' moves it to the realistic clouds
+        int savedClouds = c.cloudStyle;
+        boolean oldAnimeClouds = fileRevision < ROUND_SKY_REVISION && c.colourPreset == ColourPresets.ANIME
+                && (fileRevision < ANIME_CLOUDS_REVISION || savedClouds == CloudMath.STYLE_ANIME);
         //2026-11-17: a file saved on the Anime palette before it included the anime stars takes them (and stays on the palette); first,
         // so the anime clouds' check below finds them (for a file older than both, the clouds it takes there are assumed here too)
         if (fileRevision < PALETTE_STARS_REVISION && c.colourPreset == ColourPresets.ANIME
                 && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.STAR_KEY) ? StarMath.TYPE_ANIME
-                : key.equals(ColourPresets.CLOUD_KEY) && fileRevision < ANIME_CLOUDS_REVISION ? CloudMath.STYLE_ANIME
+                : key.equals(ColourPresets.CLOUD_KEY) && oldAnimeClouds ? ColourPresets.clouds(ColourPresets.ANIME)
                 : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
             c.starType = StarMath.TYPE_ANIME;
         }
-        //Session 11: a file saved on the Anime palette before it included the anime clouds takes them (and stays on the palette)
-        if (fileRevision < ANIME_CLOUDS_REVISION && c.colourPreset == ColourPresets.ANIME
-                && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? CloudMath.STYLE_ANIME
+        //Session 11 (a file before 10 took the anime clouds here), 2026-11-23: a file on Anime with the old palette's clouds takes the
+        // realistic clouds it picks now (and stays on the palette)
+        if (oldAnimeClouds && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? ColourPresets.clouds(ColourPresets.ANIME)
                 : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
-            c.cloudStyle = CloudMath.STYLE_ANIME;
+            c.cloudStyle = ColourPresets.clouds(ColourPresets.ANIME);
         }
         //2026-11-16: likewise a file on Realistic or Cinematic before they picked the realistic clouds
         if (fileRevision < PALETTE_CLOUDS_REVISION && ColourPresets.clouds(c.colourPreset) == CloudMath.STYLE_REALISTIC
@@ -453,7 +470,7 @@ public class VisualsConfig {
      * appear (AURORA_OFF, AURORA_END_ONLY, AURORA_NIGHT_AND_END: clear nights in the Overworld, strongest in cold biomes, and always in the
      * End) and their strength (percent, 100 = default).
      */
-    public int celestialShape = 0;
+    public int celestialShape = 1;
     /**
      * 2026-11-11 (session 10 follow-up): the round sun's and moon's size (percent, 100 = default: WaterMath.SUN_ROUND_RADIUS and
      * MOON_ROUND_RADIUS; CelestialUniforms.SIZE_MIN..SIZE_MAX). The square shape keeps vanilla's sizes.
