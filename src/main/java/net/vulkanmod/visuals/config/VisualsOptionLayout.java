@@ -52,7 +52,8 @@ public final class VisualsOptionLayout {
 
     /** Whether item follows the post-process master switch (every item but the switch itself and frame generation). */
     public static boolean followsMasterSwitch(Item item) {
-        return !item.key().equals(ENABLED) && !item.key().equals(FRAME_GENERATION) && !item.key().equals(FSR_FRAME_GENERATION);
+        return !item.key().equals(ENABLED) && !item.key().equals(FRAME_GENERATION) && !item.key().equals(FSR_FRAME_GENERATION)
+                && !item.key().equals(ExperimentalFeatures.FTB_CHUNKS_TASK_BUDGET);
     }
 
     /** The Distant Horizons block: shown only when DH draws through the fork (VisualsSettingsPage.shownBlocks). */

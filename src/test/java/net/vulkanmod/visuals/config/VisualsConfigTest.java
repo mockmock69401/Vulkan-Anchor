@@ -258,7 +258,7 @@ class VisualsConfigTest {
         assertFalse(VisualsOptionLayout.followsMasterSwitch(fg));
         for (var item : items()) {
             boolean exempt = item.key().equals(VisualsOptionLayout.ENABLED) || item.key().equals("frame_generation")
-                    || item.key().equals("fsr_frame_generation");
+                    || item.key().equals("fsr_frame_generation") || item.key().equals(ExperimentalFeatures.FTB_CHUNKS_TASK_BUDGET);
             assertEquals(!exempt, VisualsOptionLayout.followsMasterSwitch(item), item.key());
         }
     }

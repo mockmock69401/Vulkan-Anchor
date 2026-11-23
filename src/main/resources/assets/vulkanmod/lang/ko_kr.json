@@ -530,5 +530,8 @@
   "vulkanmod.visuals.cloud_level_high": "가장 높은 구름",
   "vulkanmod.visuals.cloud_level_high.tooltip": "가장 높은 구름이 평소 구름 높이보다 몇 블록 위까지 올라가는지입니다. 0이면 더 올라가지 않습니다. 사실적·애니 구름에만 적용됩니다",
   "vulkanmod.visuals.cloud_level_spread": "높낮이 다양성",
-  "vulkanmod.visuals.cloud_level_spread.tooltip": "가장 낮은 구름과 가장 높은 구름 사이 범위를 구름 덩어리들이 얼마나 쓰는지입니다. 100이면 범위 전체에 퍼지고, 0이면 모든 구름이 평소 높이로 돌아갑니다. 범위가 넓을수록 GPU 시간이 조금 더 듭니다"
+  "vulkanmod.visuals.cloud_level_spread.tooltip": "가장 낮은 구름과 가장 높은 구름 사이 범위를 구름 덩어리들이 얼마나 쓰는지입니다. 100이면 범위 전체에 퍼지고, 0이면 모든 구름이 평소 높이로 돌아갑니다. 범위가 넓을수록 GPU 시간이 조금 더 듭니다",
+  "vulkanmod.visuals.block.experimental_compat": "호환 최적화",
+  "vulkanmod.visuals.ftb_chunks_task_budget": "FTB Chunks 지도 작업 나누기",
+  "vulkanmod.visuals.ftb_chunks_task_budget.tooltip": "FTB Chunks가 있을 때만 적용됩니다. 지도 작업(영역 저장, 청크 갱신)을 한 번에 최대 100개씩 몰아서 하지 않고, 한 틱에 몇 밀리초씩 나눠 합니다. 한 틱이 프레임을 멈추게 하지 않습니다. 지도는 같은 내용으로, 몇 틱에 걸쳐 채워집니다. 후처리를 꺼도 동작합니다"
 }

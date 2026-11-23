@@ -541,6 +541,11 @@ public class VisualsConfig {
     public boolean lensWater = true;
     public int lensWaterStrength = 100;
     /**
+     * 2026-11-23 (the user's Sunlit 1% lows, Experimental > Mod Compatibility): FTB Chunks' map tasks run under a time budget a tick
+     * (net.vulkanmod.compat.FtbChunksTaskBudget) instead of up to 100 at once. Only with FTB Chunks; independent of the post-process.
+     */
+    public boolean ftbChunksTaskBudget = true;
+    /**
      * 2026-11-21 (the user: "유성(별똥별) 옵션과 별빛이 불규칙하게 더 빛나는 (star scintillation) 옵션도 추가해줘. 실험적 기능에 넣어놔", Experimental >
      * Sky): the stars' twinkle (SkyEventMath, skyevents.glsl starTwinkle) and meteors (meteors), each on / off with its strength, and the
      * meteors' amount and brightness (percent of the default; an amount of 100 %: SkyEventMath.METEORS_A_MINUTE a minute).

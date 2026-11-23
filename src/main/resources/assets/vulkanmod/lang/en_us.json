@@ -546,5 +546,8 @@
   "vulkanmod.visuals.cloud_level_high": "Highest Clouds",
   "vulkanmod.visuals.cloud_level_high.tooltip": "How far above the usual cloud height the highest clouds sit, in blocks; 0 keeps them from going higher. Realistic and Anime clouds only",
   "vulkanmod.visuals.cloud_level_spread": "Height Variety",
-  "vulkanmod.visuals.cloud_level_spread.tooltip": "How much of the range between Lowest Clouds and Highest Clouds the cloud banks use. 100 spreads them over all of it, 0 puts every cloud back at the usual height. A wider range costs a little GPU time"
+  "vulkanmod.visuals.cloud_level_spread.tooltip": "How much of the range between Lowest Clouds and Highest Clouds the cloud banks use. 100 spreads them over all of it, 0 puts every cloud back at the usual height. A wider range costs a little GPU time",
+  "vulkanmod.visuals.block.experimental_compat": "Mod Compatibility",
+  "vulkanmod.visuals.ftb_chunks_task_budget": "FTB Chunks Map Task Budget",
+  "vulkanmod.visuals.ftb_chunks_task_budget.tooltip": "With FTB Chunks installed: its map work (region saves, chunk updates) runs a few milliseconds a tick instead of up to 100 tasks at once, so one tick no longer stalls a frame. The map fills the same, spread over a few more ticks. Works with the post-process off too"
 }

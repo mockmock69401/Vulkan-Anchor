@@ -26,7 +26,8 @@ class ExperimentalFeaturesTest {
     void thePageIsLastWithItsWeatherAndInteractionBlocks() {
         VisualsOptionLayout.Page page = VisualsOptionLayout.PAGES.get(VisualsOptionLayout.PAGES.size() - 1);
         assertEquals(ExperimentalFeatures.PAGE, page.key());
-        assertEquals(List.of(ExperimentalFeatures.WEATHER, ExperimentalFeatures.INTERACTION, ExperimentalFeatures.SKY, ExperimentalFeatures.CLOUDS),
+        assertEquals(List.of(ExperimentalFeatures.WEATHER, ExperimentalFeatures.INTERACTION, ExperimentalFeatures.SKY, ExperimentalFeatures.CLOUDS,
+                        ExperimentalFeatures.COMPAT),
                 page.blocks().stream().map(VisualsOptionLayout.Block::key).toList());
         assertEquals(List.of("sandstorm_grain_size", "sandstorm_grain_amount", "blizzard_flake_size", "blizzard_flake_amount"),
                 page.blocks().get(0).items().stream().map(VisualsOptionLayout.Item::key).toList());

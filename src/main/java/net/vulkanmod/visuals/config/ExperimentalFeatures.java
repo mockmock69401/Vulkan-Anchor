@@ -33,8 +33,10 @@ public final class ExperimentalFeatures {
      * clouds' heights (2026-11-22).
      */
     public static final String WEATHER = "experimental_weather", INTERACTION = "experimental_interaction", SKY = "experimental_sky",
-            CLOUDS = "experimental_clouds";
-    public static final List<String> BLOCKS = List.of(WEATHER, INTERACTION, SKY, CLOUDS);
+            CLOUDS = "experimental_clouds", COMPAT = "experimental_compat";
+    public static final List<String> BLOCKS = List.of(WEATHER, INTERACTION, SKY, CLOUDS, COMPAT);
+    /** 2026-11-23: FTB Chunks' map tasks under a time budget (FtbChunksTaskBudget); not tied to the post-process switch. */
+    public static final String FTB_CHUNKS_TASK_BUDGET = "ftb_chunks_task_budget";
 
     /** A setting on the page: its block, the layout item, and the config field's reader and writer (in the item's units). */
     public record Entry(String block, Item item, ToIntFunction<VisualsConfig> get, ObjIntConsumer<VisualsConfig> set) {
@@ -94,7 +96,9 @@ public final class ExperimentalFeatures {
             blocks(CLOUDS, "cloud_level_high", 0, CloudLevelMath.RANGE_MAX, Impact.LOW, "far_clouds",
                     c -> c.cloudLevelHigh, (c, v) -> c.cloudLevelHigh = v),
             percent(CLOUDS, "cloud_level_spread", 0, CloudLevelMath.SPREAD_MAX, Impact.LOW, "far_clouds",
-                    c -> c.cloudLevelSpread, (c, v) -> c.cloudLevelSpread = v));
+                    c -> c.cloudLevelSpread, (c, v) -> c.cloudLevelSpread = v),
+            //2026-11-23: other mods' work spread so it does not stall one frame (net.vulkanmod.compat; each only with its mod)
+            toggle(COMPAT, FTB_CHUNKS_TASK_BUDGET, Impact.NONE, null, c -> c.ftbChunksTaskBudget, (c, on) -> c.ftbChunksTaskBudget = on));
 
     private ExperimentalFeatures() {
     }
