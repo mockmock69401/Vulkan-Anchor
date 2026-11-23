@@ -37,6 +37,7 @@
     "compatibility.UniformM",
     "compatibility.codechicken.CCUniformEntryMixin",
     "compatibility.continuity.ContinuityRedirectHandlerM",
+    "compatibility.ftbchunks.FtbChunksTaskQueueMixin",
     "compatibility.gl.GL11FacadeM",
     "compatibility.gl.GL11M",
     "compatibility.gl.GL12M",

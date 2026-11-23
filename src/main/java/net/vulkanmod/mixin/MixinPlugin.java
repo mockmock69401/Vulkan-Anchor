@@ -44,6 +44,9 @@ public class MixinPlugin implements IMixinConfigPlugin {
     private static final String CONTINUITY_MIXIN_PACKAGE = "net.vulkanmod.mixin.compatibility.continuity.";
     private static final String CONTINUITY_REDIRECT_HANDLER_MIXIN = CONTINUITY_MIXIN_PACKAGE + "ContinuityRedirectHandlerM";
     private static final String CONTINUITY_REDIRECT_HANDLER = "me.pepperbell.continuity.client.resource.ResourceRedirectHandler";
+    private static final String FTB_CHUNKS_MIXIN_PACKAGE = "net.vulkanmod.mixin.compatibility.ftbchunks.";
+    private static final String FTB_CHUNKS_TASK_QUEUE_MIXIN = FTB_CHUNKS_MIXIN_PACKAGE + "FtbChunksTaskQueueMixin";
+    private static final String FTB_CHUNKS_TASK_QUEUE = "dev.ftb.mods.ftbchunks.client.ClientTaskQueue";
 
     private static final String CHUNK_MIXIN_PACKAGE = "net.vulkanmod.mixin.chunk.";
     private static final String SECTION_LAYER_MIXIN = CHUNK_MIXIN_PACKAGE + "SectionLayerMixin";
@@ -130,6 +133,11 @@ public class MixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.startsWith(CONTINUITY_MIXIN_PACKAGE)) {
             return CONTINUITY_REDIRECT_HANDLER_MIXIN.equals(mixinClassName)
                     && CONTINUITY_REDIRECT_HANDLER.equals(targetClassName);
+        }
+
+        if (mixinClassName.startsWith(FTB_CHUNKS_MIXIN_PACKAGE)) {
+            return FTB_CHUNKS_TASK_QUEUE_MIXIN.equals(mixinClassName)
+                    && FTB_CHUNKS_TASK_QUEUE.equals(targetClassName);
         }
 
         if (SUFFIXED_DH_MIXINS.contains(mixinClassName)) {
