@@ -158,6 +158,12 @@ public final class AtmosphereUniforms {
     /** Moonbeam colour (luminance per unit of the shaft image) at full moon with the moonlight setting at its default; ColourMath.MOON_LIGHT's hue. */
     public static final float MOON_SHAFT_AMOUNT = 2.5f;
     /**
+     * 2026-11-23 (the user: the moonbeams twisted the night's colours, grey and washed out): their hue, luminance 1. ColourMath.MOON_LIGHT
+     * (8000 K) is nearly white, and added over a navy night it greyed it; this is the blue of the moonlit night air, so the beams stay in
+     * the night's hue. Linear RGB before normalising.
+     */
+    public static final float[] MOON_SHAFT_TINT = ColourMath.normalised(new float[]{0.55f, 0.85f, 1.9f});
+    /**
      * The moonbeams' mask keeps sky luminance above MOON_SHAFT_THRESHOLD (the moon's disc, WaterMath.MOON_DISC_LUMINANCE, and the bright
      * glow around it; not the night sky) within MOON_SHAFT_WINDOW screen heights of the moon (stars and aurora farther out cast none).
      */
@@ -311,7 +317,7 @@ public final class AtmosphereUniforms {
                 shafts = m;
                 screen = moonScreen;
                 moon = true;
-                for (int i = 0; i < 3; i++) colour[i] = Math.max(0, ColourMath.MOON_LIGHT[i] * amount);
+                for (int i = 0; i < 3; i++) colour[i] = Math.max(0, MOON_SHAFT_TINT[i] * amount);
             }
         }
         boolean lodValid = lodSizeMatches && frame.lodDrawn();

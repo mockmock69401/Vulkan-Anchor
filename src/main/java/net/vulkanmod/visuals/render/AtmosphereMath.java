@@ -10,6 +10,9 @@ public final class AtmosphereMath {
     public static final int SHAFT_SAMPLES = 44;
     public static final float SHAFT_DECAY = 0.963f;
     public static final float SHAFT_THRESHOLD = 1.5f;
+    /** 2026-11-23: the moonbeams' reach (times AtmosphereUniforms.MOON_SHAFT_WINDOW) and the mask level that cuts them over the moon's glow. */
+    public static final float MOON_SHAFT_REACH = 2.5f;
+    public static final float MOON_SHAFT_GLARE = 0.3f;
 
     // ---- modes (Atmosphere.sun w) ----
     public static final float ATMOSPHERE_NONE = 0, ATMOSPHERE_SKY = 1, ATMOSPHERE_NO_SKY = 2, ATMOSPHERE_FOG = 3;

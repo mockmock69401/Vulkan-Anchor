@@ -532,6 +532,8 @@ class AtmosphereTest {
         float[] c = v.shaftLight();
         assertFiniteNonNegative(c, "moon shaft light");
         assertTrue(c[2] > c[0], "moonbeams are cool");
+        //2026-11-23: in the night's blue, well bluer than the nearly white moonlight colour (which greyed the navy night)
+        assertTrue(c[2] / c[0] > 1.5f * ColourMath.MOON_LIGHT[2] / ColourMath.MOON_LIGHT[0], "moonbeams keep the night's hue");
         assertEquals(AtmosphereUniforms.MOON_SHAFT_AMOUNT, lum(c), 1e-3f);
         //The moon straight ahead is at the screen centre, with the moon's threshold and window
         assertArrayEquals(new float[]{0.5f, 0.5f, AtmosphereUniforms.MOON_SHAFT_THRESHOLD, AtmosphereUniforms.MOON_SHAFT_WINDOW}, shaftParams(v), 1e-4f);
