@@ -93,8 +93,13 @@ class ColourPresetsTest {
                 ColourPresets.apply(c, palette);
                 VisualsPresets.apply(c, level);
                 assertEquals(palette, ColourPresets.detect(c), palette + " after performance " + level);
-                ColourPresets.apply(c, (palette + 1) % ColourPresets.LEVELS);
-                assertEquals(level, VisualsPresets.detect(c), "performance " + level + " after palette " + palette);
+                int next = (palette + 1) % ColourPresets.LEVELS;
+                ColourPresets.apply(c, next);
+                //a palette's realistic clouds left on by a palette that leaves the clouds alone are the cost they are (2026-11-23: Anime
+                // picks them too, so Anime -> Horror below Ultra shows Custom, as Realistic -> Horror always did)
+                boolean leftRealistic = ColourPresets.clouds(palette) == CloudMath.STYLE_REALISTIC && ColourPresets.clouds(next) == ColourPresets.ANY_CLOUDS
+                        && VisualsPresets.value(ColourPresets.CLOUD_KEY, level) != CloudMath.STYLE_REALISTIC;
+                assertEquals(leftRealistic ? VisualsPresets.CUSTOM : level, VisualsPresets.detect(c), "performance " + level + " after palette " + palette);
             }
         }
     }
@@ -144,21 +149,23 @@ class ColourPresetsTest {
      * takes the anime clouds back to the performance preset's style; the default config is unchanged.
      */
     @Test
-    void theAnimePaletteBringsTheAnimeClouds() {
+    void theAnimePaletteBringsTheRealisticClouds() {
         VisualsConfig fresh = new VisualsConfig();
         assertEquals(CloudMath.STYLE_VANILLA, fresh.cloudStyle, "the default sky is unchanged");
         assertEquals(ColourPresets.DEFAULT, ColourPresets.detect(fresh));
         VisualsConfig c = new VisualsConfig();
         ColourPresets.apply(c, ColourPresets.ANIME);
-        assertEquals(CloudMath.STYLE_ANIME, c.cloudStyle);
+        //2026-11-23 (the user: "애니메이션 색상 프리셋에서 현실적 구름 사용 (애니메이션 구름은 차후 개선 예정), 달빛은 57%로 낮추기")
+        assertEquals(CloudMath.STYLE_REALISTIC, c.cloudStyle);
+        assertEquals(57, c.moonlight);
         assertEquals(ColourPresets.ANIME, ColourPresets.detect(c));
-        assertEquals(VisualsPresets.HIGH, VisualsPresets.detect(c), "the performance preset stays (the anime clouds are a look)");
-        //The style changed by hand: Custom, as a colour would; back to anime: Anime again
-        for (int style : new int[]{CloudMath.STYLE_VANILLA, CloudMath.STYLE_REALISTIC}) {
+        assertEquals(VisualsPresets.HIGH, VisualsPresets.detect(c), "the performance preset stays (the palette's clouds count as the level's)");
+        //The style changed by hand: Custom, as a colour would; back to realistic: Anime again
+        for (int style : new int[]{CloudMath.STYLE_VANILLA, CloudMath.STYLE_ANIME}) {
             c.cloudStyle = style;
             assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c), "style " + style);
         }
-        c.cloudStyle = CloudMath.STYLE_ANIME;
+        c.cloudStyle = CloudMath.STYLE_REALISTIC;
         assertEquals(ColourPresets.ANIME, ColourPresets.detect(c));
         //2026-11-16: the other palettes are PaletteCloudStyleTest's; anime clouds by hand under Horror keep it, Custom changes nothing
         VisualsConfig e = new VisualsConfig();
@@ -170,7 +177,7 @@ class ColourPresetsTest {
 
     /** Session 11: a file saved on the Anime palette before it included the clouds takes them and stays Anime; others keep their style. */
     @Test
-    void anOlderAnimeFileTakesTheAnimeClouds(@TempDir Path dir) throws Exception {
+    void anOlderAnimeFileTakesThePalettesClouds(@TempDir Path dir) throws Exception {
         VisualsConfig before = new VisualsConfig();
         ColourPresets.apply(before, ColourPresets.ANIME);
         before.cloudStyle = CloudMath.STYLE_VANILLA;
@@ -178,9 +185,28 @@ class ColourPresetsTest {
         before.write(f);
         Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 9"));
         VisualsConfig read = VisualsConfig.read(f);
-        assertEquals(CloudMath.STYLE_ANIME, read.cloudStyle);
+        assertEquals(CloudMath.STYLE_REALISTIC, read.cloudStyle, "the clouds Anime picks now (the anime ones until revision 27)");
         assertEquals(ColourPresets.ANIME, read.colourPreset);
         assertEquals(VisualsConfig.currentRevision(), read.revision);
+        //2026-11-23: a revision 26 file on Anime, with its anime clouds and moonlight 70, takes the realistic clouds and 57 and stays
+        VisualsConfig r26 = new VisualsConfig();
+        ColourPresets.apply(r26, ColourPresets.ANIME);
+        r26.cloudStyle = CloudMath.STYLE_ANIME;
+        r26.moonlight = 70;
+        r26.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 26"));
+        VisualsConfig moved = VisualsConfig.read(f);
+        assertEquals(CloudMath.STYLE_REALISTIC, moved.cloudStyle);
+        assertEquals(57, moved.moonlight);
+        assertEquals(ColourPresets.ANIME, moved.colourPreset);
+        //one with its moonlight changed by hand keeps it and its clouds (it was Custom then too)
+        r26.moonlight = 90;
+        r26.write(f);
+        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 26"));
+        VisualsConfig kept = VisualsConfig.read(f);
+        assertEquals(CloudMath.STYLE_ANIME, kept.cloudStyle);
+        assertEquals(90, kept.moonlight);
+        assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
         //Saved now with another style: Custom (the style was changed by hand after choosing Anime)
         before.revision = VisualsConfig.currentRevision();
         before.write(f);

@@ -101,6 +101,17 @@ public final class ColourPresets {
             {35, 94, 35, 50, 100, 100, 100, 0},
             {30, 94, 40, 40, 100, 100, 100, 20},
             {40, 85, 40, 60, 95, 100, 110, 70},
+            {35, 105, 30, 57, 110, 70, 105, 25},
+            {15, 60, 40, 15, 85, 100, 120, 0},
+    };
+    /**
+     * The rows revisions 21 to 26 saved: Anime's moonlight was 70 (2026-11-23, the user: "달빛은 57%로 낮추기"; VisualsConfig.read moves a
+     * file still on the old row to LOOK's; moveOldRows).
+     */
+    static final int[][] LOOK_BEFORE_27 = {
+            {35, 94, 35, 50, 100, 100, 100, 0},
+            {30, 94, 40, 40, 100, 100, 100, 20},
+            {40, 85, 40, 60, 95, 100, 110, 70},
             {35, 105, 30, 70, 110, 70, 105, 25},
             {15, 60, 40, 15, 85, 100, 120, 0},
     };
@@ -158,11 +169,14 @@ public final class ColourPresets {
     /** clouds' answer for a palette that leaves the cloud style alone. */
     public static final int ANY_CLOUDS = -1;
 
-    /** The cloud style palette level picks (CloudMath.STYLE_REALISTIC for REALISTIC and CINEMATIC, STYLE_ANIME for ANIME), or ANY_CLOUDS. */
+    /**
+     * The cloud style palette level picks (CloudMath.STYLE_REALISTIC for REALISTIC, CINEMATIC and ANIME), or ANY_CLOUDS. 2026-11-23 (the
+     * user: "애니메이션 색상 프리셋에서 현실적 구름 사용 (애니메이션 구름은 차후 개선 예정)"): ANIME picks the realistic clouds too, until
+     * the anime clouds are reworked (it picked STYLE_ANIME from revision 10 to 26).
+     */
     public static int clouds(int level) {
         return switch (level) {
-            case REALISTIC, CINEMATIC -> CloudMath.STYLE_REALISTIC;
-            case ANIME -> CloudMath.STYLE_ANIME;
+            case REALISTIC, CINEMATIC, ANIME -> CloudMath.STYLE_REALISTIC;
             default -> ANY_CLOUDS;
         };
     }
