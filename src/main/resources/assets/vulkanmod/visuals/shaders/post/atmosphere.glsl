@@ -91,6 +91,11 @@
 const int SHAFT_SAMPLES = 44;
 const float SHAFT_DECAY = 0.963;
 const float SHAFT_THRESHOLD = 1.5;
+//2026-11-23 (the user: the moonbeams washed the night's colours out): the moonbeams fade out within MOON_SHAFT_REACH times their mask's
+// window from the moon (screen heights; the walk toward the moon otherwise laid a lift over the whole screen), and add nothing where
+// their own mask reaches MOON_SHAFT_GLARE (the moon's disc and bright glow stay as drawn instead of blowing out to white)
+const float MOON_SHAFT_REACH = 2.5;
+const float MOON_SHAFT_GLARE = 0.3;
 
 //Modes (Atmosphere.sun.w)
 const float ATMOSPHERE_NONE = 0.0;

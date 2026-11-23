@@ -42,6 +42,7 @@ void main() {
     }
 #else
     vec2 uv = (vec2(p) + 0.5)/vec2(size);
+    vec2 here = uv;
     vec2 stepToSun = (uv - params.xy)/float(SHAFT_SAMPLES);
     float decay = 1.0;
     float light = 0.0;
@@ -51,6 +52,12 @@ void main() {
         decay *= SHAFT_DECAY;
     }
     light /= float(SHAFT_SAMPLES);
+    if (params.w > 0.0) {
+        //The moon (2026-11-23): fading with the distance from it, and nothing over its disc and glow (atmosphere.glsl)
+        vec2 d = (here - params.xy)*vec2(float(size.x)/float(size.y), 1.0);
+        light *= 1.0 - smoothstep(0.0, params.w*MOON_SHAFT_REACH, length(d));
+        light *= 1.0 - smoothstep(0.0, MOON_SHAFT_GLARE, texture(src, here).r);
+    }
 #endif
     imageStore(dst, p, vec4(light, 0.0, 0.0, 1.0));
 }
