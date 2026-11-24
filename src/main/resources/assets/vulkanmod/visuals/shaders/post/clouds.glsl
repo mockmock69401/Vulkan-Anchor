@@ -245,10 +245,13 @@ float cloudLevelValue(ivec2 k, int n) {
 ivec2 cloudLevelKey = ivec2(0x7FFFFFFF);
 vec4 cloudLevelCorners = vec4(0.0);
 
-//The clouds' level at m (blocks on the cloud map): blocks above (below: negative) the layer's usual base
-float cloudLevelAt(vec2 m) {
+//The level lattice square around m (blocks on the cloud map): its four corners' levels l (blocks above the layer's usual base; x the
+// corner k, y k + (1, 0), z k + (0, 1), w k + (1, 1)) and their blend weights w (summing to 1); levels off: l 0, w (1, 0, 0, 0)
+void cloudLevelSquare(vec2 m, out vec4 l, out vec4 w) {
     if (!(cloudLevel.w > 0.5)) {
-        return 0.0;
+        l = vec4(0.0);
+        w = vec4(1.0, 0.0, 0.0, 0.0);
+        return;
     }
     vec2 u = m/cloudLevel.z - 0.5;
     vec2 i = floor(u);
@@ -260,9 +263,25 @@ float cloudLevelAt(vec2 m) {
         cloudLevelCorners = vec4(cloudLevelValue(k, n), cloudLevelValue(k + ivec2(1, 0), n), cloudLevelValue(k + ivec2(0, 1), n),
                 cloudLevelValue(k + ivec2(1, 1), n));
     }
-    vec4 c = cloudLevelCorners;
-    return mix(cloudLevel.x, cloudLevel.y, mix(mix(c.x, c.y, f.x), mix(c.z, c.w, f.x), f.y));
+    l = mix(vec4(cloudLevel.x), vec4(cloudLevel.y), cloudLevelCorners);
+    w = vec4((1.0 - f.x)*(1.0 - f.y), f.x*(1.0 - f.y), (1.0 - f.x)*f.y, f.x*f.y);
 }
+
+//The clouds' level at m (blocks on the cloud map): blocks above (below: negative) the layer's usual base
+float cloudLevelAt(vec2 m) {
+    vec4 l;
+    vec4 w;
+    cloudLevelSquare(m, l, w);
+    return dot(l, w);
+}
+
+//2026-11-24 (the user: "some of the realistic clouds are drawn diagonally or vertically"): a realistic cloud on the border of two cells
+// took the blended level under each of its points, so across the blend it leaned from one level to the other, up to a near-vertical fin
+// where the levels were far apart. Now near a border each corner's clouds keep their own flat level and thin out toward the border (their
+// weight scales their cover); only corners within CLOUD_LEVEL_JOIN blocks of each other blend their levels as before (a slope of at most
+// a quarter), from CLOUD_LEVEL_SPLIT blocks apart they part. A sample takes the densest corner's clouds (realDensity)
+const float CLOUD_LEVEL_JOIN = 8.0;
+const float CLOUD_LEVEL_SPLIT = 24.0;
 
 
 //Session 11: cloudOffset.z's whole part from ANIME_Z on is the anime style (ANIME_Z plus its quality 0..2)
@@ -415,18 +434,15 @@ vec2 realInterval(vec3 origin, vec3 dir, float maxDist) {
     return vec2(max(t0, 0.0), min(t1, min(maxDist, REAL_REACH)));
 }
 
-//The cumulus density 0..1 at camera-relative p standing on level lv (cloudLevelAt): the weather over its coverage, the tower's height
-// profile, eroded by the noise (2026-11-16: in the curved layer, realHeight)
-float realDensityOn(vec3 p, int octaves, float lv) {
-    float y = realHeight(p) - cloudShape.x - lv;
-    float h = y/cloudShape.y;
+//The cumulus' shape 0..1 at camera-relative p standing on level lv (blocks) with keep of its cover, before the erosion: the weather over
+// its coverage and the tower's height profile (2026-11-16: in the curved layer, realHeight); n the cloud map at p
+float realShape(vec3 p, vec4 n, float lv, float keep) {
+    float h = (realHeight(p) - cloudShape.x - lv)/cloudShape.y;
     float f = min(cloudOffset.w, 1.0);
     if (!(h > 0.0 && h < 1.0) || !(f > 0.0)) {
         return 0.0;
     }
-    vec2 m = cloudOffset.xy + p.xz;
-    vec4 n = cloudNoise(m);
-    float s = (n.g - 1.0 + f)/f;
+    float s = keep*(n.g - 1.0 + f)/f;
     if (s <= 0.0) {
         return 0.0;
     }
@@ -435,8 +451,15 @@ float realDensityOn(vec3 p, int octaves, float lv) {
     if (!(hp > 0.0 && hp < 1.0)) {
         return 0.0;
     }
-    float d = s*smoothstep(0.0, REAL_BOTTOM, hp)*(1.0 - smoothstep(REAL_ROUND, 1.0, hp));
-    float er = realErosionFor(vec3(m.x, y, m.y), octaves, d);
+    return s*smoothstep(0.0, REAL_BOTTOM, hp)*(1.0 - smoothstep(REAL_ROUND, 1.0, hp));
+}
+
+//Shape d at camera-relative p (map position m) on level lv eroded by the noise: the cumulus density 0..1
+float realEroded(vec3 p, vec2 m, float lv, float d, int octaves) {
+    if (!(d > 0.0)) {
+        return 0.0;
+    }
+    float er = realErosionFor(vec3(m.x, realHeight(p) - cloudShape.x - lv, m.y), octaves, d);
     if (er < 0.0) {
         return 0.0;
     }
@@ -444,9 +467,51 @@ float realDensityOn(vec3 p, int octaves, float lv) {
     return max((d - e)/(1.0 - e), 0.0);
 }
 
-//realDensityOn at p's own level
-float realDensity(vec3 p, int octaves) {
-    return realDensityOn(p, octaves, cloudLevelAt(cloudOffset.xy + p.xz));
+//The cumulus density 0..1 at camera-relative p standing on level lv with keep of its cover (realDensity's pick)
+float realDensityOn(vec3 p, int octaves, float lv, float keep) {
+    float h = (realHeight(p) - cloudShape.x - lv)/cloudShape.y;
+    if (!(h > 0.0 && h < 1.0)) {
+        return 0.0;
+    }
+    vec2 m = cloudOffset.xy + p.xz;
+    return realEroded(p, m, lv, realShape(p, cloudNoise(m), lv, keep), octaves);
+}
+
+//The cumulus density 0..1 at camera-relative p: 2026-11-24, the densest of its level square's corners' clouds (CLOUD_LEVEL_JOIN), whose
+// level and cover share come back in lv and keep for the light samples. Off the cells' borders (most of the sky) one corner holds all the
+// weight, and its clouds are as before
+float realDensity(vec3 p, int octaves, out float lv, out float keep) {
+    vec2 m = cloudOffset.xy + p.xz;
+    vec4 l;
+    vec4 w;
+    cloudLevelSquare(m, l, w);
+    lv = dot(l, w);
+    keep = 1.0;
+    //Off the layer at every weighted corner's level (a blend's level lies within SPLIT of its corner's): nothing, without the map's fetch
+    float e = CLOUD_LEVEL_SPLIT/cloudShape.y;
+    vec4 h = (realHeight(p) - cloudShape.x - l)/cloudShape.y;
+    vec4 inside = min(h + e, 1.0 + e - h);
+    bvec4 on = greaterThan(min(inside, w), vec4(0.0));
+    if (!any(on)) {
+        return 0.0;
+    }
+    vec4 n = cloudNoise(m);
+    float best = 0.0;
+    for (int i = 0; i < 4; i++) {
+        if (!on[i]) {
+            continue;
+        }
+        vec4 j = w*(1.0 - smoothstep(CLOUD_LEVEL_JOIN, CLOUD_LEVEL_SPLIT, abs(l - l[i])));
+        float k = j.x + j.y + j.z + j.w;
+        float li = dot(j, l)/k;
+        float d = realShape(p, n, li, k);
+        if (d > best) {
+            best = d;
+            lv = li;
+            keep = k;
+        }
+    }
+    return realEroded(p, m, lv, best, octaves);
 }
 
 //Henyey-Greenstein scaled so an even phase is 1
@@ -488,9 +553,11 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
             }
             float t = span.x + (float(i) + jitter)*dt;
             vec3 p = origin + dir*t;
-            //2026-11-22: the sample's level, which its light samples (at most REAL_LIGHT_STEP x 16 blocks off) share
-            float lv = cloudLevelAt(cloudOffset.xy + p.xz);
-            float d = realDensityOn(p, octaves, lv);
+            //2026-11-22: the sample's level, which its light samples (at most REAL_LIGHT_STEP x 16 blocks off) share; 2026-11-24 with
+            // its cover's share
+            float lv;
+            float keep;
+            float d = realDensity(p, octaves, lv, keep);
             if (d <= 0.0) {
                 continue;
             }
@@ -506,7 +573,7 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
                         break;
                     }
                     float reach = REAL_LIGHT_STEP*float(j*j);
-                    od += realDensityOn(p + lightDir*(0.5*(reach + prev)), 0, lv)*(reach - prev);
+                    od += realDensityOn(p + lightDir*(0.5*(reach + prev)), 0, lv, keep)*(reach - prev);
                     prev = reach;
                 }
                 od *= REAL_DENSITY;

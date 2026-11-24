@@ -35,7 +35,9 @@ class CloudLevelTest {
         assertTrue(ShaderFiles.read("post/scene_copy.comp").contains("layout(location = " + CloudLevelMath.SLOT + ") uniform vec4 cloudLevel;"));
         assertTrue(ShaderFiles.read("post/reflection.comp").contains("layout(location = " + CloudLevelMath.REFLECTION_SLOT + ") uniform vec4 cloudLevel;"));
         //the realistic light samples share their sample's level; the anime puffs stand on the level at their centre
-        assertTrue(clouds.contains("od += realDensityOn(p + lightDir*(0.5*(reach + prev)), 0, lv)*(reach - prev);"));
+        assertTrue(clouds.contains("od += realDensityOn(p + lightDir*(0.5*(reach + prev)), 0, lv, keep)*(reach - prev);"));
+        assertEquals(CloudLevelMath.CLOUD_LEVEL_JOIN, constant(clouds, "CLOUD_LEVEL_JOIN"));
+        assertEquals(CloudLevelMath.CLOUD_LEVEL_SPLIT, constant(clouds, "CLOUD_LEVEL_SPLIT"));
         assertTrue(clouds.contains("lv = cloudLevelAt(p*cell);"));
     }
 
@@ -138,6 +140,41 @@ class CloudLevelTest {
         out = Arrays.copyOf(out, n);
         Arrays.sort(out);
         return out;
+    }
+
+    /**
+     * 2026-11-24 (the user: "some of the realistic clouds are drawn diagonally or vertically"): near a border between two far-apart levels
+     * a cloud stands flat on one of them, never on a blend leaning between them, and the borders keep most of the clouds.
+     */
+    @Test
+    void theRealisticCloudsDoNotLeanAcrossABorder() {
+        float[] level = CloudLevelMath.params(CloudLevelMath.LOW_DEFAULT, CloudLevelMath.HIGH_DEFAULT, 100, 1);
+        CloudMath.Realistic levels = layer(200, CloudMath.REAL_THICKNESS, level), flat = layer(200, CloudMath.REAL_THICKNESS, new float[4]);
+        int covered = 0, coveredFlat = 0, leaning = 0;
+        for (int i = 0; i < 200; i++) {
+            for (int j = 0; j < 200; j++) {
+                float x = i * 11.3f, z = j * 10.7f;
+                float[] q = CloudMath.levelSquare(levels, x, z); //the layer's offset is 0
+                boolean hit = false, hitFlat = false;
+                for (float y = 200 + level[0]; y < 200 + CloudMath.REAL_THICKNESS + level[1]; y += 12) {
+                    float[] pick = CloudMath.realPick(MAP, levels, x, y, z, 1);
+                    if (pick[0] > 0) {
+                        hit = true;
+                        float near = Float.MAX_VALUE;
+                        for (int k = 0; k < 4; k++) {
+                            if (q[4 + k] > 0) near = Math.min(near, Math.abs(pick[1] - q[k]));
+                        }
+                        if (near > CloudLevelMath.CLOUD_LEVEL_SPLIT) leaning++;
+                    }
+                    if (y > 200 && y < 200 + CloudMath.REAL_THICKNESS && CloudMath.realDensity(MAP, flat, x, y, z, 1) > 0) hitFlat = true;
+                }
+                if (hit) covered++;
+                if (hitFlat) coveredFlat++;
+            }
+        }
+        assertEquals(0, leaning, "clouds on a level far from every corner's (leaning across a border)");
+        assertTrue(coveredFlat > 2000, "clouds without levels: " + coveredFlat);
+        assertTrue(covered > coveredFlat * 0.8, "the borders keep most clouds: " + covered + " of " + coveredFlat);
     }
 
     /** The realistic cumulus reach below the usual base with the levels, and not without them; the march's span takes the range in. */
