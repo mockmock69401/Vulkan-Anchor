@@ -172,7 +172,7 @@ public final class CloudMath {
     public static final int REAL_OCTAVES = 3;
     public static final float REAL_OCTAVE = 0.5f, REAL_POWDER = 0.6f, REAL_POWDER_DEPTH = 8, REAL_AMBIENT_LOW = 0.25f, REAL_FLAT_DEPTH = 2;
     public static final int REAL_REFLECT_SAMPLES = 12;
-    public static final float REAL_CIRRUS_HEIGHT = 480, REAL_CIRRUS_COVER = 0.3f, REAL_CIRRUS_OPACITY = 0.45f, REAL_CIRRUS_G = 0.7f, REAL_CIRRUS_AMBIENT = 1.2f;
+    public static final float REAL_CIRRUS_HEIGHT = 480, REAL_CIRRUS_COVER = 0.3f, REAL_CIRRUS_OPACITY = 0.16f, REAL_CIRRUS_G = 0.7f, REAL_CIRRUS_AMBIENT = 1.2f;
     public static final int REAL_PRIME_X = 73856093, REAL_PRIME_Y = 19349663, REAL_PRIME_Z = 83492791;
 
     /**
@@ -496,8 +496,7 @@ public final class CloudMath {
             float rr = (float) Math.sqrt(qx * qx + qz * qz) / REAL_REACH;
             float fc = Math.min(REAL_CIRRUS_COVER * r.cover / REAL_COVER, 0.95f);
             if (t < maxDist && rr < 1 && fc > 0) {
-                float v = clamp01((noise(map, r.offsetX + qx, r.offsetZ + qz, 2) - 1 + fc) / fc);
-                float a = v * v * REAL_CIRRUS_OPACITY * (1 - smoothstep(CLOUD_FADE_START, 1, rr));
+                float a = cirrusRings(map, qx, qz, fc) * REAL_CIRRUS_OPACITY * (1 - smoothstep(CLOUD_FADE_START, 1, rr));
                 float w = a * trans;
                 sun += w * mix(hg(c, REAL_CIRRUS_G * level), 1, 0.5f);
                 amb += w * REAL_CIRRUS_AMBIENT;
@@ -538,11 +537,41 @@ public final class CloudMath {
     public static final float ANIME_EDGE = 0.5f, ANIME_TOWER = 0.35f;
     public static final float ANIME_STEP = 6, ANIME_NORMAL_STEP = 12;
     public static final int ANIME_SAMPLES_LOW = 16, ANIME_SAMPLES_MEDIUM = 28, ANIME_SAMPLES_HIGH = 44, ANIME_SAMPLES_MIN = 10;
-    public static final float ANIME_SOFT = 30, ANIME_SOFT_BASE = 60, ANIME_DENSITY = 0.12f;
+    public static final float ANIME_SOFT = 16, ANIME_SOFT_BASE = 60, ANIME_DENSITY = 0.12f;
     public static final float ANIME_FADE_NEAR = 500, ANIME_FADE_FAR = 1800, ANIME_FADE_SHRINK = 24, ANIME_HAZE = 0.5f;
     public static final float ANIME_WRAP = 0.8f, ANIME_SHADE_FROM = 0, ANIME_SHADE_TO = 1, ANIME_SHADOW = 0.4f, ANIME_FLAT = 0.6f;
     public static final float ANIME_CREASE_SHADE = 0.25f, ANIME_LOW_LIT = 0.65f, ANIME_LOW_REACH = 0.6f, ANIME_AMBIENT_LOW = 0.6f;
     public static final float ANIME_SILVER = 0.15f, ANIME_SILVER_G = 0.5f;
+    /** 2026-11-23: the watercolour (clouds.glsl animeWarp, the paint in animeMarch) and the anime style's cirrus rings. */
+    public static final float ANIME_WARP = 0.35f, ANIME_WARP_SCALE = 2, ANIME_WARP_FINE = 0.3f, ANIME_WARP_FINE_SCALE = 9;
+    public static final float ANIME_PAINT = 0.9f, ANIME_TONE_DARK = 0.62f, ANIME_TONE_EDGE = 0.55f, ANIME_TONE_SOFT = 0.05f;
+    public static final float ANIME_BLOTCH = 0.5f, ANIME_BLOTCH_SCALE = 5;
+    public static final float ANIME_CIRRUS_HEIGHT = 420, ANIME_CIRRUS_OPACITY = 0.14f, ANIME_CIRRUS_FAR = 9000;
+    /** 2026-11-23: clouds.glsl cirrusRings: the streaks along circles around the camera. */
+    public static final float CIRRUS_RING_SCALE = 1, CIRRUS_RING_NEAR = 250, CIRRUS_RING_FAR = 900;
+
+    /** cirrusRings: the cirrus' cover 0..1 at camera-relative (x, z) on its sheet for coverage share fc (the b channel along circles). */
+    public static float cirrusRings(byte[] map, float x, float z, float fc) {
+        float rr = (float) Math.sqrt(x * x + z * z);
+        if (!(fc > 0) || !(rr > CIRRUS_RING_NEAR)) return 0;
+        float turn = (float) (Math.atan2(z, x) / (2 * Math.PI)) + 0.5f;
+        float v = clamp01((noise(map, turn * MAP * CLOUD_CELL, rr * CIRRUS_RING_SCALE, 2) - 1 + fc) / fc);
+        return v * v * smoothstep(CIRRUS_RING_NEAR, CIRRUS_RING_FAR, rr);
+    }
+
+    /** animeWarp: the watercolour's push (x, z in blocks) of map position (mx, mz) for a lattice of cell blocks. */
+    public static float[] animeWarp(byte[] map, float mx, float mz, float cell) {
+        float ax = noise(map, mx * ANIME_WARP_SCALE, mz * ANIME_WARP_SCALE, 3), az = noise(map, mx * ANIME_WARP_SCALE, mz * ANIME_WARP_SCALE, 2);
+        float bx = noise(map, mx * ANIME_WARP_FINE_SCALE, mz * ANIME_WARP_FINE_SCALE, 3), bz = noise(map, mx * ANIME_WARP_FINE_SCALE, mz * ANIME_WARP_FINE_SCALE, 2);
+        return new float[]{((ax - 0.5f) * ANIME_WARP + (bx - 0.5f) * ANIME_WARP_FINE) * cell, ((az - 0.5f) * ANIME_WARP + (bz - 0.5f) * ANIME_WARP_FINE) * cell};
+    }
+
+    /** The map position of camera-relative (x, z) pushed by animeWarp. */
+    static float[] animeWarped(byte[] map, Realistic r, float x, float z) {
+        float mx = r.offsetX + x, mz = r.offsetZ + z;
+        float[] w = animeWarp(map, mx, mz, animeCell(ANIME_PUFF_CELL, animeScale(r)));
+        return new float[]{mx + w[0], mz + w[1]};
+    }
     /** animeCells: the highest top of a group where no puff stands. */
     public static final float ANIME_NONE = -1e6f;
     /** CPU side: the anime layer's base ANIME_LIFT above vanilla's, ANIME_THICKNESS thick at cloud size 100% (in proportion to the size). */
@@ -657,7 +686,8 @@ public final class CloudMath {
     public static float animeDepth(byte[] map, Realistic r, float x, float y, float z) {
         float h = y - r.base;
         if (!(h > Math.min(r.levelLow, 0) && h < r.thickness + Math.max(r.levelHigh, 0))) return 0;
-        float[] bt = animeShape(map, r, r.offsetX + x, r.offsetZ + z, h);
+        float[] m = animeWarped(map, r, x, z);
+        float[] bt = animeShape(map, r, m[0], m[1], h);
         return Math.max(Math.min((h - bt[0]) * (ANIME_SOFT / ANIME_SOFT_BASE), bt[1] - h), 0);
     }
 
@@ -667,7 +697,8 @@ public final class CloudMath {
      * bright arcs).
      */
     public static float[] animeNormal(byte[] map, Realistic r, float x, float y, float z) {
-        float mx = r.offsetX + x, mz = r.offsetZ + z, e = ANIME_NORMAL_STEP * animeScale(r), h = y - r.base;
+        float[] m = animeWarped(map, r, x, z);
+        float mx = m[0], mz = m[1], e = ANIME_NORMAL_STEP * animeScale(r), h = y - r.base;
         float[] c = animeShape(map, r, mx, mz, h), px = animeShape(map, r, mx + e, mz, h), nx = animeShape(map, r, mx - e, mz, h),
                 pz = animeShape(map, r, mx, mz + e, h), nz = animeShape(map, r, mx, mz - e, h);
         float w = smoothstep(0, 1, clamp01((y - r.base - c[0]) / Math.max(c[1] - c[0], 1e-3f)));
@@ -708,11 +739,11 @@ public final class CloudMath {
     public static float[] animeMarch(byte[] map, Realistic r, float[] origin, float[] dir, float maxDist, float[] lightDir, float jitter, int samples) {
         float horizontal = (float) Math.sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
         float[] span = interval(r, origin, dir, Math.min(maxDist, ANIME_FADE_FAR / Math.max(horizontal, CLOUD_MIN_HORIZONTAL)));
-        if (span == null) return new float[4];
-        float len = span[1] - span[0];
+        //2026-11-23: a ray that misses the layer still meets the cirrus behind it
+        float len = span == null ? 0 : span[1] - span[0];
         float k = animeScale(r);
-        int n = (int) Math.max(ANIME_SAMPLES_MIN, Math.min(Math.max(samples, ANIME_SAMPLES_MIN), Math.ceil(len / (ANIME_STEP * k))));
-        float dt = len / n;
+        int n = len > 0 ? (int) Math.max(ANIME_SAMPLES_MIN, Math.min(Math.max(samples, ANIME_SAMPLES_MIN), Math.ceil(len / (ANIME_STEP * k)))) : 0;
+        float dt = len / Math.max(n, 1);
         float trans = 1, tsum = 0, wsum = 0;
         for (int i = 0; i < ANIME_SAMPLES_HIGH; i++) {
             if (i >= n || trans < 0.01f) break;
@@ -727,17 +758,44 @@ public final class CloudMath {
             wsum += w;
             trans *= 1 - a;
         }
-        if (!(wsum > 0)) return new float[4];
-        float t = tsum / wsum;
-        float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
-        float[] c = animeShape(map, r, r.offsetX + px, r.offsetZ + pz, py - r.base);
-        float hc = clamp01((py - r.base - levelAt(r, r.offsetX + px, r.offsetZ + pz)) / r.thickness);
-        float[] l = animeLight(animeNormal(map, r, px, py, pz), c[1] > c[0] ? c[2] : 1, hc, lightDir);
-        float cov = 1 - trans;
-        //The silver lining: thin cloud (low coverage) toward the light glows with its forward scattering
-        float level = smoothstep(0, CLOUD_SHADE_LEVEL, Math.abs(lightDir[1]));
-        float silver = ANIME_SILVER * (1 - cov) * hg(dot3(dir, lightDir), ANIME_SILVER_G * level);
-        return new float[]{cov * (l[0] + silver), cov * l[1], cov, t * ANIME_HAZE};
+        float[] out = new float[4];
+        float level = smoothstep(0, CLOUD_SHADE_LEVEL, Math.abs(lightDir[1])), dsum = 0;
+        if (wsum > 0) {
+            float t = tsum / wsum;
+            float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
+            float[] m = animeWarped(map, r, px, pz);
+            float[] c = animeShape(map, r, m[0], m[1], py - r.base);
+            float hc = clamp01((py - r.base - levelAt(r, r.offsetX + px, r.offsetZ + pz)) / r.thickness);
+            float[] l = animeLight(animeNormal(map, r, px, py, pz), c[1] > c[0] ? c[2] : 1, hc, lightDir);
+            //The paint: a two-tone wash whose border the pigment moves
+            float blotch = (noise(map, (r.offsetX + px) * ANIME_BLOTCH_SCALE, (r.offsetZ + pz) * ANIME_BLOTCH_SCALE, 3) - 0.5f) * ANIME_BLOTCH;
+            float tone = mix(ANIME_TONE_DARK, 1, smoothstep(ANIME_TONE_EDGE - ANIME_TONE_SOFT, ANIME_TONE_EDGE + ANIME_TONE_SOFT, l[0] + blotch));
+            l[0] = mix(l[0], tone, ANIME_PAINT);
+            float cov = 1 - trans;
+            //The silver lining: thin cloud (low coverage) toward the light glows with its forward scattering
+            float silver = ANIME_SILVER * (1 - cov) * hg(dot3(dir, lightDir), ANIME_SILVER_G * level);
+            out = new float[]{cov * (l[0] + silver), cov * l[1], cov, 0};
+            dsum = t * ANIME_HAZE * cov;
+        }
+        //2026-11-23: the cirrus rings behind, on a flat sheet
+        float top = r.base + ANIME_CIRRUS_HEIGHT;
+        if (trans >= 0.01f && origin[1] < top && dir[1] > 0) {
+            float t = (top - origin[1]) / dir[1];
+            float qx = origin[0] + dir[0] * t, qz = origin[2] + dir[2] * t;
+            float fc = Math.min(REAL_CIRRUS_COVER * r.cover / REAL_COVER, 0.95f);
+            float a = cirrusRings(map, qx, qz, fc) * ANIME_CIRRUS_OPACITY
+                    * (1 - smoothstep(0.5f * ANIME_CIRRUS_FAR, ANIME_CIRRUS_FAR, (float) Math.sqrt(qx * qx + qz * qz)));
+            if (t < maxDist && a > 0) {
+                float w = a * trans;
+                out[0] += w * mix(hg(dot3(dir, lightDir), REAL_CIRRUS_G * level), 1, 0.5f);
+                out[1] += w;
+                out[2] += w;
+                dsum += w * t * ANIME_HAZE;
+            }
+        }
+        if (!(out[2] > 0)) return new float[4];
+        out[3] = dsum / out[2];
+        return out;
     }
 
     // ---- the noise map (CPU only): cloudMap's g, b, a channels ----

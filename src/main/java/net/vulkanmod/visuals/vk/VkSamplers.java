@@ -26,6 +26,14 @@ public final class VkSamplers {
         return create(VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_LOD_CLAMP_NONE);
     }
 
+    /**
+     * 2026-11-23: linear texels, repeating (the cloud map: clouds.glsl cloudNoiseLinear filters its noise channels in one fetch; every
+     * texelFetch of it ignores the filter and the address mode).
+     */
+    public static long linearRepeat() {
+        return create(VK_FILTER_LINEAR, VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST, VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_LOD_CLAMP_NONE);
+    }
+
     /** ModelStore's block sampler: GL_NEAREST_MIPMAP_LINEAR / GL_NEAREST, GL's default repeat, LOD 0 to maxLod. */
     public static long modelAtlas(float maxLod) {
         return create(VK_FILTER_NEAREST, VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT, maxLod);

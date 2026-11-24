@@ -180,10 +180,12 @@ const float REAL_AMBIENT_LOW = 0.25;
 const float REAL_FLAT_DEPTH = 2.0;
 const int REAL_REFLECT_SAMPLES = 12;
 //The cirrus: a sheet REAL_CIRRUS_HEIGHT blocks above the cumulus base, covering REAL_CIRRUS_COVER of the sky at coverage 100%, at most
-// REAL_CIRRUS_OPACITY opaque, scattering forward with REAL_CIRRUS_G (ice), and REAL_CIRRUS_AMBIENT of the sky light
+// REAL_CIRRUS_OPACITY opaque, scattering forward with REAL_CIRRUS_G (ice), and REAL_CIRRUS_AMBIENT of the sky light. 2026-11-23 (the user,
+// after Genshin Impact's night sky, looked at only: "the thin streak clouds look more natural drawn as near-invisible circles around the
+// player"): the streaks run along circles around the camera (cirrusRings), faint (REAL_CIRRUS_OPACITY 0.45 before)
 const float REAL_CIRRUS_HEIGHT = 480.0;
 const float REAL_CIRRUS_COVER = 0.3;
-const float REAL_CIRRUS_OPACITY = 0.45;
+const float REAL_CIRRUS_OPACITY = 0.16;
 const float REAL_CIRRUS_G = 0.7;
 const float REAL_CIRRUS_AMBIENT = 1.2;
 //2026-11-16 (the user: "the realistic clouds only show at a certain height in the sky; let them reach the horizon, as in Genshin"): the
@@ -307,6 +309,31 @@ vec4 cloudNoise(vec2 m) {
     vec4 c = texelFetch(cloudMap, ivec2(mod(i + vec2(0.0, 1.0), CLOUD_MAP)), 0);
     vec4 d = texelFetch(cloudMap, ivec2(mod(i + vec2(1.0), CLOUD_MAP)), 0);
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+//2026-11-23: cloudNoise in one filtered fetch (the cloud map is bound with VkSamplers.linearRepeat: texel centres and the wrap as
+// cloudNoise's), for the watercolour's per-sample push
+vec4 cloudNoiseLinear(vec2 m) {
+    return textureLod(cloudMap, m/(CLOUD_MAP*CLOUD_CELL), 0.0);
+}
+
+//2026-11-23: the cirrus streaks along circles around the camera. The b channel's streaks run along the map's x (four times longer than
+// wide); here the map's x is the angle around the camera (one map period a full circle, so no seam) and its z the distance out times
+// CIRRUS_RING_SCALE, so each streak is an arc of a ring around the player, its width a band of distance. Within CIRRUS_RING_NEAR ..
+// CIRRUS_RING_FAR blocks of the camera's column they fade in (overhead the angle's lattice would pinch to a point)
+const float CIRRUS_RING_SCALE = 1.0;
+const float CIRRUS_RING_NEAR = 250.0;
+const float CIRRUS_RING_FAR = 900.0;
+
+//The cirrus' cover 0..1 at camera-relative q on its sheet for coverage share fc (0..0.95)
+float cirrusRings(vec3 q, float fc) {
+    float r = length(q.xz);
+    if (!(fc > 0.0) || !(r > CIRRUS_RING_NEAR)) {
+        return 0.0;
+    }
+    float turn = atan(q.z, q.x)/6.28318531 + 0.5;
+    float v = clamp((cloudNoise(vec2(turn*CLOUD_MAP*CLOUD_CELL, r*CIRRUS_RING_SCALE)).b - 1.0 + fc)/fc, 0.0, 1.0);
+    return v*v*smoothstep(CIRRUS_RING_NEAR, CIRRUS_RING_FAR, r);
 }
 
 //0..1 at lattice corner c, x and z wrapped into n cells
@@ -606,8 +633,7 @@ vec4 realMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitter
         float r = length(q.xz)/REAL_REACH;
         float fc = min(REAL_CIRRUS_COVER*cloudOffset.w/REAL_COVER, 0.95);
         if (t < maxDist && r < 1.0 && fc > 0.0) {
-            float v = clamp((cloudNoise(cloudOffset.xy + q.xz).b - 1.0 + fc)/fc, 0.0, 1.0);
-            float a = v*v*REAL_CIRRUS_OPACITY*(1.0 - smoothstep(CLOUD_FADE_START, 1.0, r));
+            float a = cirrusRings(q, fc)*REAL_CIRRUS_OPACITY*(1.0 - smoothstep(CLOUD_FADE_START, 1.0, r));
             float w = a*trans;
             sun += w*mix(realHg(c, REAL_CIRRUS_G*level), 1.0, 0.5);
             amb += w*REAL_CIRRUS_AMBIENT;
@@ -670,7 +696,7 @@ const int ANIME_SAMPLES_MEDIUM = 28;
 const int ANIME_SAMPLES_HIGH = 44;
 const int ANIME_SAMPLES_MIN = 10;
 const float ANIME_NORMAL_STEP = 12.0;
-const float ANIME_SOFT = 30.0;
+const float ANIME_SOFT = 16.0;
 const float ANIME_SOFT_BASE = 60.0;
 const float ANIME_DENSITY = 0.12;
 const float ANIME_FADE_NEAR = 500.0;
@@ -689,6 +715,35 @@ const float ANIME_LOW_REACH = 0.6;
 const float ANIME_AMBIENT_LOW = 0.6;
 const float ANIME_SILVER = 0.15;
 const float ANIME_SILVER_G = 0.5;
+//2026-11-23 (the user: "the anime clouds should feel like watercolour, not cumulus", after Genshin Impact's night clouds, looked at only:
+// flat painted patches with ragged, brush-like edges and small flecks, blotchy two-tone shading, light rims): every sample's map position
+// is pushed sideways by the cloud map's noise (ANIME_WARP cells over its tower and cirrus channels at ANIME_WARP_SCALE times their
+// frequency, ANIME_WARP_FINE at ANIME_WARP_FINE_SCALE), so the round puffs' outlines turn ragged and break into flecks; the light is
+// painted: ANIME_PAINT of it a two-tone wash (ANIME_TONE_DARK to 1 around ANIME_TONE_EDGE, over ANIME_TONE_SOFT) whose border the pigment
+// moves by up to ANIME_BLOTCH (the tower channel at ANIME_BLOTCH_SCALE times its frequency), so light and shade meet in irregular patches;
+// the edges are crisper (ANIME_SOFT 30 before). The scales are whole numbers so the map's wrap never shows
+const float ANIME_WARP = 0.35;
+const float ANIME_WARP_SCALE = 2.0;
+const float ANIME_WARP_FINE = 0.3;
+const float ANIME_WARP_FINE_SCALE = 9.0;
+const float ANIME_PAINT = 0.9;
+const float ANIME_TONE_DARK = 0.62;
+const float ANIME_TONE_EDGE = 0.55;
+const float ANIME_TONE_SOFT = 0.05;
+const float ANIME_BLOTCH = 0.5;
+const float ANIME_BLOTCH_SCALE = 5.0;
+//The anime style's cirrus: the rings (cirrusRings) on a flat sheet ANIME_CIRRUS_HEIGHT above the layer's base, at most
+// ANIME_CIRRUS_OPACITY, fading out toward ANIME_CIRRUS_FAR blocks (the haze takes them there)
+const float ANIME_CIRRUS_HEIGHT = 420.0;
+const float ANIME_CIRRUS_OPACITY = 0.14;
+const float ANIME_CIRRUS_FAR = 9000.0;
+
+//The watercolour's push of map position m (blocks): the noise's offset in blocks for a lattice of cell blocks
+vec2 animeWarp(vec2 m, float cell) {
+    vec4 a = cloudNoiseLinear(m*ANIME_WARP_SCALE);
+    vec4 b = cloudNoiseLinear(m*ANIME_WARP_FINE_SCALE);
+    return ((a.ab - 0.5)*ANIME_WARP + (b.ab - 0.5)*ANIME_WARP_FINE)*cell;
+}
 
 //A lattice's cell in blocks: base times k (the layer's thickness over ANIME_THICKNESS), a whole number of cells to the map's period
 float animeCell(float base, float k) {
@@ -808,8 +863,9 @@ float animeDepth(float h, vec3 bt) {
 // arcs). The five columns share the 3 x 3 puffs around p's cell, which hold every puff that can reach them (ANIME_NORMAL_STEP is under
 // half a cell)
 vec3 animeNormal(vec3 p, out vec3 c) {
-    vec2 m = cloudOffset.xy + p.xz;
     float cell = animePuffCell();
+    vec2 m = cloudOffset.xy + p.xz;
+    m += animeWarp(m, cell);
     float f = min(cloudOffset.w, 1.0);
     int n = int(floor(CLOUD_MAP*CLOUD_CELL/cell + 0.5));
     vec2 u = m/cell;
@@ -866,14 +922,15 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
     //2026-11-22: from the lowest level's base to the highest level's top
     vec2 span = cloudIntervalBetween(origin, dir, min(maxDist, ANIME_FADE_FAR/max(length(dir.xz), CLOUD_MIN_HORIZONTAL)),
             cloudShape.x + min(cloudLevel.x, 0.0), cloudShape.x + cloudShape.y + max(cloudLevel.y, 0.0));
-    if (cloudShape.w < 0.5 || span.y <= span.x) {
+    if (cloudShape.w < 0.5) {
         return vec4(0.0);
     }
-    float len = span.y - span.x;
+    //2026-11-23: a ray that misses the layer still meets the cirrus behind it (n 0: no samples)
+    float len = max(span.y - span.x, 0.0);
     //The size scales the step, the soft lengths and the fade's shrink, and the density over it: the same samples and look at every size
     float k = animeScale();
-    int n = int(clamp(ceil(len/(ANIME_STEP*k)), float(ANIME_SAMPLES_MIN), float(max(samples, ANIME_SAMPLES_MIN))));
-    float dt = len/float(n);
+    int n = len > 0.0 ? int(clamp(ceil(len/(ANIME_STEP*k)), float(ANIME_SAMPLES_MIN), float(max(samples, ANIME_SAMPLES_MIN)))) : 0;
+    float dt = len/float(max(n, 1));
     float trans = 1.0;
     float tsum = 0.0;
     float wsum = 0.0;
@@ -898,6 +955,7 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
             continue;
         }
         vec2 m = cloudOffset.xy + p.xz;
+        m += animeWarp(m, cell);
         vec2 u = m/cell;
         ivec2 o = animeCorner(u);
         if (o != key) {
@@ -919,21 +977,41 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
         wsum += w;
         trans *= 1.0 - a;
     }
-    if (!(wsum > 0.0)) {
-        return vec4(0.0);
-    }
-    float t = tsum/wsum;
-    vec3 p = origin + dir*t;
-    //The height in the layer above the point's own level
-    float hc = clamp((p.y - cloudShape.x - cloudLevelAt(cloudOffset.xy + p.xz))/cloudShape.y, 0.0, 1.0);
-    vec3 col = vec3(0.0, 1.0, 1.0);
-    float y = 2.0*smoothstep(0.0, 1.0, hc) - 1.0;
-    vec3 nrm = shaded ? animeNormal(p, col) : vec3(0.0, y, sqrt(max(1.0 - y*y, 0.0)));
-    vec2 l = animeLight(nrm, col.y > col.x ? col.z : 1.0, hc, lightDir);
-    float cov = 1.0 - trans;
+    vec4 r = vec4(0.0);
     float level = smoothstep(0.0, CLOUD_SHADE_LEVEL, abs(lightDir.y));
-    float silver = ANIME_SILVER*(1.0 - cov)*realHg(dot(dir, lightDir), ANIME_SILVER_G*level);
-    return vec4(cov*(l.x + silver), cov*l.y, cov, t*ANIME_HAZE);
+    float dsum = 0.0;
+    if (wsum > 0.0) {
+        float t = tsum/wsum;
+        vec3 p = origin + dir*t;
+        //The height in the layer above the point's own level
+        float hc = clamp((p.y - cloudShape.x - cloudLevelAt(cloudOffset.xy + p.xz))/cloudShape.y, 0.0, 1.0);
+        vec3 col = vec3(0.0, 1.0, 1.0);
+        float y = 2.0*smoothstep(0.0, 1.0, hc) - 1.0;
+        vec3 nrm = shaded ? animeNormal(p, col) : vec3(0.0, y, sqrt(max(1.0 - y*y, 0.0)));
+        vec2 l = animeLight(nrm, col.y > col.x ? col.z : 1.0, hc, lightDir);
+        //The paint: a two-tone wash whose border the pigment moves
+        float blotch = (cloudNoise((cloudOffset.xy + p.xz)*ANIME_BLOTCH_SCALE).a - 0.5)*ANIME_BLOTCH;
+        float tone = mix(ANIME_TONE_DARK, 1.0, smoothstep(ANIME_TONE_EDGE - ANIME_TONE_SOFT, ANIME_TONE_EDGE + ANIME_TONE_SOFT, l.x + blotch));
+        l.x = mix(l.x, tone, ANIME_PAINT);
+        float cov = 1.0 - trans;
+        float silver = ANIME_SILVER*(1.0 - cov)*realHg(dot(dir, lightDir), ANIME_SILVER_G*level);
+        r = vec4(cov*(l.x + silver), cov*l.y, cov, 0.0);
+        dsum = t*ANIME_HAZE*cov;
+    }
+    //2026-11-23: the cirrus rings behind, on a flat sheet
+    float top = cloudShape.x + ANIME_CIRRUS_HEIGHT;
+    if (trans >= 0.01 && origin.y < top && dir.y > 0.0) {
+        float t = (top - origin.y)/dir.y;
+        vec3 q = origin + dir*t;
+        float fc = min(REAL_CIRRUS_COVER*cloudOffset.w/REAL_COVER, 0.95);
+        float a = cirrusRings(q, fc)*ANIME_CIRRUS_OPACITY*(1.0 - smoothstep(0.5*ANIME_CIRRUS_FAR, ANIME_CIRRUS_FAR, length(q.xz)));
+        if (t < maxDist && a > 0.0) {
+            float w = a*trans;
+            r += vec4(w*mix(realHg(dot(dir, lightDir), REAL_CIRRUS_G*level), 1.0, 0.5), w, w, 0.0);
+            dsum += w*t*ANIME_HAZE;
+        }
+    }
+    return r.z > 0.0 ? vec4(r.xyz, dsum/r.z) : vec4(0.0);
 }
 
 //Session 3: the far clouds along dir from origin up to maxDist in the style cloudOffset.z picks, jitter 0..1 per pixel:
