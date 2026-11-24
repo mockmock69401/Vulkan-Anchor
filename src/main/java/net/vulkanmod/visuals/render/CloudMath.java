@@ -209,14 +209,24 @@ public final class CloudMath {
      * CLOUD_LEVEL_EDGE of a cell either side of the cells' edges; 0 without levels.
      */
     public static float levelAt(Realistic r, float mx, float mz) {
-        if (!(r.levelCell > 0)) return 0;
+        float[] q = levelSquare(r, mx, mz);
+        return q[0] * q[4] + q[1] * q[5] + q[2] * q[6] + q[3] * q[7];
+    }
+
+    /**
+     * clouds.glsl cloudLevelSquare: the level lattice square around map position (mx, mz): [0..3] its corners' levels (blocks; the corner
+     * k, k + (1, 0), k + (0, 1), k + (1, 1)), [4..7] their blend weights (summing to 1); without levels 0 and (1, 0, 0, 0).
+     */
+    public static float[] levelSquare(Realistic r, float mx, float mz) {
+        if (!(r.levelCell > 0)) return new float[]{0, 0, 0, 0, 1, 0, 0, 0};
         int n = (int) Math.floor(MAP * CLOUD_CELL / r.levelCell + 0.5);
         float ux = mx / r.levelCell - 0.5f, uz = mz / r.levelCell - 0.5f;
         int ix = (int) Math.floor(ux), iz = (int) Math.floor(uz);
         float fx = smoothstep(0.5f - CloudLevelMath.CLOUD_LEVEL_EDGE, 0.5f + CloudLevelMath.CLOUD_LEVEL_EDGE, ux - ix);
         float fz = smoothstep(0.5f - CloudLevelMath.CLOUD_LEVEL_EDGE, 0.5f + CloudLevelMath.CLOUD_LEVEL_EDGE, uz - iz);
-        float v = mix(mix(levelValue(ix, iz, n), levelValue(ix + 1, iz, n), fx), mix(levelValue(ix, iz + 1, n), levelValue(ix + 1, iz + 1, n), fx), fz);
-        return mix(r.levelLow, r.levelHigh, v);
+        return new float[]{mix(r.levelLow, r.levelHigh, levelValue(ix, iz, n)), mix(r.levelLow, r.levelHigh, levelValue(ix + 1, iz, n)),
+                mix(r.levelLow, r.levelHigh, levelValue(ix, iz + 1, n)), mix(r.levelLow, r.levelHigh, levelValue(ix + 1, iz + 1, n)),
+                (1 - fx) * (1 - fz), fx * (1 - fz), (1 - fx) * fz, fx * fz};
     }
 
     /** cloudLevelValue: a level lattice point's share of the range, 0..1 (its hash's low 16 bits). */
@@ -306,24 +316,64 @@ public final class CloudMath {
 
     /** realDensity: the cumulus density 0..1 at camera-relative (x, y, z). */
     public static float realDensity(byte[] map, Realistic r, float x, float y, float z, int octaves) {
-        return realDensityOn(map, r, x, y, z, octaves, levelAt(r, r.offsetX + x, r.offsetZ + z));
+        return realPick(map, r, x, y, z, octaves)[0];
     }
 
-    /** realDensityOn: realDensity for a point standing on level lv (levelAt). */
-    public static float realDensityOn(byte[] map, Realistic r, float x, float y, float z, int octaves, float lv) {
-        float ly = realHeight(x, y, z) - r.base - lv, h = ly / r.thickness, f = Math.min(r.cover, 1);
+    /**
+     * 2026-11-24 (clouds.glsl realDensity): {density, level, keep}: the densest of the level square's corners' clouds at camera-relative
+     * (x, y, z); a corner's clouds stand flat on the level blended over the corners within CloudLevelMath.CLOUD_LEVEL_JOIN .. SPLIT blocks
+     * of it, with keep (their weights) of the cover.
+     */
+    public static float[] realPick(byte[] map, Realistic r, float x, float y, float z, int octaves) {
+        float mx = r.offsetX + x, mz = r.offsetZ + z;
+        float[] q = levelSquare(r, mx, mz);
+        float lv = q[0] * q[4] + q[1] * q[5] + q[2] * q[6] + q[3] * q[7], keep = 1, best = 0;
+        //a blend's level lies within SPLIT of its corner's
+        float ch = realHeight(x, y, z) - r.base, e = CloudLevelMath.CLOUD_LEVEL_SPLIT / r.thickness;
+        for (int i = 0; i < 4; i++) {
+            float h = (ch - q[i]) / r.thickness;
+            if (!(q[4 + i] > 0) || !(h > -e && h < 1 + e)) continue;
+            float k = 0, sum = 0;
+            for (int j = 0; j < 4; j++) {
+                float wj = q[4 + j] * (1 - smoothstep(CloudLevelMath.CLOUD_LEVEL_JOIN, CloudLevelMath.CLOUD_LEVEL_SPLIT, Math.abs(q[j] - q[i])));
+                k += wj;
+                sum += wj * q[j];
+            }
+            float li = sum / k, d = realShape(map, r, x, y, z, li, k);
+            if (d > best) {
+                best = d;
+                lv = li;
+                keep = k;
+            }
+        }
+        return new float[]{realEroded(r, x, y, z, lv, best, octaves), lv, keep};
+    }
+
+    /** clouds.glsl realShape: the cumulus' shape before the erosion at camera-relative (x, y, z) on level lv with keep of its cover. */
+    static float realShape(byte[] map, Realistic r, float x, float y, float z, float lv, float keep) {
+        float h = (realHeight(x, y, z) - r.base - lv) / r.thickness, f = Math.min(r.cover, 1);
         if (!(h > 0 && h < 1) || !(f > 0)) return 0;
         float mx = r.offsetX + x, mz = r.offsetZ + z;
-        float s = (noise(map, mx, mz, 1) - 1 + f) / f;
+        float s = keep * (noise(map, mx, mz, 1) - 1 + f) / f;
         if (s <= 0) return 0;
         float tower = noise(map, mx, mz, 3), lift = REAL_BASE_LIFT * (1 - tower);
         float hp = (h - lift) / ((1 - lift) * mix(REAL_TOP_MIN, 1, s) * mix(1 - REAL_TOWER, 1, tower));
         if (!(hp > 0 && hp < 1)) return 0;
-        float d = s * smoothstep(0, REAL_BOTTOM, hp) * (1 - smoothstep(REAL_ROUND, 1, hp));
-        float er = erosionFor(mx, ly, mz, octaves, d);
+        return s * smoothstep(0, REAL_BOTTOM, hp) * (1 - smoothstep(REAL_ROUND, 1, hp));
+    }
+
+    /** clouds.glsl realEroded: shape d at camera-relative (x, y, z) on level lv eroded by the noise. */
+    static float realEroded(Realistic r, float x, float y, float z, float lv, float d, int octaves) {
+        if (!(d > 0)) return 0;
+        float er = erosionFor(r.offsetX + x, realHeight(x, y, z) - r.base - lv, r.offsetZ + z, octaves, d);
         if (er < 0) return 0;
         float e = REAL_ERODE * er;
         return Math.max((d - e) / (1 - e), 0);
+    }
+
+    /** realDensityOn: the density for a point standing on level lv with keep of its cover (realPick's). */
+    public static float realDensityOn(byte[] map, Realistic r, float x, float y, float z, int octaves, float lv, float keep) {
+        return realEroded(r, x, y, z, lv, realShape(map, r, x, y, z, lv, keep), octaves);
     }
 
     /** realHg: Henyey-Greenstein scaled so an even phase is 1. */
@@ -414,14 +464,14 @@ public final class CloudMath {
                 if (i >= n || trans < 0.01f) break;
                 float t = span[0] + (i + jitter) * dt;
                 float px = origin[0] + dir[0] * t, py = origin[1] + dir[1] * t, pz = origin[2] + dir[2] * t;
-                float lv = levelAt(r, r.offsetX + px, r.offsetZ + pz);
-                float d = realDensityOn(map, r, px, py, pz, octaves, lv);
+                float[] pick = realPick(map, r, px, py, pz, octaves);
+                float d = pick[0], lv = pick[1], keep = pick[2];
                 if (d <= 0) continue;
                 float fade = 1 - smoothstep(CLOUD_FADE_START, 1, (float) Math.sqrt(px * px + pz * pz) / REAL_REACH);
                 float sigma = d * REAL_DENSITY;
                 float a = (1 - (float) Math.exp(-sigma * dt)) * fade;
                 float h = clamp01((realHeight(px, py, pz) - r.base - lv) / r.thickness);
-                float od = lights > 0 ? lightDepth(map, r, px, py, pz, lightDir, lights, lv) : REAL_FLAT_DEPTH * (1 - h);
+                float od = lights > 0 ? lightDepth(map, r, px, py, pz, lightDir, lights, lv, keep) : REAL_FLAT_DEPTH * (1 - h);
                 od *= level;
                 float s = 0, share = 1, depth = 1;
                 for (int k = 0; k < REAL_OCTAVES; k++) {
@@ -461,15 +511,16 @@ public final class CloudMath {
 
     /** realMarch's light march: the optical depth toward lightDir from (x, y, z), lights samples REAL_LIGHT_STEP x 1, 4, 9, 16 blocks out (segment midpoints). */
     public static float lightDepth(byte[] map, Realistic r, float x, float y, float z, float[] lightDir, int lights) {
-        return lightDepth(map, r, x, y, z, lightDir, lights, levelAt(r, r.offsetX + x, r.offsetZ + z));
+        float[] pick = realPick(map, r, x, y, z, 0);
+        return lightDepth(map, r, x, y, z, lightDir, lights, pick[1], pick[2]);
     }
 
-    /** lightDepth with every light sample on the sample's level lv (as the shader: they stay within REAL_LIGHT_STEP x 16 blocks). */
-    public static float lightDepth(byte[] map, Realistic r, float x, float y, float z, float[] lightDir, int lights, float lv) {
+    /** lightDepth with every light sample on the sample's level lv and cover share keep (as the shader: they stay within REAL_LIGHT_STEP x 16 blocks). */
+    public static float lightDepth(byte[] map, Realistic r, float x, float y, float z, float[] lightDir, int lights, float lv, float keep) {
         float od = 0, prev = 0;
         for (int j = 1; j <= Math.min(lights, REAL_LIGHT_HIGH); j++) {
             float reach = REAL_LIGHT_STEP * j * j, m = 0.5f * (reach + prev);
-            od += realDensityOn(map, r, x + lightDir[0] * m, y + lightDir[1] * m, z + lightDir[2] * m, 0, lv) * (reach - prev);
+            od += realDensityOn(map, r, x + lightDir[0] * m, y + lightDir[1] * m, z + lightDir[2] * m, 0, lv, keep) * (reach - prev);
             prev = reach;
         }
         return od * REAL_DENSITY;

@@ -17,6 +17,11 @@ public final class CloudLevelMath {
     /** clouds.glsl's level lattice at cloud size 100% (blocks), the share of a cell over which two levels blend at its edge, the hash's layer. */
     public static final float CLOUD_LEVEL_CELL = 384, CLOUD_LEVEL_EDGE = 0.2f;
     public static final int CLOUD_LEVEL_SEED = 7;
+    /**
+     * 2026-11-24 (the user: some realistic clouds were drawn diagonally or vertically, leaning across a border between two levels): corners
+     * within JOIN blocks of each other blend their levels; from SPLIT blocks apart each keeps its clouds flat on its own (CloudMath.realPick).
+     */
+    public static final float CLOUD_LEVEL_JOIN = 8, CLOUD_LEVEL_SPLIT = 24;
     /** The settings' ranges (blocks, percent) and defaults. */
     public static final int RANGE_MAX = 256, SPREAD_MAX = 100;
     /** 96 below and 64 above barely showed from high up (session18-heights-*.jpg); 192 and 128 did. */
