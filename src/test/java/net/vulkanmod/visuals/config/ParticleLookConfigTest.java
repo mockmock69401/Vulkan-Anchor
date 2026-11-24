@@ -54,6 +54,8 @@ class ParticleLookConfigTest {
         for (String key : ColourPresets.LOOK_KEYS) {
             json.append(", \"").append(VisualsConfig.class.getField(fieldOf(key)).getName()).append("\": ").append(ColourPresets.look(key, ColourPresets.HORROR));
         }
+        //2026-11-24: and the realistic clouds Horror picks since revision 30 (this file is built from today's row)
+        json.append(", \"cloudStyle\": ").append(ColourPresets.clouds(ColourPresets.HORROR));
         json.append('}');
         Path file = dir.resolve("old.json");
         Files.writeString(file, json.toString());

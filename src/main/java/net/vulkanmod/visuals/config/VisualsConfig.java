@@ -85,8 +85,17 @@ public class VisualsConfig {
      * 29 (2026-11-24, the user: "모두 커밋, 애니는 수채화"): the Anime palette picks the anime clouds again, now watercolour
      * (ColourPresets.clouds); a file saved at 27 or 28 on Anime with the realistic clouds it picked then takes the anime clouds and stays on
      * the palette; one whose clouds or other settings were changed by hand keeps them.
+     * 30 (2026-11-24, the user's seven Horror references): the Horror palette retuned, with the cave light colour (colourCave) and the
+     * light reach (lightReach), which every other palette leaves at their defaults; a file saved on the old Horror palette (its colours
+     * and look values still the palette's) takes the new one and stays on Horror (ColourPresets.moveOldHorror); one changed by hand keeps
+     * its values and shows Custom.
      */
-    private static final int REVISION = 29;
+    private static final int REVISION = 30;
+    /**
+     * 2026-11-24 (the user: "공포 프리셋의 레퍼런스 사진을 추가로 줄게. 이 사진과 비슷하게 프리셋을 조정해줘"): the first revision with the
+     * retuned Horror palette, the cave light colour and the light reach.
+     */
+    static final int HORROR_RETUNE_REVISION = 30;
     /** 2026-11-24: the first revision whose Anime palette picks the anime (watercolour) clouds again. */
     static final int ANIME_WATERCOLOUR_REVISION = 29;
     /** 2026-11-24: the first revision with three palettes and their new numbers. */
@@ -235,6 +244,14 @@ public class VisualsConfig {
         //2026-11-24: the palettes' new numbers, and a file on Realistic or Cinematic (gone) takes Default; first, since every palette
         // check below (and the performance preset's, which keeps a palette's clouds and Horror's auroras off) reads the new numbers
         if (fileRevision < THREE_PALETTES_REVISION) ColourPresets.moveRetired(c, missing);
+        //2026-11-24 (revision 30): a file on the old Horror palette takes the retuned one (and stays on it); next, since the palette checks
+        // below compare today's Horror row
+        if (fileRevision < HORROR_RETUNE_REVISION) {
+            java.util.EnumSet<Colour> absent = java.util.EnumSet.noneOf(Colour.class);
+            absent.addAll(missing);
+            if (!json.has(colourField(Colour.CAVE))) absent.add(Colour.CAVE);
+            ColourPresets.moveOldHorror(c, absent);
+        }
         //2026-11-23: a file saved before the End sky setting takes its palette's (the default, Space, on Horror and Custom); after the
         // palettes' new numbers, and before every palette check below, so they find it on its palette's
         if (!json.has("endSky")) c.endSky = ColourPresets.endSky(c.colourPreset, DimensionUniforms.END_SKY_SPACE);
@@ -345,6 +362,7 @@ public class VisualsConfig {
             case PARTICLE_MAGIC -> this.colourParticleMagic;
             case PARTICLE_AMBIENT -> this.colourParticleAmbient;
             case PARTICLE_COMBAT -> this.colourParticleCombat;
+            case CAVE -> this.colourCave;
         } & 0xFFFFFF;
     }
 
@@ -380,6 +398,7 @@ public class VisualsConfig {
             case PARTICLE_MAGIC -> this.colourParticleMagic = v;
             case PARTICLE_AMBIENT -> this.colourParticleAmbient = v;
             case PARTICLE_COMBAT -> this.colourParticleCombat = v;
+            case CAVE -> this.colourCave = v;
         }
     }
 
@@ -655,6 +674,12 @@ public class VisualsConfig {
     public int blockGlow = 100;
     /** 2026-10-28: how much ores' specks glow (slot 33 .y); 2026-10-29 nether quartz ore only. 0 leaves it as any block. */
     public int oreGlow = 100;
+    /**
+     * 2026-11-24 (the user: "광원 가까이서만 빛이 과장되게 밝게 보이도록 만들어줘 ... 동적 조명 포함 모든 광원의 범위도 조정해줘"): how far block
+     * light reaches (torches, lamps, the held light), percent: 100 is vanilla's; less falls off sooner and burns brighter right at the
+     * source (palettelight.glsl). A palette setting (ColourPresets.LOOK_KEYS).
+     */
+    public int lightReach = 100;
     public boolean heldLight = true;
     /**
      * 2026-11-10 (shader roadmap session 9): LabPBR materials from the resource packs (PbrAtlas: their _n normal and _s specular maps;
@@ -743,6 +768,8 @@ public class VisualsConfig {
     public int colourParticleMagic = Colour.PARTICLE_MAGIC.defaultRgb();
     public int colourParticleAmbient = Colour.PARTICLE_AMBIENT.defaultRgb();
     public int colourParticleCombat = Colour.PARTICLE_COMBAT.defaultRgb();
+    /** 2026-11-24: caves' and interiors' light (Colour.CAVE). */
+    public int colourCave = Colour.CAVE.defaultRgb();
     public int revision = REVISION;
     public transient int lightDebug = 0;
     /** 2026-10-23 prototype (TerrainLightTarget): the terrain light for vanilla pixels; static, so it is neither saved nor an option (the pilot's set reaches it). */

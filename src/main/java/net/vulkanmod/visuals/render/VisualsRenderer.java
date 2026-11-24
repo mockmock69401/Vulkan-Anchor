@@ -925,7 +925,8 @@ public final class VisualsRenderer {
                     camera.x, camera.y, camera.z, settings.portalGlow());
             //2026-11-10 (session 8): with the picked block light and moon colours (slots 31, 32)
             LightingUniforms.Values lighting = LightingUniforms.compute(settings, this.lightingChoice, this.atmosphere, serial,
-                    atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight, moonStrength(settings, level)).tinted(settings.colours());
+                    atmosphere.lodValid(), this.skyExposure.value(), copies, hasSkyLight, moonStrength(settings, level)).tinted(settings.colours())
+                    .withLightReach(settings.lightReach());
             //P7j design 3.3, P7f-2: the last valid cascades, rebased to this frame's sun views (which exist only when this frame
             // prepared the maps); never after a shadow failure
             boolean shadowsOn = this.shadowsOn();

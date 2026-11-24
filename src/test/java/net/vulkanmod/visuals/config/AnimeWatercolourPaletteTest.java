@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 2026-11-24 (the user: "모두 커밋, 애니는 수채화"): the Anime palette picks the anime (watercolour) clouds again (revision 29); a file
@@ -34,8 +35,8 @@ class AnimeWatercolourPaletteTest {
     void theAnimePalettePicksTheAnimeClouds() {
         assertEquals(CloudMath.STYLE_ANIME, ColourPresets.clouds(ColourPresets.ANIME));
         assertEquals(ColourPresets.ANY_CLOUDS, ColourPresets.clouds(ColourPresets.DEFAULT));
-        assertEquals(ColourPresets.ANY_CLOUDS, ColourPresets.clouds(ColourPresets.HORROR));
-        assertEquals(29, VisualsConfig.currentRevision());
+        assertEquals(net.vulkanmod.visuals.render.CloudMath.STYLE_REALISTIC, ColourPresets.clouds(ColourPresets.HORROR), "2026-11-24: Horror's realistic clouds");
+        assertTrue(VisualsConfig.currentRevision() >= VisualsConfig.ANIME_WATERCOLOUR_REVISION);
     }
 
     @Test
