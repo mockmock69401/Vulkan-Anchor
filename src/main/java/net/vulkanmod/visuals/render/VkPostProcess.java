@@ -262,7 +262,7 @@ public final class VkPostProcess {
     /** 2026-11-09 (session 5): this frame's sky slots (prepareSky), written into the reflection's after its own. */
     private CelestialUniforms.Values sky = CelestialUniforms.off();
     private final VkGpuBuffer copyUniformBuffer, lightingUniformBuffer, reflectionUniformBuffer;
-    private final long nearest, linear;
+    private final long nearest, linear, cloudSampler;
     //P7h design 3.3: clouds.png as 256x256 RGBA8 (1 on cloud cells), uploaded once; a dropped upload frame is uploaded again
     private final VkImage2D cloudMap;
     //Session 15: the round moon's face with its mips (MoonFace), uploaded once (again if that frame was dropped), and its sampler
@@ -304,7 +304,7 @@ public final class VkPostProcess {
         VkImage2D cloudMap = null, lodLightStandIn = null, moonFace = null, skyMap = null, skyMapStandIn = null;
         VkGpuBuffer lightStandIn = null, sunOpenBuffer = null, skyMapTiles = null;
         VkAmbientOcclusion ao = null;
-        long nearest = 0, linear = 0, moonSampler = 0;
+        long nearest = 0, linear = 0, cloudSampler = 0, moonSampler = 0;
         try {
             copy = VkComputeProgram.of("postSceneCopy");
             prefilter = VkComputeProgram.of("bloom.PREFILTER");
@@ -315,6 +315,7 @@ public final class VkPostProcess {
             finalDraw = VkGraphicsProgram.of("postFinal", STATE);
             nearest = VkSamplers.nearestClamp();
             linear = VkSamplers.linearClamp();
+            cloudSampler = VkSamplers.linearRepeat();
             cloudMap = VkImage2D.create(VK_FORMAT_R8G8B8A8_UNORM, CloudMath.MAP, CloudMath.MAP, 1, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
             MoonFace face = MoonFace.get();
             moonFace = VkImage2D.create(VK_FORMAT_R8G8B8A8_UNORM, face.size, face.size, face.levels.length, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
@@ -365,6 +366,7 @@ public final class VkPostProcess {
             if (reflectionUniformBuffer != null) reflectionUniformBuffer.free();
             if (nearest != 0) VkSamplers.free(nearest);
             if (linear != 0) VkSamplers.free(linear);
+            if (cloudSampler != 0) VkSamplers.free(cloudSampler);
             if (cloudMap != null) cloudMap.free();
             if (moonFace != null) moonFace.free();
             if (moonSampler != 0) VkSamplers.free(moonSampler);
@@ -412,6 +414,7 @@ public final class VkPostProcess {
         this.volumetricUniformBuffer = volumetricUniformBuffer;
         this.nearest = nearest;
         this.linear = linear;
+        this.cloudSampler = cloudSampler;
         this.cloudMap = cloudMap;
         this.moonFace = moonFace;
         this.moonSampler = moonSampler;
@@ -1033,7 +1036,7 @@ public final class VkPostProcess {
         copyTarget.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
         VkBindings copyBindings = new VkBindings().storageImage(DST, copyTarget.view()).sampledView(SRC, mainColourView, this.nearest)
                 .sampledView(MAIN_DEPTH, depths.main(), this.nearest).sampledView(LOD_DEPTH, depths.lod(), this.nearest)
-                .sampled(LIGHTING, this.lightBlurImage, this.nearest).sampled(COPY_CLOUD_MAP, this.cloudMap, this.nearest)
+                .sampled(LIGHTING, this.lightBlurImage, this.nearest).sampled(COPY_CLOUD_MAP, this.cloudMap, this.cloudSampler)
                 .storage(COPY_LIGHT_DATA, data).storage(COPY_LIGHT_READY, ready).sampledView(COPY_LIGHTMAP, light.lightmap(), this.linear)
                 .sampled(COPY_SUN, this.sunImage, this.nearest).sampledView(COPY_LOD_LIGHT, lodLight, this.nearest).storage(COPY_HELD_LIGHT, held)
                 .sampled(COPY_PLANT_SUN, this.plantSunImage, this.nearest).sampled(COPY_AO, this.ao.output(), this.nearest)
@@ -1279,7 +1282,7 @@ public final class VkPostProcess {
                 VK_ACCESS_SHADER_WRITE_BIT);
         VkBindings bindings = new VkBindings().storageImage(DST, this.scene.view()).sampled(SRC, this.sceneLit, this.nearest)
                 .sampledView(MAIN_DEPTH, depths.main(), this.nearest).sampledView(LOD_DEPTH, depths.lod(), this.nearest)
-                .sampled(REFLECTION_CLOUD_MAP, this.cloudMap, this.nearest)
+                .sampled(REFLECTION_CLOUD_MAP, this.cloudMap, this.cloudSampler)
                 .storage(REFLECTION_LIGHT_DATA, data).storage(REFLECTION_LIGHT_READY, ready).sampled(REFLECTION_SUN, this.sunImage, this.nearest)
                 .sampledView(REFLECTION_LOD_LIGHT, lodLight, this.nearest).storageImage(REFLECTION_TERRAIN_LIGHT, terrainLight)
                 .storageImage(REFLECTION_TERRAIN_NORMAL, terrainNormal).sampled(REFLECTION_MOON_FACE, this.moonFace, this.moonSampler)
@@ -1536,6 +1539,7 @@ public final class VkPostProcess {
         if (this.reflectionUniformBuffer != null) this.reflectionUniformBuffer.free();
         VkSamplers.free(this.nearest);
         VkSamplers.free(this.linear);
+        VkSamplers.free(this.cloudSampler);
         this.cloudMap.free();
         this.moonFace.free();
         VkSamplers.free(this.moonSampler);

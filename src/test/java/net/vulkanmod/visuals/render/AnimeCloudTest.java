@@ -305,7 +305,9 @@ class AnimeCloudTest {
         int checked = 0;
         for (int x = 0; x < 3072 && checked < 200; x += 37) {
             for (int z = 0; z < 3072 && checked < 200; z += 41) {
-                float[] bt = CloudMath.animeShape(MAP, r, r.offsetX() + x, r.offsetZ() + z);
+                //2026-11-23: the column at the watercolour's pushed position (animeWarped), as the normal reads it
+                float[] m = CloudMath.animeWarped(MAP, r, x, z);
+                float[] bt = CloudMath.animeShape(MAP, r, m[0], m[1]);
                 if (!(bt[1] - bt[0] > 10)) continue;
                 float[] down = CloudMath.animeNormal(MAP, r, x, r.base() + bt[0], z), up = CloudMath.animeNormal(MAP, r, x, r.base() + bt[1], z);
                 assertArrayEquals(new float[]{0, -1, 0}, down, 1e-4f);
@@ -328,10 +330,6 @@ class AnimeCloudTest {
             double az = i * 0.0317, el = Math.toRadians(20 + (i % 9) * 6);
             float[] d = {(float) (Math.cos(el) * Math.sin(az)), (float) Math.sin(el), (float) (Math.cos(el) * Math.cos(az))};
             float[] m = CloudMath.animeMarch(MAP, r, new float[3], d, 1e6f, UP, 0.5f, CloudMath.ANIME_SAMPLES_HIGH);
-            if (!(m[2] > 0.01f)) continue;
-            hits++;
-            if (m[2] > 0.95f) solid++;
-            else soft++;
             assertTrue(m[1] <= m[2] + 1e-5f, "sky-lit weight within the coverage");
             float fine = -1;
             for (float t = 120 / d[1]; t < (120 + CloudMath.ANIME_THICKNESS) / d[1]; t += 0.25f) {
@@ -340,6 +338,11 @@ class AnimeCloudTest {
                     break;
                 }
             }
+            //2026-11-23: a ray through no puff may still meet the faint cirrus rings behind (cirrusRings): count the puffs' rays
+            if (fine < 0 || !(m[2] > 0.01f)) continue;
+            hits++;
+            if (m[2] > 0.95f) solid++;
+            else soft++;
             float at = m[3] / CloudMath.ANIME_HAZE;//the distance is the haze's share of it
             if (fine >= 0 && at >= fine - 1 && at < fine + 3 * CloudMath.ANIME_SOFT_BASE + 6) near++;
         }
