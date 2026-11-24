@@ -65,5 +65,7 @@ void main() {
     for (int i = 0; i < EndPortalLayers; i++) {
         color += textureProj(Sampler1, texProj0 * end_portal_layer(float(i + 1))).rgb * COLORS[i];
     }
-    fragColor = vec4(color, 1.0);
+    //2026-11-24 (Vulkan Anchor, portallook.glsl): the End portal's and gateway's mark (END_PORTAL_ALPHA_CODE 244), for the composite's
+    // own look; its blending is off (RenderType.endPortal), so the alpha is only the mark
+    fragColor = vec4(color, 244.25/255.0);
 }

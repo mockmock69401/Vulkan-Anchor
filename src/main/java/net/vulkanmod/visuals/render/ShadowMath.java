@@ -228,7 +228,12 @@ public final class ShadowMath {
      * (lastDrawNanos; Long.MIN_VALUE: never drawn).
      */
     public static boolean refreshDue(int frameId, int phase, long nowNanos, long lastDrawNanos) {
+        return refreshDue(frameId, phase, nowNanos, lastDrawNanos, REFRESH_MIN_NANOS);
+    }
+
+    /** 2026-11-24: as above with the least time between refreshes (the End star's: EndStarLight.REFRESH_NANOS). */
+    public static boolean refreshDue(int frameId, int phase, long nowNanos, long lastDrawNanos, long minNanos) {
         if (Math.floorMod(frameId, NEAR_INTERVAL) != phase) return false;
-        return lastDrawNanos == Long.MIN_VALUE || nowNanos - lastDrawNanos >= REFRESH_MIN_NANOS;
+        return lastDrawNanos == Long.MIN_VALUE || nowNanos - lastDrawNanos >= minNanos;
     }
 }

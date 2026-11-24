@@ -210,7 +210,7 @@ public final class VkShadowMaps {
         if (d != null) {
             c.jobSlot = -1;
             c.pendingStep = d.step();
-            c.pending = ShadowMath.cascade(SunMath.sunDirection(ShadowSteps.timeOf(d.step())), now.cameraX(), now.cameraY(), now.cameraZ(), radius,
+            c.pending = ShadowMath.cascade(EndStarLight.toward(ShadowSteps.timeOf(d.step())), now.cameraX(), now.cameraY(), now.cameraZ(), radius,
                     c.width, c.height);
             return;
         }
@@ -225,7 +225,7 @@ public final class VkShadowMaps {
             c.jobSlot = r.slot();
             c.jobStep = r.step();
             c.jobSlice = 0;
-            c.jobCascade = ShadowMath.cascade(SunMath.sunDirection(ShadowSteps.timeOf(r.step())), now.cameraX(), now.cameraY(), now.cameraZ(), radius,
+            c.jobCascade = ShadowMath.cascade(EndStarLight.toward(ShadowSteps.timeOf(r.step())), now.cameraX(), now.cameraY(), now.cameraZ(), radius,
                     c.width, c.height);
         }
         c.sliceNow = c.jobSlice;
@@ -261,10 +261,10 @@ public final class VkShadowMaps {
         this.sunPerFrame = fresh ? ShadowSteps.advance(this.timeOfDay, frame.timeOfDay()) : 0f;
         this.timeOfDay = frame.timeOfDay();
         long now = System.nanoTime();
-        this.plan(this.near, fresh, frame.near(), ShadowMath.NEAR_MAX_MOVE, ShadowMath.refreshDue(frameId, ShadowMath.NEAR_PHASE, now, this.near.wholeNanos),
+        this.plan(this.near, fresh, frame.near(), ShadowMath.NEAR_MAX_MOVE, ShadowMath.refreshDue(frameId, ShadowMath.NEAR_PHASE, now, this.near.wholeNanos, frame.refreshNanos()),
                 ShadowMath.NEAR_RADIUS);
         this.plan(this.far, fresh, frame.far(), ShadowMath.FAR_MAX_MOVE, frame.farDue(), ShadowMath.FAR_RADIUS);
-        this.plan(this.close, fresh, frame.close(), ShadowMath.CLOSE_MAX_MOVE, ShadowMath.refreshDue(frameId, ShadowMath.CLOSE_PHASE, now, this.close.wholeNanos),
+        this.plan(this.close, fresh, frame.close(), ShadowMath.CLOSE_MAX_MOVE, ShadowMath.refreshDue(frameId, ShadowMath.CLOSE_PHASE, now, this.close.wholeNanos, frame.refreshNanos()),
                 ShadowMath.CLOSE_RADIUS);
         if (this.near.drawSlot >= 0) this.near.wholeNanos = now;
         if (this.close.drawSlot >= 0) this.close.wholeNanos = now;

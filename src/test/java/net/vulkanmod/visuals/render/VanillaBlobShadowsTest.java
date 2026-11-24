@@ -23,7 +23,8 @@ class VanillaBlobShadowsTest {
     @Test
     void theFrameSetsItBeforeTheEntitiesAndTheMixinIsListed() throws IOException {
         String renderer = Files.readString(Path.of("src/main/java/net/vulkanmod/visuals/render/VisualsRenderer.java"));
-        assertTrue(renderer.contains("VanillaBlobShadows.frame(serial, this.shadowFrame != null);"));
+        //2026-11-24: not while the End star casts (its maps take no entities: vanilla's round shadow stays under them)
+        assertTrue(renderer.contains("VanillaBlobShadows.frame(serial, this.shadowFrame != null && !starLight);"));
         assertTrue(renderer.indexOf("this.shadowFrame = this.shadowsOn()") < renderer.indexOf("VanillaBlobShadows.frame("));
         String mixins = Files.readString(Path.of("src/main/resources/vulkanmod.mixins.json"));
         assertTrue(mixins.contains("\"visuals.EntityRenderDispatcherShadowMixin\""));

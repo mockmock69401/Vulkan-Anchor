@@ -69,7 +69,8 @@ public final class ShadowUniforms {
      */
     public static Values compute(LightingUniforms.Values lighting, AtmosphereFrame frame, ShadowMath.Cascade now, VkShadowMaps.Maps near,
                                  VkShadowMaps.Maps far, VkShadowMaps.Maps close) {
-        if (!lighting.on() || lighting.sunWeight() <= 0 || frame == null || now == null || near == null) return off();
+        if (!lighting.on() || (lighting.sunWeight() <= 0 && lighting.sunWeight() != LightingUniforms.STAR_ONLY) || frame == null || now == null
+                || near == null) return off();
         Matrix4f nearMatrix = toNow(near.a(), now, frame);
         Matrix4f farMatrix = far == null ? new Matrix4f() : toNow(far.a(), now, frame);
         Matrix4f nearMatrixB = near.b() == null ? nearMatrix : toNow(near.b(), now, frame);
