@@ -9,7 +9,7 @@ layout(binding = 1) uniform sampler2D src;
 #ifdef MASK
 layout(binding = 2) uniform sampler2D mainDepth;
 #endif
-layout(location = 0) uniform vec4 params;//light position (row 0 at the top), the mask's threshold (0: SHAFT_THRESHOLD), its window radius in screen heights (0: none)
+layout(location = 0) uniform vec4 params;//light position (row 0 at the top); for the moon (w > 0) z its radius and w the mask's window radius, in screen heights
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/postmath.glsl>
@@ -25,7 +25,7 @@ void main() {
     //The composite writes depth for LODs too, so only the sky is left at the far plane. 2026-11-22: the mean of the 4x4 full-resolution
     // texels around this texel's 2x2 (one texel let TAA's sub-pixel jitter move a silhouette's edge a whole texel, and the beams' edges
     // flickered frame to frame)
-    float threshold = params.z > 0.0 ? params.z : SHAFT_THRESHOLD;
+    float threshold = params.w > 0.0 ? MOON_SHAFT_THRESHOLD : SHAFT_THRESHOLD;
     ivec2 full = textureSize(src, 0);
     float light = 0.0;
     for (int y = -1; y < 3; y++) {
@@ -53,10 +53,11 @@ void main() {
     }
     light /= float(SHAFT_SAMPLES);
     if (params.w > 0.0) {
-        //The moon (2026-11-23): fading with the distance from it, and nothing over its disc and glow (atmosphere.glsl)
-        vec2 d = (here - params.xy)*vec2(float(size.x)/float(size.y), 1.0);
-        light *= 1.0 - smoothstep(0.0, params.w*MOON_SHAFT_REACH, length(d));
-        light *= 1.0 - smoothstep(0.0, MOON_SHAFT_GLARE, texture(src, here).r);
+        //The moon (2026-11-23, 2026-11-24): fading with the distance from it, none over its disc, rising smoothly beyond (atmosphere.glsl)
+        float d = length((here - params.xy)*vec2(float(size.x)/float(size.y), 1.0));
+        float r = max(params.z, 1e-4);
+        light *= 1.0 - smoothstep(0.0, params.w*MOON_SHAFT_REACH, d);
+        light *= smoothstep(r*MOON_SHAFT_CLEAR_IN, r*MOON_SHAFT_CLEAR_OUT, d);
     }
 #endif
     imageStore(dst, p, vec4(light, 0.0, 0.0, 1.0));

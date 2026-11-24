@@ -92,10 +92,15 @@ const int SHAFT_SAMPLES = 44;
 const float SHAFT_DECAY = 0.963;
 const float SHAFT_THRESHOLD = 1.5;
 //2026-11-23 (the user: the moonbeams washed the night's colours out): the moonbeams fade out within MOON_SHAFT_REACH times their mask's
-// window from the moon (screen heights; the walk toward the moon otherwise laid a lift over the whole screen), and add nothing where
-// their own mask reaches MOON_SHAFT_GLARE (the moon's disc and bright glow stay as drawn instead of blowing out to white)
+// window from the moon (screen heights; the walk toward the moon otherwise laid a lift over the whole screen). Their mask keeps sky
+// luminance above MOON_SHAFT_THRESHOLD (the moon's disc and the bright glow around it, not the night sky).
+// 2026-11-24 (the user: a faint blue ring around the round moon): over the moon's disc they add nothing (it would blow out to white), and
+// they rise again smoothly from MOON_SHAFT_CLEAR_IN to MOON_SHAFT_CLEAR_OUT moon radii from its centre. The cut was the mask's own
+// level, which ended at the disc's edge: the beams came back at full strength right there and drew a ring along the limb.
 const float MOON_SHAFT_REACH = 2.5;
-const float MOON_SHAFT_GLARE = 0.3;
+const float MOON_SHAFT_THRESHOLD = 0.15;
+const float MOON_SHAFT_CLEAR_IN = 1.0;
+const float MOON_SHAFT_CLEAR_OUT = 5.0;
 
 //Modes (Atmosphere.sun.w)
 const float ATMOSPHERE_NONE = 0.0;
