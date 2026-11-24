@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
+import net.vulkanmod.visuals.render.DimensionUniforms;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import net.vulkanmod.visuals.render.StarMath;
@@ -229,6 +230,9 @@ public class VisualsConfig {
         //2026-11-24: the palettes' new numbers, and a file on Realistic or Cinematic (gone) takes Default; first, since every palette
         // check below (and the performance preset's, which keeps a palette's clouds and Horror's auroras off) reads the new numbers
         if (fileRevision < THREE_PALETTES_REVISION) ColourPresets.moveRetired(c, missing);
+        //2026-11-23: a file saved before the End sky setting takes its palette's (the default, Space, on Horror and Custom); after the
+        // palettes' new numbers, and before every palette check below, so they find it on its palette's
+        if (!json.has("endSky")) c.endSky = ColourPresets.endSky(c.colourPreset, DimensionUniforms.END_SKY_SPACE);
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
         // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
@@ -495,6 +499,13 @@ public class VisualsConfig {
     public int netherHeatHaze = 100;
     public int portalGlow = 100;
     public int endGalaxy = 100;
+    /**
+     * 2026-11-23 (the user: the End's background like outer space, the Anime palette after two screenshots, the others after two more):
+     * the End's sky (DimensionUniforms.END_SKY_*, endsky.glsl): Space (a near-black navy with a faint blue haze low down; the default),
+     * Anime (a painted indigo-to-pink sky with a planet and a bright star) or vanilla's box. The palettes pick it (ColourPresets.endSkies);
+     * a file saved before it takes its palette's (read), so no revision is needed.
+     */
+    public int endSky = DimensionUniforms.END_SKY_SPACE;
     /**
      * 2026-11-11 (session 12): the night sky's stars (vanilla's, StarMath): how many (percent of vanilla's 1500 tries), their size and
      * their brightness (percent, 100 = vanilla's exactly).

@@ -224,8 +224,9 @@ class DimensionEffectsTest {
         assertEquals(DimensionUniforms.COPY_DIMENSION, 62);
         assertEquals(PortalLights.PORTAL_FIRST, 63);
         //The galaxy behind the End's aurora on the no-sky sky
-        assertTrue(c.contains("galaxy(dir, dimensionParams.x,") && c.contains("textureLod(galaxyMap, galaxyMapCoord(dir), 0.0).rgb")
-                && c.contains("return vec4((scene + stars + auroraScreen(dir, p))"));
+        assertTrue(c.contains("galaxy(dir, dimensionParams.x*endSkyStars(endSkyParams.x), pixelAngle,")
+                && c.contains("textureLod(galaxyMap, galaxyMapCoord(dir), 0.0).rgb*endSkyBand(endSkyParams.x)")
+                && c.contains("return vec4((back + stars + auroraScreen(dir, p)*endSkyAurora(endSkyParams.x))"));
         assertTrue(c.contains("layout(binding = 26) uniform sampler2D galaxyMap;"));
         assertTrue(c.contains("layout(binding = 25, rgba16f) uniform restrict image2D heatField;"));
         assertTrue(FINAL.contains("layout(binding = 4) uniform sampler2D heatTex;") && FINAL.contains("layout(location = 5) uniform vec4 heatParams;"));

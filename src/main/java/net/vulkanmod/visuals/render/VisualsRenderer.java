@@ -11,6 +11,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.Vec3;
@@ -556,12 +558,37 @@ public final class VisualsRenderer {
         }
     }
 
+    /** How far below the exit portal's column top its portal is looked for (vanilla: 4 blocks). */
+    private static final int END_PILLAR_PORTAL_DEPTH = 8;
+
+    /**
+     * 2026-11-24: the End's light pillar (DimensionUniforms.pillar) from the exit portal at block 0, 0: the top of chunk 0, 0
+     * there (the column's bedrock, or the egg on it), and a lit portal block beside the column within END_PILLAR_PORTAL_DEPTH blocks
+     * below its top. PILLAR_OFF while the chunk is not loaded.
+     */
+    private static double endPillar(ClientLevel level) {
+        int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, 0, 0);
+        if (top <= level.getMinBuildHeight()) return DimensionUniforms.PILLAR_OFF;
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(0, top - 1, 0);
+        boolean egg = level.getBlockState(pos).is(Blocks.DRAGON_EGG);
+        int columnTop = egg ? top - 1 : top;
+        int portal = Integer.MIN_VALUE;
+        for (int y = columnTop - 1; y >= columnTop - END_PILLAR_PORTAL_DEPTH && portal == Integer.MIN_VALUE; y--) {
+            if (level.getBlockState(pos.set(1, y, 0)).is(Blocks.END_PORTAL) || level.getBlockState(pos.set(-1, y, 0)).is(Blocks.END_PORTAL)
+                    || level.getBlockState(pos.set(0, y, 1)).is(Blocks.END_PORTAL) || level.getBlockState(pos.set(0, y, -1)).is(Blocks.END_PORTAL)) {
+                portal = y;
+            }
+        }
+        return DimensionUniforms.pillar(columnTop, egg, portal);
+    }
+
     /** 2026-11-13 (session 19): the End's galaxy and the Nether's heat haze for this frame (DimensionUniforms); none in a modded level that fails. */
     private DimensionUniforms.Values dimension(PostProcessSettings settings, ClientLevel level, Vec3 camera) {
         try {
             DimensionUniforms.Kind kind = level.effects().skyType() == DimensionSpecialEffects.SkyType.END ? DimensionUniforms.Kind.END
                     : level.dimensionType().ultraWarm() ? DimensionUniforms.Kind.HOT : DimensionUniforms.Kind.OTHER;
-            return DimensionUniforms.compute(settings, kind, camera.y, this.flowSeconds);
+            double pillar = kind == DimensionUniforms.Kind.END ? endPillar(level) : DimensionUniforms.PILLAR_OFF;
+            return DimensionUniforms.compute(settings, kind, camera.x, camera.y, camera.z, pillar, this.flowSeconds);
         } catch (RuntimeException e) {
             return DimensionUniforms.off();
         }

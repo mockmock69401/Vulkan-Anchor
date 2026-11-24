@@ -2,6 +2,7 @@ package net.vulkanmod.visuals.config;
 
 import net.vulkanmod.visuals.render.CelestialUniforms;
 import net.vulkanmod.visuals.render.CloudMath;
+import net.vulkanmod.visuals.render.DimensionUniforms;
 import net.vulkanmod.visuals.render.ShaderColours;
 import net.vulkanmod.visuals.render.ShaderColours.Colour;
 import net.vulkanmod.visuals.render.StarMath;
@@ -212,6 +213,31 @@ public final class ColourPresets {
     }
 
     /**
+     * 2026-11-23 (the user: "애니메이션 색상 프리셋은 1,2번 사진을 적용하고, 나머지 기본/현실적/시네마틱은 우주느낌의 3,4번 사진을 참고해"): the
+     * End's sky, linked as the clouds are. ANIME picks the painted sky (DimensionUniforms.END_SKY_ANIME), DEFAULT the space one
+     * (END_SKY_SPACE; 2026-11-24: Realistic and Cinematic, which had it too, are gone), each shown only while it is on (changing the End
+     * sky by hand shows Custom); HORROR leaves it as the player set it. Not a performance setting.
+     */
+    public static final String END_SKY_KEY = "end_sky";
+    /** endSkies' answer for a palette that leaves the End sky alone. */
+    public static final int ANY_END_SKY = -1;
+
+    /** The End sky palette level picks, or ANY_END_SKY. */
+    public static int endSkies(int level) {
+        return switch (level) {
+            case ANIME -> DimensionUniforms.END_SKY_ANIME;
+            case DEFAULT -> DimensionUniforms.END_SKY_SPACE;
+            default -> ANY_END_SKY;
+        };
+    }
+
+    /** The End sky choosing palette level leaves, from the current one (endSkies; HORROR and CUSTOM keep it). */
+    public static int endSky(int level, int style) {
+        int own = endSkies(level);
+        return own == ANY_END_SKY ? style : own;
+    }
+
+    /**
      * 2026-11-14 (the user: "in the Horror preset, turn the aurora off automatically"): the aurora mode is the second performance setting
      * a palette touches. HORROR turns the auroras off (and shows only while they are off); another palette takes them back on to the
      * performance preset's mode when they are off and the preset is a level, so going Horror and back restores the sky it had (under a
@@ -239,6 +265,7 @@ public final class ColourPresets {
             for (String key : LOOK_KEYS) VisualsOptionLayout.set(c, VisualsOptionLayout.item(key), look(key, level));
             c.cloudStyle = cloudStyle(level, c.cloudStyle);
             c.starType = starType(level, c.starType);
+            c.endSky = endSky(level, c.endSky);
             c.aurora = aurora(level, c.aurora, c.preset);
         }
         c.colourPreset = isLevel(level) ? level : CUSTOM;
@@ -262,6 +289,7 @@ public final class ColourPresets {
             for (int i = 0; all && i < LOOK_KEYS.length; i++) all = looks.applyAsInt(LOOK_KEYS[i]) == LOOK[level][i];
             if (all && clouds(level) != ANY_CLOUDS) all = looks.applyAsInt(CLOUD_KEY) == clouds(level);
             if (all && stars(level) != ANY_STARS) all = looks.applyAsInt(STAR_KEY) == stars(level);
+            if (all && endSkies(level) != ANY_END_SKY) all = looks.applyAsInt(END_SKY_KEY) == endSkies(level);
             if (all && level == HORROR) all = looks.applyAsInt(AURORA_KEY) == CelestialUniforms.AURORA_OFF;
             if (all) return level;
         }

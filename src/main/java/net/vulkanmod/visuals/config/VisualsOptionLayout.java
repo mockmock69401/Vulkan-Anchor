@@ -185,7 +185,9 @@ public final class VisualsOptionLayout {
                     new Block("dimensions", List.of(
                             percent("nether_heat_haze", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW),
                             percent("portal_glow", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW),
-                            percent("end_galaxy", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW))),
+                            percent("end_galaxy", 0, DimensionUniforms.STRENGTH_MAX, Impact.LOW),
+                            //2026-11-23: the End's sky (Vanilla, Space, Anime; the palettes pick it)
+                            new Item("end_sky", Kind.CHOICE, 0, DimensionUniforms.END_SKY_MAX, Impact.NONE, null))),
                     //2026-11-09 (session 6): shader-drawn rain and snow (off: vanilla's columns); 2026-11-11: the snow's and the rain's type,
                     // size and amount (ParticleEffect's rows; the amount costs as many drops: about 75% of the pass at 50, 110% at 200)
                     new Block(WEATHER_BLOCK, weatherItems()))),
@@ -360,6 +362,7 @@ public final class VisualsOptionLayout {
             case "nether_heat_haze" -> c.netherHeatHaze;
             case "portal_glow" -> c.portalGlow;
             case "end_galaxy" -> c.endGalaxy;
+            case "end_sky" -> c.endSky;
             case "cloud_quality" -> c.cloudQuality;
             case "sun_shading" -> c.sunShading;
             case "ao_strength" -> c.aoStrength;
@@ -457,6 +460,7 @@ public final class VisualsOptionLayout {
             case "nether_heat_haze" -> c.netherHeatHaze = v;
             case "portal_glow" -> c.portalGlow = v;
             case "end_galaxy" -> c.endGalaxy = v;
+            case "end_sky" -> c.endSky = v;
             case "cloud_quality" -> c.cloudQuality = v;
             case "sun_shading" -> c.sunShading = v;
             case "ao_strength" -> c.aoStrength = v;
