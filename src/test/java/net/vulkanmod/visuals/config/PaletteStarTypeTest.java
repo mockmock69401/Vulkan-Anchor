@@ -16,8 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class PaletteStarTypeTest {
     private static final int[] TYPES = {StarMath.TYPE_VANILLA, StarMath.TYPE_ROUND, StarMath.TYPE_ANIME};
-    private static final int[] PALETTES = {ColourPresets.DEFAULT, ColourPresets.REALISTIC, ColourPresets.CINEMATIC, ColourPresets.ANIME,
-            ColourPresets.HORROR};
+    private static final int[] PALETTES = {ColourPresets.DEFAULT, ColourPresets.ANIME, ColourPresets.HORROR};
     private static final int[] PRESETS = {VisualsPresets.POTATO, VisualsPresets.LOW, VisualsPresets.MEDIUM, VisualsPresets.HIGH,
             VisualsPresets.ULTRA, VisualsPresets.CUSTOM};
 
@@ -103,7 +102,7 @@ class PaletteStarTypeTest {
                     c.colourPreset = palette;
                     Path f = dir.resolve("visuals-" + palette + "-" + preset + "-" + type + ".json");
                     c.write(f);
-                    Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 24"));
+                    OldFile.age(f, 24);
                     VisualsConfig read = VisualsConfig.read(f);
                     String what = "palette " + palette + ", preset " + preset + ", type " + type;
                     assertEquals(expected(palette, type), read.starType, what);
@@ -130,7 +129,7 @@ class PaletteStarTypeTest {
         own.colourPreset = ColourPresets.ANIME;
         Path g = dir.resolve("own.json");
         own.write(g);
-        Files.writeString(g, Files.readString(g).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 24"));
+        OldFile.age(g, 24);
         VisualsConfig ownRead = VisualsConfig.read(g);
         assertEquals(StarMath.TYPE_ROUND, ownRead.starType);
         assertEquals(ColourPresets.CUSTOM, ownRead.colourPreset);

@@ -89,8 +89,8 @@ class NightCloudTest {
 
     @Test
     void aCloudInFrontOfTheMilkyWayTakesItsGlow() {
-        //The realistic palette's dark night with the band's teal glow (animestars.glsl's colour at a bright part of the map) behind
-        Sky s = sky(ColourPresets.REALISTIC, CloudMath.STYLE_REALISTIC, NIGHT);
+        //The default palette's dark night with the band's teal glow (animestars.glsl's colour at a bright part of the map) behind
+        Sky s = sky(ColourPresets.DEFAULT, CloudMath.STYLE_REALISTIC, NIGHT);
         float[] d = dir(30, 90);
         float[] band = {0.002f, 0.005f, 0.0064f};
         float[] r = AtmosphereMath.cloudOver(s.atmosphere(), s.light(), new float[]{0, 0.25f, 1, 0}, d, 1, band);

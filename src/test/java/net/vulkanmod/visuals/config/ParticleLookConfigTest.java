@@ -46,7 +46,7 @@ class ParticleLookConfigTest {
         //A revision 14 file on Horror: every colour Horror's but the particle colours, which it did not have
         VisualsConfig horror = new VisualsConfig();
         ColourPresets.apply(horror, ColourPresets.HORROR);
-        StringBuilder json = new StringBuilder("{\"colourPreset\": " + ColourPresets.HORROR + ", \"revision\": 14");
+        StringBuilder json = new StringBuilder("{\"colourPreset\": " + OldFile.oldId(ColourPresets.HORROR) + ", \"revision\": 14");
         for (Colour colour : Colour.values()) {
             if (colour.key().startsWith("colour_particle_")) continue;
             json.append(", \"").append(VisualsConfig.colourField(colour)).append("\": ").append(horror.colour(colour));
@@ -63,7 +63,7 @@ class ParticleLookConfigTest {
             assertEquals(ColourPresets.value(g.effect().colour(), ColourPresets.HORROR), c.colour(g.effect().colour()));
         }
         //A file off any palette keeps the default particle colours (the picture it had)
-        Files.writeString(file, "{\"colourPreset\": " + ColourPresets.CUSTOM + ", \"colourSunset\": 1193046, \"revision\": 14}");
+        Files.writeString(file, "{\"colourPreset\": " + OldFile.oldId(ColourPresets.CUSTOM) + ", \"colourSunset\": 1193046, \"revision\": 14}");
         VisualsConfig custom = VisualsConfig.read(file);
         for (VanillaParticles.Group g : VanillaParticles.Group.values()) {
             assertEquals(g.effect().colour().defaultRgb(), custom.colour(g.effect().colour()));

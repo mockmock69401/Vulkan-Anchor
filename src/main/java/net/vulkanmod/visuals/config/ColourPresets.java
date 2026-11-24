@@ -44,8 +44,15 @@ import java.util.function.ToIntFunction;
  * to about a third, the sickly cast of its daylight). The star count, size and brightness are the player's: no palette sets them.
  */
 public final class ColourPresets {
-    public static final int DEFAULT = 0, REALISTIC = 1, CINEMATIC = 2, ANIME = 3, HORROR = 4, CUSTOM = 5;
-    public static final int LEVELS = 5;
+    /**
+     * 2026-11-24 (the user: "기존 기본과 애니메이션, 공포 프리셋만 남기고 나머지 두 개의 프리셋은 지워줘"): Realistic and Cinematic are gone;
+     * the palettes left are renumbered (revision 28). A file saved before keeps its palette by the old numbers (fromOldId), and a file on
+     * Realistic or Cinematic takes Default (moveRetired).
+     */
+    public static final int DEFAULT = 0, ANIME = 1, HORROR = 2, CUSTOM = 3;
+    public static final int LEVELS = 3;
+    /** The ids revisions 8 to 27 saved: Default 0, Realistic 1, Cinematic 2, Anime 3, Horror 4, Custom 5. */
+    static final int OLD_REALISTIC = 1, OLD_CINEMATIC = 2, OLD_ANIME = 3, OLD_HORROR = 4, OLD_CUSTOM = 5;
 
     /**
      * The palettes, one row per level (DEFAULT is ShaderColours' defaults), in ShaderColours.Colour order: day sky, sunset, sunrise, sun glow,
@@ -57,18 +64,22 @@ public final class ColourPresets {
      */
     private static final int[][] PALETTES = {
             ShaderColours.defaults(),
-            {0x6A94CC, 0xFF8A48, 0xF7B486, 0xFFE6C4, 0x1C2A46, 0xF2F5FF, 0xC2CBD4, 0xE6ECF2, 0xF2F2F2, 0xDCE6F0, 0xF7F9FF, 0xFFC88C, 0xE8F0FF, 0xEEEEEA, 0xFFA458,
-                    0x48FF8C, 0xFF4A6A, 0xA868FF, 0xCB89FF, 0x4C9CBC, 0x4AA6AA,
-                    0x6E6A66, 0xFFA848, 0xFFA020, 0x3F76E4, 0xB070F0, 0xA0A0A0, 0xE7E7E7},
-            {0x5C98C0, 0xFF7A2E, 0xFF9C5A, 0xFFC48A, 0x183C4C, 0xD6F0FF, 0xF0B8A8, 0xB6C6CA, 0xFFEEDC, 0xC4DEE6, 0xEEF8FF, 0xFFB066, 0xD0F0F0, 0xD2EEFF, 0xFF8C3A,
-                    0x3CF2E2, 0xFF5A86, 0x7E62FF, 0x9E74FF, 0x369AA6, 0x28868E,
-                    0x9A8E84, 0xFF9030, 0xFF7020, 0x3C8CC0, 0x8C70FF, 0xA49A8E, 0xE8D8C8},
             {0x58A6F4, 0xFF9874, 0xFFC0AA, 0xFFF2CC, 0x3A6CFF, 0xE0E6FF, 0xC6DEF8, 0xDCE6FF, 0xFFFFFF, 0xD4EAFF, 0xFFFFFF, 0xFFD08E, 0xE0E4FF, 0xF4F6FF, 0xFFB46E,
                     0x4CFFD6, 0xFF74E4, 0xB482FF, 0xD494FF, 0x3CD2EA, 0x3CCAE2,
                     0xB4B8C8, 0xFFB850, 0xFFA040, 0x4CA8FF, 0xD080FF, 0xC0C4D8, 0xFFFFFF},
             {0x6C7876, 0xA23C2C, 0x8C7A5E, 0xC49482, 0x0E1316, 0x8E968A, 0x858F84, 0x6E766E, 0x9A9C98, 0x98A298, 0xC6CAC6, 0xD8D0B0, 0xB8C8C0, 0xD04A3A, 0xFF6A30,
                     0x2E9E44, 0x7E1020, 0x5E1E7C, 0x5E1E5E, 0x2E4E46, 0x283E36,
                     0x4A4C48, 0xC8A040, 0xD04A20, 0x4A6E5E, 0x6A3A6A, 0x5E625A, 0xB0A8A0},
+    };
+
+    /** The Realistic and Cinematic palettes' colours (revisions 8 to 27), in Colour order: moveRetired recognises a file still on one. */
+    private static final int[][] RETIRED = {
+            {0x6A94CC, 0xFF8A48, 0xF7B486, 0xFFE6C4, 0x1C2A46, 0xF2F5FF, 0xC2CBD4, 0xE6ECF2, 0xF2F2F2, 0xDCE6F0, 0xF7F9FF, 0xFFC88C, 0xE8F0FF, 0xEEEEEA, 0xFFA458,
+                    0x48FF8C, 0xFF4A6A, 0xA868FF, 0xCB89FF, 0x4C9CBC, 0x4AA6AA,
+                    0x6E6A66, 0xFFA848, 0xFFA020, 0x3F76E4, 0xB070F0, 0xA0A0A0, 0xE7E7E7},
+            {0x5C98C0, 0xFF7A2E, 0xFF9C5A, 0xFFC48A, 0x183C4C, 0xD6F0FF, 0xF0B8A8, 0xB6C6CA, 0xFFEEDC, 0xC4DEE6, 0xEEF8FF, 0xFFB066, 0xD0F0F0, 0xD2EEFF, 0xFF8C3A,
+                    0x3CF2E2, 0xFF5A86, 0x7E62FF, 0x9E74FF, 0x369AA6, 0x28868E,
+                    0x9A8E84, 0xFF9030, 0xFF7020, 0x3C8CC0, 0x8C70FF, 0xA49A8E, 0xE8D8C8},
     };
 
     /**
@@ -99,8 +110,6 @@ public final class ColourPresets {
      */
     private static final int[][] LOOK = {
             {35, 94, 35, 50, 100, 100, 100, 0},
-            {30, 94, 40, 40, 100, 100, 100, 20},
-            {40, 85, 40, 60, 95, 100, 110, 70},
             {35, 105, 30, 57, 110, 70, 105, 25},
             {15, 60, 40, 15, 85, 100, 120, 0},
     };
@@ -110,16 +119,12 @@ public final class ColourPresets {
      */
     static final int[][] LOOK_BEFORE_27 = {
             {35, 94, 35, 50, 100, 100, 100, 0},
-            {30, 94, 40, 40, 100, 100, 100, 20},
-            {40, 85, 40, 60, 95, 100, 110, 70},
             {35, 105, 30, 70, 110, 70, 105, 25},
             {15, 60, 40, 15, 85, 100, 120, 0},
     };
     /** The rows revisions 18 to 20 saved (VisualsConfig.read moves a file still on one of them to LOOK's row; moveOldRows). */
     static final int[][] LOOK_BEFORE_21 = {
             {45, 94, 100, 50, 100, 100, 100, 0},
-            {30, 94, 40, 40, 100, 100, 100, 20},
-            {60, 85, 125, 60, 95, 100, 110, 70},
             {35, 110, 80, 70, 110, 70, 105, 25},
             {15, 60, 200, 15, 85, 100, 120, 0},
     };
@@ -130,8 +135,6 @@ public final class ColourPresets {
     /** The rows revisions 9 and 10 saved, without the moonlight (VisualsConfig.read moves a file still exactly on one of them to LOOK's row). */
     static final int[][] LOOK_BEFORE_11 = {
             {45, 94, 100},
-            {30, 94, 110},
-            {60, 85, 125},
             {70, 120, 70},
             {20, 60, 200},
     };
@@ -176,7 +179,7 @@ public final class ColourPresets {
      */
     public static int clouds(int level) {
         return switch (level) {
-            case REALISTIC, CINEMATIC, ANIME -> CloudMath.STYLE_REALISTIC;
+            case ANIME -> CloudMath.STYLE_REALISTIC;
             default -> ANY_CLOUDS;
         };
     }
@@ -382,6 +385,45 @@ public final class ColourPresets {
         }
         c.setColour(Colour.NIGHT_SKY, value(Colour.NIGHT_SKY, ANIME));
         return true;
+    }
+
+    /** A palette id revisions 8 to 27 saved, in today's numbering (Realistic and Cinematic, gone, as Custom; moveRetired runs first). */
+    static int fromOldId(int old) {
+        return switch (old) {
+            case DEFAULT -> DEFAULT;
+            case OLD_ANIME -> ANIME;
+            case OLD_HORROR -> HORROR;
+            default -> CUSTOM;
+        };
+    }
+
+    /**
+     * 2026-11-24: a file saved before revision 28 takes today's palette id (fromOldId). One on Realistic or Cinematic whose colours are
+     * still all that palette's (or, missing, at their defaults: a file older than those colours) takes the Default palette: the player
+     * chose the palette, not those numbers, and it is gone. Its cloud style and star type stay as they were. Any other file on them keeps
+     * its colours and shows Custom. Returns whether it moved a file to Default.
+     */
+    static boolean moveRetired(VisualsConfig c, java.util.Set<Colour> missing) {
+        int old = c.colourPreset;
+        if (old != OLD_REALISTIC && old != OLD_CINEMATIC) {
+            c.colourPreset = fromOldId(old);
+            return false;
+        }
+        int[] row = RETIRED[old - OLD_REALISTIC];
+        for (Colour colour : Colour.values()) {
+            boolean absent = missing.contains(colour) && c.colour(colour) == colour.defaultRgb();
+            if (!absent && c.colour(colour) != row[colour.ordinal()]) {
+                c.colourPreset = CUSTOM;
+                return false;
+            }
+        }
+        apply(c, DEFAULT);
+        return true;
+    }
+
+    /** A colour of the Realistic or Cinematic palette (OLD_REALISTIC, OLD_CINEMATIC), for the tests. */
+    static int retiredColour(Colour c, int old) {
+        return RETIRED[old - OLD_REALISTIC][c.ordinal()];
     }
 
     /** The look row in LOOK_KEYS order, for the tests. */

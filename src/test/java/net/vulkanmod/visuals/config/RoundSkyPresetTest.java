@@ -37,7 +37,7 @@ class RoundSkyPresetTest {
             c.celestialShape = level >= VisualsPresets.HIGH ? CelestialUniforms.SHAPE_SQUARE : CelestialUniforms.SHAPE_ROUND;
             Path f = dir.resolve("l" + level + ".json");
             c.write(f);
-            Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 26"));
+            OldFile.age(f, 26);
             VisualsConfig read = VisualsConfig.read(f);
             assertEquals(VisualsPresets.value("celestial_shape", level), read.celestialShape, "level " + level);
             assertEquals(level, read.preset, "level " + level);
@@ -47,7 +47,7 @@ class RoundSkyPresetTest {
         custom.celestialShape = CelestialUniforms.SHAPE_SQUARE;
         Path f = dir.resolve("custom.json");
         custom.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 26"));
+        OldFile.age(f, 26);
         assertEquals(CelestialUniforms.SHAPE_SQUARE, VisualsConfig.read(f).celestialShape);
     }
 }
