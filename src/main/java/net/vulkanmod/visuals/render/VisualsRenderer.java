@@ -623,6 +623,8 @@ public final class VisualsRenderer {
             //2026-11-24 (portallook.glsl): the portals in the palette's look
             DimensionUniforms.Values v = DimensionUniforms.compute(settings, kind, camera.x, camera.y, camera.z, pillar, fade, this.flowSeconds);
             if (settings.enabled()) v = v.withPortalLook(DimensionUniforms.portalLook(VisualsConfig.get().colourPreset));
+            //2026-11-24: the Anime Nether's fire and lava (netherlook.glsl)
+            if (settings.enabled() && DimensionUniforms.netherLook(kind, VisualsConfig.get().colourPreset)) v = v.withNetherLook(1);
             //2026-11-24 (EndStarLight): the star's shadows while its maps are drawn
             return this.lightingChoice.star() && this.lightingChoice.serial() == VkFrames.serial() && this.shadowFrame != null
                     ? v.withStarShadow(EndStarLight.SHADOW) : v;

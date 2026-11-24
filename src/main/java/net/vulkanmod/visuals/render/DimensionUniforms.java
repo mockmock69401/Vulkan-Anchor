@@ -49,33 +49,44 @@ public final class DimensionUniforms {
      * fade-in (0 to 1), starShadow the End star's shadows' strength (0: none).
      */
     public record Values(float galaxy, float heat, float cameraY, float seconds, int endSky, float pillarX, float pillarZ, float pillarBase,
-                         float pillarFade, float starShadow, int portalLook) {
+                         float pillarFade, float starShadow, int portalLook, float netherLook) {
         public Values(float galaxy, float heat, float cameraY, float seconds, int endSky) {
-            this(galaxy, heat, cameraY, seconds, endSky, 0, 0, PILLAR_OFF, 1, 0, PORTAL_LOOK_VANILLA);
+            this(galaxy, heat, cameraY, seconds, endSky, 0, 0, PILLAR_OFF, 1, 0, PORTAL_LOOK_VANILLA, 0);
+        }
+
+        public Values(float galaxy, float heat, float cameraY, float seconds, int endSky, float pillarX, float pillarZ, float pillarBase,
+                      float pillarFade, float starShadow, int portalLook) {
+            this(galaxy, heat, cameraY, seconds, endSky, pillarX, pillarZ, pillarBase, pillarFade, starShadow, portalLook, 0);
+        }
+
+        /** 2026-11-24: these values with the Anime Nether's look (1: on, netherlook.glsl). */
+        public Values withNetherLook(float look) {
+            return new Values(this.galaxy, this.heat, this.cameraY, this.seconds, this.endSky, this.pillarX, this.pillarZ, this.pillarBase,
+                    this.pillarFade, this.starShadow, this.portalLook, look);
         }
 
         public void write(LooseUniformWriter w) {
             if (w.has(COPY_DIMENSION)) w.putVec4(COPY_DIMENSION, this.galaxy, this.heat, this.cameraY, this.seconds);
             if (w.has(COPY_END_SKY)) w.putVec4(COPY_END_SKY, this.endSky, this.pillarX, this.pillarZ, this.pillarBase);
-            if (w.has(COPY_END_LIGHT)) w.putVec4(COPY_END_LIGHT, this.pillarFade, this.starShadow, this.portalLook, 0);
+            if (w.has(COPY_END_LIGHT)) w.putVec4(COPY_END_LIGHT, this.pillarFade, this.starShadow, this.portalLook, this.netherLook);
         }
 
         /** These values without the galaxy (its map not uploaded yet). */
         public Values withGalaxy(float g) {
             return new Values(g, this.heat, this.cameraY, this.seconds, this.endSky, this.pillarX, this.pillarZ, this.pillarBase, this.pillarFade,
-                    this.starShadow, this.portalLook);
+                    this.starShadow, this.portalLook, this.netherLook);
         }
 
         /** These values with the End star's shadows at strength (EndStarLight). */
         public Values withStarShadow(float strength) {
             return new Values(this.galaxy, this.heat, this.cameraY, this.seconds, this.endSky, this.pillarX, this.pillarZ, this.pillarBase,
-                    this.pillarFade, strength, this.portalLook);
+                    this.pillarFade, strength, this.portalLook, this.netherLook);
         }
 
         /** These values with the portals' look (portalLook: the colour palette's). */
         public Values withPortalLook(int look) {
             return new Values(this.galaxy, this.heat, this.cameraY, this.seconds, this.endSky, this.pillarX, this.pillarZ, this.pillarBase,
-                    this.pillarFade, this.starShadow, look);
+                    this.pillarFade, this.starShadow, look, this.netherLook);
         }
 
         /** The heat haze pass runs (and the final colour reads its offsets). */
@@ -99,6 +110,14 @@ public final class DimensionUniforms {
         } catch (RuntimeException e) {
             return false;
         }
+    }
+
+    /**
+     * 2026-11-24 (the user: "애니메이션 프리셋용 레퍼런스를 보낼게. 네더의 색감을 살리는데 참고해줘"): whether the Anime Nether's look is on: a hot
+     * dimension (the Nether) under the Anime palette. Default and Horror keep the Nether as it was.
+     */
+    public static boolean netherLook(Kind kind, int palette) {
+        return kind == Kind.HOT && palette == net.vulkanmod.visuals.config.ColourPresets.ANIME;
     }
 
     /** The portals' look for a colour palette (ColourPresets): Anime's for Anime, the Default one for the others. */

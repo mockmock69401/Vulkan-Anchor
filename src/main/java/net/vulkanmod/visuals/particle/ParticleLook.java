@@ -58,12 +58,15 @@ public final class ParticleLook {
             return;
         }
         ShaderColours colours = ShaderColours.of(c.colours());
+        boolean netherAnime = netherAnime(c);
         boolean any = false;
         for (int g = 0; g < GROUPS.length; g++) {
             REALISTIC[g] = GROUPS[g].effect().get(c, ParticleEffect.Part.TYPE) == ParticleLookMath.TYPE_REALISTIC;
             SIZE[g] = ParticleLookMath.sizeScale(GROUPS[g].effect().get(c, ParticleEffect.Part.SIZE));
             AMOUNT[g] = Math.max(0, Math.min(ParticleLookMath.AMOUNT_MAX, GROUPS[g].effect().get(c, ParticleEffect.Part.AMOUNT)));
-            float[] t = ParticleLookMath.brightTint(colours.tint(GROUPS[g].effect().colour()), GROUPS[g].effect().get(c, ParticleEffect.Part.BRIGHTNESS));
+            float[] t = ParticleLookMath.brightTint(netherAnime && NETHER_ANIME.containsKey(GROUPS[g])
+                    ? ShaderColours.tint(NETHER_ANIME.get(GROUPS[g]), GROUPS[g].effect().colour().defaultRgb())
+                    : colours.tint(GROUPS[g].effect().colour()), GROUPS[g].effect().get(c, ParticleEffect.Part.BRIGHTNESS));
             TINTED[g] = t[0] != 1f || t[1] != 1f || t[2] != 1f;
             MappedBuffer b = g < 4 ? TINTS : TINTS2;
             int col = (g % 4) * 16;
@@ -74,6 +77,19 @@ public final class ParticleLook {
             any |= REALISTIC[g] || TINTED[g] || SIZE[g] != 1f || AMOUNT[g] != 100;
         }
         active = any;
+    }
+
+    /**
+     * 2026-11-24 (the user's Anime Nether references: "작은 불꽃은 어두운 빨간색으로"): in the Nether under the Anime palette the small
+     * flames (torches', candles', the soul fire's) are a dark red, whatever their colour. The embers (lava pops, a campfire's sparks) were
+     * too, until the user: "불씨는 기존 것이 더 나아보여. 불씨만 되돌려줘"; they keep the palette's colour.
+     */
+    static final java.util.Map<VanillaParticles.Group, Integer> NETHER_ANIME = java.util.Map.of(VanillaParticles.Group.FLAMES, 0x9A1A12);
+
+    /** Whether the player is in a hot dimension (the Nether) under the Anime palette. */
+    static boolean netherAnime(VisualsConfig c) {
+        net.minecraft.client.multiplayer.ClientLevel level = net.minecraft.client.Minecraft.getInstance().level;
+        return level != null && c.colourPreset == net.vulkanmod.visuals.config.ColourPresets.ANIME && level.dimensionType().ultraWarm();
     }
 
     /** Whether any group is off its default (else the particles draw as vanilla's). */

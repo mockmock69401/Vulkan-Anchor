@@ -89,6 +89,8 @@ const int EMISSIVE_FLUID_ALPHA_CODE = 251;
 //2026-10-29: FoliageMarker.METAL_ALPHA and POLISHED_ALPHA (smooth blocks: blockreflect.glsl's highlights and reflections)
 const int METAL_ALPHA_CODE = 246;
 const int POLISHED_ALPHA_CODE = 245;
+//2026-11-24: FoliageMarker.FIRE_ALPHA (a fire's quads: a light source; the Anime Nether's cel fire, netherlook.glsl)
+const int FIRE_ALPHA_CODE = 243;
 
 //boundary 3.9: the weight of the texel at offset (i, j) whose view distance is sampleDist, for a centre at centreDist. A tent in space
 // ((BLUR_RADIUS+1)^2 at the centre) times a falloff in the distance difference relative to the centre's distance.
@@ -108,7 +110,7 @@ bool isPlant(float alpha) {
 
 bool isEmissive(float alpha) {
     int code = alphaCode(alpha);
-    return code == EMISSIVE_ALPHA_CODE || code == EMISSIVE_FLUID_ALPHA_CODE;
+    return code == EMISSIVE_ALPHA_CODE || code == EMISSIVE_FLUID_ALPHA_CODE || code == FIRE_ALPHA_CODE;
 }
 
 //Direct sun only where the sky reaches
