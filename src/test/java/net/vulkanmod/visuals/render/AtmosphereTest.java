@@ -536,7 +536,12 @@ class AtmosphereTest {
         assertTrue(c[2] / c[0] > 1.5f * ColourMath.MOON_LIGHT[2] / ColourMath.MOON_LIGHT[0], "moonbeams keep the night's hue");
         assertEquals(AtmosphereUniforms.MOON_SHAFT_AMOUNT, lum(c), 1e-3f);
         //The moon straight ahead is at the screen centre, with the moon's threshold and window
-        assertArrayEquals(new float[]{0.5f, 0.5f, AtmosphereUniforms.MOON_SHAFT_THRESHOLD, AtmosphereUniforms.MOON_SHAFT_WINDOW}, shaftParams(v), 1e-4f);
+        float[] params = shaftParams(v);
+        assertArrayEquals(new float[]{0.5f, 0.5f}, new float[]{params[0], params[1]}, 1e-4f);
+        assertEquals(AtmosphereUniforms.MOON_SHAFT_WINDOW, params[3], 0f);
+        //2026-11-24: z is the moon's radius on screen; at FOV 70 the round moon at 100% is about 4% of the screen height
+        assertEquals(WaterMath.MOON_ROUND_RADIUS / (float) Math.tan(Math.toRadians(35)) / 2, params[2], 2e-3f);
+        assertEquals(params[2], AtmosphereUniforms.moonScreenRadius(SETTINGS, f.invVanillaProjection()), 1e-6f);
         //Without the moon strength (old callers, other dimensions) nothing changes at night
         assertEquals(0f, AtmosphereUniforms.compute(SETTINGS, f, SERIAL, true, false).shafts(), 0f);
         //Half moon: dimmer; new moon, setting 0, the moon behind the camera or far aside, the moon below the horizon: off
@@ -562,12 +567,15 @@ class AtmosphereTest {
         AtmosphereUniforms.Values sun = AtmosphereUniforms.compute(SETTINGS, day, SERIAL, true, false, full);
         assertFalse(sun.moonShafts());
         assertArrayEquals(AtmosphereUniforms.compute(SETTINGS, day, SERIAL, true, false).shaftLight(), sun.shaftLight(), 0f);
-        float[] params = shaftParams(sun);
+        params = shaftParams(sun);
         assertEquals(0f, params[2], 0f);
         assertEquals(0f, params[3], 0f);
         //The moon's threshold keeps its disc (WaterMath.MOON_DISC_LUMINANCE) and stays below the sun's
-        assertTrue(AtmosphereUniforms.MOON_SHAFT_THRESHOLD < WaterMath.MOON_DISC_LUMINANCE);
-        assertTrue(AtmosphereUniforms.MOON_SHAFT_THRESHOLD < AtmosphereMath.SHAFT_THRESHOLD);
+        assertTrue(AtmosphereMath.MOON_SHAFT_THRESHOLD < WaterMath.MOON_DISC_LUMINANCE);
+        assertTrue(AtmosphereMath.MOON_SHAFT_THRESHOLD < AtmosphereMath.SHAFT_THRESHOLD);
+        //The clear zone starts at the disc's edge and rises over several radii (a soft glow, not a ring along the limb)
+        assertEquals(1f, AtmosphereMath.MOON_SHAFT_CLEAR_IN, 0f);
+        assertTrue(AtmosphereMath.MOON_SHAFT_CLEAR_OUT >= 4 * AtmosphereMath.MOON_SHAFT_CLEAR_IN);
     }
 
     // ---- 7. constants and slots ----
