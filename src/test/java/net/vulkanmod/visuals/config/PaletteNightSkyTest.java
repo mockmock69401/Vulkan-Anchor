@@ -18,7 +18,7 @@ class PaletteNightSkyTest {
     private static Path older(Path dir, String name, VisualsConfig c, int revision) throws Exception {
         Path f = dir.resolve(name);
         c.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": " + revision));
+        OldFile.age(f, revision);
         return f;
     }
 

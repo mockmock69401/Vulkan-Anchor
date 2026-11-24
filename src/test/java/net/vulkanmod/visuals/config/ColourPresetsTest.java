@@ -58,7 +58,7 @@ class ColourPresetsTest {
     @Test
     void changingOneColourIsCustomAndCustomChangesNothing() {
         VisualsConfig c = new VisualsConfig();
-        ColourPresets.apply(c, ColourPresets.CINEMATIC);
+        ColourPresets.apply(c, ColourPresets.ANIME);
         c.setColour(Colour.WATER, 0x123456);
         assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c));
         int[] before = c.colours();
@@ -128,7 +128,8 @@ class ColourPresetsTest {
         before.saturation = 94;
         before.fogStrength = 100;
         before.write(eight);
-        Files.writeString(eight, Files.readString(eight).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 8")
+        OldFile.age(eight, 8);
+        Files.writeString(eight, Files.readString(eight)
                 .replaceAll("\\s*\"colourSunlight\": \\d+,", "").replaceAll("\\s*\"colourShadeLight\": \\d+,", ""));
         VisualsConfig read8 = VisualsConfig.read(eight);
         assertEquals(45, read8.bloomStrength);
@@ -183,7 +184,7 @@ class ColourPresetsTest {
         before.cloudStyle = CloudMath.STYLE_VANILLA;
         Path f = dir.resolve("nine.json");
         before.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 9"));
+        OldFile.age(f, 9);
         VisualsConfig read = VisualsConfig.read(f);
         assertEquals(CloudMath.STYLE_REALISTIC, read.cloudStyle, "the clouds Anime picks now (the anime ones until revision 27)");
         assertEquals(ColourPresets.ANIME, read.colourPreset);
@@ -194,7 +195,7 @@ class ColourPresetsTest {
         r26.cloudStyle = CloudMath.STYLE_ANIME;
         r26.moonlight = 70;
         r26.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 26"));
+        OldFile.age(f, 26);
         VisualsConfig moved = VisualsConfig.read(f);
         assertEquals(CloudMath.STYLE_REALISTIC, moved.cloudStyle);
         assertEquals(57, moved.moonlight);
@@ -202,7 +203,7 @@ class ColourPresetsTest {
         //one with its moonlight changed by hand keeps it and its clouds (it was Custom then too)
         r26.moonlight = 90;
         r26.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 26"));
+        OldFile.age(f, 26);
         VisualsConfig kept = VisualsConfig.read(f);
         assertEquals(CloudMath.STYLE_ANIME, kept.cloudStyle);
         assertEquals(90, kept.moonlight);
@@ -218,7 +219,7 @@ class ColourPresetsTest {
         ColourPresets.apply(horror, ColourPresets.HORROR);
         horror.cloudStyle = CloudMath.STYLE_REALISTIC;
         horror.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 9"));
+        OldFile.age(f, 9);
         assertEquals(CloudMath.STYLE_REALISTIC, VisualsConfig.read(f).cloudStyle);
     }
 
@@ -227,16 +228,17 @@ class ColourPresetsTest {
     void anOlderFileOnAPalettesOldLookTakesTheNewOne(@TempDir Path dir) throws Exception {
         Path f = dir.resolve("ten.json");
         VisualsConfig old = new VisualsConfig();
-        ColourPresets.apply(old, ColourPresets.REALISTIC);
-        old.fogStrength = 110;
+        ColourPresets.apply(old, ColourPresets.DEFAULT);
+        old.bloomStrength = 45;
+        old.fogStrength = 100;
         old.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 10"));
+        OldFile.age(f, 10);
         VisualsConfig read = VisualsConfig.read(f);
-        assertEquals(40, read.fogStrength);
-        assertEquals(ColourPresets.REALISTIC, read.colourPreset);
+        assertEquals(35, read.fogStrength);
+        assertEquals(ColourPresets.DEFAULT, read.colourPreset);
         old.fogStrength = 90;
         old.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 10"));
+        OldFile.age(f, 10);
         VisualsConfig kept = VisualsConfig.read(f);
         assertEquals(90, kept.fogStrength);
         assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
@@ -264,7 +266,7 @@ class ColourPresetsTest {
             ColourPresets.apply(old, palette);
             old.moonlight = ColourPresets.MOONLIGHT_BEFORE_16;
             old.write(f);
-            Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 15"));
+            OldFile.age(f, 15);
             VisualsConfig read = VisualsConfig.read(f);
             assertEquals(ColourPresets.look("moonlight", palette), read.moonlight, "palette " + palette);
             assertEquals(palette, read.colourPreset, "palette " + palette);
@@ -273,7 +275,7 @@ class ColourPresetsTest {
         ColourPresets.apply(tuned, ColourPresets.ANIME);
         tuned.moonlight = 90;
         tuned.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 15"));
+        OldFile.age(f, 15);
         VisualsConfig kept = VisualsConfig.read(f);
         assertEquals(90, kept.moonlight);
         assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
@@ -282,7 +284,7 @@ class ColourPresetsTest {
         custom.setColour(Colour.WATER, 0x123456);
         custom.colourPreset = ColourPresets.CUSTOM;
         custom.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 15"));
+        OldFile.age(f, 15);
         assertEquals(ColourPresets.MOONLIGHT_BEFORE_16, VisualsConfig.read(f).moonlight);
     }
 
@@ -295,12 +297,12 @@ class ColourPresetsTest {
     void thePalettesSetTheToneBlock(@TempDir Path dir) throws Exception {
         String[] tone = {"exposure", "tone_strength", "contrast", "grade_strength"};
         for (String key : tone) assertTrue(java.util.List.of(ColourPresets.LOOK_KEYS).contains(key), key);
-        assertTrue(ColourPresets.look("grade_strength", ColourPresets.CINEMATIC) > ColourPresets.look("grade_strength", ColourPresets.ANIME));
-        assertTrue(ColourPresets.look("contrast", ColourPresets.HORROR) > ColourPresets.look("contrast", ColourPresets.CINEMATIC));
+        assertTrue(ColourPresets.look("grade_strength", ColourPresets.ANIME) > ColourPresets.look("grade_strength", ColourPresets.DEFAULT));
+        assertTrue(ColourPresets.look("contrast", ColourPresets.HORROR) > ColourPresets.look("contrast", ColourPresets.ANIME));
         assertTrue(ColourPresets.look("exposure", ColourPresets.HORROR) < ColourPresets.look("exposure", ColourPresets.DEFAULT));
         VisualsConfig c = new VisualsConfig();
-        ColourPresets.apply(c, ColourPresets.CINEMATIC);
-        assertEquals(ColourPresets.look("contrast", ColourPresets.CINEMATIC), c.contrast);
+        ColourPresets.apply(c, ColourPresets.ANIME);
+        assertEquals(ColourPresets.look("contrast", ColourPresets.ANIME), c.contrast);
         c.gradeStrength = 10;
         assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c));
         Path f = dir.resolve("old.json");
@@ -311,7 +313,7 @@ class ColourPresetsTest {
                 for (String key : tone) VisualsOptionLayout.set(old, VisualsOptionLayout.item(key), ColourPresets.TONE_BEFORE_18.get(key));
                 if (revision < 16) old.moonlight = ColourPresets.MOONLIGHT_BEFORE_16;
                 old.write(f);
-                Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": " + revision));
+                OldFile.age(f, revision);
                 VisualsConfig read = VisualsConfig.read(f);
                 for (String key : tone) {
                     assertEquals(ColourPresets.look(key, palette), VisualsOptionLayout.get(read, VisualsOptionLayout.item(key)), key + ", palette " + palette + ", revision " + revision);
@@ -325,7 +327,7 @@ class ColourPresetsTest {
         tuned.exposure = 100;
         tuned.contrast = 130;
         tuned.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 17"));
+        OldFile.age(f, 17);
         VisualsConfig kept = VisualsConfig.read(f);
         assertEquals(130, kept.contrast);
         assertEquals(100, kept.exposure);
@@ -360,7 +362,7 @@ class ColourPresetsTest {
         c.aurora = VisualsPresets.value(ColourPresets.AURORA_KEY, VisualsPresets.ULTRA);
         assertEquals(ColourPresets.CUSTOM, ColourPresets.detect(c), "Horror needs the auroras off");
         ColourPresets.apply(c, ColourPresets.HORROR);
-        ColourPresets.apply(c, ColourPresets.REALISTIC);
+        ColourPresets.apply(c, ColourPresets.DEFAULT);
         assertEquals(VisualsPresets.value(ColourPresets.AURORA_KEY, VisualsPresets.ULTRA), c.aurora, "leaving Horror restores the preset's");
         VisualsConfig potato = new VisualsConfig();
         VisualsPresets.apply(potato, VisualsPresets.POTATO);
@@ -369,7 +371,7 @@ class ColourPresetsTest {
         VisualsConfig custom = new VisualsConfig();
         custom.preset = VisualsPresets.CUSTOM;
         custom.aurora = CelestialUniforms.AURORA_OFF;
-        ColourPresets.apply(custom, ColourPresets.CINEMATIC);
+        ColourPresets.apply(custom, ColourPresets.ANIME);
         assertEquals(CelestialUniforms.AURORA_OFF, custom.aurora, "under Custom the player's off stays");
         VisualsConfig plain = new VisualsConfig();
         plain.aurora = CelestialUniforms.AURORA_OFF;
@@ -393,7 +395,7 @@ class ColourPresetsTest {
                 old.colourPreset = palette;
                 old.preset = VisualsPresets.HIGH;
                 old.write(f);
-                Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": " + revision));
+                OldFile.age(f, revision);
                 VisualsConfig read = VisualsConfig.read(f);
                 String at = "palette " + palette + ", revision " + revision;
                 for (String key : ColourPresets.LOOK_KEYS) {
@@ -405,11 +407,11 @@ class ColourPresetsTest {
             }
         }
         VisualsConfig tuned = new VisualsConfig();
-        ColourPresets.apply(tuned, ColourPresets.CINEMATIC);
+        ColourPresets.apply(tuned, ColourPresets.ANIME);
         tuned.bloomStrength = 60;
         tuned.fogStrength = 90;
         tuned.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 20"));
+        OldFile.age(f, 20);
         VisualsConfig kept = VisualsConfig.read(f);
         assertEquals(60, kept.bloomStrength);
         assertEquals(90, kept.fogStrength);

@@ -78,8 +78,13 @@ public class VisualsConfig {
      * (애니메이션 구름은 차후 개선 예정), 달빛은 57%로 낮추기"): the presets set the sun's and moon's shape (round from High up, so the
      * default is round); a file on a level takes that level's shape and stays on it (any other file keeps its shape). The Anime palette picks the realistic clouds and its moonlight is 57 (was 70); a file on Anime with the old row and
      * the anime clouds takes both and stays on the palette; any other file keeps its values.
+     * 28 (2026-11-24, the user: "기존 기본과 애니메이션, 공포 프리셋만 남기고 나머지 두 개의 프리셋은 지워줘"): the Realistic and Cinematic
+     * palettes are gone and the rest renumbered (Default 0, Anime 1, Horror 2, Custom 3); a file takes the new number, and one still on
+     * Realistic or Cinematic takes Default (ColourPresets.moveRetired); one changed by hand keeps its colours and shows Custom.
      */
-    private static final int REVISION = 27;
+    private static final int REVISION = 28;
+    /** 2026-11-24: the first revision with three palettes and their new numbers. */
+    static final int THREE_PALETTES_REVISION = 28;
     /** 2026-11-23: the first revision whose presets set the sun's and moon's shape and whose Anime palette picks the realistic clouds. */
     static final int ROUND_SKY_REVISION = 27;
     /** 2026-11-17: the first revision with the Anime palette's blue night sky. */
@@ -214,12 +219,6 @@ public class VisualsConfig {
         if (fileRevision < ROUND_SKY_REVISION && VisualsPresets.isLevel(c.preset)) {
             VisualsOptionLayout.set(c, VisualsOptionLayout.item("celestial_shape"), VisualsPresets.value("celestial_shape", c.preset));
         }
-        c.preset = VisualsPresets.validated(c);
-        //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
-        // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
-        //2026-11-11: a file still exactly on a palette's old look values takes the new ones (first: the Anime check below reads the new row)
-        //Session 12: a file on a palette before the star colour existed takes the palette's (first: the checks below compare every colour)
-        //Session 13: likewise the particle groups' colours (and the star colour for a file older than both)
         java.util.EnumSet<Colour> missing = java.util.EnumSet.noneOf(Colour.class);
         if (fileRevision < PARTICLE_LOOK_REVISION) {
             if (fileRevision < STARS_REVISION && !json.has("colourStars")) missing.add(Colour.STARS);
@@ -227,6 +226,15 @@ public class VisualsConfig {
                 if (e.colour().key().startsWith("colour_particle_") && !json.has(colourField(e.colour()))) missing.add(e.colour());
             }
         }
+        //2026-11-24: the palettes' new numbers, and a file on Realistic or Cinematic (gone) takes Default; first, since every palette
+        // check below (and the performance preset's, which keeps a palette's clouds and Horror's auroras off) reads the new numbers
+        if (fileRevision < THREE_PALETTES_REVISION) ColourPresets.moveRetired(c, missing);
+        c.preset = VisualsPresets.validated(c);
+        //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
+        // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
+        //2026-11-11: a file still exactly on a palette's old look values takes the new ones (first: the Anime check below reads the new row)
+        //Session 12: a file on a palette before the star colour existed takes the palette's (first: the checks below compare every colour)
+        //Session 13: likewise the particle groups' colours (and the star colour for a file older than both)
         //2026-11-17 (session 18): a file on Anime with its old night sky takes the new one; first, so every check below compares the new row
         if (fileRevision < PALETTE_NIGHT_REVISION) ColourPresets.moveOldAnimeNight(c, missing);
         if (fileRevision < PARTICLE_LOOK_REVISION) ColourPresets.moveOldColours(c, missing);

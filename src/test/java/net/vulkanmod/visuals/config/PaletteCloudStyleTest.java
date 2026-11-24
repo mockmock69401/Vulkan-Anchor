@@ -17,14 +17,13 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class PaletteCloudStyleTest {
     private static final int[] STYLES = {CloudMath.STYLE_VANILLA, CloudMath.STYLE_REALISTIC, CloudMath.STYLE_ANIME};
-    private static final int[] PALETTES = {ColourPresets.DEFAULT, ColourPresets.REALISTIC, ColourPresets.CINEMATIC, ColourPresets.ANIME,
-            ColourPresets.HORROR};
+    private static final int[] PALETTES = {ColourPresets.DEFAULT, ColourPresets.ANIME, ColourPresets.HORROR};
     private static final int[] PRESETS = {VisualsPresets.POTATO, VisualsPresets.LOW, VisualsPresets.MEDIUM, VisualsPresets.HIGH,
             VisualsPresets.ULTRA, VisualsPresets.CUSTOM};
 
     private static int expected(int palette, int style) {
         return switch (palette) {
-            case ColourPresets.REALISTIC, ColourPresets.CINEMATIC, ColourPresets.ANIME -> CloudMath.STYLE_REALISTIC;
+            case ColourPresets.ANIME -> CloudMath.STYLE_REALISTIC;
             default -> style;
         };
     }
@@ -79,7 +78,7 @@ class PaletteCloudStyleTest {
     /** Realistic, Cinematic and Anime show only while their clouds are on; changing the style by hand shows Custom. */
     @Test
     void aPaletteWithCloudsNeedsThem() {
-        for (int palette : new int[]{ColourPresets.REALISTIC, ColourPresets.CINEMATIC, ColourPresets.ANIME}) {
+        for (int palette : new int[]{ColourPresets.ANIME}) {
             VisualsConfig c = new VisualsConfig();
             ColourPresets.apply(c, palette);
             for (int style : STYLES) {
@@ -135,7 +134,7 @@ class PaletteCloudStyleTest {
                 c.colourPreset = palette;
                 Path f = dir.resolve("visuals-" + palette + "-" + preset + ".json");
                 c.write(f);
-                Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 23"));
+                OldFile.age(f, 23);
                 VisualsConfig read = VisualsConfig.read(f);
                 assertEquals(expected(palette, CloudMath.STYLE_VANILLA), read.cloudStyle, "palette " + palette);
                 assertEquals(palette, read.colourPreset);
@@ -143,9 +142,9 @@ class PaletteCloudStyleTest {
                 assertEquals(VisualsConfig.currentRevision(), read.revision);
             }
         }
-        //a file of the current revision on Realistic with the vanilla shape is Custom: the player changed the clouds
+        //a file of the current revision on Anime with the vanilla shape is Custom: the player changed the clouds
         VisualsConfig c = new VisualsConfig();
-        ColourPresets.apply(c, ColourPresets.REALISTIC);
+        ColourPresets.apply(c, ColourPresets.ANIME);
         c.cloudStyle = CloudMath.STYLE_VANILLA;
         Path f = dir.resolve("now.json");
         c.write(f);

@@ -1,5 +1,6 @@
 package net.vulkanmod.visuals.render;
 
+import net.vulkanmod.visuals.config.OldFile;
 import net.vulkanmod.visuals.config.ColourPresets;
 import net.vulkanmod.visuals.config.VisualsConfig;
 import net.vulkanmod.visuals.config.VisualsOptionLayout;
@@ -162,7 +163,7 @@ class StarMathTest {
     @Test
     void everyPaletteSetsAStarColourAndAnOlderPaletteFileTakesIt(@org.junit.jupiter.api.io.TempDir Path dir) throws IOException {
         assertEquals(0xFFFFFF, ColourPresets.value(ShaderColours.Colour.STARS, ColourPresets.DEFAULT));
-        for (int level = ColourPresets.REALISTIC; level < ColourPresets.CUSTOM; level++) {
+        for (int level = ColourPresets.ANIME; level < ColourPresets.CUSTOM; level++) {
             int v = ColourPresets.value(ShaderColours.Colour.STARS, level);
             assertNotEquals(0xFFFFFF, v, "palette " + level);
             VisualsConfig c = new VisualsConfig();
@@ -182,7 +183,8 @@ class StarMathTest {
             ColourPresets.apply(before, level);
             Path f = dir.resolve("p" + level + ".json");
             before.write(f);
-            Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 11")
+            OldFile.age(f, 11);
+            Files.writeString(f, Files.readString(f)
                     .replaceAll("\\s*\"colourStars\": \\d+,", ""));
             assertFalse(Files.readString(f).contains("colourStars"));
             VisualsConfig read = VisualsConfig.read(f);
@@ -195,7 +197,8 @@ class StarMathTest {
         custom.colourPreset = ColourPresets.CUSTOM;
         Path f = dir.resolve("custom.json");
         custom.write(f);
-        Files.writeString(f, Files.readString(f).replace("\"revision\": " + VisualsConfig.currentRevision(), "\"revision\": 11")
+        OldFile.age(f, 11);
+        Files.writeString(f, Files.readString(f)
                 .replaceAll("\\s*\"colourStars\": \\d+,", ""));
         assertEquals(0xFFFFFF, VisualsConfig.read(f).colourStars, "not on a palette: the white stars it had");
     }
