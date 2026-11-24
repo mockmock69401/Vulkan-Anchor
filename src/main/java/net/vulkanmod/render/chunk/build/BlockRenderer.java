@@ -102,6 +102,8 @@ public class BlockRenderer {
     private void setMarks(BlockState blockState, BlockPos blockPos) {
         //The visuals (glow pass): whether this block emits light, for its quads' mark
         FoliageMarker.setEmissive(blockState.getLightEmission() > 0);
+        //The visuals (2026-11-24): whether it is a fire, whose light source's mark is its own (the Anime Nether's cel fire)
+        FoliageMarker.setFire(FoliageMarker.isFire(blockState));
         //The visuals (2026-10-28): whether it is nether quartz ore, whose specks glow (2026-10-29, the user: the other ores' glow looked
         // odd however tuned; only quartz keeps it)
         FoliageMarker.setOre(blockState.is(Blocks.NETHER_QUARTZ_ORE));

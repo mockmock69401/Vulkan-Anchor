@@ -38,6 +38,12 @@ public final class FoliageMarker {
      */
     public static final float EMISSIVE_ALPHA = 253.25f / 255f;
     /**
+     * 2026-11-24 (the user's Anime Nether references: "큰 불꽃의 몸통은 노란색이면서 테두리는 하얀색, 더 겉은 옅은 파란색으로"): 243 for a fire's
+     * quads (fire, soul fire, a lit campfire): a light source like EMISSIVE_ALPHA, which the composite can also draw in the Anime Nether's
+     * cel look (netherlook.glsl). Free at both stages (terrain.vsh reads 144-239 and 247-254).
+     */
+    public static final float FIRE_ALPHA = 243.25f / 255f;
+    /**
      * 2026-10-28 (the user: Complementary Reimagined's ores glow): 252 for every quad of an ore block, lit as any block; the composite
      * adds the glow of its specks (the texels that stand out from the host stone). After the emissive mark, before the plant mark.
      * 2026-10-29 (the user: the ores' glow looked odd however tuned): nether quartz ore only (BlockRenderer.renderBatched).
@@ -108,6 +114,7 @@ public final class FoliageMarker {
     public static final float BASE_MARGIN = 0.01f;
     /** Whether the block the chunk build thread is drawing emits light (set as BlockRenderer.renderBatched starts). */
     private static final ThreadLocal<boolean[]> EMISSIVE = ThreadLocal.withInitial(() -> new boolean[1]);
+    private static final ThreadLocal<boolean[]> FIRE = ThreadLocal.withInitial(() -> new boolean[1]);
     /** Whether the block the chunk build thread is drawing is an ore. */
     private static final ThreadLocal<boolean[]> ORE = ThreadLocal.withInitial(() -> new boolean[1]);
     /** The smooth kind of the block the chunk build thread is drawing. */
@@ -116,6 +123,17 @@ public final class FoliageMarker {
     private static final ThreadLocal<int[]> SWAY = ThreadLocal.withInitial(() -> new int[2]);
 
     private FoliageMarker() {
+    }
+
+    /** 2026-11-24: whether the block this thread draws is a fire (FIRE_ALPHA for its light source's quads). */
+    public static void setFire(boolean fire) {
+        FIRE.get()[0] = fire;
+    }
+
+    /** A fire's block (fire, soul fire) or a lit campfire: their light source's mark is FIRE_ALPHA. */
+    public static boolean isFire(net.minecraft.world.level.block.state.BlockState state) {
+        return state.is(net.minecraft.tags.BlockTags.FIRE) || (state.is(net.minecraft.tags.BlockTags.CAMPFIRES)
+                && state.hasProperty(net.minecraft.world.level.block.CampfireBlock.LIT) && state.getValue(net.minecraft.world.level.block.CampfireBlock.LIT));
     }
 
     public static void setEmissive(boolean emissive) {
@@ -149,7 +167,7 @@ public final class FoliageMarker {
 
     /** As alpha(quad, alpha), EMISSIVE_ALPHA first for a light source's quads. */
     public static float alpha(Object quad, float alpha, boolean emissive) {
-        return emissive ? EMISSIVE_ALPHA : alpha(quad, alpha);
+        return emissive ? (FIRE.get()[0] ? FIRE_ALPHA : EMISSIVE_ALPHA) : alpha(quad, alpha);
     }
 
     /** The mark for the block this thread is drawing: a light source's, else an ore's, else a smooth block's, else as alpha(quad, alpha). */

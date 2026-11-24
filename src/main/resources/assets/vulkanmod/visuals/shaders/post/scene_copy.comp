@@ -260,6 +260,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/portal.glsl>
 #import <vulkanmod:visuals/post/portallook.glsl>
 #import <vulkanmod:visuals/post/palettelight.glsl>
+#import <vulkanmod:visuals/post/netherlook.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/caustics.glsl>
 #import <vulkanmod:visuals/post/wetground.glsl>
@@ -1372,6 +1373,16 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     }
     if (emission > 0.0) {
         lit = mix(lit, tintedGlow(scene*lightGlow(colour.rgb, glowParams.x*(emissiveFluid ? FLUID_GLOW_SCALE : 1.0))), emission);
+        //2026-11-24: the Anime Nether's lava gradient and cel fire (netherlook.glsl)
+        if (endLightParams.w > 0.5 && !fromLod) {
+            if (emissiveFluid) {
+                lit = netherLavaLook(p, size, lit, colour.rgb, dist, 2.0*abs(invVanillaProj[1][1])/float(size.y),
+                        world + vec3(endSkyParams.y + 0.5, dimensionParams.z, endSkyParams.z + 0.5), dimensionParams.w,
+                        dot(normalWorld, normalWorld) > 0.25 ? normalWorld.y : 1.0);
+            } else if (alphaCode(colour.a) == FIRE_ALPHA_CODE) {
+                lit = mix(lit, netherFireLook(p, size, lit, colour.rgb), emission);
+            }
+        }
     } else if (ore && !cloud && !fromLod && glowParams.y > 0.0) {
         vec3 base = colour.rgb;
         bool readable = true;
@@ -1714,6 +1725,10 @@ void main() {
         particleTile[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x] = 1u;
     }
     vec4 composite = compositeAt(p, size, colour, overdrawn);
+    //2026-11-24: the pale blue fringe just outside the Anime Nether's flames (netherlook.glsl)
+    if (endLightParams.w > 0.5 && alphaCode(colour.a) != FIRE_ALPHA_CODE) {
+        composite.rgb += netherFireFringe(p, size, dimensionParams.w)*underwaterExposure();
+    }
     //2026-11-24: the End's light pillar over the exit portal (endsky.glsl endPillar) in front of what lies behind it
     if (endSkyParams.x > 0.5 && endSkyParams.w > -1e8) {
         vec3 view;

@@ -48,10 +48,12 @@ public final class LightingMath {
     public static final int EMISSIVE_FLUID_ALPHA_CODE = 251;
     /** 2026-10-29: FoliageMarker.METAL_ALPHA and POLISHED_ALPHA, a smooth block's quads (blockreflect.glsl's highlights and reflections). */
     public static final int METAL_ALPHA_CODE = 246, POLISHED_ALPHA_CODE = 245;
+    /** 2026-11-24: FoliageMarker.FIRE_ALPHA, a fire's quads (a light source; the Anime Nether's cel fire). */
+    public static final int FIRE_ALPHA_CODE = 243;
 
     /** Whether a mark is a light source's (a block's or a fluid's). */
     public static boolean isEmissiveCode(int code) {
-        return code == EMISSIVE_ALPHA_CODE || code == EMISSIVE_FLUID_ALPHA_CODE;
+        return code == EMISSIVE_ALPHA_CODE || code == EMISSIVE_FLUID_ALPHA_CODE || code == FIRE_ALPHA_CODE;
     }
 
     // ---- lighting.comp ----
