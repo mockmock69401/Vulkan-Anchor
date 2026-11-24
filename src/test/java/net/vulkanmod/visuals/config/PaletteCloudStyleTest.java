@@ -25,6 +25,8 @@ class PaletteCloudStyleTest {
     private static int expected(int palette, int style) {
         return switch (palette) {
             case ColourPresets.ANIME -> CloudMath.STYLE_ANIME;
+            //2026-11-24 (the user: "기본 구름을 현실적 구름으로 맞추고"): Horror picks the realistic clouds
+            case ColourPresets.HORROR -> CloudMath.STYLE_REALISTIC;
             default -> style;
         };
     }
@@ -57,10 +59,13 @@ class PaletteCloudStyleTest {
         }
     }
 
-    /** The user's report: leaving Anime for Default or Horror kept wiping the cloud choice (back to the vanilla shape at High). */
+    /**
+     * The user's report: leaving Anime for Default or Horror kept wiping the cloud choice (back to the vanilla shape at High). Since
+     * 2026-11-24 Horror picks the realistic clouds; Default still keeps the choice.
+     */
     @Test
-    void defaultAndHorrorKeepTheChoice() {
-        for (int to : new int[]{ColourPresets.DEFAULT, ColourPresets.HORROR}) {
+    void defaultKeepsTheChoice() {
+        for (int to : new int[]{ColourPresets.DEFAULT}) {
             for (int style : STYLES) {
                 VisualsConfig c = new VisualsConfig();
                 c.cloudStyle = style;
@@ -68,7 +73,7 @@ class PaletteCloudStyleTest {
                 assertEquals(style, c.cloudStyle, "palette " + to);
                 assertEquals(to, ColourPresets.detect(c), "any cloud style is on palette " + to);
             }
-            //the clouds Anime brought stay too: Default and Horror never change the clouds
+            //the clouds Anime brought stay too: Default never changes the clouds
             VisualsConfig d = new VisualsConfig();
             ColourPresets.apply(d, ColourPresets.ANIME);
             ColourPresets.apply(d, to);
@@ -79,7 +84,7 @@ class PaletteCloudStyleTest {
     /** Realistic, Cinematic and Anime show only while their clouds are on; changing the style by hand shows Custom. */
     @Test
     void aPaletteWithCloudsNeedsThem() {
-        for (int palette : new int[]{ColourPresets.ANIME}) {
+        for (int palette : new int[]{ColourPresets.ANIME, ColourPresets.HORROR}) {
             VisualsConfig c = new VisualsConfig();
             ColourPresets.apply(c, palette);
             for (int style : STYLES) {
@@ -109,8 +114,8 @@ class PaletteCloudStyleTest {
                 assertEquals(palette, ColourPresets.detect(c), "the palette stays");
                 assertEquals(level, VisualsPresets.detect(c), "the level stays");
             }
-            //the realistic clouds by hand under Default or Horror: a level's own style
-            for (int palette : new int[]{ColourPresets.DEFAULT, ColourPresets.HORROR}) {
+            //the realistic clouds by hand under Default: a level's own style
+            for (int palette : new int[]{ColourPresets.DEFAULT}) {
                 VisualsConfig d = new VisualsConfig();
                 ColourPresets.apply(d, palette);
                 d.cloudStyle = CloudMath.STYLE_REALISTIC;

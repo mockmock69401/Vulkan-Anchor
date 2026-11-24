@@ -39,6 +39,8 @@ import java.util.Arrays;
  * of the End's.</li>
  * <li>WATER: deep water's body colour seen from above (water.glsl waterColour). UNDERWATER: the water's colour around the camera under
  * water (underwater.glsl, through the daylight slot it is lit by).</li>
+ * <li>CAVE (2026-11-24): the light in caves and interiors, where little sky light reaches (LightingUniforms slot 83, palettelight.glsl
+ * caveTint); the light sources' own glow near them keeps more of its colour.</li>
  * </ul>
  * Colours are not performance settings: the presets leave them alone, and a picked colour costs nothing (uniforms only).
  */
@@ -76,7 +78,10 @@ public final class ShaderColours {
         PARTICLE_DRIPS("colour_particle_drips", 0x3F76E4),
         PARTICLE_MAGIC("colour_particle_magic", 0xB070F0),
         PARTICLE_AMBIENT("colour_particle_ambient", 0xA0A0A0),
-        PARTICLE_COMBAT("colour_particle_combat", 0xE7E7E7);
+        PARTICLE_COMBAT("colour_particle_combat", 0xE7E7E7),
+        //2026-11-24 (the user: "5번째 사진은 내부(동굴) 색감용이야. 차갑고 어두운 초록 계열 색을 사용해줘"): caves' and interiors' light, where
+        // little sky light reaches (palettelight.glsl caveTint); white, the default, leaves them as they are
+        CAVE("colour_cave", 0xFFFFFF);
 
         private final String key;
         private final int defaultRgb;

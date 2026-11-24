@@ -230,6 +230,8 @@ layout(location = 81) uniform vec4 endSkyParams;
 //2026-11-24, DimensionUniforms END_LIGHT: x the pillar's fade-in (0 to 1), y the End star's shadows' strength (0: none), z the portals'
 // look (portallook.glsl PORTAL_LOOK_*; 0: vanilla's)
 layout(location = 82) uniform vec4 endLightParams;
+//2026-11-24, LightingUniforms CAVE: rgb the cave light colour's tint (1: none), w the light reach (1: vanilla's; palettelight.glsl)
+layout(location = 83) uniform vec4 caveLight;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -257,6 +259,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/heat.glsl>
 #import <vulkanmod:visuals/post/portal.glsl>
 #import <vulkanmod:visuals/post/portallook.glsl>
+#import <vulkanmod:visuals/post/palettelight.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/caustics.glsl>
 #import <vulkanmod:visuals/post/wetground.glsl>
@@ -1193,6 +1196,8 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
                 blockT = max(blockT, heldLevelAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world));
             }
         }
+        //2026-11-24: the palette's light reach on every block light, the held light's too (palettelight.glsl; 1: vanilla's)
+        blockT = lightReachLevel(blockT, caveLight.w);
         //Final fix R5: each lightmap colour is sampled once; equal levels reuse a sample (unknown light: one sample, nothing relit)
         vec3 lightAll = lightmapLinear(blockT, skyT);
         vec3 lightSky = blockT == block ? lightAll : lightmapLinear(block, skyT);
@@ -1248,7 +1253,7 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         float be = blockExposure(waterParams.z, look);
         //2026-10-28: the block-lit light's colour and falloff (1 where nothing is block-lit)
-        vec3 blockShare = (vec3(1.0) - share)*be;
+        vec3 blockShare = (vec3(1.0) - share)*be*lightReachCore(blockT, caveLight.w);
         //Session 19: near a nether portal its share of the block light turns violet and brighter (portal.glsl)
         vec3 warm = blockLightColour.rgb;
         if (portalOn) {
@@ -1324,6 +1329,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
             lit *= looked(NO_SKY_EXPOSURE, look);
         }
         //2026-11-24: the End's terrain in its sky's light (endsky.glsl endGround; vanilla's End sky: unchanged)
+        //2026-11-24: caves and interiors in the cave light (palettelight.glsl caveTint; the default changes nothing)
+        if (exposureMode(ATMOSPHERE_SKY) && any(notEqual(caveLight.rgb, vec3(1.0)))) {
+            lit *= caveTint(caveLight.rgb, skyT, blockT);
+        }
         if (endSkyParams.x > 0.5) {
             lit = endGround(lit, endSkyParams.x, blockT);
             //2026-11-24: the bright star's shadows (endStarShade; the pass ran for the star alone: EndStarLight)

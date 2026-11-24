@@ -22,6 +22,8 @@ public final class LightingUniforms {
     public static final int COPY_BLOCK_LIGHT = 31, COPY_MOON_LIGHT = 32;
     // scene_copy.comp, 2026-10-28: the block glow (light sources' bright texels) and the ore glow settings
     public static final int COPY_GLOW = 33;
+    /** scene_copy.comp, 2026-11-24: the cave light colour's tint and the light reach (palettelight.glsl). */
+    public static final int COPY_CAVE = 83;
     /**
      * 2026-11-24: the sun weight of the End star's pass (LightingChoice.star): lighting.comp's light is on (sunView.w 1), the composite's
      * sun shading weight is 0 (slot 10 .y) and the shadow maps are read (ShadowUniforms).
@@ -32,7 +34,7 @@ public final class LightingUniforms {
                          boolean lodValid, float aoStrength, float sunWeight, float[] upView, boolean vanillaCopies, float waterStrength,
                          float waterAmbient, float cameraYFrac, float[] lightSun, float sunHeightTerm, float sunUp, float blockDay, float[] eastView,
                          float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections, float[] blockLightTint,
-                         float[] moonLightTint, float[] sunLightTint, float[] shadeTint) {
+                         float[] moonLightTint, float[] sunLightTint, float[] shadeTint, float lightReach, float[] caveTint) {
         private static final float[] NO_TINT = {1, 1, 1};
 
         /** Without the picked colours (session 8): the default tints. */
@@ -42,7 +44,7 @@ public final class LightingUniforms {
                       float blockLightColour, float moonLight, float blockGlow, float oreGlow, float blockReflections) {
             this(on, invVanillaProjection, invLodProjection, projection, sunView, lodValid, aoStrength, sunWeight, upView, vanillaCopies, waterStrength,
                     waterAmbient, cameraYFrac, lightSun, sunHeightTerm, sunUp, blockDay, eastView, blockLightColour, moonLight, blockGlow, oreGlow,
-                    blockReflections, NO_TINT, NO_TINT, NO_TINT, NO_TINT);
+                    blockReflections, NO_TINT, NO_TINT, NO_TINT, NO_TINT, 1, NO_TINT);
         }
 
         /**
@@ -54,7 +56,16 @@ public final class LightingUniforms {
                     this.sunWeight, this.upView, this.vanillaCopies, this.waterStrength, this.waterAmbient, this.cameraYFrac, this.lightSun,
                     this.sunHeightTerm, this.sunUp, this.blockDay, this.eastView, this.blockLightColour, this.moonLight, this.blockGlow, this.oreGlow,
                     this.blockReflections, colours.tint(ShaderColours.Colour.BLOCK_LIGHT), colours.tint(ShaderColours.Colour.MOON),
-                    colours.tint(ShaderColours.Colour.SUNLIGHT), colours.tint(ShaderColours.Colour.SHADE_LIGHT));
+                    colours.tint(ShaderColours.Colour.SUNLIGHT), colours.tint(ShaderColours.Colour.SHADE_LIGHT), this.lightReach,
+                    colours.tint(ShaderColours.Colour.CAVE));
+        }
+
+        /** 2026-11-24: the same values with the light reach (PostProcessSettings.lightReach; 1: vanilla's). */
+        public Values withLightReach(float reach) {
+            return new Values(this.on, this.invVanillaProjection, this.invLodProjection, this.projection, this.sunView, this.lodValid, this.aoStrength,
+                    this.sunWeight, this.upView, this.vanillaCopies, this.waterStrength, this.waterAmbient, this.cameraYFrac, this.lightSun,
+                    this.sunHeightTerm, this.sunUp, this.blockDay, this.eastView, this.blockLightColour, this.moonLight, this.blockGlow, this.oreGlow,
+                    this.blockReflections, this.blockLightTint, this.moonLightTint, this.sunLightTint, this.shadeTint, reach, this.caveTint);
         }
 
         public void writeLighting(LooseUniformWriter w) {
@@ -83,6 +94,7 @@ public final class LightingUniforms {
             w.putVec4(COPY_BLOCK_LIGHT, ColourMath.BLOCK_LIGHT[0] * b[0], ColourMath.BLOCK_LIGHT[1] * b[1], ColourMath.BLOCK_LIGHT[2] * b[2], this.blockLightColour);
             w.putVec4(COPY_MOON_LIGHT, ColourMath.MOON_LIGHT[0] * m[0], ColourMath.MOON_LIGHT[1] * m[1], ColourMath.MOON_LIGHT[2] * m[2], this.moonLight);
             w.putVec4(COPY_GLOW, this.blockGlow, this.oreGlow, this.blockReflections, 0);
+            if (w.has(COPY_CAVE)) w.putVec4(COPY_CAVE, this.caveTint[0], this.caveTint[1], this.caveTint[2], this.lightReach);
         }
     }
 

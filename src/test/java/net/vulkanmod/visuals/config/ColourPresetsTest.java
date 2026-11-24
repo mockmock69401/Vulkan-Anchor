@@ -168,11 +168,12 @@ class ColourPresetsTest {
         }
         c.cloudStyle = CloudMath.STYLE_ANIME;
         assertEquals(ColourPresets.ANIME, ColourPresets.detect(c));
-        //2026-11-16: the other palettes are PaletteCloudStyleTest's; anime clouds by hand under Horror keep it, Custom changes nothing
+        //2026-11-16: the other palettes are PaletteCloudStyleTest's; anime clouds by hand under Default keep it (2026-11-24: Horror picks
+        // the realistic clouds), Custom changes nothing
         VisualsConfig e = new VisualsConfig();
-        ColourPresets.apply(e, ColourPresets.HORROR);
+        ColourPresets.apply(e, ColourPresets.DEFAULT);
         e.cloudStyle = CloudMath.STYLE_ANIME;
-        assertEquals(ColourPresets.HORROR, ColourPresets.detect(e), "anime clouds by hand under another palette keep it");
+        assertEquals(ColourPresets.DEFAULT, ColourPresets.detect(e), "anime clouds by hand under another palette keep it");
         assertEquals(CloudMath.STYLE_ANIME, ColourPresets.cloudStyle(ColourPresets.CUSTOM, CloudMath.STYLE_ANIME), "Custom changes nothing");
     }
 
@@ -325,11 +326,11 @@ class ColourPresetsTest {
         VisualsConfig tuned = new VisualsConfig();
         ColourPresets.apply(tuned, ColourPresets.HORROR);
         tuned.exposure = 100;
-        tuned.contrast = 130;
+        tuned.contrast = 140;
         tuned.write(f);
         OldFile.age(f, 17);
         VisualsConfig kept = VisualsConfig.read(f);
-        assertEquals(130, kept.contrast);
+        assertEquals(140, kept.contrast);
         assertEquals(100, kept.exposure);
         assertEquals(ColourPresets.CUSTOM, kept.colourPreset);
     }
@@ -345,7 +346,8 @@ class ColourPresetsTest {
         assertEquals(30, ColourPresets.look("fog_strength", ColourPresets.ANIME));
         for (int level = 0; level < ColourPresets.LEVELS; level++) {
             assertTrue(ColourPresets.look("bloom_strength", level) <= 40, "bloom, palette " + level);
-            assertTrue(ColourPresets.look("fog_strength", level) <= 40, "fog, palette " + level);
+            //2026-11-24 (the user's seventh Horror reference: "안개+블룸을 사용하는 것도 좋아보여 ... 적절하게"): Horror's fog a little higher
+            assertTrue(ColourPresets.look("fog_strength", level) <= (level == ColourPresets.HORROR ? 60 : 40), "fog, palette " + level);
         }
 
         VisualsConfig c = new VisualsConfig();

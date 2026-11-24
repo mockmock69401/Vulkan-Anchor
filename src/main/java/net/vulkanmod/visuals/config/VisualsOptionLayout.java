@@ -121,6 +121,14 @@ public final class VisualsOptionLayout {
     private static final Item TONE = percent("tone_strength", STRENGTH_MAX);
     private static final Item CONTRAST = percent("contrast", CONTRAST_MIN, CONTRAST_MAX, Impact.NONE);
     private static final Item GRADE = percent("grade_strength", STRENGTH_MAX);
+    //2026-11-24: block light's reach (VisualsConfig.lightReach), on the lighting page and in the palettes' look block
+    public static final int LIGHT_REACH_MIN = 25, LIGHT_REACH_MAX = 150;
+    private static final Item LIGHT_REACH = percent("light_reach", LIGHT_REACH_MIN, LIGHT_REACH_MAX, Impact.NONE);
+    //2026-11-24 (the user: "정오에 물속 일렁임도 없애줘"): the caustics, on the water page and in the palettes' look block (Horror: none)
+    private static final Item CAUSTICS = percent("caustics", 0, CausticMath.STRENGTH_MAX, Impact.NONE);
+    //2026-11-24 (the user: "물속 투명도도 더 불투명하게", "해의 눈부심"): the water's depth colour and the sun's glow, in the palettes' look block too
+    private static final Item SUN_GLOW = percent("sun_glow", net.vulkanmod.visuals.render.PostProcessSettings.SUN_GLOW_MAX);
+    private static final Item WATER_DEPTH = percent("water_depth", net.vulkanmod.visuals.render.PostProcessSettings.WATER_DEPTH_MAX);
 
     public static final List<Page> PAGES = List.of(
             new Page("image", List.of(
@@ -147,7 +155,7 @@ public final class VisualsOptionLayout {
                             new Item("fog_height", Kind.BLOCKS, FOG_HEIGHT_MIN, FOG_HEIGHT_MAX, Impact.NONE, null),
                             percent("weather_fog", 0, FOG_STRENGTH_MAX, Impact.NONE),
                             percent("distance_haze", 0, FOG_STRENGTH_MAX, Impact.NONE),
-                            percent("sun_glow", STRENGTH_MAX))),
+                            SUN_GLOW)),
                     new Block("sky", List.of(
                             percent("sunset_light", STRENGTH_MAX),
                             percent("light_shafts", 0, STRENGTH_MAX, Impact.MEDIUM),
@@ -200,6 +208,7 @@ public final class VisualsOptionLayout {
                             percent("block_light_colour", STRENGTH_MAX),
                             percent("block_glow", GLOW_MAX),
                             percent("ore_glow", GLOW_MAX),
+                            LIGHT_REACH,
                             toggle("edge_cover", Impact.NONE, null))),
                     new Block(DH_BLOCK, List.of(
                             toggle("dh_lods", Impact.HIGH, null),
@@ -225,7 +234,7 @@ public final class VisualsOptionLayout {
                     new Block("debug", List.of(new Item("light_debug", Kind.CHOICE, 0, LIGHT_DEBUG_MAX, Impact.NONE, null))))),
             new Page("water", List.of(
                     new Block("water", List.of(
-                            percent("water_depth", STRENGTH_MAX),
+                            WATER_DEPTH,
                             percent("water_reflections", 0, STRENGTH_MAX, Impact.MEDIUM),
                             new Item("block_reflections", Kind.CHOICE, 0, BLOCK_REFLECTIONS_MAX, Impact.MEDIUM, null),
                             //2026-11-13 (session 20): rain-wet ground and its puddles' reflections (0: off)
@@ -235,7 +244,7 @@ public final class VisualsOptionLayout {
                             percent("water_ripple_density", RIPPLE_DENSITY_MIN, RIPPLE_DENSITY_MAX, Impact.NONE),
                             percent("underwater_visibility", UNDERWATER_VISIBILITY_MIN, UNDERWATER_VISIBILITY_MAX, Impact.NONE),
                             //2026-11-13 (session 20): the sunlight the ripples focus on the floor under water (0: off)
-                            percent("caustics", 0, CausticMath.STRENGTH_MAX, Impact.NONE))),
+                            CAUSTICS)),
                     new Block("wind", List.of(
                             percent("foliage_wind", STRENGTH_MAX),
                             //2026-11-13 (session 20): hanging lanterns, chains and hanging plants swing (0: still)
@@ -256,7 +265,7 @@ public final class VisualsOptionLayout {
                             //2026-11-11 (session 12): the stars
                             colour(Colour.STARS, null))),
                     //Session 8 follow-up: what a palette sets besides the colours (also on the image and atmosphere pages)
-                    new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG, MOONLIGHT, EXPOSURE, TONE, CONTRAST, GRADE)),
+                    new Block(COLOURS_LOOK, List.of(BLOOM, SATURATION, FOG, MOONLIGHT, EXPOSURE, TONE, CONTRAST, GRADE, LIGHT_REACH, CAUSTICS, SUN_GLOW, WATER_DEPTH)),
                     new Block("colours_air", List.of(
                             colour(Colour.FOG, null),
                             colour(Colour.OVERCAST, null),
@@ -267,7 +276,8 @@ public final class VisualsOptionLayout {
                             colour(Colour.SUNLIGHT, null),
                             colour(Colour.SHADE_LIGHT, null),
                             colour(Colour.MOON, null),
-                            colour(Colour.BLOCK_LIGHT, null))),
+                            colour(Colour.BLOCK_LIGHT, null),
+                            colour(Colour.CAVE, null))),
                     new Block("colours_aurora", List.of(
                             colour(Colour.AURORA_MAIN, "aurora"),
                             colour(Colour.AURORA_UPPER, "aurora"),
@@ -370,6 +380,7 @@ public final class VisualsOptionLayout {
             case "sun_warmth" -> c.sunWarmth;
             case "block_light_colour" -> c.blockLightColour;
             case "block_glow" -> c.blockGlow;
+            case "light_reach" -> c.lightReach;
             case "ore_glow" -> c.oreGlow;
             case "edge_cover" -> c.edgeCover ? 1 : 0;
             case "sun_shadows" -> c.sunShadows ? 1 : 0;
@@ -468,6 +479,7 @@ public final class VisualsOptionLayout {
             case "sun_warmth" -> c.sunWarmth = v;
             case "block_light_colour" -> c.blockLightColour = v;
             case "block_glow" -> c.blockGlow = v;
+            case "light_reach" -> c.lightReach = v;
             case "ore_glow" -> c.oreGlow = v;
             case "edge_cover" -> c.edgeCover = v != 0;
             case "sun_shadows" -> c.sunShadows = v != 0;

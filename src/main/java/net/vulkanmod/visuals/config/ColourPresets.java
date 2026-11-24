@@ -30,6 +30,12 @@ import java.util.function.ToIntFunction;
  * films' skies): a saturated azure sky, pure white clouds, coral-peach sunsets with pink, a blue-violet night, turquoise water.</li>
  * <li>HORROR: fog-bound horror (Silent Hill 2, 2024; The Witch, 2015; The Mist, 2007): a grey-green daylight and fog, clouds in grey, a
  * blood-red sunset and a red moon, an almost black night, dim sickly auroras, murky water.</li>
+ * <li>HORROR, retuned 2026-11-24 (revision 30) to the user's seven reference photographs (described in the session notes, looked at only):
+ * a noon that already looks like late afternoon (a sepia-amber sky, sun glow and sunlight, crushed warm shade, a stronger sun glare), a
+ * grey rain (a neutral fog and a cool grey overcast), a near-black navy night with a cold blue-grey moon, cold dark green caves and
+ * interiors (the cave light, CAVE), light bright only near its source with a short reach (light_reach) and paler torch light, more fog
+ * and bloom than before but less than the photograph, murky dark green water (water_depth) without caustics, no stars (their colour
+ * black) or auroras, and the realistic clouds (clouds).</li>
  * </ul>
  * The follow-up's light colours and look settings, from the same references: REALISTIC a near-white noon sun (about 5500 K in daylight
  * photographs) and blue skylight in the shade (shadows on snow and concrete photograph blue), less bloom than the default (a camera's
@@ -67,20 +73,28 @@ public final class ColourPresets {
             ShaderColours.defaults(),
             {0x58A6F4, 0xFF9874, 0xFFC0AA, 0xFFF2CC, 0x3A6CFF, 0xE0E6FF, 0xC6DEF8, 0xDCE6FF, 0xFFFFFF, 0xD4EAFF, 0xFFFFFF, 0xFFD08E, 0xE0E4FF, 0xF4F6FF, 0xFFB46E,
                     0x4CFFD6, 0xFF74E4, 0xB482FF, 0xD494FF, 0x3CD2EA, 0x3CCAE2,
-                    0xB4B8C8, 0xFFB850, 0xFFA040, 0x4CA8FF, 0xD080FF, 0xC0C4D8, 0xFFFFFF},
-            {0x6C7876, 0xA23C2C, 0x8C7A5E, 0xC49482, 0x0E1316, 0x8E968A, 0x858F84, 0x6E766E, 0x9A9C98, 0x98A298, 0xC6CAC6, 0xD8D0B0, 0xB8C8C0, 0xD04A3A, 0xFF6A30,
-                    0x2E9E44, 0x7E1020, 0x5E1E7C, 0x5E1E5E, 0x2E4E46, 0x283E36,
-                    0x4A4C48, 0xC8A040, 0xD04A20, 0x4A6E5E, 0x6A3A6A, 0x5E625A, 0xB0A8A0},
+                    0xB4B8C8, 0xFFB850, 0xFFA040, 0x4CA8FF, 0xD080FF, 0xC0C4D8, 0xFFFFFF, 0xFFFFFF},
+            {0xA08C6A, 0xB4582C, 0x9C7A52, 0xFFC070, 0x1A2846, 0x000000, 0x8A949E, 0x92B2BC, 0xA89C8A, 0x98A298, 0xC6CAC6, 0xFFB45A, 0x9A8C6E, 0xA4B4CC, 0xF2DCC4,
+                    0x2E9E44, 0x7E1020, 0x5E1E7C, 0x5E1E5E, 0x163E26, 0x14321E,
+                    0x4A4C48, 0xC8A040, 0xD04A20, 0x4A6E5E, 0x6A3A6A, 0x5E625A, 0xB0A8A0, 0xA0CCC4},
     };
+
+    /**
+     * 2026-11-24: Horror's colours before revision 30 (without the cave light, then the default), in Colour order: moveOldHorror recognises
+     * a file still on them.
+     */
+    static final int[] HORROR_BEFORE_30 = {0x6C7876, 0xA23C2C, 0x8C7A5E, 0xC49482, 0x0E1316, 0x8E968A, 0x858F84, 0x6E766E, 0x9A9C98, 0x98A298, 0xC6CAC6,
+            0xD8D0B0, 0xB8C8C0, 0xD04A3A, 0xFF6A30, 0x2E9E44, 0x7E1020, 0x5E1E7C, 0x5E1E5E, 0x2E4E46, 0x283E36,
+            0x4A4C48, 0xC8A040, 0xD04A20, 0x4A6E5E, 0x6A3A6A, 0x5E625A, 0xB0A8A0};
 
     /** The Realistic and Cinematic palettes' colours (revisions 8 to 27), in Colour order: moveRetired recognises a file still on one. */
     private static final int[][] RETIRED = {
             {0x6A94CC, 0xFF8A48, 0xF7B486, 0xFFE6C4, 0x1C2A46, 0xF2F5FF, 0xC2CBD4, 0xE6ECF2, 0xF2F2F2, 0xDCE6F0, 0xF7F9FF, 0xFFC88C, 0xE8F0FF, 0xEEEEEA, 0xFFA458,
                     0x48FF8C, 0xFF4A6A, 0xA868FF, 0xCB89FF, 0x4C9CBC, 0x4AA6AA,
-                    0x6E6A66, 0xFFA848, 0xFFA020, 0x3F76E4, 0xB070F0, 0xA0A0A0, 0xE7E7E7},
+                    0x6E6A66, 0xFFA848, 0xFFA020, 0x3F76E4, 0xB070F0, 0xA0A0A0, 0xE7E7E7, 0xFFFFFF},
             {0x5C98C0, 0xFF7A2E, 0xFF9C5A, 0xFFC48A, 0x183C4C, 0xD6F0FF, 0xF0B8A8, 0xB6C6CA, 0xFFEEDC, 0xC4DEE6, 0xEEF8FF, 0xFFB066, 0xD0F0F0, 0xD2EEFF, 0xFF8C3A,
                     0x3CF2E2, 0xFF5A86, 0x7E62FF, 0x9E74FF, 0x369AA6, 0x28868E,
-                    0x9A8E84, 0xFF9030, 0xFF7020, 0x3C8CC0, 0x8C70FF, 0xA49A8E, 0xE8D8C8},
+                    0x9A8E84, 0xFF9030, 0xFF7020, 0x3C8CC0, 0x8C70FF, 0xA49A8E, 0xE8D8C8, 0xFFFFFF},
     };
 
     /**
@@ -90,7 +104,7 @@ public final class ColourPresets {
      * whether there is a night brightness setting, and have the colour presets include it"): the moonlight, the night's brightness.
      */
     public static final String[] LOOK_KEYS = {"bloom_strength", "saturation", "fog_strength", "moonlight", "exposure", "tone_strength", "contrast",
-            "grade_strength"};
+            "grade_strength", "light_reach", "caustics", "sun_glow", "water_depth"};
     /**
      * Each palette's LOOK_KEYS values, one row per level (DEFAULT is VisualsConfig's defaults; tested). 2026-11-11 (the user, after trying
      * them): Realistic's fog 110 -> 40, Anime 70 / 120 / 70 -> 35 / 110 / 80, Horror's bloom 20 -> 15. 2026-11-12, the moonlight: Default
@@ -110,24 +124,26 @@ public final class ColourPresets {
      * Realistic's 30 / 40 were already in range.
      */
     private static final int[][] LOOK = {
-            {35, 94, 35, 50, 100, 100, 100, 0},
-            {35, 105, 30, 57, 110, 70, 105, 25},
-            {15, 60, 40, 15, 85, 100, 120, 0},
+            {35, 94, 35, 50, 100, 100, 100, 0, 100, 100, 50, 100},
+            {35, 105, 30, 57, 110, 70, 105, 25, 100, 100, 50, 100},
+            {40, 65, 60, 12, 85, 100, 130, 25, 70, 0, 110, 250},
     };
+    /** 2026-11-24: Horror's row from revision 21 to 29 (without the light reach, then 100): moveOldHorror recognises a file still on it. */
+    static final int[] HORROR_LOOK_BEFORE_30 = {15, 60, 40, 15, 85, 100, 120, 0, 100, 100, 50, 100};
     /**
      * The rows revisions 21 to 26 saved: Anime's moonlight was 70 (2026-11-23, the user: "달빛은 57%로 낮추기"; VisualsConfig.read moves a
      * file still on the old row to LOOK's; moveOldRows).
      */
     static final int[][] LOOK_BEFORE_27 = {
-            {35, 94, 35, 50, 100, 100, 100, 0},
-            {35, 105, 30, 70, 110, 70, 105, 25},
-            {15, 60, 40, 15, 85, 100, 120, 0},
+            {35, 94, 35, 50, 100, 100, 100, 0, 100, 100, 50, 100},
+            {35, 105, 30, 70, 110, 70, 105, 25, 100, 100, 50, 100},
+            {15, 60, 40, 15, 85, 100, 120, 0, 100, 100, 50, 100},
     };
     /** The rows revisions 18 to 20 saved (VisualsConfig.read moves a file still on one of them to LOOK's row; moveOldRows). */
     static final int[][] LOOK_BEFORE_21 = {
-            {45, 94, 100, 50, 100, 100, 100, 0},
-            {35, 110, 80, 70, 110, 70, 105, 25},
-            {15, 60, 200, 15, 85, 100, 120, 0},
+            {45, 94, 100, 50, 100, 100, 100, 0, 100, 100, 50, 100},
+            {35, 110, 80, 70, 110, 70, 105, 25, 100, 100, 50, 100},
+            {15, 60, 200, 15, 85, 100, 120, 0, 100, 100, 50, 100},
     };
     /** The moonlight's value before the palettes set it (VisualsConfig's default): an older file on a palette with it takes the palette's. */
     static final int MOONLIGHT_BEFORE_16 = 50;
@@ -181,11 +197,13 @@ public final class ColourPresets {
     public static int clouds(int level) {
         return switch (level) {
             case ANIME -> CloudMath.STYLE_ANIME;
+            //2026-11-24 (the user: "기본 구름을 현실적 구름으로 맞추고"): Horror picks the realistic clouds (revision 30)
+            case HORROR -> CloudMath.STYLE_REALISTIC;
             default -> ANY_CLOUDS;
         };
     }
 
-    /** The cloud style choosing palette level leaves, from the current style (clouds; DEFAULT, HORROR and CUSTOM keep it). */
+    /** The cloud style choosing palette level leaves, from the current style (clouds; DEFAULT and CUSTOM keep it). */
     public static int cloudStyle(int level, int style) {
         int own = clouds(level);
         return own == ANY_CLOUDS ? style : own;
@@ -412,6 +430,32 @@ public final class ColourPresets {
             if (!old && c.colour(colour) != value(colour, ANIME)) return false;
         }
         c.setColour(Colour.NIGHT_SKY, value(Colour.NIGHT_SKY, ANIME));
+        return true;
+    }
+
+    /**
+     * 2026-11-24 (revision 30, the Horror palette retuned to the user's seven references): a file on Horror whose colours are still all the
+     * old palette's (HORROR_BEFORE_30; missing ones, absent from an older file, at their defaults) and whose look settings are all still one
+     * of the values the old palette or an older file had there (its row, the rows before 21 and 11, the moonlight's and the tone block's old
+     * defaults; the light reach at its default) takes the retuned palette whole and stays on Horror: the player chose the palette, not those
+     * numbers. A file with any of them changed by hand keeps its values (it shows Custom). Returns whether it moved the file.
+     */
+    static boolean moveOldHorror(VisualsConfig c, java.util.Set<Colour> missing) {
+        if (c.colourPreset != HORROR) return false;
+        for (Colour colour : Colour.values()) {
+            int old = colour.ordinal() < HORROR_BEFORE_30.length ? HORROR_BEFORE_30[colour.ordinal()] : colour.defaultRgb();
+            boolean absent = missing.contains(colour) && c.colour(colour) == colour.defaultRgb();
+            if (!absent && c.colour(colour) != old) return false;
+        }
+        for (int i = 0; i < LOOK_KEYS.length; i++) {
+            String key = LOOK_KEYS[i];
+            int v = VisualsOptionLayout.get(c, VisualsOptionLayout.item(key));
+            boolean old = v == HORROR_LOOK_BEFORE_30[i] || v == LOOK_BEFORE_21[HORROR][i]
+                    || (i < LOOK_BEFORE_11[HORROR].length && v == LOOK_BEFORE_11[HORROR][i])
+                    || (TONE_BEFORE_18.containsKey(key) && v == TONE_BEFORE_18.get(key)) || (key.equals("moonlight") && v == MOONLIGHT_BEFORE_16);
+            if (!old) return false;
+        }
+        apply(c, HORROR);
         return true;
     }
 
