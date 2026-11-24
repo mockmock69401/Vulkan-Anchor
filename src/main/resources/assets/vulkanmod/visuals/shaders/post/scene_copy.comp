@@ -222,6 +222,11 @@ layout(location = 77) uniform vec4 skyEvents;
 // life's factor; meteorEase the speed's cubic bezier (x1, y1, x2, y2)
 layout(location = 78) uniform vec4 meteorShape;
 layout(location = 79) uniform vec4 meteorEase;
+//2026-11-23 (the user: the End's background like outer space), DimensionUniforms: x the End's sky style (endsky.glsl END_SKY_SPACE,
+// END_SKY_ANIME; 0 outside the End or for vanilla's sky); 2026-11-24: yz the camera's world xz from the light pillar's axis, w the
+// pillar (DimensionUniforms.pillar: its column's top, world y, in the whole part and how far below it its light starts in 1024ths;
+// PILLAR_OFF, below -1e8: no pillar)
+layout(location = 81) uniform vec4 endSkyParams;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -243,6 +248,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/sunopen.glsl>
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/galaxy.glsl>
+#import <vulkanmod:visuals/post/endsky.glsl>
 #import <vulkanmod:visuals/post/animestars.glsl>
 #import <vulkanmod:visuals/post/skyevents.glsl>
 #import <vulkanmod:visuals/post/heat.glsl>
@@ -1006,10 +1012,15 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         vec3 dir = normalize(toWorld*viewRay(invVanillaProj, pixelUvGl(p, size)));
         if (!atmosphereOn(a) || abs(a.sun.w - ATMOSPHERE_NO_SKY) < 0.5) {
-            //Session 19: the End's galaxy behind its aurora (dimensionParams.x 0 elsewhere: nothing evaluated)
-            vec3 stars = dimensionParams.x > 0.0 ? galaxy(dir, dimensionParams.x, 2.0*abs(invVanillaProj[1][1])/float(size.y),
-                    textureLod(galaxyMap, galaxyMapCoord(dir), 0.0).rgb) : vec3(0.0);
-            return vec4((scene + stars + auroraScreen(dir, p))*underwaterExposure(), 0.0);
+            //2026-11-23: the End's own sky and its stars (endsky.glsl) in place of vanilla's box
+            float pixelAngle = 2.0*abs(invVanillaProj[1][1])/float(size.y);
+            vec3 back = endSkyParams.x > 0.5 ? endSky(dir, endSkyParams.x, pixelAngle, dimensionParams.w) : scene;
+            //Session 19: the End's galaxy behind its aurora (dimensionParams.x 0 elsewhere: nothing evaluated); the Anime sky leaves the
+            // band out (endSkyBand, endSkyStars)
+            vec3 stars = dimensionParams.x > 0.0 ? galaxy(dir, dimensionParams.x*endSkyStars(endSkyParams.x), pixelAngle,
+                    textureLod(galaxyMap, galaxyMapCoord(dir), 0.0).rgb*endSkyBand(endSkyParams.x)) : vec3(0.0);
+            //2026-11-24: the aurora fainter over the Space sky (endSkyAurora)
+            return vec4((back + stars + auroraScreen(dir, p)*endSkyAurora(endSkyParams.x))*underwaterExposure(), 0.0);
         }
         //Session 5: the round discs (the round moon replaces vanilla's square one, which vanillaMoonKept drops) and the aurora, under
         // the far clouds
@@ -1301,6 +1312,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         }
         if (exposureMode(ATMOSPHERE_NO_SKY)) {
             lit *= looked(NO_SKY_EXPOSURE, look);
+        }
+        //2026-11-24: the End's terrain in its sky's light (endsky.glsl endGround; vanilla's End sky: unchanged)
+        if (endSkyParams.x > 0.5) {
+            lit = endGround(lit, endSkyParams.x, blockT);
         }
         if (water && floorWeight > 0.0) {
             //Gate G7l: water whose vanilla light was too dark to scale keeps its body's scattering floor. 2026-11-22: faded in past
@@ -1668,7 +1683,19 @@ void main() {
         colour = vec4(own, 1.0);
         particleTile[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x] = 1u;
     }
-    imageStore(sceneOut, p, compositeAt(p, size, colour, overdrawn));
+    vec4 composite = compositeAt(p, size, colour, overdrawn);
+    //2026-11-24: the End's light pillar over the exit portal (endsky.glsl endPillar) in front of what lies behind it
+    if (endSkyParams.x > 0.5 && endSkyParams.w > -1e8) {
+        vec3 view;
+        bool fromLod;
+        float far = scenePositionFrom(p, size, view, fromLod) ? length(view) : 1e9;
+        vec3 dir = normalize(mat3(invView)*viewRay(invVanillaProj, pixelUvGl(p, size)));
+        float pixelAngle = 2.0*abs(invVanillaProj[1][1])/float(size.y);
+        float top = floor(endSkyParams.w);
+        vec3 rel = vec3(endSkyParams.y, dimensionParams.z - top, endSkyParams.z);
+        composite.rgb += endPillar(rel, dir, far, pixelAngle, (endSkyParams.w - top)*1024.0, dimensionParams.w)*underwaterExposure();
+    }
+    imageStore(sceneOut, p, composite);
 }
 #endif
 #endif

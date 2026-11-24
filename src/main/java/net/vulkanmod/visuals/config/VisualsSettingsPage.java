@@ -129,12 +129,15 @@ public final class VisualsSettingsPage {
         Runnable paletteFollow = linkColourPreset(byKey, allByKey);
         linkPreset(byKey, refresh, paletteFollow);
         //2026-11-17: the star type moves the colour palette too (Anime needs the anime stars); it is no performance setting
-        Option<?> starType = byKey.get(ColourPresets.STAR_KEY);
-        if (starType != null) {
-            starType.setOnChange(() -> {
-                paletteFollow.run();
-                refresh.run();
-            });
+        //2026-11-23: and the End sky (the palettes pick it)
+        for (String key : new String[]{ColourPresets.STAR_KEY, ColourPresets.END_SKY_KEY}) {
+            Option<?> linked = byKey.get(key);
+            if (linked != null) {
+                linked.setOnChange(() -> {
+                    paletteFollow.run();
+                    refresh.run();
+                });
+            }
         }
         //Optical Flow and FSR frame generation exclude each other: turning one on shows the other off (FsrSettings.onToggle does the same in the config)
         excludeEachOther(byKey.get(VisualsOptionLayout.FRAME_GENERATION), byKey.get(VisualsOptionLayout.FSR_FRAME_GENERATION), refresh);
@@ -237,6 +240,12 @@ public final class VisualsSettingsPage {
                 if (stars != null) {
                     int type = ColourPresets.starType(level, intValue(stars));
                     if (type != intValue(stars)) show(stars, VisualsOptionLayout.item(ColourPresets.STAR_KEY), type);
+                }
+                //2026-11-23: Anime shows its painted End sky, Default, Realistic and Cinematic the space one; Horror leaves it
+                Option<?> endSky = byKey.get(ColourPresets.END_SKY_KEY);
+                if (endSky != null) {
+                    int style = ColourPresets.endSky(level, intValue(endSky));
+                    if (style != intValue(endSky)) show(endSky, VisualsOptionLayout.item(ColourPresets.END_SKY_KEY), style);
                 }
                 //2026-11-14: Horror shows the auroras off; another palette takes them back to the performance preset's mode
                 Option<?> aurora = byKey.get(ColourPresets.AURORA_KEY);

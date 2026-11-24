@@ -1728,7 +1728,9 @@ class SceneCompositeTest {
         assertTrue(c.contains("own = albedo*lightmapDisplay(t.y, t.x);"));
         assertTrue(body.contains("if (overdrawn && translucentParticle(p, colour.rgb, behind, own, cover)) {"));
         int own = body.indexOf("colour = vec4(own, 1.0);"), flag = body.indexOf("particleTile[gl_WorkGroupID.y*gl_NumWorkGroups.x + gl_WorkGroupID.x] = 1u;");
-        assertTrue(own > 0 && flag > own && flag < body.indexOf("imageStore(sceneOut, p, compositeAt(p, size, colour, overdrawn));"));
+        //2026-11-24: the End's light pillar is added to the composite before it is stored
+        int composite = body.indexOf("vec4 composite = compositeAt(p, size, colour, overdrawn);");
+        assertTrue(own > 0 && flag > own && flag < composite && composite < body.indexOf("imageStore(sceneOut, p, composite);"));
         assertEquals(1, body.split("compositeAt\\(", -1).length - 1, "one composite per pixel");
         assertTrue(c.contains("layout(binding = 21, std430) restrict buffer ParticleTiles { uint particleTile[]; };"));
         //The particles' pass: only flagged tiles (the whole group returns together), the same cover, the composite read back, one barrier

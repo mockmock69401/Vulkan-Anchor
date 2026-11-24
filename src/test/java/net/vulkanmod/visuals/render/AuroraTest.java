@@ -234,7 +234,8 @@ class AuroraTest {
         int sky = COPY.indexOf("+ auroraScreen(dir, p);"), clouds = COPY.indexOf("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)");
         assertTrue(sky > 0 && clouds > sky, "under the far clouds");
         //Session 19: over the End's galaxy
-        assertTrue(COPY.contains("return vec4((scene + stars + auroraScreen(dir, p))*underwaterExposure(), 0.0);"), "the End's sky");
+        //2026-11-23: over the End's own sky (endsky.glsl)
+        assertTrue(COPY.contains("return vec4((back + stars + auroraScreen(dir, p)*endSkyAurora(endSkyParams.x))*underwaterExposure(), 0.0);"), "the End's sky");
         //Session 14 follow-up: on a sky pixel the half-size aurora with Half-resolution Weather & Sky, else the full-size march as before
         assertTrue(COPY.replace("\r\n", "\n").contains("    if (halfParams.y > 0.5) {\n        return auroraParams.x > 0.0 ? halfSkyAt(true, p, HAZE_MAX_DISTANCE).rgb : vec3(0.0);\n    }\n    return auroraSky(dir, p);"));
         //The half-size pass fades rays finer than its texel (moire at 1280x720); the full size calls the march with no pixel angle
