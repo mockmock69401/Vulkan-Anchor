@@ -13,7 +13,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * 2026-11-16 (the user: "only the Anime preset should change the clouds; choosing another preset resets the cloud choice", then "the
  * Realistic and Cinematic presets should pick the realistic clouds"): Realistic and Cinematic pick the realistic clouds, Anime the anime
  * ones, and Default and Horror leave the style as the player set it; the performance presets keep a palette's clouds. 2026-11-23 (the
- * user: "애니메이션 색상 프리셋에서 현실적 구름 사용"): Anime picks the realistic clouds too.
+ * user: "애니메이션 색상 프리셋에서 현실적 구름 사용"): Anime picked the realistic clouds too; 2026-11-24 (the user: "모두 커밋, 애니는
+ * 수채화"): the anime (watercolour) clouds again.
  */
 class PaletteCloudStyleTest {
     private static final int[] STYLES = {CloudMath.STYLE_VANILLA, CloudMath.STYLE_REALISTIC, CloudMath.STYLE_ANIME};
@@ -23,7 +24,7 @@ class PaletteCloudStyleTest {
 
     private static int expected(int palette, int style) {
         return switch (palette) {
-            case ColourPresets.ANIME -> CloudMath.STYLE_REALISTIC;
+            case ColourPresets.ANIME -> CloudMath.STYLE_ANIME;
             default -> style;
         };
     }
@@ -71,7 +72,7 @@ class PaletteCloudStyleTest {
             VisualsConfig d = new VisualsConfig();
             ColourPresets.apply(d, ColourPresets.ANIME);
             ColourPresets.apply(d, to);
-            assertEquals(CloudMath.STYLE_REALISTIC, d.cloudStyle);
+            assertEquals(CloudMath.STYLE_ANIME, d.cloudStyle);
         }
     }
 

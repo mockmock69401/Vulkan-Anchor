@@ -174,13 +174,13 @@ public final class ColourPresets {
     public static final int ANY_CLOUDS = -1;
 
     /**
-     * The cloud style palette level picks (CloudMath.STYLE_REALISTIC for REALISTIC, CINEMATIC and ANIME), or ANY_CLOUDS. 2026-11-23 (the
-     * user: "애니메이션 색상 프리셋에서 현실적 구름 사용 (애니메이션 구름은 차후 개선 예정)"): ANIME picks the realistic clouds too, until
-     * the anime clouds are reworked (it picked STYLE_ANIME from revision 10 to 26).
+     * The cloud style palette level picks, or ANY_CLOUDS. 2026-11-23 (the user: "애니메이션 색상 프리셋에서 현실적 구름 사용 (애니메이션
+     * 구름은 차후 개선 예정)"): ANIME picked the realistic clouds until the anime clouds were reworked (STYLE_ANIME from revision 10 to 26).
+     * 2026-11-24, the anime clouds now watercolour (the user: "모두 커밋, 애니는 수채화"): ANIME picks STYLE_ANIME again (revision 29).
      */
     public static int clouds(int level) {
         return switch (level) {
-            case ANIME -> CloudMath.STYLE_REALISTIC;
+            case ANIME -> CloudMath.STYLE_ANIME;
             default -> ANY_CLOUDS;
         };
     }

@@ -82,11 +82,16 @@ public class VisualsConfig {
      * 28 (2026-11-24, the user: "기존 기본과 애니메이션, 공포 프리셋만 남기고 나머지 두 개의 프리셋은 지워줘"): the Realistic and Cinematic
      * palettes are gone and the rest renumbered (Default 0, Anime 1, Horror 2, Custom 3); a file takes the new number, and one still on
      * Realistic or Cinematic takes Default (ColourPresets.moveRetired); one changed by hand keeps its colours and shows Custom.
+     * 29 (2026-11-24, the user: "모두 커밋, 애니는 수채화"): the Anime palette picks the anime clouds again, now watercolour
+     * (ColourPresets.clouds); a file saved at 27 or 28 on Anime with the realistic clouds it picked then takes the anime clouds and stays on
+     * the palette; one whose clouds or other settings were changed by hand keeps them.
      */
-    private static final int REVISION = 28;
+    private static final int REVISION = 29;
+    /** 2026-11-24: the first revision whose Anime palette picks the anime (watercolour) clouds again. */
+    static final int ANIME_WATERCOLOUR_REVISION = 29;
     /** 2026-11-24: the first revision with three palettes and their new numbers. */
     static final int THREE_PALETTES_REVISION = 28;
-    /** 2026-11-23: the first revision whose presets set the sun's and moon's shape and whose Anime palette picks the realistic clouds. */
+    /** 2026-11-23: the first revision whose presets set the sun's and moon's shape and whose Anime palette picks the realistic clouds (until 29). */
     static final int ROUND_SKY_REVISION = 27;
     /** 2026-11-17: the first revision with the Anime palette's blue night sky. */
     static final int PALETTE_NIGHT_REVISION = 26;
@@ -233,6 +238,14 @@ public class VisualsConfig {
         //2026-11-23: a file saved before the End sky setting takes its palette's (the default, Space, on Horror and Custom); after the
         // palettes' new numbers, and before every palette check below, so they find it on its palette's
         if (!json.has("endSky")) c.endSky = ColourPresets.endSky(c.colourPreset, DimensionUniforms.END_SKY_SPACE);
+        //2026-11-24: a file on Anime saved at 27 or 28 with the realistic clouds the palette picked then takes the anime (watercolour)
+        // clouds it picks again, and stays on it; before the performance preset's check, which counts the palette's clouds as the level's
+        if (fileRevision >= ROUND_SKY_REVISION && fileRevision < ANIME_WATERCOLOUR_REVISION && c.colourPreset == ColourPresets.ANIME
+                && c.cloudStyle == CloudMath.STYLE_REALISTIC
+                && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? ColourPresets.clouds(ColourPresets.ANIME)
+                : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
+            c.cloudStyle = ColourPresets.clouds(ColourPresets.ANIME);
+        }
         c.preset = VisualsPresets.validated(c);
         //Session 8: the colour palette is the one the colours are on (an older file has neither: the defaults, DEFAULT); since revision 9
         // also its bloom, saturation and fog strength (a file saved before keeps them, so a palette with other values there shows Custom)
@@ -261,7 +274,8 @@ public class VisualsConfig {
         //2026-11-23: a file still on Anime's old row (moonlight 70) takes the new one; first, so the Anime checks below see it
         if (fileRevision < ROUND_SKY_REVISION) ColourPresets.moveOldRows(c, ColourPresets.LOOK_BEFORE_27, java.util.Map.of());
         //The cloud style an Anime file saved before 27 had under the old palette counts as the palette's (the anime clouds, assumed for a
-        // file older than 10, which the old palette gave them on load); the block after the stars' moves it to the realistic clouds
+        // file older than 10, which the old palette gave them on load); the block after the stars' gives it the palette's clouds (the
+        // anime ones again since 29)
         int savedClouds = c.cloudStyle;
         boolean oldAnimeClouds = fileRevision < ROUND_SKY_REVISION && c.colourPreset == ColourPresets.ANIME
                 && (fileRevision < ANIME_CLOUDS_REVISION || savedClouds == CloudMath.STYLE_ANIME);
@@ -274,7 +288,7 @@ public class VisualsConfig {
             c.starType = StarMath.TYPE_ANIME;
         }
         //Session 11 (a file before 10 took the anime clouds here), 2026-11-23: a file on Anime with the old palette's clouds takes the
-        // realistic clouds it picks now (and stays on the palette)
+        // clouds it picks now (and stays on the palette)
         if (oldAnimeClouds && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.CLOUD_KEY) ? ColourPresets.clouds(ColourPresets.ANIME)
                 : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.ANIME) {
             c.cloudStyle = ColourPresets.clouds(ColourPresets.ANIME);
