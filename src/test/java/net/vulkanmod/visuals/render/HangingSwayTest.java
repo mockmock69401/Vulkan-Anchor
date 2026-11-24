@@ -135,4 +135,60 @@ class HangingSwayTest {
         assertTrue(s.contains("float own = sin(6.2831853 * (fract(cycles * WindHang.y) + phase));"));
         assertEquals(FoliageWind.PERIOD, FoliageWind.HANG_WRAP, 1e-9);
     }
+
+    /** 2026-11-24 (the user: "사슬과 랜턴을 자세히 보니 바람에 흔들릴 때 각도가 미묘하게 틀어지고 있어"): the exact depths and the rigid turn. */
+    @Test
+    void aLanternAndItsChainsTurnAsOneBody() throws IOException {
+        //A hanging lantern's heights in its block (template_hanging_lantern: body 1..8, cap 8..10, hook 10..16 sixteenths), under 0 and 2
+        // chains; the camera at a few heights: the depth taken back from the mark is the exact one
+        for (int above = 0; above <= 2; above += 2) {
+            for (float camera : new float[]{0f, 0.37f, 0.999f}) {
+                for (int y16 : new int[]{1, 8, 10, 11, 15, 16}) {
+                    float y = y16 / 16f, depth = above + 1 - y;
+                    int steps = mark(FoliageMarker.hangAlpha(1.0f, depth)) - FoliageMarker.HANG_BASE;
+                    float rounded = steps * FoliageMarker.HANG_STEP;
+                    //the vertex 5 blocks above the camera's block: its height from the camera plus the camera's height in its block
+                    float grid = (5 + y - camera) + camera;
+                    assertEquals(depth, FoliageWind.hangDepth(rounded, grid), 1e-5, "above " + above + " y " + y16 + " camera " + camera);
+                }
+            }
+        }
+        //The deepest mark keeps its depth
+        assertEquals(FoliageWind.HANG_DEEPEST, FoliageWind.hangDepth(FoliageWind.HANG_DEEPEST, 0.3f), 0);
+        //A vertex on the axis moves as before: sideways by the slope times its depth, up by the arc
+        float[] o = FoliageWind.hangTurn(0.12f, -0.05f, 2f, 0, 0);
+        assertEquals(0.24f, o[0], 1e-5);
+        assertEquals(-0.1f, o[2], 1e-5);
+        assertEquals(2 * (1 - Math.sqrt(1 - 0.13 * 0.13)), o[1], 1e-5);
+        //The body keeps its shape: the distances between a lantern's corners (and to the anchor) stay as they were
+        float[][] corners = {{-0.1875f, 0.9375f, -0.1875f}, {0.1875f, 0.9375f, 0.1875f}, {0.1875f, 0.5f, -0.1875f}, {-0.125f, 0.375f, 0.125f},
+                {0, 0, 0}};
+        float[][] moved = new float[corners.length][];
+        for (int i = 0; i < corners.length; i++) {
+            float[] c = corners[i];
+            float[] d = FoliageWind.hangTurn(0.2f, 0.1f, c[1], c[0], c[2]);
+            moved[i] = new float[]{c[0] + d[0], -c[1] + d[1], c[2] + d[2]};
+        }
+        for (int i = 0; i < corners.length; i++) {
+            for (int j = 0; j < corners.length; j++) {
+                float[] a = corners[i], b = corners[j];
+                double before = Math.sqrt(sq(a[0] - b[0]) + sq(a[1] - b[1]) + sq(a[2] - b[2]));
+                double after = Math.sqrt(sq(moved[i][0] - moved[j][0]) + sq(moved[i][1] - moved[j][1]) + sq(moved[i][2] - moved[j][2]));
+                assertEquals(before, after, 1e-5, i + " to " + j);
+            }
+        }
+        //The lantern's bottom face tilts with the swing (a shear kept it level)
+        assertNotEquals(moved[0][1], moved[1][1], 1e-3);
+        assertEquals(0, FoliageWind.hangTurn(0, 0, 1, 0.1f, 0.1f)[0]);
+        String s = Files.readString(VSH);
+        assertTrue(s.contains("const float WIND_HANG_DEEPEST = float(WIND_HANG_LEVELS - 1) * WIND_HANG_STEP;"));
+        assertTrue(s.contains("const float WIND_HANG_SINE_MAX = " + FoliageWind.HANG_SINE_MAX + ";"));
+        assertTrue(s.contains("float depth = depthMark < WIND_HANG_DEEPEST ? floor(depthMark + grid + 0.5) - grid : depthMark;"));
+        assertTrue(s.contains("float moved = a * cosine + depth * sine - a;"));
+        assertTrue(s.contains("return vec3(dir.x * moved, depth * (1.0 - cosine) + a * sine, dir.y * moved);"));
+    }
+
+    private static double sq(double v) {
+        return v * v;
+    }
 }

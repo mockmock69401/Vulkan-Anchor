@@ -148,10 +148,42 @@ public final class FoliageWind {
         return HANG_AMPLITUDE * s * (1 + RAIN_GAIN * r);
     }
 
-    /** The terrain's WindHang: the hanging blocks' swing (0 while the post-processing is off) and their clock (0..1). */
+    /**
+     * The terrain's WindHang: the hanging blocks' swing (0 while the post-processing is off), their clock (0..1) and (2026-11-24) the
+     * camera's height above its block (hangDepth's grid).
+     */
     public static MappedBuffer hang() {
         if (!VisualsConfig.get().enabled) HANG.putFloat(0, 0);
+        double y = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition().y;
+        HANG.putFloat(8, (float) (y - Math.floor(y)));
         return HANG;
+    }
+
+    /** terrain.vsh's WIND_HANG_DEEPEST and WIND_HANG_SINE_MAX. */
+    public static final float HANG_DEEPEST = (FoliageMarker.HANG_LEVELS - 1) * FoliageMarker.HANG_STEP, HANG_SINE_MAX = 0.9f;
+
+    /**
+     * 2026-11-24, as terrain.vsh's hangOffset: a vertex's exact depth below its anchor from the mark's rounded depth and its height grid
+     * above the camera's block (its height from the camera plus WindHang.z): the anchor is a whole block on that grid.
+     */
+    public static float hangDepth(float depthMark, float grid) {
+        return depthMark < HANG_DEEPEST ? (float) Math.floor(depthMark + grid + 0.5f) - grid : depthMark;
+    }
+
+    /**
+     * 2026-11-24, as terrain.vsh's hangOffset: the offset {x, y, z} of a vertex depth blocks below the anchor and (ax, az) from the
+     * column's axis when the column swings by slope (sideways blocks per block of depth): it turns about the anchor by the angle whose sine
+     * is the slope's length (at most HANG_SINE_MAX).
+     */
+    public static float[] hangTurn(float slopeX, float slopeZ, float depth, float ax, float az) {
+        float len = (float) Math.sqrt(slopeX * slopeX + slopeZ * slopeZ);
+        float sine = Math.min(len, HANG_SINE_MAX);
+        if (!(sine > 0) || !(depth > 0)) return new float[3];
+        float dx = slopeX / len, dz = slopeZ / len;
+        float cosine = (float) Math.sqrt(1 - sine * sine);
+        float a = ax * dx + az * dz;
+        float moved = a * cosine + depth * sine - a;
+        return new float[]{dx * moved, depth * (1 - cosine) + a * sine, dz * moved};
     }
 
     public static MappedBuffer phase() {

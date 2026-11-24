@@ -8,7 +8,7 @@ layout (binding = 0) uniform UniformBufferObject {
     vec4 WindPhase;
     vec4 WindParams;
     //Session 20: x the hanging blocks' swing (blocks sideways per block below the anchor, 0 = still), y their clock (0..1 over
-    // FoliageWind.HANG_TIME_PERIOD)
+    // FoliageWind.HANG_TIME_PERIOD); 2026-11-24: z the camera's height above its block (0..1)
     vec4 WindHang;
 };
 
@@ -129,6 +129,9 @@ vec3 windOffset(int mark, vec3 rel) {
 const int WIND_HANG_WRAP = 240, WIND_HANG_REACH = 480;
 const float WIND_HANG_CYCLES = 40.0, WIND_HANG_CYCLES_SPAN = 21.0, WIND_HANG_CROSS_CYCLES = 29.0, WIND_HANG_CROSS_SPAN = 17.0;
 const float WIND_HANG_SIZE = 0.7, WIND_HANG_SIZE_SPAN = 0.6;
+//2026-11-24: the deepest depth a mark holds (a deeper vertex keeps it), and the steepest swing (the sine of its angle)
+const float WIND_HANG_DEEPEST = float(WIND_HANG_LEVELS - 1) * WIND_HANG_STEP;
+const float WIND_HANG_SINE_MAX = 0.9;
 
 //The PCG hash (Jarzynski and Olano 2020, "Hash Functions for GPU Rendering"): a column's next number, 0..1
 float hangRandom(inout uint state) {
@@ -138,19 +141,30 @@ float hangRandom(inout uint state) {
     return float(w >> 8u) / 16777216.0;
 }
 
-//Session 20: a hanging vertex depth blocks below its anchor swings as a pendulum about it: the whole column leans with the wind at its
-// centre and swings at its own pace, and a vertex out to the side rises a little (the arc). Every vertex of a column (its chains and
-// its lantern) reads the same block, so the column moves as one
-vec3 hangOffset(float depth, vec3 rel) {
-    if (!(WindHang.x > 0.0) || depth <= 0.0) {
+//Session 20: a hanging column swings as a pendulum about its anchor: the whole column leans with the wind at its centre and swings at its
+// own pace. Every vertex of a column (its chains and its lantern) reads the same block, so the column moves as one.
+// 2026-11-24 (the user: "사슬과 랜턴을 자세히 보니 바람에 흔들릴 때 각도가 미묘하게 틀어지고 있어"): it turns as one rigid body. The mark
+// carries the vertex's depth rounded to WIND_HANG_STEP, so a lantern's body, cap and hook leaned by different angles (its body 1.14 times
+// the chain's, its cap not at all), and the vertices slid sideways by their depth (a shear: the lantern's top and bottom stayed level).
+// Now the anchor's height, a whole block above the camera's block grid, is taken back from the rounded depth (its error is under half a
+// block) and the vertex's exact depth from it; and each vertex turns about the anchor by the angle whose sine is the column's lean, so
+// a vertex under the anchor moves as before and the rest keeps its shape. depthMark is the mark's depth, pos the vertex (from the camera).
+vec3 hangOffset(float depthMark, vec3 pos) {
+    if (!(WindHang.x > 0.0) || depthMark <= 0.0) {
         return vec3(0.0);
     }
-    float near = windFade(rel, WIND_PLANT_FADE);
+    vec2 cell = floor(pos.xz + WindParams.xy);
+    vec2 centre = cell + 0.5 - WindParams.xy;
+    float near = windFade(vec3(centre.x, pos.y, centre.y), WIND_PLANT_FADE);
     if (near <= 0.0) {
         return vec3(0.0);
     }
-    vec2 cell = floor(rel.xz + WindParams.xy);
-    vec3 f = windAt(vec3(cell.x + 0.5 - WindParams.x, 0.0, cell.y + 0.5 - WindParams.y), 0.0);
+    float grid = pos.y + WindHang.z;
+    float depth = depthMark < WIND_HANG_DEEPEST ? floor(depthMark + grid + 0.5) - grid : depthMark;
+    if (depth <= 0.0) {
+        return vec3(0.0);
+    }
+    vec3 f = windAt(vec3(centre.x, 0.0, centre.y), 0.0);
     uvec2 column = uvec2(ivec2(cell) + WIND_HANG_REACH) % uint(WIND_HANG_WRAP);
     uint state = column.x * 73856093u ^ column.y * 19349663u;
     float cycles = WIND_HANG_CYCLES + floor(hangRandom(state) * WIND_HANG_CYCLES_SPAN);
@@ -164,8 +178,18 @@ vec3 hangOffset(float depth, vec3 rel) {
     vec2 along = vec2(cos(turn), sin(turn));
     vec2 lean = WIND_DIR * (f.x - 0.35) + vec2(-WIND_DIR.y, WIND_DIR.x) * (0.6 * f.y) + along * (0.45 * own)
             + vec2(-along.y, along.x) * (0.3 * own2);
-    vec2 xz = lean * (WindHang.x * size * near * depth);
-    return vec3(xz.x, 0.5 * dot(xz, xz) / depth, xz.y);
+    vec2 slope = lean * (WindHang.x * size * near);
+    float sine = min(length(slope), WIND_HANG_SINE_MAX);
+    if (!(sine > 0.0)) {
+        return vec3(0.0);
+    }
+    //The turn in the vertical plane through the lean: the vertex's offset from the column's axis along the lean (a) and its depth turn;
+    // its offset across the lean stays
+    vec2 dir = slope / length(slope);
+    float cosine = sqrt(1.0 - sine * sine);
+    float a = dot(pos.xz - centre, dir);
+    float moved = a * cosine + depth * sine - a;
+    return vec3(dir.x * moved, depth * (1.0 - cosine) + a * sine, dir.y * moved);
 }
 
 void main() {
