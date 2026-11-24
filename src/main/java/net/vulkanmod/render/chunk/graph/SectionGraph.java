@@ -382,6 +382,11 @@ public class SectionGraph {
         }
     }
 
+    /**
+     * The walk without directional culling: in dimensions without sky light (the Nether, the End), for a spectator inside a block, and
+     * when the culled walk found nothing. 2026-11-24 (the user: "엔드 포탈이 렌더되지 않고 있어"): it never collected the block entity
+     * sections, so no block entity was drawn there (End portals, gateways, chests, signs); it collects them as updateRenderChunks does.
+     */
     private void updateRenderChunksSpectator() {
         while (this.sectionQueue.hasNext()) {
             RenderSection renderSection = this.sectionQueue.poll();
@@ -393,6 +398,11 @@ public class SectionGraph {
                 renderSection.getChunkArea().sectionQueue.add(renderSection);
                 this.chunkAreaQueue.add(renderSection.getChunkArea());
                 this.nonEmptyChunks++;
+            }
+
+            if (renderSection.containsBlockEntities()) {
+                this.blockEntitiesSections.ensureCapacity(1);
+                this.blockEntitiesSections.add(renderSection);
             }
 
             if (renderSection.isDirty()) {

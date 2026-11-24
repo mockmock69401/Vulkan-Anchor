@@ -177,6 +177,7 @@
     "visuals.LightTextureAccessor",
     "visuals.LevelRendererWeatherInvoker",
     "visuals.LevelRendererStarsInvoker",
+    "visuals.LevelRendererBossFogMixin",
     "visuals.LevelRendererStarsMixin",
     "visuals.GameRendererPostMixin",
     "visuals.GameRendererJitterMixin",

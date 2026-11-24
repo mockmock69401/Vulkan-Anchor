@@ -208,14 +208,26 @@ vec3 endStars(vec3 dir, float pixelAngle, float t) {
             + endStarLayer(dir, END_STARS_DIM_CELLS, END_STARS_DIM_CHANCE, END_STARS_DIM_LIGHT, 12, END_STARS_DIM_SIGMA, pixelAngle, t);
 }
 
+//2026-11-24 (the user: "애니메이션 프리셋의 별들이 지평선에 가까울수록 다소 흐릿해지고 있어. 조금 더 뚜렷하게 보이도록 만들어줘"): over the
+// Anime sky's bright pink horizon a star of the same light stood out far less than against the indigo overhead. The stars' light rises
+// with the sky's behind them (LIFT per unit of its luminance), so they keep about their contrast down to the horizon; the dark Space sky
+// barely changes
+const float END_STARS_LIFT = 5.0;
+
+float endStarsLift(vec3 back) {
+    return 1.0 + END_STARS_LIFT*dot(back, vec3(0.2126, 0.7152, 0.0722));
+}
+
 //The End's sky along dir for style (END_SKY_SPACE or END_SKY_ANIME; anything else: black) with its stars; t the time (seconds) for
 // their twinkle
 vec3 endSky(vec3 dir, float style, float pixelAngle, float t) {
     if (abs(style - END_SKY_SPACE) < 0.5) {
-        return endSpaceSky(dir) + endStars(dir, pixelAngle, t);
+        vec3 back = endSpaceSky(dir);
+        return back + endStars(dir, pixelAngle, t)*endStarsLift(back);
     }
     if (abs(style - END_SKY_ANIME) < 0.5) {
-        return endAnimeSky(dir) + endAnimeStar(dir, pixelAngle) + endStars(dir, pixelAngle, t);
+        vec3 back = endAnimeSky(dir);
+        return back + endAnimeStar(dir, pixelAngle) + endStars(dir, pixelAngle, t)*endStarsLift(back);
     }
     return vec3(0.0);
 }
@@ -255,12 +267,29 @@ vec3 endGround(vec3 lit, float style, float blockLight) {
     return mix(graded, lit, smoothstep(END_GROUND_BLOCK_FROM, END_GROUND_BLOCK_TO, blockLight));
 }
 
+//2026-11-24 (the user: "엔드에서 가장 밝은 별로 인한 빛 그림자도 구현해줘. 달빛그림자 처럼 진하게 할 필요는 없지만 코러스 식물 등에 그림자가
+// 비쳐져야 해"): the Anime sky's bright star casts soft shadows (EndStarLight: the sun's shadow maps from its direction, looked up by
+// lighting.comp). starLit is how much of the star reaches the surface (lighting.comp's facing times visibility, 0 to 1: a face turned
+// away is in shadow too); strength the share of the light its shadow takes (endLightParams.y). The shadow is a little cooler (TINT, display
+// sRGB, kept at its luminance: the indigo overhead), and block light keeps its own (BLOCK_FROM to BLOCK_TO, as the ground's grade)
+const float END_STAR_SHADOW_TINT_R = 196.0;
+const float END_STAR_SHADOW_TINT_G = 190.0;
+const float END_STAR_SHADOW_TINT_B = 255.0;
+
+vec3 endStarShade(vec3 lit, float starLit, float strength, float blockLight) {
+    vec3 tint = endSkySrgb(END_STAR_SHADOW_TINT_R, END_STAR_SHADOW_TINT_G, END_STAR_SHADOW_TINT_B);
+    tint /= max(dot(tint, vec3(0.2126, 0.7152, 0.0722)), 1e-4);
+    vec3 shadow = (1.0 - strength)*tint;
+    vec3 shade = mix(shadow, vec3(1.0), clamp(starLit, 0.0, 1.0));
+    return lit*mix(shade, vec3(1.0), smoothstep(END_GROUND_BLOCK_FROM, END_GROUND_BLOCK_TO, blockLight));
+}
+
 //2026-11-24 (the user: "레퍼런스 이미지 중 노란 빛기둥이 있어. 이걸 엔더섬 정 가운데 빛기둥으로 구현해볼 수 있어?", the third screenshot;
 // then "빛기둥이 너무 인위적이야. 레퍼런스 이미지 처럼 불꽃을 기다랗게 한 것 같이 고쳐줘", and "빛기둥의 시작지점을 포탈 y좌표만큼 아래로
 // 이동해줘 ... 엔더드래곤 처치가 완료된 후 그 위치의 드래곤 알이 없어졌을 때만 ... 길이를 너무 높게 할 필요는 없어보여"): a long golden
 // flame straight up through the exit portal's bedrock column (block 0, 0: its axis at x 0.5, z 0.5), not a uniform rod. Its shape is
 // measured from the column's top (its foot), its light runs on down the portal's height below it (DimensionUniforms.pillar: the
-// island hides it there, its underside does not), and it is drawn only once the dragon is dead and its egg gone. Three layers across it, each a
+// island hides it there, its underside does not), and it is drawn once the dragon is dead (fading in). Three layers across it, each a
 // Gaussian of the distance from its axis (blocks): a white-gold core, a golden glow and a faint orange halo (no streaks: it reaches far
 // over the sky). Heights are from the column's top. It is widest at its foot
 // (BASE_WIDTH times the layers' widths), narrows to TOP_WIDTH times them by TAPER blocks up, and burns out about TOP blocks up, its tip
@@ -301,6 +330,8 @@ const float END_PILLAR_RISE = 1.0;
 const float END_PILLAR_HEIGHT = 80.0;
 const float END_PILLAR_MIN_PIXELS = 0.75;
 const float END_PILLAR_SLANT = 4.0;
+//2026-11-24 (the user: "엔더드래곤 처치 후 빛기둥이 생길 때 페이드인으로 구현해줘"): the share of its height the flame starts at as it fades in
+const float END_PILLAR_IGNITE = 0.2;
 
 //One layer's weight: d the ray's closest horizontal distance to the axis, at ray length tc; a the ray's horizontal speed (|dir.xz|);
 // the ray runs from the camera to tMax; sigma the layer's width, light its peak; pixelAngle one pixel's angle
@@ -313,8 +344,13 @@ float endPillarLayer(float d, float tc, float tMax, float a, float sigma, float 
 
 //The flame along the ray from the camera (rel: its position from the flame's axis, xz, and y above the column's top) along dir
 // (world, unit) out to tMax (blocks; the sky: very far); depth how far below the column's top its light starts; t the time (seconds)
-// for its flicker
-vec3 endPillar(vec3 rel, vec3 dir, float tMax, float pixelAngle, float depth, float t) {
+// for its flicker; fade its fade-in (0 to 1, DimensionUniforms.PillarFade: once the dragon dies it brightens and climbs from IGNITE of
+// its height)
+vec3 endPillar(vec3 rel, vec3 dir, float tMax, float pixelAngle, float depth, float t, float fade) {
+    float f = smoothstep(0.0, 1.0, fade);
+    if (!(f > 0.0)) {
+        return vec3(0.0);
+    }
     float a2 = max(dot(dir.xz, dir.xz), 1e-6);
     float a = sqrt(a2);
     float tc = -dot(rel.xz, dir.xz)/a2;
@@ -325,7 +361,7 @@ vec3 endPillar(vec3 rel, vec3 dir, float tMax, float pixelAngle, float depth, fl
         return vec3(0.0);
     }
     float h = rel.y + max(tc, 0.0)*dir.y;
-    float tip = END_PILLAR_TOP*(1.0 + END_PILLAR_TIP*(2.0*galaxyNoise(vec3(t*0.7, 3.5, 9.5)) - 1.0));
+    float tip = END_PILLAR_TOP*(1.0 + END_PILLAR_TIP*(2.0*galaxyNoise(vec3(t*0.7, 3.5, 9.5)) - 1.0))*mix(END_PILLAR_IGNITE, 1.0, f);
     float height = smoothstep(-depth, END_PILLAR_RISE - depth, h)*exp(-max(h, 0.0)/END_PILLAR_HEIGHT)*(1.0 - smoothstep(0.45*tip, tip, h));
     if (!(height > 0.0)) {
         return vec3(0.0);
@@ -347,5 +383,5 @@ vec3 endPillar(vec3 rel, vec3 dir, float tMax, float pixelAngle, float depth, fl
             *endPillarLayer(d, tc, tMax, a, END_PILLAR_CORE*width, END_PILLAR_CORE_LIGHT, pixelAngle)*mix(1.0, tongue, 0.6);
     c += mix(gold, ember, warm)*endPillarLayer(d, tc, tMax, a, END_PILLAR_GLOW*width, END_PILLAR_GLOW_LIGHT, pixelAngle)*tongue;
     c += ember*endPillarLayer(d, tc, tMax, a, END_PILLAR_HALO*width, END_PILLAR_HALO_LIGHT, pixelAngle);
-    return c*height*slant;
+    return c*height*slant*f;
 }

@@ -184,8 +184,9 @@ public final class VisualsRenderer {
             this.heldLight = new HeldLightSystem();
             this.terrainLight = new TerrainLightTarget(this.deferred);
             this.edgeCover = createEdgeCover();
-            //P7j final review: a dimension without sky light never draws them
-            this.shadows = level.dimensionType().hasSkyLight() ? createShadowMaps() : null;
+            //P7j final review: a dimension without sky light never draws them; 2026-11-24: but the End, whose bright star casts (EndStarLight)
+            this.shadows = level.dimensionType().hasSkyLight() || level.effects().skyType() == DimensionSpecialEffects.SkyType.END
+                    ? createShadowMaps() : null;
             //2026-10-29: with the sun shadows only
             this.entityShadows = this.shadows != null ? VkEntityShadows.create() : null;
             this.post = createPostProcess(this.deferred);
@@ -300,7 +301,12 @@ public final class VisualsRenderer {
                 BlockPos camera = BlockPos.containing(cameraX, cameraY, cameraZ);
                 this.skyExposure.update(SkyExposure.target(level.getBrightness(LightLayer.SKY, camera) / 15f, airAbove(level, camera)), System.nanoTime());
             }
-            this.lightingChoice = LightingChoice.of(serial, settings, this.post != null && !this.postFailed, this.atmosphere != null, fogCoversAll, hasSky);
+            //2026-11-24 (EndStarLight): in the End under the Anime sky its bright star casts the shadows
+            boolean starLight = this.shadowsOn() && level != null && EndStarLight.on(settings,
+                    level.effects().skyType() == DimensionSpecialEffects.SkyType.END);
+            EndStarLight.use(starLight);
+            this.lightingChoice = starLight ? LightingChoice.star(serial, this.post != null && !this.postFailed, this.atmosphere != null)
+                    : LightingChoice.of(serial, settings, this.post != null && !this.postFailed, this.atmosphere != null, fogCoversAll, hasSky);
             this.captureUnderwater = settings.enabled() && this.post != null && !this.postFailed
                     && cameraFluid(Minecraft.getInstance().gameRenderer.getMainCamera().getFluidInCamera()) == AtmosphereFrame.CameraFluid.WATER;
             //Sun-step crossfade (2026-10-16): the shadows' time of day moves between ticks while the day runs, never back (SmoothDayTime)
@@ -317,13 +323,23 @@ public final class VisualsRenderer {
                 }
             }
             //2026-11-18: at night the moon's views (MoonShadowMath), by the moonlight setting and the moon's phase
-            this.shadowFrame = this.shadowsOn() ? ShadowFrame.of(serial, this.lightingChoice.sun(), plan.shadows(), shadowTime,
-                    level != null ? level.getRainLevel(partialTick) : 0, this.skyExposure.value(), cameraX, cameraY, cameraZ, this.frameId,
-                    moonStrength(settings, level)) : null;
-            //2026-10-29: the entities drawn after this cast into the entity shadow map when this frame has sun shadows
-            EntityShadowCapture.beginFrame(serial, this.shadowFrame != null && this.entityShadows != null && VisualsConfig.get().entityShadows, modelView);
+            if (starLight) {
+                long now = System.nanoTime();
+                boolean farDue = this.starFarNanos == Long.MIN_VALUE || now - this.starFarNanos >= EndStarLight.FAR_REFRESH_NANOS;
+                if (farDue) this.starFarNanos = now;
+                this.shadowFrame = this.lightingChoice.star() ? ShadowFrame.fixed(serial, EndStarLight.direction(), cameraX, cameraY, cameraZ, farDue) : null;
+            } else {
+                this.starFarNanos = Long.MIN_VALUE;
+                this.shadowFrame = this.shadowsOn() ? ShadowFrame.of(serial, this.lightingChoice.sun(), plan.shadows(), shadowTime,
+                        level != null ? level.getRainLevel(partialTick) : 0, this.skyExposure.value(), cameraX, cameraY, cameraZ, this.frameId,
+                        moonStrength(settings, level)) : null;
+            }
+            //2026-10-29: the entities drawn after this cast into the entity shadow map when this frame has sun shadows (not the End star's:
+            // that map is drawn every frame)
+            EntityShadowCapture.beginFrame(serial, this.shadowFrame != null && !starLight && this.entityShadows != null && VisualsConfig.get().entityShadows,
+                    modelView);
             //2026-11-19: and vanilla's round entity shadow is left out while the maps shade
-            VanillaBlobShadows.frame(serial, this.shadowFrame != null);
+            VanillaBlobShadows.frame(serial, this.shadowFrame != null && !starLight);
 
             List<VisualsExtension> ext = VisualsExtensions.all();
             long mainDepth = this.mainDepthViews.get(main.identity(), this.deferred, serial);
@@ -561,17 +577,22 @@ public final class VisualsRenderer {
     /** How far below the exit portal's column top its portal is looked for (vanilla: 4 blocks). */
     private static final int END_PILLAR_PORTAL_DEPTH = 8;
 
+    /** 2026-11-24: the pillar's fade-in once the exit portal lights (DimensionUniforms.PillarFade), and the level it watches. */
+    private final DimensionUniforms.PillarFade pillarFade = new DimensionUniforms.PillarFade();
+    private ClientLevel pillarLevel;
+    /** 2026-11-24: when the End star's far map last refreshed (EndStarLight.FAR_REFRESH_NANOS; Long.MIN_VALUE: not in the End). */
+    private long starFarNanos = Long.MIN_VALUE;
+
     /**
      * 2026-11-24: the End's light pillar (DimensionUniforms.pillar) from the exit portal at block 0, 0: the top of chunk 0, 0
      * there (the column's bedrock, or the egg on it), and a lit portal block beside the column within END_PILLAR_PORTAL_DEPTH blocks
-     * below its top. PILLAR_OFF while the chunk is not loaded.
+     * below its top (the dragon dead). NaN while the chunk is not loaded.
      */
     private static double endPillar(ClientLevel level) {
         int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, 0, 0);
-        if (top <= level.getMinBuildHeight()) return DimensionUniforms.PILLAR_OFF;
+        if (top <= level.getMinBuildHeight()) return Double.NaN;
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(0, top - 1, 0);
-        boolean egg = level.getBlockState(pos).is(Blocks.DRAGON_EGG);
-        int columnTop = egg ? top - 1 : top;
+        int columnTop = level.getBlockState(pos).is(Blocks.DRAGON_EGG) ? top - 1 : top;
         int portal = Integer.MIN_VALUE;
         for (int y = columnTop - 1; y >= columnTop - END_PILLAR_PORTAL_DEPTH && portal == Integer.MIN_VALUE; y--) {
             if (level.getBlockState(pos.set(1, y, 0)).is(Blocks.END_PORTAL) || level.getBlockState(pos.set(-1, y, 0)).is(Blocks.END_PORTAL)
@@ -579,7 +600,7 @@ public final class VisualsRenderer {
                 portal = y;
             }
         }
-        return DimensionUniforms.pillar(columnTop, egg, portal);
+        return DimensionUniforms.pillar(columnTop, portal);
     }
 
     /** 2026-11-13 (session 19): the End's galaxy and the Nether's heat haze for this frame (DimensionUniforms); none in a modded level that fails. */
@@ -587,8 +608,24 @@ public final class VisualsRenderer {
         try {
             DimensionUniforms.Kind kind = level.effects().skyType() == DimensionSpecialEffects.SkyType.END ? DimensionUniforms.Kind.END
                     : level.dimensionType().ultraWarm() ? DimensionUniforms.Kind.HOT : DimensionUniforms.Kind.OTHER;
-            double pillar = kind == DimensionUniforms.Kind.END ? endPillar(level) : DimensionUniforms.PILLAR_OFF;
-            return DimensionUniforms.compute(settings, kind, camera.x, camera.y, camera.z, pillar, this.flowSeconds);
+            double pillar = DimensionUniforms.PILLAR_OFF;
+            float fade = 1;
+            if (kind == DimensionUniforms.Kind.END) {
+                if (level != this.pillarLevel) {
+                    this.pillarFade.reset();
+                    this.pillarLevel = level;
+                }
+                double found = endPillar(level);
+                boolean loaded = !Double.isNaN(found);
+                fade = this.pillarFade.update(loaded, loaded && found > DimensionUniforms.PILLAR_OFF / 2, System.nanoTime());
+                if (loaded) pillar = found;
+            }
+            //2026-11-24 (portallook.glsl): the portals in the palette's look
+            DimensionUniforms.Values v = DimensionUniforms.compute(settings, kind, camera.x, camera.y, camera.z, pillar, fade, this.flowSeconds);
+            if (settings.enabled()) v = v.withPortalLook(DimensionUniforms.portalLook(VisualsConfig.get().colourPreset));
+            //2026-11-24 (EndStarLight): the star's shadows while its maps are drawn
+            return this.lightingChoice.star() && this.lightingChoice.serial() == VkFrames.serial() && this.shadowFrame != null
+                    ? v.withStarShadow(EndStarLight.SHADOW) : v;
         } catch (RuntimeException e) {
             return DimensionUniforms.off();
         }
@@ -794,7 +831,8 @@ public final class VisualsRenderer {
      */
     public void captureDepth(int slot) {
         if (this.failed || this.closed || this.depthCapture == null || this.captureFailed || !VkContext.recordingFrame()) return;
-        if (this.lightingChoice.serial() != VkFrames.serial() || !(this.lightingChoice.any() || this.captureUnderwater)) return;
+        //2026-11-24: the End star's pass reads no translucent kinds (LightingChoice.star)
+        if (this.lightingChoice.serial() != VkFrames.serial() || !((this.lightingChoice.any() && !this.lightingChoice.star()) || this.captureUnderwater)) return;
         //endMainPass forgets Reforged's bound framebuffer, so the main target is read first
         VkContext.MainTarget main = VkContext.captureMainTarget();
         if (main == null || main.width() <= 0 || main.height() <= 0) return;
@@ -899,7 +937,7 @@ public final class VisualsRenderer {
             //2026-10-29: the entity shadow map, from this frame's sun at the camera, when entities were captured or (2026-11-07) a sub-level drew
             ShadowMath.Cascade entityCascade = shadowNow != null && this.entityShadows != null && this.atmosphere != null
                     && VkEntityShadows.drawsAnything(true, EntityShadowCapture.vertexCount(serial), this.entityShadows.subLevelCasters())
-                    ? VkEntityShadows.cascade(SunMath.sunDirection(this.shadowFrame.timeOfDay()), shadowNow.cameraX(), shadowNow.cameraY(), shadowNow.cameraZ()) : null;
+                    ? VkEntityShadows.cascade(EndStarLight.toward(this.shadowFrame.timeOfDay()), shadowNow.cameraX(), shadowNow.cameraY(), shadowNow.cameraZ()) : null;
             this.post.prepareEntityShadows(EntityShadowUniforms.compute(entityCascade, shadowNow, this.atmosphere, shadow.near() || shadow.far()),
                     this.entityShadows != null ? this.entityShadows.view() : 0);
             ReflectionUniforms.Values reflection = plan.reflections() ? ReflectionUniforms.compute(settings, this.lightingChoice, lighting,
@@ -940,7 +978,7 @@ public final class VisualsRenderer {
                     this.atmosphere.invModelView(), camera.x, camera.y, camera.z, atmosphere.lodValid(),
                     mc.options.getEffectiveRenderDistance() * 16f) : null);
             //P7l design 3.4: with the per-pixel light the lightmap stays vanilla (the copy lifts the sky light where the sun reaches)
-            SunShadows.set(light.on() ? 0 : SunShadows.strength(settings, this.lightingChoice, serial, shadowsOn));
+            SunShadows.set(light.on() || this.lightingChoice.star() ? 0 : SunShadows.strength(settings, this.lightingChoice, serial, shadowsOn));
             VkContext.endMainPass();
             try {
                 VkGpuTimer.reset(cmd);//when frame() did not run this frame

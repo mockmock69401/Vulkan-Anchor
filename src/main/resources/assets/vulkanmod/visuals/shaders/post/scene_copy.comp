@@ -227,6 +227,9 @@ layout(location = 79) uniform vec4 meteorEase;
 // pillar (DimensionUniforms.pillar: its column's top, world y, in the whole part and how far below it its light starts in 1024ths;
 // PILLAR_OFF, below -1e8: no pillar)
 layout(location = 81) uniform vec4 endSkyParams;
+//2026-11-24, DimensionUniforms END_LIGHT: x the pillar's fade-in (0 to 1), y the End star's shadows' strength (0: none), z the portals'
+// look (portallook.glsl PORTAL_LOOK_*; 0: vanilla's)
+layout(location = 82) uniform vec4 endLightParams;
 
 //Session 8 follow-up: a light source's glow in the colour of the light it casts (glowTint; the plain builds leave it)
 vec3 tintedGlow(vec3 glow) {
@@ -253,6 +256,7 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/skyevents.glsl>
 #import <vulkanmod:visuals/post/heat.glsl>
 #import <vulkanmod:visuals/post/portal.glsl>
+#import <vulkanmod:visuals/post/portallook.glsl>
 #import <vulkanmod:visuals/post/underwater.glsl>
 #import <vulkanmod:visuals/post/caustics.glsl>
 #import <vulkanmod:visuals/post/wetground.glsl>
@@ -264,10 +268,12 @@ vec3 tintedGlow(vec3 glow) {
 #import <vulkanmod:visuals/post/pbr.glsl>
 
 //Session 19: the portal light's share of the block light at level block at world (camera-relative), the largest of the boxes', with that
-// box's glow strength (portal.glsl portalShare); 0 without a box
-float portalShareAt(vec3 world, float block, out float strength, out float surface) {
+// box's glow strength (portal.glsl portalShare); 0 without a box. 2026-11-24: face the point on the surface's box face (xy: blocks across
+// and up from its corner, zw: the face's size; portallook.glsl)
+float portalShareAt(vec3 world, float block, out float strength, out float surface, out vec4 face) {
     strength = 0.0;
     surface = 0.0;
+    face = vec4(0.0);
     float best = 0.0;
     vec4 lo[4] = vec4[4](portalLo0, portalLo1, portalLo2, portalLo3);
     vec4 hi[4] = vec4[4](portalHi0, portalHi1, portalHi2, portalHi3);
@@ -278,6 +284,9 @@ float portalShareAt(vec3 world, float block, out float strength, out float surfa
         float d = portalDistance(world, lo[i].xyz, hi[i].xyz);
         if (d < PORTAL_SURFACE) {
             surface = portalGlowGain(world - lo[i].xyz, dimensionParams.w, hi[i].w);
+            vec3 local = world - lo[i].xyz;
+            vec3 extent = hi[i].xyz - lo[i].xyz;
+            face = extent.x >= extent.z ? vec4(local.x, local.y, extent.x, extent.y) : vec4(local.z, local.y, extent.z, extent.y);
         }
         float s = portalShare(world, block, lo[i].xyz, hi[i].xyz);
         if (s > best) {
@@ -1105,7 +1114,8 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     float block = known ? pl.y : 0.0;
     //Session 19: the portal light's share here and whether this is a portal's own surface (portalGlow > 1)
     float portalStrength = 0.0, portalGlow = 0.0;
-    float portalLight = portalLo0.w > 0.5 && !fromLod ? portalShareAt(world, block, portalStrength, portalGlow) : 0.0;
+    vec4 portalFace = vec4(0.0);
+    float portalLight = portalLo0.w > 0.5 && !fromLod ? portalShareAt(world, block, portalStrength, portalGlow, portalFace) : 0.0;
     bool portalOn = known && portalLight > 0.0;
     //2026-11-16: the wetness where the rain falls on this ground (wetclimate.glsl: none in deserts, badlands and savannas, none where it
     // snows), so no ground there gets wet or dries after the rain
@@ -1316,6 +1326,10 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         //2026-11-24: the End's terrain in its sky's light (endsky.glsl endGround; vanilla's End sky: unchanged)
         if (endSkyParams.x > 0.5) {
             lit = endGround(lit, endSkyParams.x, blockT);
+            //2026-11-24: the bright star's shadows (endStarShade; the pass ran for the star alone: EndStarLight)
+            if (endLightParams.y > 0.0 && passRan) {
+                lit = endStarShade(lit, plant && plantSun >= 0.0 ? plantSun : lt.y, endLightParams.y, blockT);
+            }
         }
         if (water && floorWeight > 0.0) {
             //Gate G7l: water whose vanilla light was too dark to scale keeps its body's scattering floor. 2026-11-22: faded in past
@@ -1337,8 +1351,15 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
     //2026-10-28: light sources glow (2026-11-08: their share that is light); an ore's specks add their own light (its albedo, or vanilla's
     // colour over vanilla's lightmap)
     if (portalGlow > 1.0) {
-        //Session 19: a nether portal's own surface glows (bloom spreads it)
-        lit *= portalGlow;
+        //Session 19: a nether portal's own surface glows (bloom spreads it); 2026-11-24: in the palette's own look (portallook.glsl)
+        lit = endLightParams.z > 0.5 ? netherPortalLook(scene, portalFace.xy, portalFace.zw, dimensionParams.w, endLightParams.z, portalGlow)
+                : lit*portalGlow;
+    }
+    //2026-11-24 (portallook.glsl): the End portal's and gateway's surface (their shader's mark) as a window into space
+    if (endLightParams.z > 0.5 && !fromLod && alphaCode(colour.a) == END_PORTAL_ALPHA_CODE) {
+        vec3 camera = vec3(endSkyParams.y + 0.5, dimensionParams.z, endSkyParams.z + 0.5);
+        vec3 faceNormal = dot(normalWorld, normalWorld) > 0.25 ? normalWorld : vec3(0.0, 1.0, 0.0);
+        lit = endPortalLook(world + camera, dir, faceNormal, 2.0*abs(invVanillaProj[1][1])/float(size.y), dist, dimensionParams.w, endLightParams.z);
     }
     if (emission > 0.0) {
         lit = mix(lit, tintedGlow(scene*lightGlow(colour.rgb, glowParams.x*(emissiveFluid ? FLUID_GLOW_SCALE : 1.0))), emission);
@@ -1693,7 +1714,7 @@ void main() {
         float pixelAngle = 2.0*abs(invVanillaProj[1][1])/float(size.y);
         float top = floor(endSkyParams.w);
         vec3 rel = vec3(endSkyParams.y, dimensionParams.z - top, endSkyParams.z);
-        composite.rgb += endPillar(rel, dir, far, pixelAngle, (endSkyParams.w - top)*1024.0, dimensionParams.w)*underwaterExposure();
+        composite.rgb += endPillar(rel, dir, far, pixelAngle, (endSkyParams.w - top)*1024.0, dimensionParams.w, endLightParams.x)*underwaterExposure();
     }
     imageStore(sceneOut, p, composite);
 }

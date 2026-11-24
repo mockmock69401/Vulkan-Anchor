@@ -86,6 +86,11 @@ public final class EndSkyMath {
     // the third and fourth screenshots; Anime and vanilla's sky as before)
     public static final float END_SPACE_AURORA = 0.3f;
     public static final float END_ANIME_AURORA = 1.0f;
+    //2026-11-24 (the user: "애니메이션 프리셋의 별들이 지평선에 가까울수록 다소 흐릿해지고 있어. 조금 더 뚜렷하게 보이도록 만들어줘"): over the
+    // Anime sky's bright pink horizon a star of the same light stood out far less than against the indigo overhead. The stars' light rises
+    // with the sky's behind them (LIFT per unit of its luminance), so they keep about their contrast down to the horizon; the dark Space sky
+    // barely changes
+    public static final float END_STARS_LIFT = 5.0f;
     //2026-11-24 (the user: "엔드 지형이 하늘과 안 어울리게 탁해보여. 적절한 색감으로 튜닝해봐줘"): the End's terrain graded into its sky's
     // light. Vanilla's end stone reads as a flat olive green under either sky. Its ambient light (what no block light reaches) keeps
     // SATURATION of the texture's own colour and takes the sky's light colour (TINT, display sRGB, kept at the light's luminance) at
@@ -104,12 +109,20 @@ public final class EndSkyMath {
     public static final float END_ANIME_GROUND_EXPOSURE = 1.1f;
     public static final float END_GROUND_BLOCK_FROM = 3.0f;
     public static final float END_GROUND_BLOCK_TO = 12.0f;
+    //2026-11-24 (the user: "엔드에서 가장 밝은 별로 인한 빛 그림자도 구현해줘. 달빛그림자 처럼 진하게 할 필요는 없지만 코러스 식물 등에 그림자가
+    // 비쳐져야 해"): the Anime sky's bright star casts soft shadows (EndStarLight: the sun's shadow maps from its direction, looked up by
+    // lighting.comp). starLit is how much of the star reaches the surface (lighting.comp's facing times visibility, 0 to 1: a face turned
+    // away is in shadow too); strength the share of the light its shadow takes (endLightParams.y). The shadow is a little cooler (TINT, display
+    // sRGB, kept at its luminance: the indigo overhead), and block light keeps its own (BLOCK_FROM to BLOCK_TO, as the ground's grade)
+    public static final float END_STAR_SHADOW_TINT_R = 196.0f;
+    public static final float END_STAR_SHADOW_TINT_G = 190.0f;
+    public static final float END_STAR_SHADOW_TINT_B = 255.0f;
     //2026-11-24 (the user: "레퍼런스 이미지 중 노란 빛기둥이 있어. 이걸 엔더섬 정 가운데 빛기둥으로 구현해볼 수 있어?", the third screenshot;
     // then "빛기둥이 너무 인위적이야. 레퍼런스 이미지 처럼 불꽃을 기다랗게 한 것 같이 고쳐줘", and "빛기둥의 시작지점을 포탈 y좌표만큼 아래로
     // 이동해줘 ... 엔더드래곤 처치가 완료된 후 그 위치의 드래곤 알이 없어졌을 때만 ... 길이를 너무 높게 할 필요는 없어보여"): a long golden
     // flame straight up through the exit portal's bedrock column (block 0, 0: its axis at x 0.5, z 0.5), not a uniform rod. Its shape is
     // measured from the column's top (its foot), its light runs on down the portal's height below it (DimensionUniforms.pillar: the
-    // island hides it there, its underside does not), and it is drawn only once the dragon is dead and its egg gone. Three layers across it, each a
+    // island hides it there, its underside does not), and it is drawn once the dragon is dead (fading in). Three layers across it, each a
     // Gaussian of the distance from its axis (blocks): a white-gold core, a golden glow and a faint orange halo (no streaks: it reaches far
     // over the sky). Heights are from the column's top. It is widest at its foot
     // (BASE_WIDTH times the layers' widths), narrows to TOP_WIDTH times them by TAPER blocks up, and burns out about TOP blocks up, its tip
@@ -150,6 +163,8 @@ public final class EndSkyMath {
     public static final float END_PILLAR_HEIGHT = 80.0f;
     public static final float END_PILLAR_MIN_PIXELS = 0.75f;
     public static final float END_PILLAR_SLANT = 4.0f;
+    //2026-11-24 (the user: "엔더드래곤 처치 후 빛기둥이 생길 때 페이드인으로 구현해줘"): the share of its height the flame starts at as it fades in
+    public static final float END_PILLAR_IGNITE = 0.2f;
 
     private EndSkyMath() {
     }

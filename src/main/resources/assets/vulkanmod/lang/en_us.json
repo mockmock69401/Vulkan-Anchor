@@ -405,7 +405,7 @@
   "vulkanmod.visuals.end_galaxy": "End Galaxy Sky",
   "vulkanmod.visuals.end_galaxy.tooltip": "The End's sky shows a galaxy: a Milky Way band with a bright core and dark dust lanes, faint nebulae and many stars, behind the End's auroras. 100 is the default, 200 twice as bright, 0 off",
   "vulkanmod.visuals.end_sky": "End Sky",
-  "vulkanmod.visuals.end_sky.tooltip": "The End's background. Space is a near-black navy sky with a faint blue haze low over the horizon; Anime paints a sky from a deep indigo overhead through violet and lavender to a pink glow on the horizon, with a bright star; both carry their own stars, tint the island's ground in their light and, once the dragon is dead and its egg taken, raise a golden pillar of light over the exit portal; Vanilla keeps vanilla's grey End sky. The galaxy and the auroras show over it. The Anime colour palette picks Anime; Default picks Space",
+  "vulkanmod.visuals.end_sky.tooltip": "The End's background. Space is a near-black navy sky with a faint blue haze low over the horizon; Anime paints a sky from a deep indigo overhead through violet and lavender to a pink glow on the horizon, with a bright star that casts soft shadows (with Shadows on); both carry their own stars, tint the island's ground in their light and, once the dragon is dead, raise a golden pillar of light over the exit portal, fading in; Vanilla keeps vanilla's grey End sky. The galaxy and the auroras show over it. The Anime colour palette picks Anime; Default picks Space",
   "vulkanmod.visuals.end_sky.0": "Vanilla",
   "vulkanmod.visuals.end_sky.1": "Space",
   "vulkanmod.visuals.end_sky.2": "Anime",

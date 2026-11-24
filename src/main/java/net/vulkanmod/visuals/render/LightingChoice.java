@@ -6,8 +6,21 @@ package net.vulkanmod.visuals.render;
  * of the same frame (same serial) applies the lighting. P7e-1 3.4: the water depth colour is a third effect; the pass, and
  * with it the translucent detection and the depth copies, runs for any of them. P7e-2 3.4: the water reflections are a fourth effect.
  */
-public record LightingChoice(long serial, boolean ao, boolean sun, boolean water, boolean reflections) {
+public record LightingChoice(long serial, boolean ao, boolean sun, boolean water, boolean reflections, boolean star) {
     public static final LightingChoice NONE = new LightingChoice(Long.MIN_VALUE, false, false, false, false);
+
+    public LightingChoice(long serial, boolean ao, boolean sun, boolean water, boolean reflections) {
+        this(serial, ao, sun, water, reflections, false);
+    }
+
+    /**
+     * 2026-11-24: the End star's shadows (EndStarLight): the pass runs for its light alone (sun with star: lighting.comp looks the maps
+     * up, the composite's sun shading stays off), without the AO, the water, the reflections or the depth copies.
+     */
+    public static LightingChoice star(long serial, boolean postAvailable, boolean atmosphereCaptured) {
+        boolean on = postAvailable && atmosphereCaptured;
+        return new LightingChoice(serial, false, on, false, false, on);
+    }
 
     public static LightingChoice of(long serial, PostProcessSettings s, boolean postAvailable, boolean atmosphereCaptured, boolean fogCoversAll,
                                     boolean hasSkyLight) {

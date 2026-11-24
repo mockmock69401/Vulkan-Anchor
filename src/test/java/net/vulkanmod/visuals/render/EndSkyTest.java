@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class EndSkyTest {
     private static final String END = ShaderFiles.read("post/endsky.glsl");
     private static final String COPY = ShaderFiles.read("post/scene_copy.comp").replace(String.valueOf((char) 13), "");
+    private static final String ENDSKY = ShaderFiles.read("post/endsky.glsl").replace(String.valueOf((char) 13), "");
     private static final int[] PALETTES = {ColourPresets.DEFAULT, ColourPresets.ANIME, ColourPresets.HORROR};
     private static final int[] STYLES = {DimensionUniforms.END_SKY_VANILLA, DimensionUniforms.END_SKY_SPACE, DimensionUniforms.END_SKY_ANIME};
 
@@ -258,13 +259,20 @@ class EndSkyTest {
     }
 
     private static double pillar(double[] rel, double[] dir, double tMax, double pixelAngle, double depth, double t) {
+        return pillar(rel, dir, tMax, pixelAngle, depth, t, 1);
+    }
+
+    private static double pillar(double[] rel, double[] dir, double tMax, double pixelAngle, double depth, double t, double fade) {
+        double f = smooth(0, 1, fade);
+        if (!(f > 0)) return 0;
         double a2 = Math.max(dir[0] * dir[0] + dir[2] * dir[2], 1e-6), a = Math.sqrt(a2);
         double tc = -(rel[0] * dir[0] + rel[2] * dir[2]) / a2;
         double across = (dir[0] * rel[2] - dir[2] * rel[0]) / a;
         double reach = 6 * EndSkyMath.END_PILLAR_HALO * EndSkyMath.END_PILLAR_BASE_WIDTH + EndSkyMath.END_PILLAR_SWAY;
         if (Math.abs(across) > reach + EndSkyMath.END_PILLAR_MIN_PIXELS * 6 * pixelAngle * Math.max(tc, 0) || tc < -reach / a) return 0;
         double h = rel[1] + Math.max(tc, 0) * dir[1];
-        double tip = EndSkyMath.END_PILLAR_TOP * (1 + EndSkyMath.END_PILLAR_TIP * (2 * noise(t * 0.7, 3.5, 9.5) - 1));
+        double tip = EndSkyMath.END_PILLAR_TOP * (1 + EndSkyMath.END_PILLAR_TIP * (2 * noise(t * 0.7, 3.5, 9.5) - 1))
+                * (EndSkyMath.END_PILLAR_IGNITE + (1 - EndSkyMath.END_PILLAR_IGNITE) * f);
         double height = smooth(-depth, EndSkyMath.END_PILLAR_RISE - depth, h) * Math.exp(-Math.max(h, 0) / EndSkyMath.END_PILLAR_HEIGHT)
                 * (1 - smooth(0.45 * tip, tip, h));
         if (!(height > 0)) return 0;
@@ -278,7 +286,7 @@ class EndSkyTest {
         double streak = 0.6 * noise(x * 1.3 + 17, rise, 2.5) + 0.4 * noise(x * 3.1 + 41, rise * 1.7, 6.5);
         double tongue = 1 - EndSkyMath.END_PILLAR_STREAK + 2 * EndSkyMath.END_PILLAR_STREAK * smooth(0.25, 0.75, streak);
         double slant = Math.min(1 / a, EndSkyMath.END_PILLAR_SLANT);
-        return height * slant * (pillarLayer(d, tc, tMax, a, EndSkyMath.END_PILLAR_CORE * width, EndSkyMath.END_PILLAR_CORE_LIGHT, pixelAngle) * (0.4 + 0.6 * tongue)
+        return f * height * slant * (pillarLayer(d, tc, tMax, a, EndSkyMath.END_PILLAR_CORE * width, EndSkyMath.END_PILLAR_CORE_LIGHT, pixelAngle) * (0.4 + 0.6 * tongue)
                 + pillarLayer(d, tc, tMax, a, EndSkyMath.END_PILLAR_GLOW * width, EndSkyMath.END_PILLAR_GLOW_LIGHT, pixelAngle) * tongue
                 + pillarLayer(d, tc, tMax, a, EndSkyMath.END_PILLAR_HALO * width, EndSkyMath.END_PILLAR_HALO_LIGHT, pixelAngle));
     }
@@ -334,24 +342,111 @@ class EndSkyTest {
         assertTrue(main.contains("if (endSkyParams.x > 0.5 && endSkyParams.w > -1e8) {"));
         assertTrue(main.contains("float top = floor(endSkyParams.w);"));
         assertTrue(main.contains("vec3 rel = vec3(endSkyParams.y, dimensionParams.z - top, endSkyParams.z);"));
-        assertTrue(main.contains("composite.rgb += endPillar(rel, dir, far, pixelAngle, (endSkyParams.w - top)*1024.0, dimensionParams.w)*underwaterExposure();"));
+        assertTrue(main.contains("composite.rgb += endPillar(rel, dir, far, pixelAngle, (endSkyParams.w - top)*1024.0, dimensionParams.w, endLightParams.x)*underwaterExposure();"));
         DimensionUniforms.Values v = DimensionUniforms.compute(PostProcessSettings.from(PostOn.defaults()), DimensionUniforms.Kind.END,
                 100.5, 80, -20.5, 66, 1);
         assertEquals(100, v.pillarX(), 1e-4);
         assertEquals(-21, v.pillarZ(), 1e-4);
         assertEquals(66, v.pillarBase(), 1e-4);
         assertEquals(v.pillarX(), v.withGalaxy(0).pillarX());
-        //2026-11-24 (the user: "빛기둥의 시작지점을 포탈 y좌표만큼 아래로 ... 엔더드래곤 처치가 완료된 후 그 위치의 드래곤 알이 없어졌을 때만"): the
-        // column's top lowered by the lit portal's y; none while the dragon lives (no lit portal) or its egg sits on the column
-        float lit = DimensionUniforms.pillar(68, false, 64);
+        //2026-11-24 (the user: "빛기둥의 시작지점을 포탈 y좌표만큼 아래로"; then "출력 조건을 드래곤 알 제거 여부에서 엔더드래곤 처치로"): the
+        // column's top lowered by the lit portal's y; none while the dragon lives (no lit portal), whether or not its egg is there
+        float lit = DimensionUniforms.pillar(68, 64);
         assertEquals(68, DimensionUniforms.pillarTop(lit));
         assertEquals(64, DimensionUniforms.pillarDepth(lit), 1e-3);
-        assertEquals(DimensionUniforms.PILLAR_OFF, DimensionUniforms.pillar(68, true, 64));
-        assertEquals(DimensionUniforms.PILLAR_OFF, DimensionUniforms.pillar(68, false, Integer.MIN_VALUE));
+        assertEquals(DimensionUniforms.PILLAR_OFF, DimensionUniforms.pillar(68, Integer.MIN_VALUE));
         assertEquals(DimensionUniforms.PILLAR_OFF, DimensionUniforms.compute(PostProcessSettings.from(PostOn.defaults()), DimensionUniforms.Kind.OTHER,
                 0, 80, 0, 4, 1).pillarBase());
         assertEquals(DimensionUniforms.PILLAR_OFF, DimensionUniforms.off().pillarBase());
         assertTrue(DimensionUniforms.PILLAR_OFF < -1e8f);
+    }
+
+    /**
+     * 2026-11-24 (the user: "엔더드래곤 처치 후 빛기둥이 생길 때 페이드인으로 구현해줘"): once the exit portal lights in sight the pillar fades in over
+     * PILLAR_FADE_SECONDS, short and dim at first; a portal already lit when its chunk loads shows it at once; the slot carries the fade.
+     */
+    @Test
+    void thePillarFadesInOnceTheDragonDies() {
+        DimensionUniforms.PillarFade f = new DimensionUniforms.PillarFade();
+        long s = 1_000_000_000L;
+        assertEquals(0, f.update(true, false, 0), "the dragon lives");
+        assertEquals(0, f.update(true, true, s / 60), 1e-6, "lit: starts dark");
+        float mid = 0;
+        for (int i = 2; i <= 60 * 2; i++) mid = f.update(true, true, i * s / 60);
+        assertEquals(2 / DimensionUniforms.PILLAR_FADE_SECONDS, mid, 0.02, "half way");
+        float end = 0;
+        for (int i = 121; i <= 60 * 6; i++) end = f.update(true, true, i * s / 60);
+        assertEquals(1, end, 1e-6, "in full");
+        //Unloaded, then found lit (entering the End after the fight): at once
+        assertEquals(0, f.update(false, false, 7 * s));
+        assertEquals(1, f.update(true, true, 7 * s + s / 60), 1e-6);
+        f.reset();
+        assertEquals(1, f.update(true, true, 9 * s), 1e-6, "another level, already lit");
+        //A long pause does not jump the fade
+        f.update(true, false, 10 * s);
+        f.update(true, true, 10 * s + 1);
+        assertTrue(f.update(true, true, 20 * s) < 0.1f);
+        //In the shader: dark and short at 0, the whole flame at 1
+        double pixel = 2 * Math.tan(Math.toRadians(35)) / 1440;
+        double[] rel = {80, 10, 0};
+        assertEquals(0, pillar(rel, unit(-80, 20, 0), 1e9, pixel, 60, 3, 0), 1e-12);
+        double half = pillar(rel, unit(-80, 20, 0), 1e9, pixel, 60, 3, 0.5), full = pillar(rel, unit(-80, 20, 0), 1e9, pixel, 60, 3, 1);
+        assertTrue(half > 0 && half < full, half + " " + full);
+        assertEquals(0, pillar(rel, unit(-80, 60, 0), 1e9, pixel, 60, 3, 0.2), 1e-9, "short while it ignites");
+        assertTrue(pillar(rel, unit(-80, 60, 0), 1e9, pixel, 60, 3, 1) > 0, "tall once lit");
+        DimensionUniforms.Values v = DimensionUniforms.compute(PostProcessSettings.from(PostOn.defaults()), DimensionUniforms.Kind.END,
+                0, 80, 0, 66, 0.25f, 1);
+        assertEquals(0.25f, v.pillarFade(), 1e-6);
+        assertEquals(0.25f, v.withGalaxy(0).pillarFade(), 1e-6);
+        assertEquals(1, DimensionUniforms.off().pillarFade(), 1e-6);
+        assertTrue(COPY.contains("layout(location = 82) uniform vec4 endLightParams;"));
+        assertEquals(82, DimensionUniforms.COPY_END_LIGHT);
+    }
+
+    /**
+     * 2026-11-24 (the user: "엔더드래곤을 처치해야만 하늘이 출력되고 있어. 하늘은 엔더드래곤 처치 여부와 상관없이 항상 보이고 있어야 해"): the dragon's
+     * boss bar asks for the world fog, which put the atmosphere in its fog mode for the whole fight; in the End with its own sky the
+     * fog is left out of renderLevel (a redirect of BossHealthOverlay.shouldCreateWorldFog), registered with the visuals' mixins.
+     */
+    @Test
+    void theEndSkyShowsDuringTheFight() throws Exception {
+        String mixin = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/java/net/vulkanmod/mixin/visuals/LevelRendererBossFogMixin.java"));
+        assertTrue(mixin.contains("@Redirect(method = \"renderLevel\""));
+        assertTrue(mixin.contains("Lnet/minecraft/client/gui/components/BossHealthOverlay;shouldCreateWorldFog()Z"));
+        assertTrue(mixin.contains("return overlay.shouldCreateWorldFog() && !DimensionUniforms.endSkyDrawn(Minecraft.getInstance().level);"));
+        String json = java.nio.file.Files.readString(java.nio.file.Path.of("src/main/resources/vulkanmod.mixins.json"));
+        assertTrue(json.contains("\"visuals.LevelRendererBossFogMixin\""));
+        assertFalse(DimensionUniforms.endSkyDrawn(null));
+    }
+
+    /**
+     * 2026-11-24 (the user: "애니메이션 프리셋의 별들이 지평선에 가까울수록 다소 흐릿해지고 있어"): the stars' light rises with the sky's behind
+     * them, so over the Anime sky's bright horizon a star keeps about its contrast; over the dark Space sky it barely changes.
+     */
+    @Test
+    void theStarsStayCrispOverTheBrightHorizon() {
+        assertTrue(EndSkyMath.END_STARS_LIFT >= 3);
+        assertTrue(ENDSKY.contains("return back + endStars(dir, pixelAngle, t)*endStarsLift(back);"));
+        assertTrue(ENDSKY.contains("return back + endAnimeStar(dir, pixelAngle) + endStars(dir, pixelAngle, t)*endStarsLift(back);"));
+        double horizon = lum(srgb(EndSkyMath.END_ANIME_HORIZON_R, EndSkyMath.END_ANIME_HORIZON_G, EndSkyMath.END_ANIME_HORIZON_B));
+        double zenith = lum(srgb(EndSkyMath.END_ANIME_ZENITH_R, EndSkyMath.END_ANIME_ZENITH_G, EndSkyMath.END_ANIME_ZENITH_B));
+        double space = lum(srgb(EndSkyMath.END_SPACE_ZENITH_R, EndSkyMath.END_SPACE_ZENITH_G, EndSkyMath.END_SPACE_ZENITH_B));
+        assertTrue(1 + EndSkyMath.END_STARS_LIFT * horizon > 3, "lifted at the pink horizon");
+        assertTrue(1 + EndSkyMath.END_STARS_LIFT * zenith < 1.1, "as before overhead");
+        assertTrue(1 + EndSkyMath.END_STARS_LIFT * space < 1.05, "as before in space");
+    }
+
+    private static double srgb(double v) {
+        double c = v / 255;
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    private static double lum(double[] c) {
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    }
+
+    private static double[] srgb(double r, double g, double b) {
+        return new double[]{srgb(r), srgb(g), srgb(b)};
     }
 
     //endsky.glsl endGround, ported

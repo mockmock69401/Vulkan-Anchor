@@ -22,6 +22,11 @@ public final class LightingUniforms {
     public static final int COPY_BLOCK_LIGHT = 31, COPY_MOON_LIGHT = 32;
     // scene_copy.comp, 2026-10-28: the block glow (light sources' bright texels) and the ore glow settings
     public static final int COPY_GLOW = 33;
+    /**
+     * 2026-11-24: the sun weight of the End star's pass (LightingChoice.star): lighting.comp's light is on (sunView.w 1), the composite's
+     * sun shading weight is 0 (slot 10 .y) and the shadow maps are read (ShadowUniforms).
+     */
+    public static final float STAR_ONLY = -1;
 
     public record Values(boolean on, Matrix4f invVanillaProjection, Matrix4f invLodProjection, Matrix4f projection, float[] sunView,
                          boolean lodValid, float aoStrength, float sunWeight, float[] upView, boolean vanillaCopies, float waterStrength,
@@ -59,14 +64,14 @@ public final class LightingUniforms {
         /** 2026-11-09: waterMarks: this frame's terrain filled the albedo image, whose water marks the pass then reads (depthParams.w). */
         public void writeLighting(LooseUniformWriter w, boolean waterMarks) {
             w.putMat4(INV_VANILLA_PROJ, this.invVanillaProjection).putMat4(INV_LOD_PROJ, this.invLodProjection).putMat4(PROJ, this.projection);
-            w.putVec4(SUN, this.sunView[0], this.sunView[1], this.sunView[2], this.sunWeight > 0 ? 1 : 0);
+            w.putVec4(SUN, this.sunView[0], this.sunView[1], this.sunView[2], this.sunWeight > 0 || this.sunWeight == STAR_ONLY ? 1 : 0);
             w.putVec4(DEPTH, LodClamp.CLAMP_THRESHOLD, this.lodValid ? 1 : 0, this.vanillaCopies ? 1 : 0, waterMarks ? 1 : 0);
             w.putVec4(UP, this.upView[0], this.upView[1], this.upView[2], this.cameraYFrac);
             w.putVec4(EAST, this.eastView[0], this.eastView[1], this.eastView[2], 0);
         }
 
         public void writeCopy(LooseUniformWriter w) {
-            w.putVec4(COPY_LIGHTING, this.aoStrength, this.sunWeight, this.on ? 1 : 0, this.sunHeightTerm);
+            w.putVec4(COPY_LIGHTING, this.aoStrength, Math.max(0, this.sunWeight), this.on ? 1 : 0, this.sunHeightTerm);
             w.putVec4(COPY_WATER, this.waterStrength, this.waterAmbient, this.sunUp, this.blockDay);
             //Session 8 follow-up: the sun's and the shade's colours times the picked sunlight's and shade light's tints (exactly 1 at the
             // defaults); the composite mixes them in by the light colour setting as before, and the PBR highlights take the sun's
@@ -138,8 +143,18 @@ public final class LightingUniforms {
             float up = hasSky ? SunMath.dayFactor(SunMath.sunDirection(frame.timeOfDay()).y, 0) : 0;
             return off(up, up * Math.max(0, Math.min(1, skyExposure)), s.blockLightColour(), s.blockGlow(), s.oreGlow(), s.blockReflections());
         }
-        Vector3f sun = SunMath.sunDirection(frame.timeOfDay());
         Matrix4f modelView = new Matrix4f(frame.invModelView()).invert();
+        if (choice.star()) {
+            //2026-11-24 (EndStarLight): the star's light for lighting.comp alone; the copy as without a pass (no sun, no day there)
+            Vector3f star = modelView.transformDirection(EndStarLight.direction()).normalize();
+            Vector3f up = modelView.transformDirection(new Vector3f(0, 1, 0)).normalize();
+            Vector3f east = modelView.transformDirection(new Vector3f(1, 0, 0)).normalize();
+            return new Values(true, frame.invVanillaProjection(), frame.invLodProjection(), new Matrix4f(frame.invVanillaProjection()).invert(),
+                    new float[]{star.x, star.y, star.z}, lodValid, 0, STAR_ONLY, new float[]{up.x, up.y, up.z}, vanillaCopies, 0, 1,
+                    (float) (frame.cameraY() - Math.floor(frame.cameraY())), new float[]{1, 1, 1, 0, 0, 1, 1, 1}, 0, 0, 0,
+                    new float[]{east.x, east.y, east.z}, s.blockLightColour(), 0, s.blockGlow(), s.oreGlow(), s.blockReflections());
+        }
+        Vector3f sun = SunMath.sunDirection(frame.timeOfDay());
         Vector3f view = modelView.transformDirection(MoonShadowMath.lightDirection(frame.timeOfDay())).normalize();
         Vector3f up = modelView.transformDirection(new Vector3f(0, 1, 0)).normalize();
         Vector3f east = modelView.transformDirection(new Vector3f(1, 0, 0)).normalize();
