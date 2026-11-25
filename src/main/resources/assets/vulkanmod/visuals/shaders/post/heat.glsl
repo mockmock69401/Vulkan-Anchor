@@ -29,9 +29,11 @@ const float HEAT_SKY_DISTANCE = 256.0;
 const float HEAT_LAVA_LEVEL = 31.0;
 const float HEAT_LAVA_HEIGHT = 12.0;
 //The heat of the Nether's air, of the lava sea's layer and right above lava on screen, and the most heat
+//2026-11-25 (the user: "네더 용암 아지랑이 줄이기"): the lava's shimmer, of its sea's layer (HEAT_SEA, was 0.9) and right above it on
+// screen (HEAT_LAVA, was 1.0), is less than half what it was; the Nether's air keeps its own
 const float HEAT_AIR = 0.35;
-const float HEAT_SEA = 0.9;
-const float HEAT_LAVA = 1.0;
+const float HEAT_SEA = 0.4;
+const float HEAT_LAVA = 0.4;
 const float HEAT_MAX = 1.5;
 //Lava on screen: how far below (share of the view height) and in how many taps
 const float HEAT_LAVA_REACH = 0.12;

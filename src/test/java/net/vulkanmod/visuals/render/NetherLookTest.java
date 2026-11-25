@@ -88,7 +88,7 @@ class NetherLookTest {
         assertFalse(COPY.contains("netherFireFringe"));
         assertTrue(LOOK.contains("vec3 netherFireLook(vec3 lit, vec3 vanilla, vec3 pos, float t) {"));
         assertTrue(LOOK.contains("netherNoise(vec3(pos.xz*NETHER_FIRE_BLOTCH_SCALE + pos.y*0.7, t*NETHER_FIRE_BLOTCH_SPEED))"));
-        String fire = LOOK.substring(LOOK.indexOf("vec3 netherFireLook("), LOOK.indexOf("//The share of no lava"));
+        String fire = LOOK.substring(LOOK.indexOf("vec3 netherFireLook("), LOOK.indexOf("vec2 netherShoreRing("));
         assertFalse(fire.contains("texelFetch"));
         //"일반불에 흰색 느낌을 줄여줘": no white heart, and no blotch over a flame's dim tips (where it fell to a grey)
         assertFalse(fire.contains("vec3(1.0)"));
@@ -105,10 +105,14 @@ class NetherLookTest {
         assertTrue(LOOK.contains("vec3 netherLavaLook(ivec2 p, ivec2 size, vec3 lit, vec3 vanilla, float dist, float pixelAngle, vec3 pos, float t, float up) {"));
         assertTrue(LOOK.contains("if (length(viewPosition(invVanillaProj, pixelUvGl(q, size), texelFetch(mainDepth, q, 0).r)) < cover) {"));
         //"파란색 테두리가 라인에 딱 붙지 않고 있어": the cyan is full against the shore, no strip of lava between
-        assertTrue(LOOK.contains("float ribbon = smoothstep(mix(NETHER_RIBBON_FROM_THIN, NETHER_RIBBON_FROM_WIDE, reach),"));
+        assertTrue(LOOK.contains("float ribbon = smoothstep(mix(NETHER_RIBBON_FROM_THIN, NETHER_RIBBON_FROM_WIDE, reach) + lift,"));
         //"그라데이션을 넣고 구간별 두께도": how far in it reaches changes by stretch, and it grades from deep blue to a light cyan
         assertTrue(LOOK.contains("float deep = smoothstep(0.35, 1.0, ribbon);"));
         assertFalse(LOOK.contains("NETHER_RIBBON_GAP"));
+        //"파란 무늬 면적이 좁으면 따라서 작아져야 함": where opposite taps both leave the lava, the cyan reaches less far in
+        assertTrue(LOOK.contains("pairs += gone[k] && gone[k + 4] ? 1.0 : 0.0;"));
+        assertTrue(LOOK.contains("            *(1.0 - narrow);"));
+        assertTrue(LOOK.contains("float lift = NETHER_NARROW_LIFT*narrow;"));
         //"테두리 두께가 너무 칼같이 끊기고 있어. 테두리 중심의 얼룩 느낌": held against a drifting grain, it breaks into blobs inward
         assertTrue(LOOK.contains("float blotch = smoothstep(grain - NETHER_RIBBON_GRAIN_SOFT, grain + NETHER_RIBBON_GRAIN_SOFT, ribbon*stretch);"));
         //"테두리에 나타나지 않은 부분 ... 중앙 용암 색과 다르게": the lava's own colour does not follow the shore

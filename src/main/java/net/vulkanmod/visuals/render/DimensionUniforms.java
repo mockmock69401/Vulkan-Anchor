@@ -105,7 +105,7 @@ public final class DimensionUniforms {
     public static boolean endSkyDrawn(net.minecraft.client.multiplayer.ClientLevel level) {
         try {
             if (level == null || level.effects().skyType() != net.minecraft.client.renderer.DimensionSpecialEffects.SkyType.END) return false;
-            PostProcessSettings s = PostProcessSettings.from(net.vulkanmod.visuals.config.VisualsConfig.get());
+            PostProcessSettings s = PostProcessSettings.from(DimensionSkies.current());
             return s.enabled() && s.endSky() > END_SKY_VANILLA;
         } catch (RuntimeException e) {
             return false;
