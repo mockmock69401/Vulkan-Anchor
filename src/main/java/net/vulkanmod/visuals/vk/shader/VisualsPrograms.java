@@ -75,6 +75,8 @@ final class VisualsPrograms {
         add(c, "postWeather", defs("USE_ZERO_ONE_DEPTH", ""), c.compute("post/weather.comp"));
         //Session 14 follow-up (Half-resolution Weather & Sky): the half-size weather overlay up to the full-size one
         add(c, "postWeatherUp", defs(), c.compute("post/weather_up.comp"));
+        //2026-11-25: the aurora's footprint noise once a frame (VkPostProcess.auroraMap), which the composite's march reads
+        add(c, "postAuroraMap", defs(), c.compute("post/aurora_map.comp"));
         //2026-11-11: the same while snow and rain are both round (WEATHER_ROUND_ONLY: the pixel sprites compiled out)
         add(c, "postWeather.ROUND", defs("USE_ZERO_ONE_DEPTH", "", "WEATHER_ROUND_ONLY", ""), c.compute("post/weather.comp"));
         add(c, "postFinal", defs("USE_ZERO_ONE_DEPTH", ""),c.vertex("post/fullscreen.vert"), c.fragment("post/post_final.frag"));

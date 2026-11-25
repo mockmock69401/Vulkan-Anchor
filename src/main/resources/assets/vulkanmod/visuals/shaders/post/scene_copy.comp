@@ -89,6 +89,8 @@ layout(binding = 26) uniform sampler2D galaxyMap;
 layout(binding = 27) uniform usampler2D footprintMap;
 //2026-11-16: where the rain falls on the ground (WetClimateMap, wetclimate.glsl)
 layout(binding = 28) uniform usampler2D wetClimateMap;
+//2026-11-25: the aurora's footprint noise (postAuroraMap, aurora.glsl AURORA_FOOTPRINT_MAP), written this frame while halfParams.w is 1
+layout(binding = 30) uniform sampler2D auroraFootprintMap;
 
 //Slots (boundary 3.2). 0, 1, 2, 8 fixed meanings (W4 writes them); 3..7, 9, 25 W4's struct Atmosphere in field order; 26..28 W4's
 // star inputs; 29 W4's look slot; 30..34 W4's reserved slots
@@ -189,7 +191,7 @@ layout(location = 59) uniform vec4 glowTint;
 // exactly 1 at its default, w 0; read only by postSceneCopy.TINTED
 layout(location = 60) uniform vec4 starTint;
 //2026-11-12 (session 14 follow-up): x 1 while the far clouds come from the half-size image (.SKY_HALF ran), y 1 while the aurora does;
-// 2026-11-25: z 1 while skyHalfHistory holds the last frame's clouds
+// 2026-11-25: z 1 while skyHalfHistory holds the last frame's clouds, w 1 while auroraFootprintMap was written this frame
 layout(location = 61) uniform vec4 halfParams;
 //2026-11-25: a world direction to the last frame's clip space (its projection times its view's rotation; skyHalfHistory's texels)
 layout(location = 84) uniform mat4 cloudPrevClip;
@@ -256,6 +258,9 @@ vec3 tintedGlow(vec3 glow) {
 #define MOON_FACE_PIXEL (2.0*abs(invVanillaProj[1][1])/float(imageSize(sceneOut).y))
 #import <vulkanmod:visuals/post/water.glsl>
 #import <vulkanmod:visuals/post/sunopen.glsl>
+//2026-11-25: the march reads the footprint's noise from auroraFootprintMap while it was written this frame
+#define AURORA_FOOTPRINT_MAP
+#define AURORA_FOOTPRINT_MAP_ON (halfParams.w > 0.5)
 #import <vulkanmod:visuals/post/aurora.glsl>
 #import <vulkanmod:visuals/post/galaxy.glsl>
 #import <vulkanmod:visuals/post/endsky.glsl>
