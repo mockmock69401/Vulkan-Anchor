@@ -18,6 +18,10 @@
 
 const float END_SKY_SPACE = 1.0;
 const float END_SKY_ANIME = 2.0;
+//2026-11-25 (the user: "엔드 차원의 공포 프리셋도 작업해줘 ... 별과 오로라를 끄고 완전한 검은 하늘로, 분위기는 엔드에 맞게 동굴 조명처럼 회색빛 초록 분위기로"): HORROR (Horror), a black
+// sky: no stars of its own, no galaxy, no aurora (endSkyBand, endSkyStars, endSkyAurora), and its terrain in a grey-green like the
+// palette's cave light (endGround)
+const float END_SKY_HORROR = 3.0;
 
 //Space: the zenith, the haze on the horizon (its height scale: sine of the elevation), the void far below
 const float END_SPACE_ZENITH_R = 2.0;
@@ -98,10 +102,16 @@ const float END_ANIME_BAND = 0.0;
 const float END_ANIME_STARS = 1.0;
 
 float endSkyBand(float style) {
+    if (abs(style - END_SKY_HORROR) < 0.5) {
+        return 0.0;
+    }
     return abs(style - END_SKY_ANIME) < 0.5 ? END_ANIME_BAND : abs(style - END_SKY_SPACE) < 0.5 ? END_SPACE_BAND : 1.0;
 }
 
 float endSkyStars(float style) {
+    if (abs(style - END_SKY_HORROR) < 0.5) {
+        return 0.0;
+    }
     return abs(style - END_SKY_ANIME) < 0.5 ? END_ANIME_STARS : abs(style - END_SKY_SPACE) < 0.5 ? END_SPACE_STARS : 1.0;
 }
 
@@ -111,6 +121,9 @@ const float END_SPACE_AURORA = 0.3;
 const float END_ANIME_AURORA = 1.0;
 
 float endSkyAurora(float style) {
+    if (abs(style - END_SKY_HORROR) < 0.5) {
+        return 0.0;
+    }
     return abs(style - END_SKY_ANIME) < 0.5 ? END_ANIME_AURORA : abs(style - END_SKY_SPACE) < 0.5 ? END_SPACE_AURORA : 1.0;
 }
 
@@ -248,22 +261,32 @@ const float END_ANIME_GROUND_G = 182.0;
 const float END_ANIME_GROUND_B = 248.0;
 const float END_ANIME_GROUND_SATURATION = 0.35;
 const float END_ANIME_GROUND_EXPOSURE = 1.1;
+//2026-11-25: Horror's, a grey-green like its cave light, dim
+const float END_HORROR_GROUND_R = 150.0;
+const float END_HORROR_GROUND_G = 182.0;
+const float END_HORROR_GROUND_B = 158.0;
+const float END_HORROR_GROUND_SATURATION = 0.15;
+const float END_HORROR_GROUND_EXPOSURE = 0.6;
 const float END_GROUND_BLOCK_FROM = 3.0;
 const float END_GROUND_BLOCK_TO = 12.0;
 
-//The lit terrain colour lit (scene units) graded for style (anything but Space and Anime: unchanged); blockLight its block light 0..15
+//The lit terrain colour lit (scene units) graded for style (anything but Space, Anime and Horror: unchanged); blockLight its block light
+// 0..15
 vec3 endGround(vec3 lit, float style, float blockLight) {
     bool space = abs(style - END_SKY_SPACE) < 0.5;
-    if (!space && abs(style - END_SKY_ANIME) >= 0.5) {
+    bool horror = abs(style - END_SKY_HORROR) < 0.5;
+    if (!space && !horror && abs(style - END_SKY_ANIME) >= 0.5) {
         return lit;
     }
     vec3 lum = vec3(0.2126, 0.7152, 0.0722);
     vec3 tint = space ? endSkySrgb(END_SPACE_GROUND_R, END_SPACE_GROUND_G, END_SPACE_GROUND_B)
+            : horror ? endSkySrgb(END_HORROR_GROUND_R, END_HORROR_GROUND_G, END_HORROR_GROUND_B)
             : endSkySrgb(END_ANIME_GROUND_R, END_ANIME_GROUND_G, END_ANIME_GROUND_B);
     tint /= max(dot(tint, lum), 1e-4);
     float l = dot(lit, lum);
-    vec3 graded = mix(vec3(l), lit, space ? END_SPACE_GROUND_SATURATION : END_ANIME_GROUND_SATURATION)*tint
-            *(space ? END_SPACE_GROUND_EXPOSURE : END_ANIME_GROUND_EXPOSURE);
+    float saturation = space ? END_SPACE_GROUND_SATURATION : horror ? END_HORROR_GROUND_SATURATION : END_ANIME_GROUND_SATURATION;
+    float exposure = space ? END_SPACE_GROUND_EXPOSURE : horror ? END_HORROR_GROUND_EXPOSURE : END_ANIME_GROUND_EXPOSURE;
+    vec3 graded = mix(vec3(l), lit, saturation)*tint*exposure;
     return mix(graded, lit, smoothstep(END_GROUND_BLOCK_FROM, END_GROUND_BLOCK_TO, blockLight));
 }
 

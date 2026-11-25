@@ -9,6 +9,8 @@ package net.vulkanmod.visuals.render;
 public final class EndSkyMath {
     public static final float END_SKY_SPACE = 1.0f;
     public static final float END_SKY_ANIME = 2.0f;
+    /** 2026-11-25: Horror's black End sky. */
+    public static final float END_SKY_HORROR = 3.0f;
     //Space: the zenith, the haze on the horizon (its height scale: sine of the elevation), the void far below
     public static final float END_SPACE_ZENITH_R = 2.0f;
     public static final float END_SPACE_ZENITH_G = 5.0f;
@@ -107,6 +109,11 @@ public final class EndSkyMath {
     public static final float END_ANIME_GROUND_B = 248.0f;
     public static final float END_ANIME_GROUND_SATURATION = 0.35f;
     public static final float END_ANIME_GROUND_EXPOSURE = 1.1f;
+    public static final float END_HORROR_GROUND_R = 150.0f;
+    public static final float END_HORROR_GROUND_G = 182.0f;
+    public static final float END_HORROR_GROUND_B = 158.0f;
+    public static final float END_HORROR_GROUND_SATURATION = 0.15f;
+    public static final float END_HORROR_GROUND_EXPOSURE = 0.6f;
     public static final float END_GROUND_BLOCK_FROM = 3.0f;
     public static final float END_GROUND_BLOCK_TO = 12.0f;
     //2026-11-24 (the user: "엔드에서 가장 밝은 별로 인한 빛 그림자도 구현해줘. 달빛그림자 처럼 진하게 할 필요는 없지만 코러스 식물 등에 그림자가
@@ -216,11 +223,13 @@ public final class EndSkyMath {
 
     /** endSkyBand: the galaxy band's weight over style (1 for vanilla's sky). */
     public static float endSkyBand(float style) {
+        if (Math.abs(style - END_SKY_HORROR) < 0.5f) return 0;
         return Math.abs(style - END_SKY_ANIME) < 0.5f ? END_ANIME_BAND : Math.abs(style - END_SKY_SPACE) < 0.5f ? END_SPACE_BAND : 1;
     }
 
     /** endSkyStars: the galaxy stars' weight over style (1 for vanilla's sky). */
     public static float endSkyStars(float style) {
+        if (Math.abs(style - END_SKY_HORROR) < 0.5f) return 0;
         return Math.abs(style - END_SKY_ANIME) < 0.5f ? END_ANIME_STARS : Math.abs(style - END_SKY_SPACE) < 0.5f ? END_SPACE_STARS : 1;
     }
 }

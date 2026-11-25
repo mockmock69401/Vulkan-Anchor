@@ -234,7 +234,8 @@ public final class ColourPresets {
      * 2026-11-23 (the user: "애니메이션 색상 프리셋은 1,2번 사진을 적용하고, 나머지 기본/현실적/시네마틱은 우주느낌의 3,4번 사진을 참고해"): the
      * End's sky, linked as the clouds are. ANIME picks the painted sky (DimensionUniforms.END_SKY_ANIME), DEFAULT the space one
      * (END_SKY_SPACE; 2026-11-24: Realistic and Cinematic, which had it too, are gone), each shown only while it is on (changing the End
-     * sky by hand shows Custom); HORROR leaves it as the player set it. Not a performance setting.
+     * sky by hand shows Custom); HORROR leaves it as the player set it. Not a performance setting. 2026-11-25 (the user: "엔드 차원의 공포
+     * 프리셋도 작업해줘. 현재 애니메이션 프리셋과 동일하게 나오고 있어"): HORROR picks its own, black one (END_SKY_HORROR; revision 31).
      */
     public static final String END_SKY_KEY = "end_sky";
     /** endSkies' answer for a palette that leaves the End sky alone. */
@@ -245,11 +246,12 @@ public final class ColourPresets {
         return switch (level) {
             case ANIME -> DimensionUniforms.END_SKY_ANIME;
             case DEFAULT -> DimensionUniforms.END_SKY_SPACE;
+            case HORROR -> DimensionUniforms.END_SKY_HORROR;
             default -> ANY_END_SKY;
         };
     }
 
-    /** The End sky choosing palette level leaves, from the current one (endSkies; HORROR and CUSTOM keep it). */
+    /** The End sky choosing palette level leaves, from the current one (endSkies; CUSTOM keeps it). */
     public static int endSky(int level, int style) {
         int own = endSkies(level);
         return own == ANY_END_SKY ? style : own;

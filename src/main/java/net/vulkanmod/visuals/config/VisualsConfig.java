@@ -89,8 +89,12 @@ public class VisualsConfig {
      * light reach (lightReach), which every other palette leaves at their defaults; a file saved on the old Horror palette (its colours
      * and look values still the palette's) takes the new one and stays on Horror (ColourPresets.moveOldHorror); one changed by hand keeps
      * its values and shows Custom.
+     * 31 (2026-11-25, the user: "엔드 차원의 공포 프리셋도 작업해줘"): the Horror palette picks its own End sky (END_SKY_HORROR); a file saved
+     * on Horror (its other settings still the palette's) takes it and stays on Horror.
      */
-    private static final int REVISION = 30;
+    private static final int REVISION = 31;
+    /** 2026-11-25: the first revision whose Horror palette picks its own End sky. */
+    static final int HORROR_END_REVISION = 31;
     /**
      * 2026-11-24 (the user: "공포 프리셋의 레퍼런스 사진을 추가로 줄게. 이 사진과 비슷하게 프리셋을 조정해줘"): the first revision with the
      * retuned Horror palette, the cave light colour and the light reach.
@@ -255,6 +259,12 @@ public class VisualsConfig {
         //2026-11-23: a file saved before the End sky setting takes its palette's (the default, Space, on Horror and Custom); after the
         // palettes' new numbers, and before every palette check below, so they find it on its palette's
         if (!json.has("endSky")) c.endSky = ColourPresets.endSky(c.colourPreset, DimensionUniforms.END_SKY_SPACE);
+        //2026-11-25 (revision 31): a file on Horror, which left the End sky as it was, takes Horror's own and stays on it
+        if (fileRevision < HORROR_END_REVISION && c.colourPreset == ColourPresets.HORROR
+                && ColourPresets.detect(c::colour, key -> key.equals(ColourPresets.END_SKY_KEY) ? ColourPresets.endSkies(ColourPresets.HORROR)
+                : VisualsOptionLayout.get(c, VisualsOptionLayout.item(key))) == ColourPresets.HORROR) {
+            c.endSky = DimensionUniforms.END_SKY_HORROR;
+        }
         //2026-11-24: a file on Anime saved at 27 or 28 with the realistic clouds the palette picked then takes the anime (watercolour)
         // clouds it picks again, and stays on it; before the performance preset's check, which counts the palette's clouds as the level's
         if (fileRevision >= ROUND_SKY_REVISION && fileRevision < ANIME_WATERCOLOUR_REVISION && c.colourPreset == ColourPresets.ANIME
