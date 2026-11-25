@@ -595,7 +595,39 @@ class WaterTest {
         //Session 16c: both solid callers keep the pixel's own colour, not the sky, where their ray ran behind ground in front of them (a
         // pit's facing wall: the obsidian pit's pale edges)
         assertEquals(2, COMP.replace("\r\n", "\n").split(java.util.regex.Pattern.quote(
-                "hitColour, pathLength, blocked);\n        if (blocked > 0.5) {\n            reflection = own;\n        }"), -1).length - 1);
+                "hitColour, pathLength, blocked);\n        if (blocked > 0.5 || (w < 1.0 && reflectNearBlocked(view, toView*r, nGeom, dist, size, toWorld))) {\n"
+                        + "            reflection = own;\n        }"), -1).length - 1);
+        //Session 16e (the anvil's base under its head; 16c's thin line on a pit's inner corner): ...and next to a concave edge or under
+        // an overhang, where the ray meets a face before the march's first step or one the screen does not show
+        assertTrue(COMP.contains("const float REFLECT_NEAR_PROBE[3] = float[](0.05, 0.15, 0.4);"));
+        assertArrayEquals(new float[]{0.05f, 0.15f, 0.4f}, WaterMath.REFLECT_NEAR_PROBE);
+        assertTrue(COMP.replace("\r\n", "\n").contains("v.z < scene.z && v.z > scene.z - REFLECT_NEAR_THICK\n                && dot(toWorld*(scene - v0), nGeom) > front"));
+        //A face 3 blocks away: the surface in front of it 0.1 block above its plane, the probe 0.05 behind that surface: hidden sky
+        assertTrue(WaterMath.nearBlocks(-3.1f, -3.05f, 0.1f, 3));
+        //The face itself, rebuilt from depth a hair off its plane, does not hide it; nor a surface far in front of the probe
+        assertFalse(WaterMath.nearBlocks(-3.1f, -3.05f, 0.005f, 3));
+        assertFalse(WaterMath.nearBlocks(-3.9f, -3.05f, 0.1f, 3));
+        //Far away the face's own depth error grows: the threshold with it
+        assertFalse(WaterMath.nearBlocks(-20.1f, -20.05f, 0.04f, 20));
+        //Past REFLECT_NEAR_MAX_DIST the line is under a pixel: no probes (their cost on a floor filling the view)
+        assertFalse(WaterMath.nearBlocks(-30.1f, -30.05f, 1f, 30));
+    }
+
+    @Test
+    void aSolidSurfacesRayBelowTheHorizonMeetsGroundNotSky() {
+        //Session 16e (the user: anvils and some stone stairs looked like water): a side face seen from above sends its ray down, where
+        // a miss keeps the pixel's own colour instead of the pale sky; both solid callers, before their march
+        String comp = COMP.replace("\r\n", "\n");
+        assertTrue(comp.contains("const float REFLECT_SOLID_GROUND_FADE = " + WaterMath.REFLECT_SOLID_GROUND_FADE + ";"));
+        assertEquals(2, comp.split(Pattern.quote("vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);\n"
+                + "    reflection = mix(own, reflection, smoothstep(-REFLECT_SOLID_GROUND_FADE, 0.0, r.y));\n    if (max(f.r, max(f.g, f.b)) >= "), -1).length - 1);
+        //...and only they: water and the wet ground keep their sky
+        assertEquals(2, comp.split(Pattern.quote("smoothstep(-REFLECT_SOLID_GROUND_FADE, 0.0, r.y)"), -1).length - 1);
+        //Level and rising rays keep the sky; half a tenth down half of it; a tenth down none
+        assertEquals(1f, WaterMath.solidSkyShare(0.0f), 1e-6f);
+        assertEquals(1f, WaterMath.solidSkyShare(0.5f), 1e-6f);
+        assertEquals(0.5f, WaterMath.solidSkyShare(-0.05f), 1e-6f);
+        assertEquals(0f, WaterMath.solidSkyShare(-0.1f), 1e-6f);
     }
 
     @Test

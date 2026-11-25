@@ -71,6 +71,25 @@ public final class WaterMath {
     public static final float REFLECT_THICK_MIN = 0.5f, REFLECT_THICK_SHARE = 0.03f, REFLECT_STEP_CAP = 0.25f;
     /** Session 16: the thickness floor for solid surfaces' reflections (blockReflection, pbrReflection); water keeps REFLECT_THICK_MIN. */
     public static final float REFLECT_SOLID_THICK_MIN = 0.15f;
+    /** Session 16c / 16e: reflectNearBlocked's probes (blocks along the ray) and its tests. */
+    public static final float[] REFLECT_NEAR_PROBE = {0.05f, 0.15f, 0.4f};
+    public static final float REFLECT_NEAR_FRONT = 0.01f, REFLECT_NEAR_FRONT_SHARE = 0.002f, REFLECT_NEAR_THICK = 0.5f, REFLECT_NEAR_MAX_DIST = 24.0f;
+    /** Session 16e: a solid surface's missed ray below the horizon keeps the pixel's own colour, faded in over this much of its world y. */
+    public static final float REFLECT_SOLID_GROUND_FADE = 0.1f;
+
+    /**
+     * reflectNearBlocked for one probe: the probe at view z probeZ against the surface the screen shows there (view z sceneZ), which
+     * stands heightAbove in front of the reflecting face; dist is the face's view distance.
+     */
+    public static boolean nearBlocks(float probeZ, float sceneZ, float heightAbove, float dist) {
+        return dist < REFLECT_NEAR_MAX_DIST && probeZ < sceneZ && probeZ > sceneZ - REFLECT_NEAR_THICK && heightAbove > REFLECT_NEAR_FRONT + REFLECT_NEAR_FRONT_SHARE * dist;
+    }
+
+    /** Session 16e: the share of the sky a solid surface's missed ray with world y ry keeps (the rest is the pixel's own colour). */
+    public static float solidSkyShare(float ry) {
+        float t = Math.max(0, Math.min(1, (ry + REFLECT_SOLID_GROUND_FADE) / REFLECT_SOLID_GROUND_FADE));
+        return t * t * (3 - 2 * t);
+    }
     public static final float REFLECT_EDGE_FADE = 0.05f, REFLECT_MIN_MARCH = 0.025f;
     public static final float REFRACT_BLOCKS = 0.6f, REFRACT_MAX_PIXELS = 24.0f, REFRACT_SAME_DEPTH = 0.08f;
     public static final int REFLECT_CLOUD_MIN_SAMPLES = 4, REFLECT_CLOUD_MAX_SAMPLES = 12;
