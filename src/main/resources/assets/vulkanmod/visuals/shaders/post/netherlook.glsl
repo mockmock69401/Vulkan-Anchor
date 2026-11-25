@@ -20,6 +20,8 @@
 // fine drifting noise (RIBBON_GRAIN_*), so the cyan breaks into soft-edged blobs toward the lava instead of ending at a line. Then
 // ("여전히 얼룩의 두께가 구간마다 일정해보여. 그라데이션을 넣고 구간별 두께도"): how far in it reaches changes from stretch to stretch
 // (RIBBON_REACH_*), and it grades from a deep blue at the shore (LAVA_BLUE) to a light cyan at its inner blobs (LAVA_BLUE_INNER).
+// 2026-11-25 (the user: "파란 무늬 면적이 좁으면 따라서 작아져야 함"): in a narrow pool or channel the cyan reaches less far in (NARROW_*):
+// where two opposite taps of a ring both leave the lava, the lava there is narrower than the ring is wide.
 // A tap of something much nearer than the lava (a pillar in front of it) is no shore and is left out. The lava's own colour does not
 // follow the shore (2026-11-25, the user: "테두리에 나타나지 않은 부분을 잘 보면 중앙 용암 색과 다르게 보이고 있어"): where no ribbon shows,
 // its edge is the lava of its middle. A bright yellow (LAVA_CORE) takes some deep orange (LAVA_BODY) in slow patches all over
@@ -75,6 +77,12 @@ const float NETHER_SHORE_MID_WEIGHT = 0.3;
 const float NETHER_SHORE_FAR_WEIGHT = 0.2;
 const float NETHER_SHORE_MIN_PIXELS = 1.5;
 const float NETHER_SHORE_MAX_PIXELS = 60.0;
+//How narrow the lava is where two opposite taps leave it at SHORE_NEAR (under about 1 block), SHORE_MID (2.4) or SHORE_FAR (5): the
+// share of the cyan's reach taken away there, and how much the field's thresholds rise
+const float NETHER_NARROW_NEAR = 1.0;
+const float NETHER_NARROW_MID = 0.8;
+const float NETHER_NARROW_FAR = 0.5;
+const float NETHER_NARROW_LIFT = 0.1;
 //A tap this much nearer than the lava (blocks, plus a share of the distance) covers it and is no shore
 const float NETHER_SHORE_COVER_BLOCKS = 2.0;
 const float NETHER_SHORE_COVER_SHARE = 0.1;
@@ -140,13 +148,16 @@ vec3 netherFireLook(vec3 lit, vec3 vanilla, vec3 pos, float t) {
     return mix(shown, netherKeepLight(blue, lit)*NETHER_FIRE_BLOTCH_LIGHT, blotch*NETHER_FIRE_BLOTCH_MOST);
 }
 
-//The share of no lava among 8 taps r pixels from p (rotated by turn); taps that cover the lava (much nearer than dist) left out
-float netherShoreRing(ivec2 p, ivec2 size, float r, float turn, float dist) {
+//Among 8 taps r pixels from p (rotated by turn): x the share of no lava, taps that cover the lava (much nearer than dist) left out; y how
+// narrow the lava is there (0 none .. 1 two pairs or more of opposite taps both leave it)
+vec2 netherShoreRing(ivec2 p, ivec2 size, float r, float turn, float dist) {
     float cover = dist - NETHER_SHORE_COVER_BLOCKS - NETHER_SHORE_COVER_SHARE*dist;
     float open = 0.0, counted = 0.0;
+    bool gone[8];
     for (int k = 0; k < 8; k++) {
         float a = float(k)*0.78539816 + turn;
         ivec2 q = clamp(p + ivec2(round(vec2(cos(a), sin(a))*r)), ivec2(0), size - 1);
+        gone[k] = false;
         if (alphaCode(texelFetch(mainColour, q, 0).a) == EMISSIVE_FLUID_ALPHA_CODE) {
             counted += 1.0;
             continue;
@@ -154,21 +165,26 @@ float netherShoreRing(ivec2 p, ivec2 size, float r, float turn, float dist) {
         if (length(viewPosition(invVanillaProj, pixelUvGl(q, size), texelFetch(mainDepth, q, 0).r)) < cover) {
             continue;
         }
+        gone[k] = true;
         open += 1.0;
         counted += 1.0;
     }
-    return counted > 0.0 ? open/counted : 0.0;
+    float pairs = 0.0;
+    for (int k = 0; k < 4; k++) {
+        pairs += gone[k] && gone[k + 4] ? 1.0 : 0.0;
+    }
+    return vec2(counted > 0.0 ? open/counted : 0.0, min(pairs*0.5, 1.0));
 }
 
-//How near the shore a lava pixel lies: 0 well inside, about 0.5 at a straight shore's edge, more in a narrow inlet
-float netherShore(ivec2 p, ivec2 size, float dist, float pixelAngle) {
+//x how near the shore a lava pixel lies: 0 well inside, about 0.5 at a straight shore's edge, more in a narrow inlet; y how narrow the
+// lava is there (0 wide .. 1 under about a block)
+vec2 netherShore(ivec2 p, ivec2 size, float dist, float pixelAngle) {
     float perBlock = 1.0/max(dist*pixelAngle, 1e-4);
-    return NETHER_SHORE_NEAR_WEIGHT*netherShoreRing(p, size,
-                    clamp(NETHER_SHORE_NEAR*perBlock, NETHER_SHORE_MIN_PIXELS, NETHER_SHORE_MAX_PIXELS), 0.39269908, dist)
-            + NETHER_SHORE_MID_WEIGHT*netherShoreRing(p, size,
-                    clamp(NETHER_SHORE_MID*perBlock, NETHER_SHORE_MIN_PIXELS, NETHER_SHORE_MAX_PIXELS), 0.0, dist)
-            + NETHER_SHORE_FAR_WEIGHT*netherShoreRing(p, size,
-                    clamp(NETHER_SHORE_FAR*perBlock, NETHER_SHORE_MIN_PIXELS, NETHER_SHORE_MAX_PIXELS), 0.19634954, dist);
+    vec2 near = netherShoreRing(p, size, clamp(NETHER_SHORE_NEAR*perBlock, NETHER_SHORE_MIN_PIXELS, NETHER_SHORE_MAX_PIXELS), 0.39269908, dist);
+    vec2 mid = netherShoreRing(p, size, clamp(NETHER_SHORE_MID*perBlock, NETHER_SHORE_MIN_PIXELS, NETHER_SHORE_MAX_PIXELS), 0.0, dist);
+    vec2 far = netherShoreRing(p, size, clamp(NETHER_SHORE_FAR*perBlock, NETHER_SHORE_MIN_PIXELS, NETHER_SHORE_MAX_PIXELS), 0.19634954, dist);
+    return vec2(NETHER_SHORE_NEAR_WEIGHT*near.x + NETHER_SHORE_MID_WEIGHT*mid.x + NETHER_SHORE_FAR_WEIGHT*far.x,
+            max(NETHER_NARROW_NEAR*near.y, max(NETHER_NARROW_MID*mid.y, NETHER_NARROW_FAR*far.y)));
 }
 
 //A lava pixel's look: lit the composite's glow, vanilla its colour (display), dist its distance (blocks), pixelAngle a pixel's angle,
@@ -180,16 +196,20 @@ vec3 netherLavaLook(ivec2 p, ivec2 size, vec3 lit, vec3 vanilla, float dist, flo
     if (!(pool > 0.0)) {
         return lit;
     }
-    float shore = netherShore(p, size, dist, pixelAngle);
+    vec2 measure = netherShore(p, size, dist, pixelAngle);
+    float shore = measure.x;
+    float narrow = measure.y;
     float m = max(vanilla.r, max(vanilla.g, vanilla.b));
     float swirl = netherNoise(vec3(pos.xz*NETHER_LAVA_SWIRL_SCALE, t*NETHER_LAVA_SWIRL_SPEED + 40.0));
     vec3 c = mix(netherSrgb(NETHER_LAVA_CORE_R, NETHER_LAVA_CORE_G, NETHER_LAVA_CORE_B),
             netherSrgb(NETHER_LAVA_BODY_R, NETHER_LAVA_BODY_G, NETHER_LAVA_BODY_B),
             NETHER_LAVA_SWIRL_MOST*smoothstep(NETHER_LAVA_SWIRL_FROM, NETHER_LAVA_SWIRL_TO, swirl));
     vec3 shown = netherKeepLight(c, lit)*NETHER_LAVA_LIGHT*(1.0 - NETHER_LAVA_TEXTURE + NETHER_LAVA_TEXTURE*2.0*m*m);
-    float reach = smoothstep(0.3, 0.7, netherNoise(vec3(pos.xz*NETHER_RIBBON_REACH_SCALE, t*NETHER_RIBBON_REACH_SPEED + 20.0)));
-    float ribbon = smoothstep(mix(NETHER_RIBBON_FROM_THIN, NETHER_RIBBON_FROM_WIDE, reach),
-            mix(NETHER_RIBBON_TO_THIN, NETHER_RIBBON_TO_WIDE, reach), shore);
+    float reach = smoothstep(0.3, 0.7, netherNoise(vec3(pos.xz*NETHER_RIBBON_REACH_SCALE, t*NETHER_RIBBON_REACH_SPEED + 20.0)))
+            *(1.0 - narrow);
+    float lift = NETHER_NARROW_LIFT*narrow;
+    float ribbon = smoothstep(mix(NETHER_RIBBON_FROM_THIN, NETHER_RIBBON_FROM_WIDE, reach) + lift,
+            mix(NETHER_RIBBON_TO_THIN, NETHER_RIBBON_TO_WIDE, reach) + lift, shore);
     float stretch = smoothstep(NETHER_LAVA_BLOTCH_FROM, NETHER_LAVA_BLOTCH_TO,
             netherNoise(vec3(pos.xz*NETHER_LAVA_BLOTCH_SCALE, t*NETHER_LAVA_BLOTCH_SPEED)));
     float grain = netherNoise(vec3(pos.xz*NETHER_RIBBON_GRAIN_SCALE, t*NETHER_RIBBON_GRAIN_SPEED + 9.0));

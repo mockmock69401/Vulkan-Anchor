@@ -908,7 +908,7 @@ public final class VkPostProcess {
             this.moonFaceSerial = VkFrames.serial();
         }
         //Session 12 follow-up: the anime stars (their band's map once baked; vanilla's stars stay where the composite draws no sky)
-        VisualsConfig animeConfig = VisualsConfig.get();
+        VisualsConfig animeConfig = DimensionSkies.current();
         boolean animeWanted = animeConfig != null && animeConfig.enabled && animeConfig.starType == StarMath.TYPE_ANIME;
         boolean skyDrawn = atmosphere.mode() == AtmosphereMath.ATMOSPHERE_SKY;
         //2026-11-17: a desert's Milky Way over the other star types needs the band's map too

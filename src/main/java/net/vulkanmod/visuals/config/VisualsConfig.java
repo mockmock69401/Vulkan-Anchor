@@ -417,6 +417,20 @@ public class VisualsConfig {
         return b.toString();
     }
 
+    /** 2026-11-25 (DimensionSkies): a copy with every setting (every public instance field) the same. */
+    public VisualsConfig copy() {
+        VisualsConfig c = new VisualsConfig();
+        for (Field f : VisualsConfig.class.getFields()) {
+            if (Modifier.isStatic(f.getModifiers())) continue;
+            try {
+                f.set(c, f.get(this));
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException(e);
+            }
+        }
+        return c;
+    }
+
     /** 2026-11-10 (session 8): every colour in ShaderColours.Colour order. */
     public int[] colours() {
         int[] v = new int[ShaderColours.COUNT];

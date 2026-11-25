@@ -63,7 +63,7 @@ public final class VisualsRenderer {
 
     /** 2026-11-18: the moon's shadow strength (MoonShadowMath.strength) in a level with sky light, else 0. */
     static float moonStrength(PostProcessSettings settings, ClientLevel level) {
-        return level != null && level.dimensionType().hasSkyLight() ? MoonShadowMath.strength(settings.moonlight(), level.getMoonPhase()) : 0;
+        return DimensionSkies.skyLit(level) ? MoonShadowMath.strength(settings.moonlight(), level.getMoonPhase()) : 0;
     }
 
     /** The far clouds' and the shafts' reach in LOD sections: the extension's LOD distance when it supplied inputs this frame, else the default. */
@@ -185,7 +185,7 @@ public final class VisualsRenderer {
             this.terrainLight = new TerrainLightTarget(this.deferred);
             this.edgeCover = createEdgeCover();
             //P7j final review: a dimension without sky light never draws them; 2026-11-24: but the End, whose bright star casts (EndStarLight)
-            this.shadows = level.dimensionType().hasSkyLight() || level.effects().skyType() == DimensionSpecialEffects.SkyType.END
+            this.shadows = DimensionSkies.skyLit(level) || level.effects().skyType() == DimensionSpecialEffects.SkyType.END
                     ? createShadowMaps() : null;
             //2026-10-29: with the sun shadows only
             this.entityShadows = this.shadows != null ? VkEntityShadows.create() : null;
@@ -290,8 +290,10 @@ public final class VisualsRenderer {
             // the last capture stands in for this frame's)
             ClientLevel level = Minecraft.getInstance().level;
             float partialTick = Minecraft.getInstance().getFrameTime();
-            PostProcessSettings settings = PostProcessSettings.from(VisualsConfig.get());
-            boolean hasSky = level != null && level.dimensionType().hasSkyLight();
+            //2026-11-25: a modded dimension's own sky (DimensionSkies)
+            PostProcessSettings settings = PostProcessSettings.from(DimensionSkies.current());
+            //2026-11-25 (DimensionSkies.skyLit): not an End-effects dimension with sky light; a listed one without
+            boolean hasSky = DimensionSkies.skyLit(level);
             Plan plan = Plan.of(hasSky, settings);
             //2026-10-23: from inside water as when the water's fog covers everything (AtmosphereFrame.withCameraFluid): no switch once it clears
             boolean fogCoversAll = FogParameters.fromRenderSystem().environmentalEnd() < vanillaRenderDistance()
@@ -559,7 +561,7 @@ public final class VisualsRenderer {
         if (frame == null || frame.serial() != serial) return CelestialUniforms.off();
         try {
             CelestialUniforms.Sky sky = level.effects().skyType() == DimensionSpecialEffects.SkyType.END ? CelestialUniforms.Sky.END
-                    : level.dimensionType().hasSkyLight() && level.effects().skyType() == DimensionSpecialEffects.SkyType.NORMAL
+                    : DimensionSkies.skyLit(level) && level.effects().skyType() == DimensionSpecialEffects.SkyType.NORMAL
                     ? CelestialUniforms.Sky.SUN : CelestialUniforms.Sky.NONE;
             long now = System.nanoTime();
             float dt = this.climateNanos == 0 ? Float.NaN : (now - this.climateNanos) / 1e9f;
@@ -622,9 +624,9 @@ public final class VisualsRenderer {
             }
             //2026-11-24 (portallook.glsl): the portals in the palette's look
             DimensionUniforms.Values v = DimensionUniforms.compute(settings, kind, camera.x, camera.y, camera.z, pillar, fade, this.flowSeconds);
-            if (settings.enabled()) v = v.withPortalLook(DimensionUniforms.portalLook(VisualsConfig.get().colourPreset));
+            if (settings.enabled()) v = v.withPortalLook(DimensionUniforms.portalLook(DimensionSkies.current().colourPreset));
             //2026-11-24: the Anime Nether's fire and lava (netherlook.glsl)
-            if (settings.enabled() && DimensionUniforms.netherLook(kind, VisualsConfig.get().colourPreset)) v = v.withNetherLook(1);
+            if (settings.enabled() && DimensionUniforms.netherLook(kind, DimensionSkies.current().colourPreset)) v = v.withNetherLook(1);
             //2026-11-24 (EndStarLight): the star's shadows while its maps are drawn
             return this.lightingChoice.star() && this.lightingChoice.serial() == VkFrames.serial() && this.shadowFrame != null
                     ? v.withStarShadow(EndStarLight.SHADOW) : v;
@@ -876,7 +878,7 @@ public final class VisualsRenderer {
         Minecraft mc = Minecraft.getInstance();
         ClientLevel level = mc.level;
         RenderTarget target = mc.getMainRenderTarget();
-        PostProcessSettings settings = PostProcessSettings.from(VisualsConfig.get());
+        PostProcessSettings settings = PostProcessSettings.from(DimensionSkies.current());
         boolean enabled = settings.enabled(), unavailable = this.closed || this.post == null || this.postFailed;
         if (!PostGate.shouldRun(level != null, target.width, target.height, enabled, VkContext.recordingFrame(), unavailable)) {
             //P7l design 3.1: no post-process, no volume (a frame only skipped by Reforged or a minimised window keeps it)
@@ -897,7 +899,7 @@ public final class VisualsRenderer {
         try {
             this.post.ensureSize(main.width(), main.height());
             float partialTick = mc.getFrameTime();
-            boolean hasSkyLight = level.dimensionType().hasSkyLight();
+            boolean hasSkyLight = DimensionSkies.skyLit(level);
             Plan plan = Plan.of(hasSkyLight, settings);
             //P7l design 3.1: the light volume around the camera (read here, not cached by frame(), which stops once it has failed),
             // filled a budget of sections per frame

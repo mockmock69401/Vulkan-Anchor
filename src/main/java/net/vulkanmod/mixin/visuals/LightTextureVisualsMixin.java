@@ -25,7 +25,7 @@ public abstract class LightTextureVisualsMixin {
     private float visuals$moonlight(float skyFactor) {
         //LightTexture's own minecraft field is Minecraft.getInstance(); no @Shadow (the jar's reobf does not rename shadow fields)
         ClientLevel level = Minecraft.getInstance().level;
-        PostProcessSettings s = PostProcessSettings.from(VisualsConfig.get());
+        PostProcessSettings s = PostProcessSettings.from(net.vulkanmod.visuals.render.DimensionSkies.current());
         boolean applies = level != null && level.dimensionType().hasSkyLight() && level.getSkyFlashTime() <= 0
                 && s.enabled() && Visuals.active();
         if (!applies) return skyFactor;

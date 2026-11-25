@@ -52,7 +52,8 @@ public final class ParticleLook {
 
     /** Reads the settings (once a frame; cheap). */
     public static void refresh() {
-        VisualsConfig c = VisualsConfig.get();
+        //2026-11-25: a modded dimension's own palette (DimensionSkies) colours its particles too
+        VisualsConfig c = net.vulkanmod.visuals.render.DimensionSkies.current();
         if (c == null || !c.enabled) {
             active = false;
             return;

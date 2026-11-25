@@ -65,7 +65,7 @@ class NoSkyDimensionTest {
         assertTrue(calls(RENDERER, "frame").contains("VisualsRenderer$Plan.of"), calls(RENDERER, "frame").toString());
         assertTrue(calls(RENDERER, "postProcess").contains("VisualsRenderer$Plan.of"), calls(RENDERER, "postProcess").toString());
         List<String> init = calls(RENDERER, "<init>");
-        assertTrue(Bytecode.inOrder(init, List.of("DimensionType.hasSkyLight", "VisualsRenderer.createShadowMaps")), init.toString());
+        assertTrue(Bytecode.inOrder(init, List.of("DimensionSkies.skyLit", "VisualsRenderer.createShadowMaps")), init.toString());
         assertTrue(calls(RENDERER, "createShadowMaps").contains("VkShadowMaps.<init>"));
     }
 }

@@ -12,8 +12,10 @@ public final class HeatMath {
     public static final float HEAT_LAVA_LEVEL = 31.0f;
     public static final float HEAT_LAVA_HEIGHT = 12.0f;
     public static final float HEAT_AIR = 0.35f;
-    public static final float HEAT_SEA = 0.9f;
-    public static final float HEAT_LAVA = 1.0f;
+    /** 2026-11-25 ("네더 용암 아지랑이 줄이기"): was 0.9. */
+    public static final float HEAT_SEA = 0.4f;
+    /** 2026-11-25: was 1.0. */
+    public static final float HEAT_LAVA = 0.4f;
     public static final float HEAT_MAX = 1.5f;
     public static final float HEAT_LAVA_REACH = 0.12f;
     public static final int HEAT_LAVA_TAPS = 4;

@@ -258,7 +258,7 @@ class VisualsRendererWiringTest {
         assertTrue(calls(SYSTEM, "prepareShadows").contains("VkShadowMaps.prepare"));
         assertTrue(calls(SYSTEM, "drawShadows").contains("VkShadowMaps.draw"));
         assertTrue(calls(SYSTEM, "onRecordingStarted").contains("VkShadowMaps.tick"));
-        assertTrue(inOrder(calls(SYSTEM, "<init>"), List.of("DimensionType.hasSkyLight", "VisualsRenderer.createShadowMaps")), calls(SYSTEM, "<init>").toString());
+        assertTrue(inOrder(calls(SYSTEM, "<init>"), List.of("DimensionSkies.skyLit", "VisualsRenderer.createShadowMaps")), calls(SYSTEM, "<init>").toString());
     }
 
     /** Design 3.3, review focus 5: the lighting reads this frame's cascades, or the main depth in their place (PostInputs). */
