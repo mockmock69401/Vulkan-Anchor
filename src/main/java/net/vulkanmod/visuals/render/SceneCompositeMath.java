@@ -59,6 +59,17 @@ public final class SceneCompositeMath {
      */
     public static final float HALF_SKY_DEPTH_SHARPNESS = 16.0f, HALF_SKY_FAR = 60000.0f;
     public static final int HALF_SKY_AURORA_STEPS = AuroraMath.AURORA_STEPS;
+    /** 2026-11-25: the share of the last frame's half-size clouds a texel keeps, and how far beyond its distance that cloud may lie (scene_copy .SKY_HALF). */
+    public static final float HALF_SKY_KEEP = 0.9f, HALF_SKY_BEYOND = 1.05f;
+
+    /**
+     * 2026-11-25: cloudPrevClip, a world direction (w 0) to the last frame's clip space: the last frame's projection times its view's
+     * rotation, from their inverses (AtmosphereUniforms.Values.invVanillaProjection, invView).
+     */
+    public static org.joml.Matrix4f prevClip(org.joml.Matrix4fc lastInvProjection, org.joml.Matrix4fc lastInvView) {
+        org.joml.Matrix4f view = new org.joml.Matrix4f(lastInvView).invert().setTranslation(0, 0, 0);
+        return new org.joml.Matrix4f(lastInvProjection).invert().mul(view);
+    }
 
     /** halfSkyAt's weight of a half-size texel: its bilinear share, divided by 1 + sharpness times the relative distance gap. */
     public static float halfSkyWeight(float bilinear, float texelDist, float pixelDist) {
@@ -484,9 +495,16 @@ public final class SceneCompositeMath {
         return new Atmosphere(slots[3], slots[4], slots[5], slots[6], slots[7], slots[9], slots[25], slots[48], slots[49], slots[50]);
     }
 
-    private static float[] farCloudsOver(Atmosphere a, float[][] slots, float[] colour, float[] dir, float[] march) {
-        if (slots[CLOUD_SHAPE][3] < 0.5f || !AtmosphereMath.atmosphereSky(a) || !(CloudMath.four(march)[2] > 0)) return colour;
-        float[] r = AtmosphereMath.cloudOver(a, new CloudLight(slots[CLOUD_LIT], slots[CLOUD_AMBIENT], slots[CLOUD_LIGHT_DIR]), march, dir, 1);
+    /** 2026-11-25: behind far cloud covering this much of a sky pixel the aurora is not marched (scene_copy.comp). */
+    public static final float AURORA_CLOUD_HIDDEN = 0.995f;
+
+    /** The composite's farClouds: the far cloud layer premultiplied (rgb the light, a the cover), 0 where none. */
+    private static float[] farClouds(Atmosphere a, float[][] slots, float[] dir, float[] march) {
+        if (slots[CLOUD_SHAPE][3] < 0.5f || !AtmosphereMath.atmosphereSky(a) || !(CloudMath.four(march)[2] > 0)) return new float[4];
+        return AtmosphereMath.cloudOver(a, new CloudLight(slots[CLOUD_LIT], slots[CLOUD_AMBIENT], slots[CLOUD_LIGHT_DIR]), march, dir, 1);
+    }
+
+    private static float[] over(float[] colour, float[] r) {
         return new float[]{colour[0] * (1 - r[3]) + r[0], colour[1] * (1 - r[3]) + r[1], colour[2] * (1 - r[3]) + r[2]};
     }
 
@@ -523,8 +541,11 @@ public final class SceneCompositeMath {
             //Session 12: the star colour (the .TINTED build; 1 at its default)
             stars = mul(stars, WaterMath.vanillaStarTint(a, px.dir, slots[STAR_TINT]));
             float[] sky = add(add(add(AtmosphereMath.skyColour(a, px.dir), AtmosphereMath.sunGlow(a, px.dir)),
-                    add(WaterMath.sunDisc(a, px.dir, celestial), WaterMath.moonDisc(a, px.dir, celestial))), add(stars, auroraSky(slots, px.dir)));
-            return rgba(scale(farCloudsOver(a, slots, sky, px.dir, px.cloudMarch), underwaterExposure(slots[LOOK])), 0);
+                    add(WaterMath.sunDisc(a, px.dir, celestial), WaterMath.moonDisc(a, px.dir, celestial))), stars);
+            //2026-11-25: the clouds first, the aurora only where they leave it showing
+            float[] cloud = farClouds(a, slots, px.dir, px.cloudMarch);
+            if (cloud[3] < AURORA_CLOUD_HIDDEN) sky = add(sky, auroraSky(slots, px.dir));
+            return rgba(scale(over(sky, cloud), underwaterExposure(slots[LOOK])), 0);
         }
         float[] lighting = slots[LIGHTING], water = slots[WATER], lightFrac = slots[LIGHT_FRAC], lightMode = slots[LIGHT_MODE], look = slots[LOOK];
         boolean passRan = lighting[2] > 0.5f;
@@ -690,7 +711,7 @@ public final class SceneCompositeMath {
             float[] fog = AtmosphereMath.fogColour(a, px.dir);
             for (int i = 0; i < 3; i++) hazed[i] = fog[i] + (hazed[i] - fog[i]) * t;
         }
-        float[] shown = scale(farCloudsOver(a, slots, hazed, px.dir, px.cloudMarch), underwaterExposure(look));
+        float[] shown = scale(over(hazed, farClouds(a, slots, px.dir, px.cloudMarch)), underwaterExposure(look));
         if (cameraUnderwater(slots)) shown = underwaterView(px, slots, shown);
         return rgba(shown, passRan && !cloud ? WaterMath.reflectionMark(kind) : 0);
     }

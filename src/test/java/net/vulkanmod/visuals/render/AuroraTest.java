@@ -231,8 +231,10 @@ class AuroraTest {
         assertTrue(COPY.contains("#import <vulkanmod:visuals/post/aurora.glsl>") && REFLECTION.contains("#import <vulkanmod:visuals/post/aurora.glsl>"));
         assertTrue(COPY.contains("layout(location = 46) uniform vec4 celestial;") && COPY.contains("layout(location = 47) uniform vec4 auroraParams;"));
         assertTrue(REFLECTION.contains("layout(location = 27) uniform vec4 celestial;") && REFLECTION.contains("layout(location = 28) uniform vec4 auroraParams;"));
-        int sky = COPY.indexOf("+ auroraScreen(dir, p);"), clouds = COPY.indexOf("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)");
-        assertTrue(sky > 0 && clouds > sky, "under the far clouds");
+        //2026-11-25: the clouds worked out first, the aurora added under them only where they leave it showing
+        int clouds = COPY.indexOf("vec4 cloud = farClouds(a, dir, HAZE_MAX_DISTANCE, p);"), sky = COPY.indexOf("sky += auroraScreen(dir, p);"),
+                over = COPY.indexOf("(sky*(1.0 - cloud.a) + cloud.rgb)");
+        assertTrue(clouds > 0 && sky > clouds && over > sky, "under the far clouds");
         //Session 19: over the End's galaxy
         //2026-11-23: over the End's own sky (endsky.glsl)
         assertTrue(COPY.contains("return vec4((back + stars + auroraScreen(dir, p)*endSkyAurora(endSkyParams.x))*underwaterExposure(), 0.0);"), "the End's sky");

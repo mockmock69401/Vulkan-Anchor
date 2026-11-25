@@ -232,6 +232,7 @@ class SceneCompositeTest {
         expected.put("COPY_PARTICLE_TILES", VulkanShaderMeta.Kind.STORAGE_BUFFER);//2026-11-12 (session 14 follow-up)
         expected.put("COPY_SKY_HALF_CLOUD", VulkanShaderMeta.Kind.IMAGE);//2026-11-12 (session 14 follow-up, half resolution)
         expected.put("COPY_SKY_HALF_AURORA", VulkanShaderMeta.Kind.IMAGE);
+        expected.put("COPY_SKY_HALF_HISTORY", VulkanShaderMeta.Kind.IMAGE);//2026-11-25: the half-size clouds' history
         expected.put("COPY_MOON_FACE", VulkanShaderMeta.Kind.SAMPLER);//2026-11-12 (session 15, the moon's face)
         expected.put("COPY_HEAT", VulkanShaderMeta.Kind.IMAGE);//2026-11-13 (session 19, the Nether's heat haze)
         expected.put("COPY_GALAXY_MAP", VulkanShaderMeta.Kind.SAMPLER);//2026-11-13 (session 19, the End galaxy's map)
@@ -250,7 +251,7 @@ class SceneCompositeTest {
             have.add(b.binding() + ":" + b.kind());
         }
         assertEquals(want, have);
-        assertEquals(29, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14), the particle tiles at 21, the half-size clouds and aurora at 22, 23 (session 14 follow-up), the moon's face at 24 (session 15), the heat haze's offsets at 25, the End galaxy's map at 26 (session 19), the footprints' map at 27 (session 25), the rain map at 28 (2026-11-16)");
+        assertEquals(30, have.size(), "boundary 3.2: bindings 0..12, W10's ambient occlusion at 13, the terrain light at 14, its albedo at 15, the colour after the translucent terrain at 16, the depth before it at 17, the PBR material images at 18, 19 (session 9), the sun open share at 20 (session 14), the particle tiles at 21, the half-size clouds and aurora at 22, 23 (session 14 follow-up), the moon's face at 24 (session 15), the heat haze's offsets at 25, the End galaxy's map at 26 (session 19), the footprints' map at 27 (session 25), the rain map at 28 (2026-11-16), the half-size clouds' history at 29 (2026-11-25)");
         //Every slot 0..34 with the type its writer uses: the three matrices, then vec4
         for (int loc = 0; loc <= 34; loc++) assertEquals(loc <= 2 ? "mat4" : "vec4", member(loc).type(), "location " + loc);
         //The clean writers and W4 fill every slot but the held light's (HeldLightSystem needs a device buffer: its slot is checked by value)
@@ -384,7 +385,7 @@ class SceneCompositeTest {
         //Not in the open air
         assertEquals(1f, SceneCompositeMath.underwaterExposure(scene(DEFAULT, frame(NOON), true, true, 1)[SceneCompositeMath.LOOK]));
         assertTrue(COMP.contains("vec3 shown = lit*underwaterExposure();"));
-        assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure()"));
+        assertTrue(COMP.contains("return vec4((sky*(1.0 - cloud.a) + cloud.rgb)*underwaterExposure(), 0.0);"));
         //The shader takes the haze from W4 only (no fog of its own)
         assertTrue(COMP.contains("float amount = hazeAmount(a, known && !cloud ? hazeSky : 1.0, fromLod);"));
         assertTrue(COMP.contains("applyHazeOpen(a, lit, dir, dist, amount, sunOpen)"));
@@ -995,9 +996,10 @@ class SceneCompositeTest {
         // vanillaMoonKept 1 (vanilla's moon is kept through vanillaStars)
         //Session 12: the stars (times the picked star colour in the .TINTED build) in the same place of the sum
         assertTrue(COMP.contains("vec3 stars = vanillaStars(a, dir, scene, vanillaSky, vanillaFog, starGate)*vanillaMoonKept(a, dir, celestial);"));
-        assertTrue(COMP.contains("vec3 sky = skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir)) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars"
-                + "\n                + auroraScreen(dir, p);"));
-        assertTrue(COMP.contains("farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)"));
+        assertTrue(COMP.contains("vec3 sky = skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir)) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars;"));
+        //2026-11-25: the far clouds over it, the aurora added only where they leave it showing
+        assertTrue(COMP.contains("vec4 cloud = farClouds(a, dir, HAZE_MAX_DISTANCE, p);"));
+        assertTrue(COMP.contains("sky += auroraScreen(dir, p);"));
     }
 
     /**
@@ -1208,7 +1210,7 @@ class SceneCompositeTest {
         assertTrue(COMP.contains("float hazeSky = water ? skyShare(sky) : clamp(skyT/15.0, 0.0, 1.0);"));
         assertTrue(COMP.contains("heldLevelAt(lightFrac.xyz + world, dot(lightNormal, lightNormal) > 0.25 ? lightNormal : -world)"));
         assertTrue(COMP.contains("lightAll*perLight*ao*waterParams.y"));
-        assertTrue(COMP.contains("if (!(m.z > 0.0)) {\n        return colour;"));
+        assertTrue(COMP.contains("if (!(m.z > 0.0)) {\n        return vec4(0.0);"));
         //Water: the AO darkens the body's light too (W6: what a white texel receives). W10: only the sky light's ambient part of it
         float[][] lit = noonLit();
         lit[SceneCompositeMath.LIGHTING][0] = 1;

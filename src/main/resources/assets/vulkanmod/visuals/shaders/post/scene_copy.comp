@@ -76,6 +76,8 @@ layout(binding = 21, std430) restrict buffer ParticleTiles { uint particleTile[]
 // its distances from the camera) and the aurora, with the texel's view distance in w; the composite reads them while halfParams.x is 1
 layout(binding = 22, rgba16f) uniform restrict image2D skyHalfCloud;
 layout(binding = 23, rgba16f) uniform restrict image2D skyHalfAurora;
+//2026-11-25 (the far clouds always at half size): the last frame's skyHalfCloud, which .SKY_HALF blends into this frame's
+layout(binding = 29, rgba16f) uniform readonly restrict image2D skyHalfHistory;
 //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace: albedo and slopes with their mips, water.glsl moonShape)
 layout(binding = 24) uniform sampler2D moonFace;
 //2026-11-13 (shader roadmap session 19): .HEAT writes, at a quarter of the size, the Nether's heat haze (heat.glsl): rg the offset the final
@@ -186,8 +188,11 @@ layout(location = 59) uniform vec4 glowTint;
 //2026-11-11 (session 12): CelestialUniforms' STAR_TINT, the picked star colour's tint on vanilla's stars (water.glsl vanillaStarTint),
 // exactly 1 at its default, w 0; read only by postSceneCopy.TINTED
 layout(location = 60) uniform vec4 starTint;
-//2026-11-12 (session 14 follow-up): x 1 while the far clouds come from the half-size image (.SKY_HALF ran), y 1 while the aurora does
+//2026-11-12 (session 14 follow-up): x 1 while the far clouds come from the half-size image (.SKY_HALF ran), y 1 while the aurora does;
+// 2026-11-25: z 1 while skyHalfHistory holds the last frame's clouds
 layout(location = 61) uniform vec4 halfParams;
+//2026-11-25: a world direction to the last frame's clip space (its projection times its view's rotation; skyHalfHistory's texels)
+layout(location = 84) uniform mat4 cloudPrevClip;
 //2026-11-13 (session 19), DimensionUniforms: x the End's galaxy strength (galaxy.glsl; 0 elsewhere), y the Nether's heat haze strength
 // (heat.glsl; 0 elsewhere), z the camera's world y, w the time in seconds (wrapped at HEAT_TIME_WRAP)
 layout(location = 62) uniform vec4 dimensionParams;
@@ -807,6 +812,10 @@ const float HALF_SKY_DEPTH_SHARPNESS = 16.0;
 const float HALF_SKY_FAR = 60000.0;
 //The half-size pass marches the aurora along two directions with the full size's samples each
 const int HALF_SKY_AURORA_STEPS = AURORA_STEPS;
+//2026-11-25: the share of the last frame's half-size clouds a texel keeps (.SKY_HALF), and how far beyond the texel's own distance
+// that cloud may lie before it is dropped (a hill moved in front of it)
+const float HALF_SKY_KEEP = 0.9;
+const float HALF_SKY_BEYOND = 1.05;
 vec4 halfSkyAt(bool aurora, ivec2 p, float dist) {
     dist = min(dist, HALF_SKY_FAR);
     ivec2 hs = imageSize(skyHalfCloud);
@@ -865,13 +874,14 @@ vec3 nightCloudBand(Atmosphere a, vec3 dir) {
     return band;
 }
 
-vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) {
+//The far cloud layer in front of maxDist along dir, premultiplied (rgb the light, a the cover); 0 where none
+vec4 farClouds(Atmosphere a, vec3 dir, float maxDist, ivec2 p) {
     if (cloudShape.w < 0.5 || !atmosphereSky(a)) {
-        return colour;
+        return vec4(0.0);
     }
     float near = farCloudNear();
     if (!(maxDist > near)) {
-        return colour;
+        return vec4(0.0);
     }
     vec4 m;
     if (halfParams.x > 0.5) {
@@ -882,12 +892,20 @@ vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) 
         m.w += near;//the march's distances are from its start
     }
     if (!(m.z > 0.0)) {
-        return colour;//no cloud in front: no haze to evaluate
+        return vec4(0.0);//no cloud in front: no haze to evaluate
     }
     vec3 band = nightClouds(a) > 0.0 ? nightCloudBand(a, dir) : vec3(0.0);
-    vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0, band, animeWash(m, dir, a.sun.xyz, nightClouds(a)));
+    return cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0, band, animeWash(m, dir, a.sun.xyz, nightClouds(a)));
+}
+
+vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) {
+    vec4 r = farClouds(a, dir, maxDist, p);
     return colour*(1.0 - r.a) + r.rgb;
 }
+
+//2026-11-25 (the user: "밤 오로라도 비용절감 방법을 생각해봐줘"): behind far cloud covering this much of a sky pixel the aurora is not
+// marched (at most this share of its light would show)
+const float AURORA_CLOUD_HIDDEN = 0.995;
 
 //2026-10-21 (CTE2: light dots and dashes on far water): vanilla's water texture has bright streaks, which under the water colour and the
 // reflection stood out where a texel is about a pixel. A vanilla water pixel takes up to WATER_FLATTEN of the mean of its eight
@@ -1065,9 +1083,13 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         //2026-11-21 (Experimental > Sky): meteors, at night (the stars' weight), under the far clouds
         stars += meteors(dir, skyEvents, meteorShape, meteorEase, starGate.x, pixelAngle);
         //2026-11-22: below the horizon the haze dims and greys downward (skyBelow), its glow under the sun and moon fading slower
-        vec3 sky = skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir)) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars
-                + auroraScreen(dir, p);
-        return vec4(farCloudsOver(a, sky, dir, HAZE_MAX_DISTANCE, p)*underwaterExposure(), 0.0);
+        vec3 sky = skyBelow(a, dir, skyColour(a, dir), sunGlow(a, dir)) + sunDisc(a, dir, celestial) + moonDisc(a, dir, celestial) + stars;
+        //2026-11-25: the clouds first, the aurora only where they leave it showing (AURORA_CLOUD_HIDDEN)
+        vec4 cloud = farClouds(a, dir, HAZE_MAX_DISTANCE, p);
+        if (cloud.a < AURORA_CLOUD_HIDDEN) {
+            sky += auroraScreen(dir, p);
+        }
+        return vec4((sky*(1.0 - cloud.a) + cloud.rgb)*underwaterExposure(), 0.0);
     }
     float dist = length(view);
     vec3 world = toWorld*view;
@@ -1584,11 +1606,38 @@ void main() {
         m = farCloudMarch(dir*near, dir, dist - near, cloudLightDir.xyz, interleavedGradientNoise(vec2(p)));
         m.w += near;
     }
+    //2026-11-25 (the user: "구름은 흐릿해도 크게 티가 나지 않으니 렌더배율을 한번 낮춰봐줘"): the march's jitter turns every frame and
+    // TAA, whose neighbourhood is a full pixel's, did not settle it at half size (comb teeth on the anime clouds' edges, streaks in the
+    // realistic ones), so the texel keeps HALF_SKY_KEEP of the last frame's clouds where its centre's direction was on screen, read
+    // bilinear from skyHalfHistory; not where that cloud lay beyond this texel's distance (a hill now in front)
+    if (halfParams.z > 0.5) {
+        vec2 centre = vec2(float(2*p.x + 1)/float(size.x), 1.0 - float(2*p.y + 1)/float(size.y));
+        vec3 centreDir = normalize(mat3(invView)*viewRay(invVanillaProj, centre));
+        vec4 clip = cloudPrevClip*vec4(centreDir, 0.0);
+        if (clip.w > 0.0) {
+            vec2 uv = clip.xy/clip.w*0.5 + 0.5;
+            vec2 h = vec2(uv.x, 1.0 - uv.y)*vec2(hs) - 0.5;
+            if (all(greaterThan(h, vec2(-0.5))) && all(lessThan(h, vec2(hs) - 0.5))) {
+                ivec2 b = ivec2(floor(h));
+                vec2 f = h - vec2(b);
+                vec4 last = vec4(0.0);
+                for (int i = 0; i < 4; i++) {
+                    ivec2 o = ivec2(i & 1, i >> 1);
+                    float w = (o.x == 1 ? f.x : 1.0 - f.x)*(o.y == 1 ? f.y : 1.0 - f.y);
+                    last += imageLoad(skyHalfHistory, clamp(b + o, ivec2(0), hs - 1))*w;
+                }
+                if (!(last.z > 0.0 && last.w > min(dist, HALF_SKY_FAR)*HALF_SKY_BEYOND)) {
+                    m = mix(m, last, HALF_SKY_KEEP);
+                }
+            }
+        }
+    }
     imageStore(skyHalfCloud, p, m);
     //The aurora as the mean of two of the block's pixels (its diagonal), each with the full size's samples and half a step of jitter apart
     // (one direction a texel left coarse curved bands of the march's steps at 1280x720), the rays faded where finer than a texel
+    // (2026-11-25: none behind cloud that hides it, AURORA_CLOUD_HIDDEN)
     vec3 au = vec3(0.0);
-    if (!scene && auroraParams.x > 0.0 && halfParams.y > 0.5) {
+    if (!scene && auroraParams.x > 0.0 && halfParams.y > 0.5 && m.z < AURORA_CLOUD_HIDDEN) {
         float pixelAngle = 2.0*abs(invVanillaProj[1][1])/float(hs.y);
         float jitter = fract(interleavedGradientNoise(vec2(p)) + auroraParams.w);
         for (int k = 0; k < 2; k++) {
