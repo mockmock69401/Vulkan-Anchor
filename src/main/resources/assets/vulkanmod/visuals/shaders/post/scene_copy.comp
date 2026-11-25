@@ -885,7 +885,7 @@ vec3 farCloudsOver(Atmosphere a, vec3 colour, vec3 dir, float maxDist, ivec2 p) 
         return colour;//no cloud in front: no haze to evaluate
     }
     vec3 band = nightClouds(a) > 0.0 ? nightCloudBand(a, dir) : vec3(0.0);
-    vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0, band);
+    vec4 r = cloudOver(a, CloudLight(cloudLit, cloudAmbient, cloudLightDir), m, dir, 1.0, band, animeWash(m, dir, a.sun.xyz, nightClouds(a)));
     return colour*(1.0 - r.a) + r.rgb;
 }
 

@@ -562,8 +562,10 @@ float nightClouds(Atmosphere a) {
 }
 
 //cloudColour hazed over the march's mean distance m.w along dir (the in-scatter weighted by the coverage); at night lit by the smooth sky
-// in dir (nightClouds), band the sky's glow beyond skyColour + sunGlow there (scene_copy's Milky Way band; 0 where none is drawn)
-vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount, vec3 band) {
+// in dir (nightClouds), band the sky's glow beyond skyColour + sunGlow there (scene_copy's Milky Way band; 0 where none is drawn).
+// 2026-11-25: wash.a of the cloud's colour turns to the colour wash.rgb times its luminance before the haze (the anime
+// clouds' watercolour, clouds.glsl animeWash; 0: none)
+vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount, vec3 band, vec4 wash) {
     vec4 cloud = cloudColour(c, m);
     float night = nightClouds(a);
     if (night > 0.0 && cloud.a > 0.0) {
@@ -574,13 +576,21 @@ vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount, vec3 
         vec3 lit = (max(m.x, 0.0)*c.lit.rgb + z*shade*light)*(1.0 - clamp(c.light.w, 0.0, 1.0));
         cloud.rgb = mix(cloud.rgb, lit, night);
     }
+    if (wash.a > 0.0) {
+        cloud.rgb = mix(cloud.rgb, luminance(cloud.rgb)*wash.rgb, wash.a);
+    }
     vec3 t;
     vec3 i;
     haze(a, dir, m.w, amount, t, i);
     return vec4(cloud.rgb*t + i*cloud.a, cloud.a);
 }
 
+//cloudOver with no wash
+vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount, vec3 band) {
+    return cloudOver(a, c, m, dir, amount, band, vec4(0.0));
+}
+
 //cloudOver with no glow beyond skyColour + sunGlow (the reflections' sky)
 vec4 cloudOver(Atmosphere a, CloudLight c, vec4 m, vec3 dir, float amount) {
-    return cloudOver(a, c, m, dir, amount, vec3(0.0));
+    return cloudOver(a, c, m, dir, amount, vec3(0.0), vec4(0.0));
 }
