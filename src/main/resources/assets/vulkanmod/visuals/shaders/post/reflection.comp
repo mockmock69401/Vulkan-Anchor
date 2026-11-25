@@ -95,6 +95,10 @@ layout(location = 36) uniform vec4 skyMapParams;
 //The map's tiles (8 x 8 texels, ReflectSkyMap.TILE): which this frame made with their neighbours (the first share), and which a frame's pass
 // read, two shares by the frame's parity (skyMapParams.w 1 or 2): a frame makes only the tiles the frame before read (skyMapTexel)
 layout(binding = 17, std430) restrict buffer SkyMapTiles { uint skyMapTiles[]; };
+//2026-11-25 (session 16d; the user: the mirror in the ice wobbled while walking, gone with View Bobbing off): xyz the eye in the view
+// space the inverse projection gives (ReflectionUniforms.eyeInView). Vanilla puts the view bobbing into the projection (P T Rz Rx,
+// GameRenderer.bobView), so while walking the eye stands up to 0.1 block off that space's origin, a different offset every frame
+layout(location = 38) uniform vec4 eyeView;
 
 #import <vulkanmod:visuals/util/depthutils.glsl>
 #import <vulkanmod:visuals/post/viewpos.glsl>
@@ -217,6 +221,15 @@ float refinedThickness(float sceneZ, float bracketZ) {
 //Whether the ray at depth rayZ is behind a surface at sceneZ by less than thick (view z is negative in front of the camera)
 bool marchBehind(float rayZ, float sceneZ, float thick) {
     return rayZ < sceneZ && rayZ > sceneZ - thick;
+}
+
+//2026-11-25 (session 16d): the direction from the eye to a surface point (world, camera relative) in world space. It was world over
+// its length, the direction from the view space's origin: with the view bobbing's offset of the eye (eyeView) every mirror's ray was
+// off by that offset over the distance, up to about a degree a few blocks away, and the mirror image swayed against the scene at the
+// pace of the steps
+vec3 eyeRay(vec3 world, mat3 toWorld) {
+    vec3 v = world - toWorld*eyeView.xyz;
+    return v/max(length(v), 0.000001);
 }
 
 //The march from v0 (view space) along rView. Returns the hit's weight (0: none) with its colour and the reflected path's length
@@ -435,7 +448,7 @@ vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
     mat3 toView = transpose(toWorld);
     vec3 world = toWorld*view;
     float dist = length(view);
-    vec3 d = world/max(dist, 0.000001);
+    vec3 d = eyeRay(world, toWorld);
     vec3 nGeom = normalize(toWorld*snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), toView*vec3(1.0, 0.0, 0.0), toView*vec3(0.0, 1.0, 0.0)));
     if (!(-dot(d, nGeom) > 0.0)) {
         return own;
@@ -520,7 +533,7 @@ vec3 pbrReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
     mat3 toView = transpose(toWorld);
     vec3 world = toWorld*view;
     float dist = length(view);
-    vec3 d = world/max(dist, 0.000001);
+    vec3 d = eyeRay(world, toWorld);
     vec3 nGeom = normalize(toWorld*snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), toView*vec3(1.0, 0.0, 0.0), toView*vec3(0.0, 1.0, 0.0)));
     if (!(-dot(d, nGeom) > 0.0)) {
         return own;
@@ -591,7 +604,7 @@ vec3 wetReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
     mat3 toView = transpose(toWorld);
     vec3 world = toWorld*view;
     float dist = length(view);
-    vec3 d = world/max(dist, 0.000001);
+    vec3 d = eyeRay(world, toWorld);
     vec3 nGeom = normalize(toWorld*snapNormal(depthNormal(mainDepth, invVanillaProj, p, size, view), toView*vec3(1.0, 0.0, 0.0), toView*vec3(0.0, 1.0, 0.0)));
     float cosGeom = -dot(d, nGeom);
     if (!(cosGeom > 0.0)) {
@@ -843,7 +856,7 @@ void main() {
     mat3 toView = transpose(toWorld);
     vec3 world = toWorld*view;
     float dist = length(view);
-    vec3 d = world/max(dist, 0.000001);
+    vec3 d = eyeRay(world, toWorld);
     //The surface's own normal: water lies flat; ice/glass/slime take their snapped depth normal (windows are upright)
     vec3 nGeom = vec3(0.0, 1.0, 0.0);
     if (mark < 0.0) {

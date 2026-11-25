@@ -2,7 +2,10 @@ package net.vulkanmod.visuals.render;
 
 import net.vulkanmod.visuals.lod.LodClamp;
 import net.vulkanmod.visuals.vk.LooseUniformWriter;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fc;
+import org.joml.Vector3f;
 
 /**
  * W6: reflection.comp's uniforms (boundary 3.3). W6 owns locations 0..13 and 23..29: 0 invVanillaProj, 1 invLodProj, 2 proj (view to clip),
@@ -20,6 +23,8 @@ public final class ReflectionUniforms {
     public static final float DEFAULT_SKY_FOG_END = 256;
 
     public static final int INV_VANILLA_PROJ = 0, INV_LOD_PROJ = 1, PROJ = 2, DEPTH = 3, INV_VIEW = 8, RIPPLE_A = 11, RIPPLE_B = 12, PARAMS = 13, BLOCK = 24, RAIN = 25, RIPPLE_PARAMS = 26;
+    /** 2026-11-25 (session 16d): xyz the eye in the view space of the inverse projection (eyeInView). */
+    public static final int EYE = 38;
     /** Where the Atmosphere struct goes, in field order (sun, sunLight, moonLight, depth, ambient, glow, fog, fogTint, overcastTint, moonTint). */
     public static final int[] ATMOSPHERE_SLOTS = {4, 5, 6, 7, 9, 10, 23, 29, 30, 31};
 
@@ -53,10 +58,28 @@ public final class ReflectionUniforms {
             w.putVec4(BLOCK, this.blockReflections, this.frame & 0xFFFF, 0, 0);
             w.putVec4(RAIN, this.rainTime, this.rain, 0, 0);
             w.putVec4(RIPPLE_PARAMS, this.density, 0, 0, 0);
+            float[] eye = eyeInView(this.projection);
+            w.putVec4(EYE, eye[0], eye[1], eye[2], 0);
         }
     }
 
     private ReflectionUniforms() {
+    }
+
+    /**
+     * 2026-11-25 (session 16d; the user: the mirror in the ice wobbled while walking, gone with View Bobbing off): the eye of a projection
+     * (view to clip) in its view space, the point whose clip x, y and w are all 0. Vanilla builds the level projection with the view
+     * bobbing in it (P T Rz Rx, GameRenderer.bobView), so while walking the eye is up to 0.1 block (0.05 sideways) off the view space's
+     * origin; a plain perspective gives 0. The TAA jitter (clip x and y plus w times an offset) and the depth remap (clip z only) leave it
+     * where it is. {0, 0, 0} when the rows are degenerate.
+     */
+    public static float[] eyeInView(Matrix4fc projection) {
+        //Rows x, y and w of the matrix (JOML's mCR is column C, row R): A (x y z) = -translation column
+        Matrix3f a = new Matrix3f(projection.m00(), projection.m01(), projection.m03(), projection.m10(), projection.m11(), projection.m13(),
+                projection.m20(), projection.m21(), projection.m23());
+        if (!(Math.abs(a.determinant()) > 1e-12f)) return new float[3];
+        Vector3f c = a.invert().transform(new Vector3f(-projection.m30(), -projection.m31(), -projection.m33()));
+        return Float.isFinite(c.x) && Float.isFinite(c.y) && Float.isFinite(c.z) ? new float[]{c.x, c.y, c.z} : new float[3];
     }
 
     /**
