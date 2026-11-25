@@ -102,6 +102,13 @@ const float AURORA_END_TOP_G = 0.35;
 const float AURORA_END_TOP_B = 1.0;
 //The light per unit length of curtain at strength 1 (scene units)
 const float AURORA_BRIGHTNESS = 1.6;
+//2026-11-25 (the user: "오로라 커튼 무늬 텍스처 미리 계산도 해줘"): the footprint's noise (auroraFootprintNoise) is the march's main cost
+// (ten hashes a sample) and depends only on the horizontal point and the time, so postAuroraMap (aurora_map.comp) writes it once a frame
+// into an AURORA_MAP_SIZE square image over AURORA_MAP_REACH layer heights each way from overhead, and a shader that defines
+// AURORA_FOOTPRINT_MAP (and binds the image as auroraFootprintMap, AURORA_FOOTPRINT_MAP_ON true while it was written) reads it there
+// instead; beyond it, in the End and elsewhere the noise is evaluated as before
+const float AURORA_MAP_REACH = 32.0;
+const int AURORA_MAP_SIZE = 1536;
 //Hash constants (Teschner et al. 2003 primes, Wellons 2018's finaliser, as water.glsl)
 const int AURORA_PRIME_X = 73856093;
 const int AURORA_PRIME_Z = 19349663;
@@ -146,16 +153,40 @@ float auroraNoise1(float x, uint seed) {
     return mix(auroraCorner(vec2(i, 0.0), seed).x, auroraCorner(vec2(i + 1.0, 0.0), seed).x, f*f*(3.0 - 2.0*f));
 }
 
-//The footprint at horizontal point q (layer heights) at time t: x the curtain (0..1, 1 on a crest), y the patch brightness 0..1, z the
-// lower border's lift 0..1, w the coordinate along the arc (for the rays)
-vec4 auroraFootprint(vec2 q, float t) {
+//2026-11-25: the footprint's noise at horizontal point q (layer heights) at time t: x the crest noise (before its sharpening), y the
+// patch brightness 0..1, z the lower border's lift 0..1, w the warp's shift along the arc (small: it keeps its precision in rgba16f)
+vec4 auroraFootprintNoise(vec2 q, float t) {
     vec2 p = vec2(q.x/AURORA_STRETCH, q.y)*AURORA_SCALE;
     vec2 w = auroraNoise(p*AURORA_WARP_SCALE + vec2(t*AURORA_WARP_DRIFT, -t*AURORA_WARP_DRIFT), 1u);
     vec2 warped = p + (w - 0.5)*AURORA_WARP;
     float n = auroraNoise(warped + vec2(t*AURORA_CREST_DRIFT, 0.0), 3u).x;
-    float crest = pow(1.0 - abs(2.0*n - 1.0), AURORA_SHARPNESS);
-    return vec4(crest, w, warped.x);
+    return vec4(n, w, warped.x - p.x);
 }
+
+//The footprint at q from its noise: x the curtain (0..1, 1 on a crest), y the patch brightness 0..1, z the lower border's lift 0..1,
+// w the coordinate along the arc (for the rays)
+vec4 auroraFootprintFrom(vec4 noise, vec2 q) {
+    float crest = pow(1.0 - abs(2.0*noise.x - 1.0), AURORA_SHARPNESS);
+    return vec4(crest, noise.yz, q.x/AURORA_STRETCH*AURORA_SCALE + noise.w);
+}
+
+//The footprint at horizontal point q (layer heights) at time t
+vec4 auroraFootprint(vec2 q, float t) {
+    return auroraFootprintFrom(auroraFootprintNoise(q, t), q);
+}
+
+#ifdef AURORA_FOOTPRINT_MAP
+//2026-11-25: the footprint from the includer's auroraFootprintMap (postAuroraMap's noise, bilinear) inside its reach, evaluated outside
+// it, in the End (end) and while the map was not written
+vec4 auroraFootprintAt(vec2 q, float t, bool end) {
+    vec2 uv = q/(2.0*AURORA_MAP_REACH) + 0.5;
+    float edge = 0.5/float(AURORA_MAP_SIZE);
+    if (end || !(AURORA_FOOTPRINT_MAP_ON) || any(lessThan(uv, vec2(edge))) || any(greaterThan(uv, vec2(1.0 - edge)))) {
+        return auroraFootprint(q, t);
+    }
+    return auroraFootprintFrom(textureLod(auroraFootprintMap, uv, 0.0), q);
+}
+#endif
 
 //The emission colour at height h (layer heights, 1 = the lowest border) above a border at border, in the End's colours when end, each
 // times its tint (session 8)
@@ -194,7 +225,11 @@ vec3 aurora(vec3 dir, vec4 params, vec3 tintLow, vec3 tintMid, vec3 tintTop, int
     for (int i = 0; i < steps; i++) {
         float s = enter + (float(i) + j)*dt;
         vec3 x = dir*s;
+#ifdef AURORA_FOOTPRINT_MAP
+        vec4 f = auroraFootprintAt(x.xz, t, end);
+#else
         vec4 f = auroraFootprint(x.xz, t);
+#endif
         if (f.x < 0.001) {
             continue;
         }

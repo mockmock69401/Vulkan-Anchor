@@ -89,6 +89,8 @@ public final class VkPostProcess {
     COPY_SKY_HALF_CLOUD = 22, COPY_SKY_HALF_AURORA = 23,
     //2026-11-25: and the last frame's half-size clouds at 29 (.SKY_HALF blends them into this frame's)
     COPY_SKY_HALF_HISTORY = 29,
+    //2026-11-25: and the aurora's footprint noise at 30 (postAuroraMap writes it)
+    COPY_AURORA_MAP = 30,
     //2026-11-12 (shader roadmap session 15): the round moon's face (MoonFace, water.glsl moonShape), the copy at 24, the reflection at 11
     COPY_MOON_FACE = 24, REFLECTION_MOON_FACE = 11,
     //2026-11-13 (shader roadmap session 19): .HEAT writes the heat haze's offsets at 25; the final colour reads them at 4
@@ -140,6 +142,15 @@ public final class VkPostProcess {
     private Matrix4f lastInvProjection, lastInvView;
     private boolean skyHalfWritten;
     private final VkComputeProgram copySkyHalf, copyTintedSkyHalf, weatherUp;
+    /**
+     * 2026-11-25 (the user: "오로라 커튼 무늬 텍스처 미리 계산도 해줘"): postAuroraMap writes the aurora's footprint noise
+     * (AuroraMath.AURORA_MAP_SIZE square, rgba16f) once a frame while the Overworld has an aurora, and the composite's march reads it
+     * (aurora.glsl AURORA_FOOTPRINT_MAP, halfParams.w); the image is bound always (moonFace stands in if it could not be made)
+     */
+    private final VkComputeProgram auroraMapPass;
+    private final LooseUniformWriter auroraMapUniforms;
+    private final VkImage2D auroraMap;
+    private boolean auroraMapOn;
     /**
      * 2026-11-13 (shader roadmap session 19): the Nether's heat haze: postSceneCopy.HEAT writes, at a quarter of the size, the offsets the final
      * colour reads the scene at (heat.glsl) while DimensionUniforms gives it a strength; bound always (not read otherwise).
@@ -488,6 +499,18 @@ public final class VkPostProcess {
             VisualsLog.warn("Visuals footprints not created, none are drawn: " + e);
         }
         this.footprintMap = footprintMap;
+        VkComputeProgram auroraMapPass = optional("postAuroraMap");
+        VkImage2D auroraMap = null;
+        try {
+            auroraMap = VkImage2D.create(SKY_HALF_FORMAT, AuroraMath.AURORA_MAP_SIZE, AuroraMath.AURORA_MAP_SIZE, 1,
+                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+        } catch (RuntimeException | LinkageError e) {
+            VisualsLog.warn("Visuals aurora map not created, the aurora evaluates its noise: " + e);
+        }
+        this.auroraMap = auroraMap;
+        this.auroraMapPass = auroraMap != null ? auroraMapPass : null;
+        this.auroraMapUniforms = this.auroraMapPass != null ? pushOnly(new LooseUniformWriter(this.auroraMapPass.meta()), "postAuroraMap") : null;
+        if (this.auroraMapPass == null && auroraMapPass != null) auroraMapPass.free();
         VkImage2D wetClimateMap = null;
         try {
             wetClimateMap = VkImage2D.create(VK_FORMAT_R32_UINT, WetClimateMap.SIZE, WetClimateMap.SIZE, 1,
@@ -940,7 +963,11 @@ public final class VkPostProcess {
         //2026-11-25: the half-size clouds' history, valid while the pass ran last frame at this size (cloudPrevClip from the last
         // frame's matrices)
         boolean history = this.skyHalfOn && this.skyHalfWritten && this.lastInvProjection != null;
-        if (this.copyUniforms.has(COPY_HALF_SLOT)) this.copyUniforms.putVec4(COPY_HALF_SLOT, this.skyHalfOn ? 1 : 0, this.skyHalfOn && halfAurora ? 1 : 0, history ? 1 : 0, 0);
+        //2026-11-25: the aurora's footprint map, written this frame while the Overworld has an aurora (the End's evaluates its noise)
+        this.auroraMapOn = this.auroraMapPass != null && this.sky.aurora()[0] > 0 && this.sky.aurora()[2] < 0.5f;
+        if (this.copyUniforms.has(COPY_HALF_SLOT)) {
+            this.copyUniforms.putVec4(COPY_HALF_SLOT, this.skyHalfOn ? 1 : 0, this.skyHalfOn && halfAurora ? 1 : 0, history ? 1 : 0, this.auroraMapOn ? 1 : 0);
+        }
         if (this.copyUniforms.has(COPY_HALF_PREV_CLIP)) {
             this.copyUniforms.putMat4(COPY_HALF_PREV_CLIP, history ? SceneCompositeMath.prevClip(this.lastInvProjection, this.lastInvView) : new Matrix4f());
         }
@@ -1066,6 +1093,20 @@ public final class VkPostProcess {
             this.skyHalfCloud = this.skyHalfHistory;
             this.skyHalfHistory = last;
         }
+        //2026-11-25: the aurora's footprint noise at this frame's time, read by the composite (bound always: in the read layout)
+        if (this.auroraMap != null) {
+            if (this.auroraMapOn) {
+                this.auroraMap.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VK_ACCESS_SHADER_WRITE_BIT);
+                this.auroraMapUniforms.putVec4(0, this.sky.aurora()[1], 0, 0, 0);
+                this.auroraMapPass.dispatchWithPush(cmd, new VkBindings().storageImage(DST, this.auroraMap.view()), this.auroraMapUniforms.buffer(),
+                        groups(this.auroraMap.width), groups(this.auroraMap.height), 1);
+                toRead(cmd, this.auroraMap);
+            } else {
+                this.auroraMap.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, COMPUTE_AND_FRAGMENT,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT);
+            }
+        }
         VkImage2D copyTarget = this.reflectionOn ? this.sceneLit : this.scene;
         copyTarget.transitionFromUndefined(cmd, VK_IMAGE_LAYOUT_GENERAL, COMPUTE_AND_FRAGMENT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT);
         VkBindings copyBindings = new VkBindings().storageImage(DST, copyTarget.view()).sampledView(SRC, mainColourView, this.nearest)
@@ -1081,6 +1122,7 @@ public final class VkPostProcess {
                 .storage(COPY_SUN_OPEN, this.sunOpenBuffer).storage(COPY_PARTICLE_TILES, this.particleTiles)
                 .storageImage(COPY_SKY_HALF_CLOUD, this.skyHalfCloud.view()).storageImage(COPY_SKY_HALF_AURORA, this.skyHalfAurora.view())
                 .storageImage(COPY_SKY_HALF_HISTORY, this.skyHalfHistory.view())
+                .sampled(COPY_AURORA_MAP, this.auroraMap != null ? this.auroraMap : this.moonFace, this.auroraMap != null ? this.linear : this.moonSampler)
                 .sampled(COPY_MOON_FACE, this.moonFace, this.moonSampler).storageImage(COPY_HEAT, this.heatImage.view())
                 .sampled(COPY_GALAXY_MAP, this.galaxyMapBound(), this.galaxyMapBound() != this.moonFace ? this.galaxySampler : this.moonSampler)
                 .sampled(COPY_FOOTPRINTS, this.footprintMap != null ? this.footprintMap : this.lodLightStandIn, this.nearest)
@@ -1532,6 +1574,7 @@ public final class VkPostProcess {
         this.cloudMap.tick();
         if (this.precipitationMap != null) this.precipitationMap.tick();
         if (this.footprintMap != null) this.footprintMap.tick();
+        if (this.auroraMap != null) this.auroraMap.tick();
         if (this.wetClimateMap != null) this.wetClimateMap.tick();
         this.lodLightStandIn.tick();
         this.ao.tick();
@@ -1592,6 +1635,8 @@ public final class VkPostProcess {
         if (this.weatherUniformBuffer != null) this.weatherUniformBuffer.free();
         if (this.precipitationMap != null) this.precipitationMap.free();
         if (this.footprintMap != null) this.footprintMap.free();
+        if (this.auroraMap != null) this.auroraMap.free();
+        if (this.auroraMapPass != null) this.auroraMapPass.free();
         if (this.wetClimateMap != null) this.wetClimateMap.free();
         if (this.wakeBuffer != null) this.wakeBuffer.free();
         MemoryUtil.memFree(this.wakeBytes);

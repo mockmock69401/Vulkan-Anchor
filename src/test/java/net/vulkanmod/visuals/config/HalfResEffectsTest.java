@@ -107,7 +107,7 @@ class HalfResEffectsTest {
         assertTrue(post.contains("this.halfOn = VisualsConfig.get().halfResEffects;"));
         //2026-11-25: the far clouds always from the half-size pass, the aurora by halfAurora; the pass only while either is drawn
         assertTrue(post.contains("this.skyHalfOn = this.copySkyHalf != null && (clouds.on() || halfAurora);"));
-        assertTrue(post.contains("this.copyUniforms.putVec4(COPY_HALF_SLOT, this.skyHalfOn ? 1 : 0, this.skyHalfOn && halfAurora ? 1 : 0, history ? 1 : 0, 0);"));
+        assertTrue(post.contains("this.copyUniforms.putVec4(COPY_HALF_SLOT, this.skyHalfOn ? 1 : 0, this.skyHalfOn && halfAurora ? 1 : 0, history ? 1 : 0, this.auroraMapOn ? 1 : 0);"));
         assertTrue(post.contains("return VisualsConfig.get().halfResEffects && this.weatherUp != null;"));
         String copy = Files.readString(Path.of("src/main/resources/assets/vulkanmod/visuals/shaders/post/scene_copy.comp"));
         assertTrue(copy.contains("layout(location = 61) uniform vec4 halfParams;"));

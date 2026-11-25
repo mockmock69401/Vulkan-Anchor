@@ -1,0 +1,20 @@
+#version 450
+//2026-11-25 (the user: "오로라 커튼 무늬 텍스처 미리 계산도 해줘"): the aurora's footprint noise (aurora.glsl auroraFootprintNoise) over
+// AURORA_MAP_REACH layer heights each way from overhead at this frame's time, which the composite's march reads instead of its ten
+// hashes a sample (AURORA_FOOTPRINT_MAP)
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(binding = 0, rgba16f) uniform writeonly restrict image2D dst;
+layout(location = 0) uniform vec4 params;//x the aurora's time (auroraParams.y)
+
+#import <vulkanmod:visuals/post/aurora.glsl>
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(dst);
+    if (any(greaterThanEqual(p, size))) {
+        return;
+    }
+    vec2 q = ((vec2(p) + 0.5)/vec2(size)*2.0 - 1.0)*AURORA_MAP_REACH;
+    imageStore(dst, p, auroraFootprintNoise(q, params.x));
+}

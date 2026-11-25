@@ -8,6 +8,9 @@ package net.vulkanmod.visuals.render;
 public final class AuroraMath {
     public static final float AURORA_TOP = 3.0f;
     public static final int AURORA_STEPS = 12, AURORA_REFLECTION_STEPS = 6;
+    /** 2026-11-25: postAuroraMap's footprint noise: its reach each way from overhead (layer heights) and its size (aurora.glsl). */
+    public static final float AURORA_MAP_REACH = 32.0f;
+    public static final int AURORA_MAP_SIZE = 1536;
     public static final float AURORA_REACH = 10.0f, AURORA_EXTINCTION = 12.0f;
     public static final float AURORA_HORIZON_LOW = 0.0f, AURORA_HORIZON_HIGH = 0.22f;
     public static final float AURORA_SCALE = 0.9f, AURORA_STRETCH = 2.5f;
@@ -72,14 +75,24 @@ public final class AuroraMath {
         return a + (b - a) * (f * f * (3 - 2 * f));
     }
 
-    /** x the curtain 0..1, y the patch brightness noise, z the border's lift noise, w the coordinate along the arc. */
-    public static float[] auroraFootprint(float qx, float qz, float t) {
+    /** 2026-11-25: aurora.glsl auroraFootprintNoise: the crest noise, the patch and lift noise, the warp's shift along the arc. */
+    public static float[] auroraFootprintNoise(float qx, float qz, float t) {
         float px = qx / AURORA_STRETCH * AURORA_SCALE, pz = qz * AURORA_SCALE;
         float[] w = auroraNoise(px * AURORA_WARP_SCALE + t * AURORA_WARP_DRIFT, pz * AURORA_WARP_SCALE - t * AURORA_WARP_DRIFT, 1);
         float warpedX = px + (w[0] - 0.5f) * AURORA_WARP, warpedZ = pz + (w[1] - 0.5f) * AURORA_WARP;
         float n = auroraNoise(warpedX + t * AURORA_CREST_DRIFT, warpedZ, 3)[0];
-        float crest = (float) Math.pow(1 - Math.abs(2 * n - 1), AURORA_SHARPNESS);
-        return new float[]{crest, w[0], w[1], warpedX};
+        return new float[]{n, w[0], w[1], warpedX - px};
+    }
+
+    /** aurora.glsl auroraFootprintFrom: the footprint at q from its noise. */
+    public static float[] auroraFootprintFrom(float[] noise, float qx) {
+        float crest = (float) Math.pow(1 - Math.abs(2 * noise[0] - 1), AURORA_SHARPNESS);
+        return new float[]{crest, noise[1], noise[2], qx / AURORA_STRETCH * AURORA_SCALE + noise[3]};
+    }
+
+    /** x the curtain 0..1, y the patch brightness noise, z the border's lift noise, w the coordinate along the arc. */
+    public static float[] auroraFootprint(float qx, float qz, float t) {
+        return auroraFootprintFrom(auroraFootprintNoise(qx, qz, t), qx);
     }
 
     public static float[] auroraColour(float h, float border, boolean end) {
@@ -107,8 +120,34 @@ public final class AuroraMath {
         return aurora(dir, params, new float[]{1, 1, 1}, new float[]{1, 1, 1}, new float[]{1, 1, 1}, steps, jitter);
     }
 
+    /**
+     * 2026-11-25: aurora.glsl auroraFootprintAt with the map written: inside the reach the noise bilinear between the four nearest
+     * texel centres of postAuroraMap's image (exact values, as rgba16f keeps them to about 1/2048), outside it and in the End evaluated.
+     */
+    public static float[] auroraFootprintMapped(float qx, float qz, float t, boolean end) {
+        float u = qx / (2 * AURORA_MAP_REACH) + 0.5f, v = qz / (2 * AURORA_MAP_REACH) + 0.5f, edge = 0.5f / AURORA_MAP_SIZE;
+        if (end || u < edge || v < edge || u > 1 - edge || v > 1 - edge) return auroraFootprint(qx, qz, t);
+        float hx = u * AURORA_MAP_SIZE - 0.5f, hz = v * AURORA_MAP_SIZE - 0.5f;
+        int bx = (int) Math.floor(hx), bz = (int) Math.floor(hz);
+        float fx = hx - bx, fz = hz - bz;
+        float[] noise = new float[4];
+        for (int k = 0; k < 4; k++) {
+            int ox = k & 1, oz = k >> 1;
+            float w = (ox == 1 ? fx : 1 - fx) * (oz == 1 ? fz : 1 - fz);
+            float cx = ((bx + ox + 0.5f) / AURORA_MAP_SIZE * 2 - 1) * AURORA_MAP_REACH, cz = ((bz + oz + 0.5f) / AURORA_MAP_SIZE * 2 - 1) * AURORA_MAP_REACH;
+            float[] n = auroraFootprintNoise(cx, cz, t);
+            for (int i = 0; i < 4; i++) noise[i] += n[i] * w;
+        }
+        return auroraFootprintFrom(noise, qx);
+    }
+
     /** 2026-11-10 (session 8): with the colour tints (lower, main, upper; see auroraColour). */
     public static float[] aurora(float[] dir, float[] params, float[] tintLow, float[] tintMid, float[] tintTop, int steps, float jitter) {
+        return aurora(dir, params, tintLow, tintMid, tintTop, steps, jitter, false);
+    }
+
+    /** 2026-11-25: map true as the composite (AURORA_FOOTPRINT_MAP, the map written): the footprint from auroraFootprintMapped. */
+    public static float[] aurora(float[] dir, float[] params, float[] tintLow, float[] tintMid, float[] tintTop, int steps, float jitter, boolean map) {
         if (!(params[0] > 0) || !(dir[1] > AURORA_HORIZON_LOW) || steps < 1) return new float[3];
         float fade = smoothstep(AURORA_HORIZON_LOW, AURORA_HORIZON_HIGH, dir[1]);
         float t = params[1];
@@ -123,7 +162,7 @@ public final class AuroraMath {
         for (int i = 0; i < steps; i++) {
             float s = enter + (i + j) * dt;
             float x = dir[0] * s, y = dir[1] * s, z = dir[2] * s;
-            float[] f = auroraFootprint(x, z, t);
+            float[] f = map ? auroraFootprintMapped(x, z, t, end) : auroraFootprint(x, z, t);
             if (f[0] < 0.001f) continue;
             float rays = 1 - AURORA_RAY_DEPTH * auroraNoise1(f[3] * AURORA_RAY_CELLS + t * AURORA_RAY_DRIFT, 4);
             float bright = AURORA_PATCH_MIN + (1 - AURORA_PATCH_MIN) * smoothstep(0.25f, 0.75f, f[1]);
