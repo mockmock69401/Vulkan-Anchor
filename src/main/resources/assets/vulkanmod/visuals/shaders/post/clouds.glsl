@@ -737,6 +737,37 @@ const float ANIME_BLOTCH_SCALE = 5.0;
 const float ANIME_CIRRUS_HEIGHT = 420.0;
 const float ANIME_CIRRUS_OPACITY = 0.14;
 const float ANIME_CIRRUS_FAR = 9000.0;
+//2026-11-25 (the user: "사진을 참고해서 애니메이션 구름의 수채화 색감을 더 살려줘", after a Genshin Impact daytime scene, looked at only:
+// the clouds are soft washes of several colours, warm cream on the lit tops, pink and lavender through the bodies, a cool blue-violet
+// in the shade, bleeding into each other, the edges thinning to dusty pink and lilac, the side toward the sun warmer than the side away).
+// The paint varies by up to ANIME_WASH_VARY (the tower channel at ANIME_WASH_SCALE times its frequency) through each cloud; the colour
+// (animeWash) takes the painted light and the height in the layer from the march, puts the point on a ramp from ANIME_WASH_DEEP
+// (0: the shaded base) through ANIME_WASH_SHADE (ANIME_WASH_SHADE_AT) and ANIME_WASH_MID (ANIME_WASH_MID_AT) to ANIME_WASH_LIT (1)
+// (the hues sampled from the reference, linear, at luminance 1), and turns ANIME_WASH of the cloud's colour to that hue at its own
+// luminance, its chroma ANIME_WASH_CHROMA times the hue's and its brightness from ANIME_WASH_DARK (0) to 1 (1) of the cloud's (the bright
+// clouds near white lose their colour in the tone mapping otherwise). The light enters at the power ANIME_WASH_GAMMA (only the brightest
+// tops reach the cream; the sunlit bodies stay pink and lavender). A shaded point sits at ANIME_WASH_SHADE_TONE of the ramp, the base at ANIME_WASH_BASE of a point's place; the view toward
+// the sun moves it up by ANIME_WASH_SPLIT, away from it down; thin cloud (the edges) moves toward ANIME_WASH_EDGE. Toward sunset
+// (the sun under ANIME_WASH_DAY high) the wash eases to ANIME_WASH_DUSK of itself, at night to ANIME_WASH_NIGHT
+const float ANIME_WASH_VARY = 0.16;
+const float ANIME_WASH_SCALE = 3.0;
+const float ANIME_WASH = 0.9;
+const float ANIME_WASH_CHROMA = 2.5;
+const float ANIME_WASH_DARK = 0.5;
+const float ANIME_WASH_GAMMA = 2.0;
+const float ANIME_WASH_DUSK = 0.4;
+const float ANIME_WASH_NIGHT = 0.3;
+const float ANIME_WASH_DAY = 0.3;
+const float ANIME_WASH_SHADE_TONE = 0.3;
+const float ANIME_WASH_BASE = 0.5;
+const float ANIME_WASH_SPLIT = 0.15;
+const float ANIME_WASH_EDGE = 0.6;
+const float ANIME_WASH_SHADE_AT = 0.35;
+const float ANIME_WASH_MID_AT = 0.65;
+const vec3 ANIME_WASH_DEEP = vec3(0.86, 0.96, 1.8);
+const vec3 ANIME_WASH_SHADE = vec3(0.97, 0.94, 1.71);
+const vec3 ANIME_WASH_MID = vec3(1.25, 0.88, 1.46);
+const vec3 ANIME_WASH_LIT = vec3(1.09, 0.99, 0.88);
 
 //The watercolour's push of map position m (blocks): the noise's offset in blocks for a lattice of cell blocks
 vec2 animeWarp(vec2 m, float cell) {
@@ -993,6 +1024,8 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
         float blotch = (cloudNoise((cloudOffset.xy + p.xz)*ANIME_BLOTCH_SCALE).a - 0.5)*ANIME_BLOTCH;
         float tone = mix(ANIME_TONE_DARK, 1.0, smoothstep(ANIME_TONE_EDGE - ANIME_TONE_SOFT, ANIME_TONE_EDGE + ANIME_TONE_SOFT, l.x + blotch));
         l.x = mix(l.x, tone, ANIME_PAINT);
+        //2026-11-25: the wash varies through the cloud
+        l.x += (cloudNoise((cloudOffset.xy + p.xz)*ANIME_WASH_SCALE).a - 0.5)*ANIME_WASH_VARY;
         float cov = 1.0 - trans;
         float silver = ANIME_SILVER*(1.0 - cov)*realHg(dot(dir, lightDir), ANIME_SILVER_G*level);
         r = vec4(cov*(l.x + silver), cov*l.y, cov, 0.0);
@@ -1012,6 +1045,31 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
         }
     }
     return r.z > 0.0 ? vec4(r.xyz, dsum/r.z) : vec4(0.0);
+}
+
+//2026-11-25: the watercolour ramp's hue (linear, luminance 1) at s (0 the shaded base .. 1 the lit top), each colour bleeding into the next
+vec3 animeWashHue(float s) {
+    vec3 c = mix(ANIME_WASH_DEEP, ANIME_WASH_SHADE, smoothstep(0.0, ANIME_WASH_SHADE_AT, s));
+    c = mix(c, ANIME_WASH_MID, smoothstep(ANIME_WASH_SHADE_AT, ANIME_WASH_MID_AT, s));
+    return mix(c, ANIME_WASH_LIT, smoothstep(ANIME_WASH_MID_AT, 1.0, s));
+}
+
+//2026-11-25: the anime clouds' watercolour for farCloudMarch's result m along dir (sun toward the sun, night nightClouds): the hue
+// (animeWashHue, at ANIME_WASH_CHROMA, its luminance the share of the cloud's brightness) and how much of the cloud's colour turns to it (atmosphere.glsl cloudOver); none for another style
+vec4 animeWash(vec4 m, vec3 dir, vec3 sun, float night) {
+    if (!cloudAnime() || !(m.z > 0.0)) {
+        return vec4(0.0);
+    }
+    float light = clamp((m.x/m.z - ANIME_TONE_DARK)/(1.0 - ANIME_TONE_DARK), 0.0, 1.0);
+    float height = clamp((m.y/m.z - ANIME_AMBIENT_LOW)/(1.0 - ANIME_AMBIENT_LOW), 0.0, 1.0);
+    float s = mix(ANIME_WASH_SHADE_TONE, 1.0, pow(light, ANIME_WASH_GAMMA))*mix(ANIME_WASH_BASE, 1.0, height);
+    float ld = length(dir.xz);
+    float ls = length(sun.xz);
+    float side = ld > 0.0001 && ls > 0.0001 ? dot(dir.xz/ld, sun.xz/ls) : 0.0;
+    s = mix(clamp(s + ANIME_WASH_SPLIT*side, 0.0, 1.0), ANIME_WASH_EDGE, 1.0 - min(m.z, 1.0));
+    float day = smoothstep(0.0, ANIME_WASH_DAY, sun.y);
+    vec3 hue = mix(vec3(1.0), animeWashHue(s), ANIME_WASH_CHROMA)*mix(ANIME_WASH_DARK, 1.0, s);
+    return vec4(max(hue, vec3(0.0)), ANIME_WASH*mix(mix(ANIME_WASH_DUSK, 1.0, day), ANIME_WASH_NIGHT, night));
 }
 
 //Session 3: the far clouds along dir from origin up to maxDist in the style cloudOffset.z picks, jitter 0..1 per pixel:

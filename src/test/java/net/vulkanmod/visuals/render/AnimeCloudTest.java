@@ -42,7 +42,7 @@ class AnimeCloudTest {
         assertTrue(found >= 30, "constants found: " + found);
         for (Field f : CloudMath.class.getFields()) {
             if (!Modifier.isStatic(f.getModifiers()) || !f.getName().startsWith("ANIME_") || f.getName().equals("ANIME_LIFT") || f.getName().equals("ANIME_THICKNESS")) continue;
-            assertTrue(Pattern.compile("const\\s+(float|int)\\s+" + f.getName() + "\\b").matcher(text).find(), f.getName() + " missing in clouds.glsl");
+            assertTrue(Pattern.compile("const\\s+(float|int|vec3)\\s+" + f.getName() + "\\b").matcher(text).find(), f.getName() + " missing in clouds.glsl");
         }
         //The lattices' cells divide vanilla's 3072-block period (the offset wraps there) at every cloud size, and JITTER + MAX keeps a
         // sphere within the 2 x 2 cells on a point's side

@@ -547,6 +547,41 @@ public final class CloudMath {
     public static final float ANIME_PAINT = 0.9f, ANIME_TONE_DARK = 0.62f, ANIME_TONE_EDGE = 0.55f, ANIME_TONE_SOFT = 0.05f;
     public static final float ANIME_BLOTCH = 0.5f, ANIME_BLOTCH_SCALE = 5;
     public static final float ANIME_CIRRUS_HEIGHT = 420, ANIME_CIRRUS_OPACITY = 0.14f, ANIME_CIRRUS_FAR = 9000;
+    /** 2026-11-25: the watercolour's colour washes (clouds.glsl animeWash; the hues linear, at luminance 1, from the reference). */
+    public static final float ANIME_WASH_CHROMA = 2.5f, ANIME_WASH_DARK = 0.5f, ANIME_WASH_GAMMA = 2;
+    public static final float ANIME_WASH_VARY = 0.16f, ANIME_WASH_SCALE = 3, ANIME_WASH = 0.9f, ANIME_WASH_DUSK = 0.4f, ANIME_WASH_NIGHT = 0.3f;
+    public static final float ANIME_WASH_DAY = 0.3f, ANIME_WASH_SHADE_TONE = 0.3f, ANIME_WASH_BASE = 0.5f, ANIME_WASH_SPLIT = 0.15f;
+    public static final float ANIME_WASH_EDGE = 0.6f, ANIME_WASH_SHADE_AT = 0.35f, ANIME_WASH_MID_AT = 0.65f;
+    public static final float[] ANIME_WASH_DEEP = {0.86f, 0.96f, 1.8f}, ANIME_WASH_SHADE = {0.97f, 0.94f, 1.71f};
+    public static final float[] ANIME_WASH_MID = {1.25f, 0.88f, 1.46f}, ANIME_WASH_LIT = {1.09f, 0.99f, 0.88f};
+
+    /** clouds.glsl animeWashHue: the ramp's hue at s (0 the shaded base .. 1 the lit top). */
+    public static float[] animeWashHue(float s) {
+        float[] c = new float[3];
+        float a = smoothstep(0, ANIME_WASH_SHADE_AT, s), b = smoothstep(ANIME_WASH_SHADE_AT, ANIME_WASH_MID_AT, s), d = smoothstep(ANIME_WASH_MID_AT, 1, s);
+        for (int i = 0; i < 3; i++) c[i] = mix(mix(mix(ANIME_WASH_DEEP[i], ANIME_WASH_SHADE[i], a), ANIME_WASH_MID[i], b), ANIME_WASH_LIT[i], d);
+        return c;
+    }
+
+    /** clouds.glsl animeWash's place on the ramp for the anime march's m along dir, sun toward the sun (before the hue). */
+    public static float animeWashTone(float[] m, float[] dir, float[] sun) {
+        float light = clamp01((m[0] / m[2] - ANIME_TONE_DARK) / (1 - ANIME_TONE_DARK));
+        float height = clamp01((m[1] / m[2] - ANIME_AMBIENT_LOW) / (1 - ANIME_AMBIENT_LOW));
+        float s = mix(ANIME_WASH_SHADE_TONE, 1, (float) Math.pow(light, ANIME_WASH_GAMMA)) * mix(ANIME_WASH_BASE, 1, height);
+        float ld = (float) Math.sqrt(dir[0] * dir[0] + dir[2] * dir[2]), ls = (float) Math.sqrt(sun[0] * sun[0] + sun[2] * sun[2]);
+        float side = ld > 0.0001f && ls > 0.0001f ? (dir[0] * sun[0] + dir[2] * sun[2]) / (ld * ls) : 0;
+        return mix(clamp01(s + ANIME_WASH_SPLIT * side), ANIME_WASH_EDGE, 1 - Math.min(m[2], 1));
+    }
+
+    /** clouds.glsl animeWash: {colour r, g, b (its luminance the share of the cloud's), strength} for the anime march's m (no coverage: none), night atmosphere.glsl nightClouds. */
+    public static float[] animeWash(float[] m, float[] dir, float[] sun, float night) {
+        if (!(m[2] > 0)) return new float[4];
+        float s = animeWashTone(m, dir, sun), v = mix(ANIME_WASH_DARK, 1, s);
+        float[] h = animeWashHue(s);
+        for (int i = 0; i < 3; i++) h[i] = Math.max(mix(1, h[i], ANIME_WASH_CHROMA) * v, 0);
+        float day = smoothstep(0, ANIME_WASH_DAY, sun[1]);
+        return new float[]{h[0], h[1], h[2], ANIME_WASH * mix(mix(ANIME_WASH_DUSK, 1, day), ANIME_WASH_NIGHT, night)};
+    }
     /** 2026-11-23: clouds.glsl cirrusRings: the streaks along circles around the camera. */
     public static final float CIRRUS_RING_SCALE = 1, CIRRUS_RING_NEAR = 250, CIRRUS_RING_FAR = 900;
 
@@ -771,6 +806,8 @@ public final class CloudMath {
             float blotch = (noise(map, (r.offsetX + px) * ANIME_BLOTCH_SCALE, (r.offsetZ + pz) * ANIME_BLOTCH_SCALE, 3) - 0.5f) * ANIME_BLOTCH;
             float tone = mix(ANIME_TONE_DARK, 1, smoothstep(ANIME_TONE_EDGE - ANIME_TONE_SOFT, ANIME_TONE_EDGE + ANIME_TONE_SOFT, l[0] + blotch));
             l[0] = mix(l[0], tone, ANIME_PAINT);
+            //2026-11-25: the wash varies through the cloud
+            l[0] += (noise(map, (r.offsetX + px) * ANIME_WASH_SCALE, (r.offsetZ + pz) * ANIME_WASH_SCALE, 3) - 0.5f) * ANIME_WASH_VARY;
             float cov = 1 - trans;
             //The silver lining: thin cloud (low coverage) toward the light glows with its forward scattering
             float silver = ANIME_SILVER * (1 - cov) * hg(dot3(dir, lightDir), ANIME_SILVER_G * level);
