@@ -18,6 +18,11 @@ public interface QuadView {
 
     float getV(int idx);
 
+    /** The vertex's baked light (a model element's "forge_data" block/sky light), packed as the lightmap; 0 when the quad has none. */
+    default int getLight(int idx) {
+        return 0;
+    }
+
     int getColorIndex();
 
     Direction getFacingDirection();

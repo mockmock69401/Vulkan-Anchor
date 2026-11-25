@@ -229,7 +229,8 @@ public class BlockRenderer {
             //The visuals (shadow pass): a quad without directional shade (a plant) or of a light source is marked in its alpha; the
             // wind's vertex marks (plants by height, leaves) ride on it
             final int color = ColorUtil.RGBA.pack(r, g, b, FoliageMarker.vertexAlpha(quad, quad.getY(idx)));
-            final int light = lights[idx];
+            //2026-11-25: the quad's baked light where it is brighter (Forge's renderer does the same: a glowing overlay's forge_data)
+            final int light = BakedLight.merge(lights[idx], quad.getLight(idx));
             final float u = quad.getU(idx);
             final float v = quad.getV(idx);
 

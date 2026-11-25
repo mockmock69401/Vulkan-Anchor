@@ -10,7 +10,8 @@ import net.vulkanmod.vulkan.util.ColorUtil;
  * Session 23: vanilla's vertex sink in front of our terrain buffer, for the blocks drawn by vanilla's block renderer (FrapiModels). The
  * position arrives section-relative (BlockRenderer.renderFrapi's pose); the colour already holds the tint, shade and AO, as ours does;
  * the alpha becomes the block's visuals mark as in BlockRenderer.putQuadData (the plant / leaf height marks by the vertex's height in
- * its block). The overlay coordinates mean nothing to terrain.
+ * its block). The overlay coordinates mean nothing to terrain. 2026-11-25: a quad is written once its 4 vertices are in, so that an
+ * overlay lying on an earlier quad of the block keeps its transparency in a solid-layer call (QuadOverlay: Continuity's emissive layers).
  */
 final class TerrainVertexConsumer implements VertexConsumer {
     private TerrainBufferBuilder out;
@@ -22,10 +23,18 @@ final class TerrainVertexConsumer implements VertexConsumer {
     private int light;
     private float nx, ny = 1, nz;
 
+    //the quad being gathered, and the block's quads written so far (their corners, for QuadOverlay)
+    private final float[] quad = new float[12];
+    private final float[] quadU = new float[4], quadV = new float[4];
+    private final int[] quadColour = new int[4], quadLight = new int[4], quadNormal = new int[4];
+    private final float[] seen = new float[12 * QuadOverlay.MAX_QUADS];
+    private int seenCount;
+
     TerrainVertexConsumer begin(TerrainBufferBuilder out, float blockY) {
         this.out = out;
         this.blockY = blockY;
         this.count = 0;
+        this.seenCount = 0;
         return this;
     }
 
@@ -73,11 +82,36 @@ final class TerrainVertexConsumer implements VertexConsumer {
 
     @Override
     public void endVertex() {
-        if ((this.count & 3) == 0) this.out.ensureCapacity();
+        int i = this.count & 3;
         float alpha = FoliageMarker.vertexAlpha(null, this.y - this.blockY);
-        int colour = ColorUtil.RGBA.pack(this.r / 255f, this.g / 255f, this.b / 255f, alpha);
-        this.out.vertex(this.x, this.y, this.z, colour, this.u, this.v, this.light, VertexUtil.packNormal(this.nx, this.ny, this.nz));
+        this.quad[i * 3] = this.x;
+        this.quad[i * 3 + 1] = this.y;
+        this.quad[i * 3 + 2] = this.z;
+        this.quadColour[i] = ColorUtil.RGBA.pack(this.r / 255f, this.g / 255f, this.b / 255f, alpha);
+        this.quadU[i] = this.u;
+        this.quadV[i] = this.v;
+        this.quadLight[i] = this.light;
+        this.quadNormal[i] = VertexUtil.packNormal(this.nx, this.ny, this.nz);
         this.count++;
+        if (i == 3) writeQuad();
+    }
+
+    private void writeQuad() {
+        boolean overlay = false;
+        if (this.out.isOpaque()) {
+            overlay = QuadOverlay.coversEarlier(this.seen, this.seenCount, this.quad, 0);
+            if (!overlay && this.seenCount < QuadOverlay.MAX_QUADS) {
+                System.arraycopy(this.quad, 0, this.seen, this.seenCount * 12, 12);
+                this.seenCount++;
+            }
+        }
+        if (overlay) this.out.setOpaque(false);
+        this.out.ensureCapacity();
+        for (int i = 0; i < 4; i++) {
+            this.out.vertex(this.quad[i * 3], this.quad[i * 3 + 1], this.quad[i * 3 + 2], this.quadColour[i], this.quadU[i], this.quadV[i],
+                    this.quadLight[i], this.quadNormal[i]);
+        }
+        if (overlay) this.out.setOpaque(true);
     }
 
     @Override
