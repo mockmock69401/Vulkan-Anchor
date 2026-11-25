@@ -166,7 +166,30 @@ public final class VisualsPilot {
         instance.step(Minecraft.getInstance());
     }
 
+    //"follow PATH": once the script's lines are done, lines appended to PATH run too (a game kept open for quick checks)
+    private Path follow;
+    private int followRead;
+    private long followPolled;
+
+    /** Appends the follow file's lines not read yet (at most every 250 ms). */
+    private void readFollow() {
+        long now = System.currentTimeMillis();
+        if (now - this.followPolled < 250) return;
+        this.followPolled = now;
+        try {
+            if (!Files.isRegularFile(this.follow)) return;
+            List<String> all = Files.readAllLines(this.follow);
+            if (all.size() > this.followRead) {
+                this.lines.addAll(all.subList(this.followRead, all.size()));
+                this.followRead = all.size();
+            }
+        } catch (IOException e) {
+            //the writer may be mid-write: read again next poll
+        }
+    }
+
     private void step(Minecraft mc) {
+        if (this.follow != null && this.next >= this.lines.size()) this.readFollow();
         if (this.next >= this.lines.size()) {
             if (!this.finished) {
                 this.finished = true;
@@ -344,6 +367,23 @@ public final class VisualsPilot {
                 }
                 case "log" -> {
                     VisualsLog.info("Visuals pilot: " + arg);
+                    return 0;
+                }
+                case "shaders" -> {
+                    //"shaders reload": the dev shader reload at the next tick's end (needs -Dvulkanmod.visuals.shaderDir)
+                    if (!arg.equals("reload")) throw new IllegalArgumentException("shaders: only 'reload'");
+                    ShaderHotReload.request();
+                    return 1;
+                }
+                case "follow" -> {
+                    //lines appended to this file later run after the script (va_verify.py live); starts at the file's current end
+                    this.follow = Path.of(arg.trim());
+                    try {
+                        this.followRead = Files.isRegularFile(this.follow) ? Files.readAllLines(this.follow).size() : 0;
+                    } catch (IOException e) {
+                        throw new java.io.UncheckedIOException(e);
+                    }
+                    VisualsLog.info("Visuals pilot: following " + this.follow);
                     return 0;
                 }
                 case "screen" -> {

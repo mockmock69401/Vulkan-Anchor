@@ -55,6 +55,7 @@ public final class ClientInitializer {
 		VisualsConfig.load();
 		VisualsSettingsPage.register();
 		VisualsPilot.install();
+		net.vulkanmod.visuals.dev.ShaderHotReload.install();
 		net.vulkanmod.render.profiling.FpsOverlay.install();
 		// DhRegistration names DH types, so it must not load without DH
 		switch (DhPresence.current()) {

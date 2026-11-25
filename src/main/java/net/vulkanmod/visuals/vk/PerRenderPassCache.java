@@ -31,6 +31,11 @@ public final class PerRenderPassCache {
         return pipeline;
     }
 
+    /** Forgets every pipeline (the dev shader reload; the caller destroyed them once no frame used them). */
+    public void clear() {
+        this.pipelines.clear();
+    }
+
     /** Render pass compatibility for single colour + depth attachment passes at one sample (Reforged's main passes). */
     public static long compatibilityKey(int colourFormat, int depthFormat) {
         return ((long) colourFormat << 32) | (depthFormat & 0xFFFFFFFFL);

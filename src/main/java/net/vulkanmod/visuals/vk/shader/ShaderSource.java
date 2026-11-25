@@ -70,6 +70,38 @@ public final class ShaderSource {
         return "assets/" + id.substring(0, colon) + "/" + id.substring(colon + 1, slash) + "/shaders/" + id.substring(slash + 1);
     }
 
+    /**
+     * 2026-11-25 (the user: shader changes take too long to check in game): with -Dvulkanmod.visuals.shaderDir=<resources folder> (the
+     * project's src/main/resources), shader files are read from that folder first, so an edited file is what a reload compiles.
+     */
+    public static final String DEV_DIR_PROPERTY = "vulkanmod.visuals.shaderDir";
+
+    /** The folder dev shader files are read from, or null when the property is not set. */
+    public static java.nio.file.Path devDir() {
+        String dir = System.getProperty(DEV_DIR_PROPERTY);
+        return dir == null || dir.isBlank() ? null : java.nio.file.Path.of(dir);
+    }
+
+    /** The reader the game uses: the dev folder first when one is set (see DEV_DIR_PROPERTY), then the classpath. */
+    public static Function<String, String> reader() {
+        java.nio.file.Path dir = devDir();
+        return dir == null ? classpath() : folderThenClasspath(dir);
+    }
+
+    /** Reads a file id from dir (laid out as the classpath: assets/ns/visuals/shaders/...), falling back to the classpath. */
+    public static Function<String, String> folderThenClasspath(java.nio.file.Path dir) {
+        Function<String, String> classpath = classpath();
+        return id -> {
+            java.nio.file.Path file = dir.resolve(resourcePath(id));
+            if (!java.nio.file.Files.isRegularFile(file)) return classpath.apply(id);
+            try {
+                return java.nio.file.Files.readString(file, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new IllegalStateException("reading shader file " + file, e);
+            }
+        };
+    }
+
     /** Reads file ids from the classpath; null for a missing file. */
     public static Function<String, String> classpath() {
         return id -> {

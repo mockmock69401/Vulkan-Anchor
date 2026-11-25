@@ -176,7 +176,68 @@ public final class VkGraphicsProgram {
         VkGraphicsProgram program = new VkGraphicsProgram(catalogName, state, vertexLayout, c[0].meta(), c[1].meta());
         program.create(VkContext.spirv(catalogName + ".vert", c[0].source(), SPIRVUtils.ShaderKind.VERTEX_SHADER),
                 VkContext.spirv(catalogName + ".frag", c[1].source(), SPIRVUtils.ShaderKind.FRAGMENT_SHADER));
+        program.catalog = catalog;
+        if (ShaderSource.devDir() != null) LIVE.add(program);
         return program;
+    }
+
+    //the dev shader reload's programs (only with ShaderSource.DEV_DIR_PROPERTY set); free() takes a program out
+    private static final java.util.Set<VkGraphicsProgram> LIVE = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    private ShaderCatalog catalog;
+
+    /** The programs the dev reload can rebuild. */
+    public static java.util.List<VkGraphicsProgram> live() {
+        return java.util.List.copyOf(LIVE);
+    }
+
+    public String name() {
+        return this.name;
+    }
+
+    /**
+     * The dev shader reload: converts and compiles both stages again from the current files and swaps the shader modules in; the
+     * pipelines are built again on their next use. Only once no submitted frame can still use this program (the caller waits idle).
+     * Throws, leaving the program as it was, when a stage does not compile or its bindings or loose uniforms changed (a restart then).
+     */
+    public void reload() {
+        ShaderCatalog.Program p = this.catalog.get(this.name).withPlatform(VkContext.shaderPlatform());
+        GlslForVulkan.Converted v = GlslForVulkan.converted(this.catalog, p, p.stages().get(0));
+        GlslForVulkan.Converted f = GlslForVulkan.converted(this.catalog, p, p.stages().get(1));
+        if (!sameLayout(this.bindings, this.meta, v.meta(), f.meta())) {
+            throw new IllegalStateException(this.name + ": its bindings or uniforms changed; restart the game for that");
+        }
+        ByteBuffer vertSpirv = VkContext.spirv(this.name + ".vert", v.source(), SPIRVUtils.ShaderKind.VERTEX_SHADER);
+        ByteBuffer fragSpirv = VkContext.spirv(this.name + ".frag", f.source(), SPIRVUtils.ShaderKind.FRAGMENT_SHADER);
+        VkDevice device = VkContext.device();
+        long vert, frag;
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer h = stack.mallocLong(1);
+            check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(vertSpirv), null, h), "vertex module");
+            vert = h.get(0);
+            int r = vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(fragSpirv), null, h);
+            if (r != VK_SUCCESS) {
+                vkDestroyShaderModule(device, vert, null);
+                check(r, "fragment module");
+            }
+            frag = h.get(0);
+        }
+        for (long pipeline : this.built) vkDestroyPipeline(device, pipeline, null);
+        livePipelines -= this.built.size();
+        this.built.clear();
+        this.pipelines.clear();
+        vkDestroyShaderModule(device, this.vertModule, null);
+        vkDestroyShaderModule(device, this.fragModule, null);
+        this.vertModule = vert;
+        this.fragModule = frag;
+    }
+
+    /** Whether new stage metadata gives the same descriptor layout and loose uniforms as the program was made with. */
+    static boolean sameLayout(List<StagedBinding> bindings, VulkanShaderMeta meta, VulkanShaderMeta vert, VulkanShaderMeta frag) {
+        List<StagedBinding> merged = mergeBindings(vert, frag);
+        int looseStage = looseUniformStage(vert, frag);
+        VulkanShaderMeta loose = looseStage == VK_SHADER_STAGE_VERTEX_BIT ? vert : frag;
+        VulkanShaderMeta next = loose.withBindings(merged.stream().map(b -> new VulkanShaderMeta.Binding(b.set(), b.binding(), b.kind())).toList());
+        return merged.equals(bindings) && next.equals(meta);
     }
 
     private static void checkStages(ShaderCatalog.Program p) {
@@ -190,8 +251,8 @@ public final class VkGraphicsProgram {
     static GlslForVulkan.Converted[] convert(ShaderCatalog.Program p) {
         checkStages(p);
         return new GlslForVulkan.Converted[]{
-                GlslForVulkan.toVulkan(p.source(p.stages().get(0), ShaderSource.classpath()), p.defines()),
-                GlslForVulkan.toVulkan(p.source(p.stages().get(1), ShaderSource.classpath()), p.defines())};
+                GlslForVulkan.toVulkan(p.source(p.stages().get(0), ShaderSource.reader()), p.defines()),
+                GlslForVulkan.toVulkan(p.source(p.stages().get(1), ShaderSource.reader()), p.defines())};
     }
 
     /** Both stages' bindings in one layout; a set:binding both declare must be the same kind. */
@@ -401,6 +462,7 @@ public final class VkGraphicsProgram {
 
     /** Only once no submitted frame can still use it. */
     public void free() {
+        LIVE.remove(this);
         VkDevice device = VkContext.device();
         for (long pipeline : this.built) vkDestroyPipeline(device, pipeline, null);
         livePipelines -= this.built.size();

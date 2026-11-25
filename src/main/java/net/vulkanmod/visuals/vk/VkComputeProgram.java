@@ -36,6 +36,8 @@ public final class VkComputeProgram {
         GlslForVulkan.Converted c = GlslForVulkan.converted(catalog, p, stage);
         VkComputeProgram program = new VkComputeProgram(catalogName, c.meta());
         program.create(VkContext.spirv(catalogName + ".comp", c.source(), SPIRVUtils.ShaderKind.COMPUTE_SHADER));
+        program.catalog = catalog;
+        if (ShaderSource.devDir() != null) LIVE.add(program);
         return program;
     }
 
@@ -85,7 +87,15 @@ public final class VkComputeProgram {
             }
             check(vkCreatePipelineLayout(device, layoutInfo, null, p), "pipeline layout");
             this.pipelineLayout = p.get(0);
+        }
+        this.pipeline = this.pipelineFrom(spirv);
+    }
 
+    /** A compute pipeline for spirv on this program's layout. */
+    private long pipelineFrom(ByteBuffer spirv) {
+        VkDevice device = VkContext.device();
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            LongBuffer p = stack.mallocLong(1);
             check(vkCreateShaderModule(device, VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(spirv), null, p), "module");
             long module = p.get(0);
             try {
@@ -98,11 +108,38 @@ public final class VkComputeProgram {
                     FrameRecorder.time(FrameRecorder.PIPELINE, pipelineStart);
                     FrameRecorder.add(FrameRecorder.PIPELINES, 1);
                 }
-                this.pipeline = p.get(0);
+                return p.get(0);
             } finally {
                 vkDestroyShaderModule(device, module, null);
             }
         }
+    }
+
+    //the dev shader reload's programs (only with ShaderSource.DEV_DIR_PROPERTY set); free() takes a program out
+    private static final java.util.Set<VkComputeProgram> LIVE = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+    private ShaderCatalog catalog;
+
+    /** The programs the dev reload can rebuild. */
+    public static java.util.List<VkComputeProgram> live() {
+        return java.util.List.copyOf(LIVE);
+    }
+
+    public String name() {
+        return this.name;
+    }
+
+    /**
+     * The dev shader reload: converts and compiles the stage again from the current file and swaps the pipeline. Only once no submitted
+     * frame can still use this program. Throws, leaving the program as it was, when it does not compile or its bindings or push constants
+     * changed (a restart then).
+     */
+    public void reload() {
+        ShaderCatalog.Program p = this.catalog.get(this.name).withPlatform(VkContext.shaderPlatform());
+        GlslForVulkan.Converted c = GlslForVulkan.converted(this.catalog, p, p.stages().get(0));
+        if (!c.meta().equals(this.meta)) throw new IllegalStateException(this.name + ": its bindings or uniforms changed; restart the game for that");
+        long next = this.pipelineFrom(VkContext.spirv(this.name + ".comp", c.source(), SPIRVUtils.ShaderKind.COMPUTE_SHADER));
+        vkDestroyPipeline(VkContext.device(), this.pipeline, null);
+        this.pipeline = next;
     }
 
     public void dispatch(VkCommandBuffer cmd, VkBindings bindings, PushConstantWriter push, int x, int y, int z) {
@@ -160,6 +197,7 @@ public final class VkComputeProgram {
 
     /** Only once no submitted frame can still use it. */
     public void free() {
+        LIVE.remove(this);
         VkDevice device = VkContext.device();
         vkDestroyPipeline(device, this.pipeline, null);
         vkDestroyPipelineLayout(device, this.pipelineLayout, null);

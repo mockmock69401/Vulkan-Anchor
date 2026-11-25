@@ -12,7 +12,7 @@ final class PilotScript {
     /** The commands VisualsPilot runs; a script line with another name is logged and skipped. */
     private static final Set<String> COMMANDS = Set.of("world", "wait", "cmd", "ccmd", "rd", "fov", "zoom", "key", "hold", "set", "gui",
             "shot", "fps", "log", "vm", "spin", "burst", "glide", "gpu", "screen", "quit", "size", "f3", "chunks", "leave", "frames", "fgburst",
-            "fsr", "window", "preset", "colourpreset");
+            "fsr", "window", "preset", "colourpreset", "shaders", "follow");
 
     record Line(String command, String arg) {
     }

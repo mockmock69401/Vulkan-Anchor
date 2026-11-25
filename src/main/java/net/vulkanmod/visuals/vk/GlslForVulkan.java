@@ -37,7 +37,12 @@ public final class GlslForVulkan {
     public static Converted converted(net.vulkanmod.visuals.vk.shader.ShaderCatalog catalog, net.vulkanmod.visuals.vk.shader.ShaderCatalog.Program p,
                                       net.vulkanmod.visuals.vk.shader.ShaderCatalog.Stage stage) {
         String key = System.identityHashCode(catalog) + "|" + p.name() + "|" + stage.kind() + "|" + stage.id() + "|" + p.defines();
-        return CONVERTED.computeIfAbsent(key, k -> toVulkan(p.source(stage, net.vulkanmod.visuals.vk.shader.ShaderSource.classpath()), p.defines()));
+        return CONVERTED.computeIfAbsent(key, k -> toVulkan(p.source(stage, net.vulkanmod.visuals.vk.shader.ShaderSource.reader()), p.defines()));
+    }
+
+    /** Forgets every kept conversion, so the next converted() reads the files again (the dev shader reload). */
+    public static void clearConverted() {
+        CONVERTED.clear();
     }
 
     /** Full the visuals GLSL → Vulkan GLSL conversion, with the merged metadata. */
