@@ -26,8 +26,11 @@ public final class DimensionUniforms {
     public static final int COPY_END_LIGHT = 82;
     /** The portals' looks: vanilla's, the Default palette's (and Horror's), Anime's (portallook.glsl PORTAL_LOOK_DEFAULT, _ANIME). */
     public static final int PORTAL_LOOK_VANILLA = 0, PORTAL_LOOK_DEFAULT = 1, PORTAL_LOOK_ANIME = 2;
-    /** The End sky setting's styles (VisualsConfig.endSky; endsky.glsl END_SKY_SPACE, END_SKY_ANIME). */
-    public static final int END_SKY_VANILLA = 0, END_SKY_SPACE = 1, END_SKY_ANIME = 2, END_SKY_MAX = 2;
+    /**
+     * The End sky setting's styles (VisualsConfig.endSky; endsky.glsl END_SKY_SPACE, END_SKY_ANIME, END_SKY_HORROR). 2026-11-25 (the user:
+     * "엔드 차원의 공포 프리셋도 작업해줘 ... 별과 오로라를 끄고 완전한 검은 하늘로, 분위기는 엔드에 맞게 동굴 조명처럼 회색빛 초록 분위기로"): HORROR, a black sky.
+     */
+    public static final int END_SKY_VANILLA = 0, END_SKY_SPACE = 1, END_SKY_ANIME = 2, END_SKY_HORROR = 3, END_SKY_MAX = 3;
     /** The light pillar's axis (the middle of block 0, 0: the exit portal's bedrock column). */
     public static final double PILLAR_X = 0.5, PILLAR_Z = 0.5;
     /** The pillar value meaning no pillar (scene_copy.comp: below -1e8). */

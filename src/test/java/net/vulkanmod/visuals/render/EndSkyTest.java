@@ -30,7 +30,8 @@ class EndSkyTest {
     private static final String COPY = ShaderFiles.read("post/scene_copy.comp").replace(String.valueOf((char) 13), "");
     private static final String ENDSKY = ShaderFiles.read("post/endsky.glsl").replace(String.valueOf((char) 13), "");
     private static final int[] PALETTES = {ColourPresets.DEFAULT, ColourPresets.ANIME, ColourPresets.HORROR};
-    private static final int[] STYLES = {DimensionUniforms.END_SKY_VANILLA, DimensionUniforms.END_SKY_SPACE, DimensionUniforms.END_SKY_ANIME};
+    private static final int[] STYLES = {DimensionUniforms.END_SKY_VANILLA, DimensionUniforms.END_SKY_SPACE, DimensionUniforms.END_SKY_ANIME,
+            DimensionUniforms.END_SKY_HORROR};
 
     private static float[] dir(float azimuthDeg, float elevationDeg) {
         double a = Math.toRadians(azimuthDeg), e = Math.toRadians(elevationDeg);
@@ -67,6 +68,7 @@ class EndSkyTest {
         //The shader's style numbers are the setting's
         assertEquals(DimensionUniforms.END_SKY_SPACE, (int) EndSkyMath.END_SKY_SPACE);
         assertEquals(DimensionUniforms.END_SKY_ANIME, (int) EndSkyMath.END_SKY_ANIME);
+        assertEquals(DimensionUniforms.END_SKY_HORROR, (int) EndSkyMath.END_SKY_HORROR);
         //The bright star sits on a unit direction above the horizon
         float[] d = {EndSkyMath.END_STAR_X, EndSkyMath.END_STAR_Y, EndSkyMath.END_STAR_Z};
         assertEquals(1, d[0] * d[0] + d[1] * d[1] + d[2] * d[2], 2e-3);
@@ -130,7 +132,7 @@ class EndSkyTest {
         assertEquals(1, EndSkyMath.endSkyStars(0));
     }
 
-    /** Anime picks its painted sky; Default picks Space; Horror leaves it; each shows only with its own. */
+    /** Anime picks its painted sky; Default picks Space; Horror its black one (2026-11-25); each shows only with its own. */
     @Test
     void thePalettesPickTheEndSky() {
         for (int from : PALETTES) {
@@ -140,7 +142,8 @@ class EndSkyTest {
                     ColourPresets.apply(c, from);
                     c.endSky = style;
                     ColourPresets.apply(c, to);
-                    int want = to == ColourPresets.ANIME ? DimensionUniforms.END_SKY_ANIME : to == ColourPresets.HORROR ? style : DimensionUniforms.END_SKY_SPACE;
+                    int want = to == ColourPresets.ANIME ? DimensionUniforms.END_SKY_ANIME : to == ColourPresets.HORROR ? DimensionUniforms.END_SKY_HORROR
+                            : DimensionUniforms.END_SKY_SPACE;
                     String what = "palette " + from + " -> " + to + ", style " + style;
                     assertEquals(want, c.endSky, what);
                     assertEquals(to, ColourPresets.detect(c), what);
@@ -175,7 +178,8 @@ class EndSkyTest {
             assertNotEquals(json, without);
             Files.writeString(f, without);
             VisualsConfig read = VisualsConfig.read(f);
-            int want = palette == ColourPresets.ANIME ? DimensionUniforms.END_SKY_ANIME : DimensionUniforms.END_SKY_SPACE;
+            int want = palette == ColourPresets.ANIME ? DimensionUniforms.END_SKY_ANIME : palette == ColourPresets.HORROR
+                    ? DimensionUniforms.END_SKY_HORROR : DimensionUniforms.END_SKY_SPACE;
             assertEquals(want, read.endSky, "palette " + palette);
             assertEquals(palette, read.colourPreset, "palette " + palette);
         }
@@ -190,7 +194,8 @@ class EndSkyTest {
             OldFile.age(f, 27);
             VisualsConfig read = VisualsConfig.read(f);
             assertEquals(palette, read.colourPreset, "old palette " + palette);
-            assertEquals(palette == ColourPresets.ANIME ? DimensionUniforms.END_SKY_ANIME : DimensionUniforms.END_SKY_SPACE, read.endSky, "old palette " + palette);
+            assertEquals(palette == ColourPresets.ANIME ? DimensionUniforms.END_SKY_ANIME : palette == ColourPresets.HORROR
+                    ? DimensionUniforms.END_SKY_HORROR : DimensionUniforms.END_SKY_SPACE, read.endSky, "old palette " + palette);
         }
         //A file that has it keeps it (vanilla's sky on Horror)
         VisualsConfig c = new VisualsConfig();
@@ -490,6 +495,38 @@ class EndSkyTest {
         for (int i = 0; i < 3; i++) assertEquals(stone[i], torch[i], 1e-9, "block-lit ground keeps its colour");
         assertTrue(COPY.contains("lit = endGround(lit, endSkyParams.x, blockT);"));
         String f = END.substring(END.indexOf("vec3 endGround("));
-        assertTrue(f.contains("if (!space && abs(style - END_SKY_ANIME) >= 0.5) {"), "vanilla's End sky: unchanged");
+        assertTrue(f.contains("if (!space && !horror && abs(style - END_SKY_ANIME) >= 0.5) {"), "vanilla's End sky: unchanged");
+    }
+
+    /**
+     * 2026-11-25 (the user: "엔드 차원의 공포 프리셋도 작업해줘 ... 별과 오로라를 끄고 완전한 검은 하늘로, 분위기는 엔드에 맞게 동굴 조명처럼 회색빛
+     * 초록 분위기로"): Horror's End sky is black, with no stars, galaxy or aurora, and its ground a dim grey-green.
+     */
+    @Test
+    void horrorsEndSkyIsBlack(@TempDir Path dir) throws Exception {
+        assertEquals(0, EndSkyMath.endSkyBand(EndSkyMath.END_SKY_HORROR));
+        assertEquals(0, EndSkyMath.endSkyStars(EndSkyMath.END_SKY_HORROR));
+        String aurora = ENDSKY.substring(ENDSKY.indexOf("float endSkyAurora("));
+        assertTrue(aurora.substring(0, aurora.indexOf("}") + 1).contains("if (abs(style - END_SKY_HORROR) < 0.5) {"));
+        String sky = ENDSKY.substring(ENDSKY.indexOf("vec3 endSky(vec3 dir"));
+        sky = sky.substring(0, sky.indexOf("\n}\n"));
+        assertFalse(sky.contains("END_SKY_HORROR"), "Horror falls through to black");
+        assertTrue(sky.trim().endsWith("return vec3(0.0);"));
+        //A grey-green: green over red and blue, little saturation, dimmer than the stone
+        float r = EndSkyMath.END_HORROR_GROUND_R, g = EndSkyMath.END_HORROR_GROUND_G, b = EndSkyMath.END_HORROR_GROUND_B;
+        assertTrue(g > r + 20 && g > b + 15 && b > r, "grey-green");
+        assertTrue(EndSkyMath.END_HORROR_GROUND_SATURATION < EndSkyMath.END_SPACE_GROUND_SATURATION);
+        assertTrue(EndSkyMath.END_HORROR_GROUND_EXPOSURE < 1);
+        assertEquals(DimensionUniforms.END_SKY_HORROR, ColourPresets.endSkies(ColourPresets.HORROR));
+        //A file saved on Horror before revision 31 (its End sky Anime's, left by the palette before) takes Horror's and stays on Horror
+        VisualsConfig c = new VisualsConfig();
+        ColourPresets.apply(c, ColourPresets.HORROR);
+        c.endSky = DimensionUniforms.END_SKY_ANIME;
+        Path f = dir.resolve("horror30.json");
+        c.write(f);
+        net.vulkanmod.visuals.config.OldFile.age(f, 30);
+        VisualsConfig read = VisualsConfig.read(f);
+        assertEquals(DimensionUniforms.END_SKY_HORROR, read.endSky);
+        assertEquals(ColourPresets.HORROR, read.colourPreset);
     }
 }
