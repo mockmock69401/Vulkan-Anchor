@@ -130,8 +130,14 @@ public final class FoliageMarker {
         FIRE.get()[0] = fire;
     }
 
-    /** A fire's block (fire, soul fire) or a lit campfire: their light source's mark is FIRE_ALPHA. */
+    /**
+     * A fire's block or a lit campfire: their light source's mark is FIRE_ALPHA. Not the soul fire's (2026-11-25, the user: "영혼불은 일반불과
+     * 구분이 잘 안가. 영혼불을 본래의 색으로 되돌리고"): soul fire and a soul campfire keep a light source's mark, and their own blue.
+     */
     public static boolean isFire(net.minecraft.world.level.block.state.BlockState state) {
+        if (state.is(net.minecraft.world.level.block.Blocks.SOUL_FIRE) || state.is(net.minecraft.world.level.block.Blocks.SOUL_CAMPFIRE)) {
+            return false;
+        }
         return state.is(net.minecraft.tags.BlockTags.FIRE) || (state.is(net.minecraft.tags.BlockTags.CAMPFIRES)
                 && state.hasProperty(net.minecraft.world.level.block.CampfireBlock.LIT) && state.getValue(net.minecraft.world.level.block.CampfireBlock.LIT));
     }

@@ -82,9 +82,11 @@ public final class ParticleLook {
     /**
      * 2026-11-24 (the user's Anime Nether references: "작은 불꽃은 어두운 빨간색으로"): in the Nether under the Anime palette the small
      * flames (torches', candles', the soul fire's) are a dark red, whatever their colour. The embers (lava pops, a campfire's sparks) were
-     * too, until the user: "불씨는 기존 것이 더 나아보여. 불씨만 되돌려줘"; they keep the palette's colour.
+     * too, until the user: "불씨는 기존 것이 더 나아보여. 불씨만 되돌려줘"; they keep the palette's colour. 2026-11-25 (the user: "일반 불은 끝
+     * 부분이 회색으로 보이고 있어"): the grey over a fire's tips was its smoke, so the smoke is a warm ash there.
      */
-    static final java.util.Map<VanillaParticles.Group, Integer> NETHER_ANIME = java.util.Map.of(VanillaParticles.Group.FLAMES, 0x9A1A12);
+    static final java.util.Map<VanillaParticles.Group, Integer> NETHER_ANIME = java.util.Map.of(VanillaParticles.Group.FLAMES, 0x9A1A12,
+            VanillaParticles.Group.SMOKE, 0x8A4A3A);
 
     /** Whether the player is in a hot dimension (the Nether) under the Anime palette. */
     static boolean netherAnime(VisualsConfig c) {
