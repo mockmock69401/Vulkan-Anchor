@@ -145,6 +145,11 @@ const float REFLECT_STEP_CAP = 0.25;
 // took its place: a pale band along the pit's inner corners and bottom. A solid surface's ray that ran behind ground standing in
 // front of it (the march's blocked, as water's sky already takes it) keeps the pixel's own colour in place of the sky
 const float REFLECT_SOLID_THICK_MIN = 0.15;
+//2026-11-25 (session 16e; the user: anvils and some stone stairs and slabs looked like water, as obsidian had): a solid surface's ray
+// that goes below the horizon would meet ground, not sky. Seen from above, a side face (an anvil's, a step's riser) sends its ray down
+// toward the camera, where the march rarely finds the ground it meets, and the sky the face's sky light allowed took its place: pale
+// blue sides, like water. Such a ray keeps the pixel's own colour where the march finds nothing, faded in over this much of r.y
+const float REFLECT_SOLID_GROUND_FADE = 0.1;
 float reflectThickMin = REFLECT_THICK_MIN;
 //Hits fade out over this share of the screen at its edges
 const float REFLECT_EDGE_FADE = 0.05;
@@ -230,6 +235,45 @@ bool marchBehind(float rayZ, float sceneZ, float thick) {
 vec3 eyeRay(vec3 world, mat3 toWorld) {
     vec3 v = world - toWorld*eyeView.xyz;
     return v/max(length(v), 0.000001);
+}
+
+//2026-11-22 (session 16c; the user: obsidian, a polished block, showed strange edges along a dug pit): next to a concave edge (a pit's
+// inner corner, a wall's foot) the reflected ray reaches the neighbouring face within a few pixels, before the march's first step,
+// and no step sees it: the sky took its place in a thin bright line along the edge. A solid surface's ray is looked at
+// REFLECT_NEAR_PROBE blocks out: one that lies behind a surface standing in front of the reflecting face (REFLECT_NEAR_FRONT plus
+// REFLECT_NEAR_FRONT_SHARE of the distance: the face itself, rebuilt from depth, stays below it) by under REFLECT_NEAR_THICK has
+// that face's sky hidden. Only within REFLECT_NEAR_MAX_DIST blocks: farther the line is under a pixel, and a floor filling the view
+// paid 0.4 .. 0.6 ms at 2560 x 1440 (RTX 5070) with five probes at every distance (three within 24 blocks: about 0.3 ms).
+// 2026-11-25 (session 16e; the user: anvils looked like water): the same probes catch an overhang, the top of an anvil's base under
+// its head, whose ray runs up behind the head's front into an underside the screen does not show
+const float REFLECT_NEAR_PROBE[3] = float[](0.05, 0.15, 0.4);
+const float REFLECT_NEAR_FRONT = 0.01;
+const float REFLECT_NEAR_FRONT_SHARE = 0.002;
+const float REFLECT_NEAR_THICK = 0.5;
+const float REFLECT_NEAR_MAX_DIST = 24.0;
+
+bool reflectNearBlocked(vec3 v0, vec3 rView, vec3 nGeom, float dist, ivec2 size, mat3 toWorld) {
+    if (!(dist < REFLECT_NEAR_MAX_DIST)) {
+        return false;
+    }
+    float front = REFLECT_NEAR_FRONT + REFLECT_NEAR_FRONT_SHARE*dist;
+    for (int i = 0; i < 3; i++) {
+        vec3 v = v0 + rView*REFLECT_NEAR_PROBE[i];
+        vec4 c = proj*vec4(v, 1.0);
+        if (!(c.w > 0.0)) {
+            return false;
+        }
+        vec2 s = c.xy/c.w*0.5 + 0.5;
+        if (any(lessThan(s, vec2(0.0))) || any(greaterThan(s, vec2(1.0)))) {
+            return false;
+        }
+        vec3 scene;
+        if (marchPosition(marchPixel(s, size), size, scene) && v.z < scene.z && v.z > scene.z - REFLECT_NEAR_THICK
+                && dot(toWorld*(scene - v0), nGeom) > front) {
+            return true;
+        }
+    }
+    return false;
 }
 
 //The march from v0 (view space) along rView. Returns the hit's weight (0: none) with its colour and the reflected path's length
@@ -475,13 +519,14 @@ vec3 blockReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
         sky = sky*(1.0 - cloud.a) + cloud.rgb;
     }
     vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+    reflection = mix(own, reflection, smoothstep(-REFLECT_SOLID_GROUND_FADE, 0.0, r.y));
     if (max(f.r, max(f.g, f.b)) >= REFLECT_MIN_MARCH) {
         vec3 hitColour;
         float pathLength;
         float blocked;
         reflectThickMin = REFLECT_SOLID_THICK_MIN;
         float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
-        if (blocked > 0.5) {
+        if (blocked > 0.5 || (w < 1.0 && reflectNearBlocked(view, toView*r, nGeom, dist, size, toWorld))) {
             reflection = own;
         }
         if (w > 0.0) {
@@ -569,13 +614,14 @@ vec3 pbrReflection(ivec2 p, ivec2 size, vec3 own, float mark) {
         sky = sky*(1.0 - cloud.a) + cloud.rgb;
     }
     vec3 reflection = reflectFallback(applyHaze(a, sky, d, dist, amount), own, skyAccess);
+    reflection = mix(own, reflection, smoothstep(-REFLECT_SOLID_GROUND_FADE, 0.0, r.y));
     if (max(f.r, max(f.g, f.b)) >= PBR_REFLECT_MIN_MARCH) {
         vec3 hitColour;
         float pathLength;
         float blocked;
         reflectThickMin = REFLECT_SOLID_THICK_MIN;
         float w = marchReflection(view, toView*r, nGeom, dist, p, size, toWorld, hitColour, pathLength, blocked);
-        if (blocked > 0.5) {
+        if (blocked > 0.5 || (w < 1.0 && reflectNearBlocked(view, toView*r, nGeom, dist, size, toWorld))) {
             reflection = own;
         }
         if (w > 0.0) {
