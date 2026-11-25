@@ -61,6 +61,10 @@ public class TerrainBufferBuilder {
         this.capacity = size;
     }
 
+    public boolean isOpaque() {
+        return this.flags != 0;
+    }
+
     public void ensureCapacity() {
         this.ensureCapacity(this.format.getVertexSize() * 4);
     }

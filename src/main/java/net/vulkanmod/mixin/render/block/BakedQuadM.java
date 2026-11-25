@@ -71,6 +71,11 @@ public class BakedQuadM implements QuadView {
     }
 
     @Override
+    public int getLight(int idx) {
+        return this.vertices[vertexOffset(idx) + 6];
+    }
+
+    @Override
     public int getColorIndex() {
         return this.tintIndex;
     }
