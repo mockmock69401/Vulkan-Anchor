@@ -1,6 +1,7 @@
 package net.vulkanmod.render.chunk.build;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.vulkanmod.render.model.quad.QuadUtils;
 import net.vulkanmod.render.vertex.TerrainBufferBuilder;
 import net.vulkanmod.render.vertex.VertexUtil;
 import net.vulkanmod.visuals.render.FoliageMarker;
@@ -62,6 +63,22 @@ final class TerrainVertexConsumer implements VertexConsumer {
         if (i == 3) writeQuad();
     }
 
+    private final float[] shade = new float[4];
+    private final int[] lights = new int[4];
+
+    /**
+     * The corner to start the quad at (QuadUtils.getIterationStartIdx): its corners' brightness (vanilla bakes the AO into the colour; the
+     * tint and the face's shade are the quad's own, so their sum orders the corners as the AO does) and their light.
+     */
+    static int startIndex(int[] colour, int[] light, float[] shade, int[] lights) {
+        for (int i = 0; i < 4; i++) {
+            int c = colour[i];
+            shade[i] = ColorUtil.RGBA.unpackR(c) + ColorUtil.RGBA.unpackG(c) + ColorUtil.RGBA.unpackB(c);
+            lights[i] = (light[i] & 0xFFFF) + (light[i] >>> 16);
+        }
+        return QuadUtils.getIterationStartIdx(shade, lights);
+    }
+
     private void writeQuad() {
         boolean overlay = false;
         if (this.out.isOpaque()) {
@@ -73,7 +90,12 @@ final class TerrainVertexConsumer implements VertexConsumer {
         }
         if (overlay) this.out.setOpaque(false);
         this.out.ensureCapacity();
-        for (int i = 0; i < 4; i++) {
+        //2026-11-26 (the user: "눈 양탄자에 보이는 햇빛 그림자가 층이 져 보이고 있어", Snow! Real Magic's snow in Sunlit): the quad is split
+        // into its two triangles along the diagonal its corners' shade and light agree on, as BlockRenderer.putQuadData does
+        // (QuadUtils); written in vanilla's order a smooth-lit face whose corners differ showed a hard light / dark diagonal
+        int start = startIndex(this.quadColour, this.quadLight, this.shade, this.lights);
+        for (int k = 0; k < 4; k++) {
+            int i = (start + k) & 3;
             this.out.vertex(this.quad[i * 3], this.quad[i * 3 + 1], this.quad[i * 3 + 2], this.quadColour[i], this.quadU[i], this.quadV[i],
                     this.quadLight[i], this.quadNormal[i]);
         }
