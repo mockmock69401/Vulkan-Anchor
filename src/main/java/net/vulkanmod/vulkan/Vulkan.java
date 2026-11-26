@@ -45,7 +45,12 @@ import static org.lwjgl.vulkan.VK12.VK_API_VERSION_1_2;
 
 public class Vulkan {
 
-    public static final boolean ENABLE_VALIDATION_LAYERS = false;
+    /**
+     * 2026-11-26 (Sunlit VK_ERROR_DEVICE_LOST hunt): -Dvulkanmod.validation=true turns on the Khronos validation layer (it must be
+     * installed, as with the Vulkan SDK) and logs each error with the Java stack that recorded the command, the first few times per kind.
+     */
+    public static final boolean ENABLE_VALIDATION_LAYERS = Boolean.getBoolean("vulkanmod.validation");
+    private static final java.util.Map<Integer, Integer> VALIDATION_STACKS = new java.util.concurrent.ConcurrentHashMap<>();
 
     public static final boolean DYNAMIC_RENDERING = false;
 
@@ -88,8 +93,10 @@ public class Vulkan {
 
         System.err.println(s);
 
-        if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0)
-            System.nanoTime();
+        if ((messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0
+                && VALIDATION_STACKS.merge(callbackData.messageIdNumber(), 1, Integer::sum) <= 3) {
+            new Throwable("Vulkan validation error recorded here (id " + callbackData.messageIdNumber() + ")").printStackTrace();
+        }
 
         return VK_FALSE;
     }

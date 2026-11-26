@@ -20,6 +20,7 @@ import net.vulkanmod.vulkan.shader.descriptor.UBO;
 import net.vulkanmod.vulkan.shader.layout.AlignedStruct;
 import net.vulkanmod.vulkan.shader.layout.PushConstants;
 import net.vulkanmod.vulkan.texture.VTextureSelector;
+import net.vulkanmod.vulkan.texture.AttachmentSampling;
 import net.vulkanmod.vulkan.texture.VulkanImage;
 import net.vulkanmod.gl.GlSampler;
 import org.apache.commons.lang3.Validate;
@@ -334,8 +335,12 @@ public abstract class Pipeline {
                     view = imageDescriptor.getImageView(image);
                     sampler = imageDescriptor.getSampler(image);
 
-                    if (imageDescriptor.isReadOnlyLayout)
-                        image.readOnlyLayout();
+                    if (imageDescriptor.isReadOnlyLayout) {
+                        //2026-11-26: an attachment of the pass being drawn is sampled through a fresh copy (updateDescriptorSet)
+                        if (AttachmentSampling.needsCopy(image))
+                            return true;
+                        AttachmentSampling.prepare(image);
+                    }
                 }
 
                 if (!this.boundTextures[j].isCurrentState(view, sampler)) {
@@ -408,11 +413,16 @@ public abstract class Pipeline {
                     sampler = 0;
                 } else {
                     VulkanImage image = imageDescriptor.getImage();
-                    view = imageDescriptor.getImageView(image);
                     sampler = imageDescriptor.getSampler(image);
 
-                    if (imageDescriptor.isReadOnlyLayout)
-                        image.readOnlyLayout();
+                    //2026-11-26 (validation, watut's blur): moved to the read-only layout in order with the frame's drawing, and an
+                    // attachment of the pass being drawn is sampled through a copy of it (AttachmentSampling)
+                    if (imageDescriptor.isReadOnlyLayout) {
+                        VulkanImage sampled = AttachmentSampling.prepare(image);
+                        view = sampled == image ? imageDescriptor.getImageView(image) : sampled.getImageView();
+                    } else {
+                        view = imageDescriptor.getImageView(image);
+                    }
                 }
 
                 imageInfo[j] = VkDescriptorImageInfo.calloc(1, stack);

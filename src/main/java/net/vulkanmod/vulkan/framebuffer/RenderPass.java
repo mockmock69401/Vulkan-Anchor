@@ -282,12 +282,60 @@ public class RenderPass {
         return framebuffer;
     }
 
+    /** This pass with every attachment loaded (made once, freed with this pass), to carry on a pass that was ended part way. */
+    private RenderPass loadingTwin;
+
+    /**
+     * 2026-11-26 (validation: watut samples the target it draws into): whether this pass can be ended part way and carried on with
+     * {@link #resume}, the attachments keeping what was drawn: each one is stored at the end (a DONT_CARE store would lose it).
+     */
+    public boolean canSuspend() {
+        return !Vulkan.DYNAMIC_RENDERING
+                && (colorAttachmentInfo == null || colorAttachmentInfo.storeOp == VK_ATTACHMENT_STORE_OP_STORE)
+                && (depthAttachmentInfo == null || depthAttachmentInfo.storeOp == VK_ATTACHMENT_STORE_OP_STORE);
+    }
+
+    /**
+     * Carries on this pass in {@code begun} (the framebuffer it was begun with) after endRenderPass: the same pass with LOAD for each
+     * attachment, so nothing is cleared. A LOAD twin is compatible with this pass, so it uses this pass's VkFramebuffer and the
+     * pipelines made for this pass; the renderer keeps this pass as the bound one. The viewport, scissor and pipeline bound before
+     * stay set (command buffer state outlives a render pass instance). The twin's external dependency for a loading pass
+     * (createSubpassDependencies) orders the load after the writes of the part that was ended.
+     */
+    public void resume(VkCommandBuffer commandBuffer, Framebuffer begun, MemoryStack stack) {
+        RenderPass twin = this.loadingTwin();
+        twin.beginRenderPass(commandBuffer, begun.getFramebufferId(this), stack);
+        Renderer.getInstance().setBoundRenderPass(this);
+    }
+
+    private RenderPass loadingTwin() {
+        boolean loads = (colorAttachmentInfo == null || colorAttachmentInfo.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+                && (depthAttachmentInfo == null || depthAttachmentInfo.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD);
+        if (loads)
+            return this;
+
+        if (this.loadingTwin == null) {
+            this.loadingTwin = new RenderPass(this.framebuffer, loading(colorAttachmentInfo), loading(depthAttachmentInfo));
+        }
+        return this.loadingTwin;
+    }
+
+    private static AttachmentInfo loading(AttachmentInfo info) {
+        if (info == null)
+            return null;
+        return new AttachmentInfo(info.type, info.format).setOps(VK_ATTACHMENT_LOAD_OP_LOAD, info.storeOp).setFinalLayout(info.finalLayout);
+    }
+
     public void cleanUp() {
 
         if (!Vulkan.DYNAMIC_RENDERING)
             MemoryManager.getInstance().addFrameOp(
                     () -> vkDestroyRenderPass(Vulkan.getVkDevice(), this.id, null));
 
+        if (this.loadingTwin != null) {
+            this.loadingTwin.cleanUp();
+            this.loadingTwin = null;
+        }
     }
 
     public long getId() {
