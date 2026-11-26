@@ -446,6 +446,10 @@ public class VulkanImage {
         return currentLayout;
     }
 
+    public int getUsage() {
+        return usage;
+    }
+
     public void setCurrentLayout(int currentLayout) {
         this.currentLayout = currentLayout;
     }

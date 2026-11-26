@@ -573,6 +573,29 @@ public class Renderer {
         GlFramebuffer.resetBoundFramebuffer();
     }
 
+    /**
+     * 2026-11-26 (validation: watut samples the target it draws into): ends the current render pass for commands that may not run
+     * inside one (a barrier on another image, a copy), keeping this renderer's bound pass and framebuffer for {@link #resumeRenderPass}.
+     * False (nothing ended) outside a frame, outside a pass, or when the pass would lose its attachments' contents (RenderPass.canSuspend).
+     */
+    public boolean suspendRenderPass() {
+        if (skipRendering || !recordingCmds || this.boundRenderPass == null || this.boundFramebuffer == null
+                || !this.boundRenderPass.canSuspend())
+            return false;
+
+        RenderPass pass = this.boundRenderPass;
+        pass.endRenderPass(currentCmdBuffer);
+        this.boundRenderPass = pass;
+        return true;
+    }
+
+    /** Carries on the pass suspendRenderPass ended, loading what it drew (no clear); viewport, scissor and pipeline stay as they were. */
+    public void resumeRenderPass() {
+        try (MemoryStack stack = stackPush()) {
+            this.boundRenderPass.resume(currentCmdBuffer, this.boundFramebuffer, stack);
+        }
+    }
+
     public boolean beginRendering(RenderPass renderPass, Framebuffer framebuffer) {
         if (skipRendering || !recordingCmds)
             return false;
@@ -752,6 +775,9 @@ public class Renderer {
             boundPipelineHandle = handle;
             boundPipeline = pipeline;
             addUsedPipeline(pipeline);
+            //2026-11-26: a pipeline bound behind this renderer's back (clearBoundPipeline) may have had static blend constants, which
+            // leaves the dynamic ones undefined: set them again with each new bind
+            blendConstantsApplied = false;
         }
 
         float blendR = VRenderSystem.blendColor.get(0);

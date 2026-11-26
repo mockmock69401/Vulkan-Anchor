@@ -112,13 +112,16 @@ public class RenderPass {
                         renderPassInfo.pDependencies(subpassDependencies);
                     }
                     case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL -> {
+                        //2026-11-26: this dependency replaces the implicit one for every attachment, the depth one too: its writes are
+                        // made available before its final layout transition (and before Renderer.resumeRenderPass loads it again)
+                        boolean depth = depthAttachmentInfo != null;
                         VkSubpassDependency.Buffer subpassDependencies = VkSubpassDependency.calloc(1, stack);
                         subpassDependencies.get(0)
                                 .srcSubpass(0)
                                 .dstSubpass(VK_SUBPASS_EXTERNAL)
-                                .srcStageMask(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT)
+                                .srcStageMask(VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | (depth ? VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT : 0))
                                 .dstStageMask(VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
-                                .srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
+                                .srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | (depth ? VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT : 0))
                                 .dstAccessMask(VK_ACCESS_SHADER_READ_BIT);
 
                         renderPassInfo.pDependencies(subpassDependencies);
@@ -250,12 +253,71 @@ public class RenderPass {
         return framebuffer;
     }
 
+    /** This pass with every attachment loaded (made once, freed with this pass), to carry on a pass that was ended part way. */
+    private RenderPass loadingTwin;
+
+    /**
+     * 2026-11-26 (validation: watut samples the target it draws into): whether this pass can be ended part way and carried on with
+     * {@link #resume}, the attachments keeping what was drawn: each one is stored at the end (a DONT_CARE store would lose it).
+     */
+    public boolean canSuspend() {
+        return !Vulkan.DYNAMIC_RENDERING
+                && (colorAttachmentInfo == null || colorAttachmentInfo.storeOp == VK_ATTACHMENT_STORE_OP_STORE)
+                && (depthAttachmentInfo == null || depthAttachmentInfo.storeOp == VK_ATTACHMENT_STORE_OP_STORE);
+    }
+
+    /**
+     * Carries on this pass in {@code begun} (the framebuffer it was begun with) after endRenderPass: the same pass with LOAD for each
+     * attachment, so nothing is cleared. A LOAD twin is compatible with this pass, so it uses this pass's VkFramebuffer and the
+     * pipelines made for this pass; the renderer keeps this pass as the bound one. The viewport, scissor and pipeline bound before
+     * stay set (command buffer state outlives a render pass instance).
+     */
+    public void resume(VkCommandBuffer commandBuffer, Framebuffer begun, MemoryStack stack) {
+        RenderPass twin = this.loadingTwin();
+
+        //an attachment whose final layout is its attachment layout gets no barrier from beginRenderPass: the load waits for the writes
+        // of the part that was ended all the same
+        VkMemoryBarrier.Buffer barrier = VkMemoryBarrier.calloc(1, stack).sType$Default()
+                .srcAccessMask(VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+                .dstAccessMask(VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+                        | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+        vkCmdPipelineBarrier(commandBuffer,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                0, barrier, null, null);
+
+        twin.beginRenderPass(commandBuffer, begun.getFramebufferId(this), stack);
+        Renderer.getInstance().setBoundRenderPass(this);
+    }
+
+    private RenderPass loadingTwin() {
+        boolean loads = (colorAttachmentInfo == null || colorAttachmentInfo.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD)
+                && (depthAttachmentInfo == null || depthAttachmentInfo.loadOp == VK_ATTACHMENT_LOAD_OP_LOAD);
+        if (loads)
+            return this;
+
+        if (this.loadingTwin == null) {
+            this.loadingTwin = new RenderPass(this.framebuffer, loading(colorAttachmentInfo), loading(depthAttachmentInfo));
+        }
+        return this.loadingTwin;
+    }
+
+    private static AttachmentInfo loading(AttachmentInfo info) {
+        if (info == null)
+            return null;
+        return new AttachmentInfo(info.type, info.format).setOps(VK_ATTACHMENT_LOAD_OP_LOAD, info.storeOp).setFinalLayout(info.finalLayout);
+    }
+
     public void cleanUp() {
 
         if (!Vulkan.DYNAMIC_RENDERING)
             MemoryManager.getInstance().addFrameOp(
                     () -> vkDestroyRenderPass(Vulkan.getVkDevice(), this.id, null));
 
+        if (this.loadingTwin != null) {
+            this.loadingTwin.cleanUp();
+            this.loadingTwin = null;
+        }
     }
 
     public long getId() {
