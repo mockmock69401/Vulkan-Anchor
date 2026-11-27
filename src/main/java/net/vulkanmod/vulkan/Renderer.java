@@ -91,6 +91,10 @@ public class Renderer {
     private int appliedStencilCompareMask;
     private int appliedStencilWriteMask;
     private boolean stencilStateApplied;
+    //2026-11-27 (stability test, ZTE's FTB Chunks minimap): only line pipelines take the line width as dynamic state, so binding any
+    // other pipeline leaves it undefined (VUID-vkCmdDraw-None-07833); the width asked for is set again when a line pipeline follows
+    private float requestedLineWidth = 1.0f;
+    private boolean lineWidthValid;
 
     private Drawer drawer;
 
@@ -129,10 +133,13 @@ public class Renderer {
     }
 
     public static void setLineWidth(float width) {
+        INSTANCE.requestedLineWidth = width;
         if (INSTANCE.boundFramebuffer == null) {
+            INSTANCE.lineWidthValid = false;
             return;
         }
         vkCmdSetLineWidth(INSTANCE.currentCmdBuffer, width);
+        INSTANCE.lineWidthValid = true;
     }
 
     private void init() {
@@ -331,6 +338,8 @@ public class Renderer {
         mainPass.begin(commandBuffer, stack);
 
         resetDynamicState(commandBuffer);
+        requestedLineWidth = 1.0F;
+        lineWidthValid = true;
     }
 
     public void endFrame() {
@@ -659,6 +668,7 @@ public class Renderer {
                                                 
         blendConstantsApplied = false;
         stencilStateApplied = false;
+        lineWidthValid = false;
     }
 
     void waitForSwapChain() {
@@ -778,6 +788,13 @@ public class Renderer {
             //2026-11-26: a pipeline bound behind this renderer's back (clearBoundPipeline) may have had static blend constants, which
             // leaves the dynamic ones undefined: set them again with each new bind
             blendConstantsApplied = false;
+            //a pipeline with a static line width leaves the dynamic one undefined for the next line pipeline
+            if (!currentState.drawsLines()) lineWidthValid = false;
+        }
+
+        if (!lineWidthValid && currentState.drawsLines()) {
+            vkCmdSetLineWidth(commandBuffer, requestedLineWidth);
+            lineWidthValid = true;
         }
 
         float blendR = VRenderSystem.blendColor.get(0);
@@ -859,6 +876,7 @@ public class Renderer {
     public void clearBoundPipeline() {
         boundPipeline = null;
         boundPipelineHandle = 0;
+        lineWidthValid = false;
     }
 
     private static void resetDynamicState(VkCommandBuffer commandBuffer) {

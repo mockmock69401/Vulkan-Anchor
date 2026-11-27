@@ -168,7 +168,7 @@ public class GraphicsPipeline extends Pipeline {
 
             //2026-11-26: blend constants are dynamic, as Renderer.bindGraphicsPipeline sets them (glBlendColor) after every bind; a
             // static value with that call breaks VUID-vkCmdDraw*-None-08608
-            if (topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST || polygonMode == VK_POLYGON_MODE_LINE)
+            if (PipelineState.AssemblyRasterState.drawsLines(state.assemblyRasterState))
                 dynamicStates.pDynamicStates(stack.ints(VK_DYNAMIC_STATE_DEPTH_BIAS, VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_LINE_WIDTH, VK_DYNAMIC_STATE_BLEND_CONSTANTS));
             else
                 dynamicStates.pDynamicStates(stack.ints(VK_DYNAMIC_STATE_DEPTH_BIAS, VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS));

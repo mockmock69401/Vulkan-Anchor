@@ -75,6 +75,8 @@ public class MinecraftMixin {
         Renderer.getInstance().endFrame();
         //a screenshot deferred while paced runs here, after the frame that drew its hand and GUI into the world (final review I4)
         net.vulkanmod.visuals.framegen.FrameGen.afterEndFrame();
+        //a screenshot kept while FSR's swapchain is live runs here, with the copy this frame made before the hand-over (FsrScreenshot)
+        net.vulkanmod.visuals.fsr.FsrScreenshot.afterEndFrame();
     }
 
     @Redirect(method = "runTick", at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/pipeline/RenderTarget;bindWrite(Z)V"))

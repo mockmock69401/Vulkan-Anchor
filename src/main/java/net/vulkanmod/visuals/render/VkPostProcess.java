@@ -1183,9 +1183,10 @@ public final class VkPostProcess {
             particles.dispatchWithPush(cmd, copyBindings, this.copyUniformBuffer == null ? this.copyUniforms.buffer() : null,
                     groups(this.width), groups(this.height), 1);
         }
-        toRead(cmd, copyTarget);
         //Session 19: the Nether's heat haze's offsets (reads the main colour's marks and the depth only); the image is read by the final
         // colour only while they were written this frame, but always bound, so it is kept in the read layout
+        //2026-11-27 (stability test): the heat build sizes its work by imageSize(sceneOut), the copy target in the same set as a GENERAL
+        // storage image, so the target moves to the read layout only after it (VUID-VkDescriptorImageInfo-imageLayout-00344 every frame)
         this.heatDrawn = false;
         if (this.copyHeat != null && this.dimension.heatOn()) {
             VkGpuTimer.mark(cmd, "post.heat");
@@ -1193,6 +1194,7 @@ public final class VkPostProcess {
                     groups(this.heatImage.width), groups(this.heatImage.height), 1);
             this.heatDrawn = true;
         }
+        toRead(cmd, copyTarget);
         toRead(cmd, this.heatImage);
         VkGpuTimer.mark(cmd, "post.reflection");
         this.computeReflection(cmd, depths, data, ready, lodLight, light.terrainLight(), light.terrainNormal(), light.terrainAlbedo());

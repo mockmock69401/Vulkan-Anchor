@@ -131,6 +131,11 @@ public class PipelineState {
         return StencilState.stencilTest(stencilState_i);
     }
 
+    /** The pipeline for this state takes its line width as dynamic state (AssemblyRasterState.drawsLines). */
+    public boolean drawsLines() {
+        return AssemblyRasterState.drawsLines(assemblyRasterState);
+    }
+
     public static BlendInfo defaultBlendInfo() {
         return new BlendInfo(true, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD);
@@ -337,7 +342,9 @@ public class PipelineState {
 
         public static final int TOPOLOGY_OFFSET = 3;
         public static final int TOPOLOGY_BITS = 4;
-        public static final int TOPOLOGY_MASK = 0b11111;
+        //2026-11-27 (stability test, Nightfall): the mask was 5 bits over a 4-bit field, so the cull mode's low bit (front-face culling)
+        // came back as topology + 16 and vkCreateGraphicsPipelines got topology 19 (VUID-VkPipelineInputAssemblyStateCreateInfo-topology-parameter)
+        public static final int TOPOLOGY_MASK = (1 << TOPOLOGY_BITS) - 1;
 
         public static final int CULL_MODE_OFFSET = TOPOLOGY_OFFSET + TOPOLOGY_BITS;
         public static final int CULL_MODE_BITS = 2;
@@ -355,7 +362,7 @@ public class PipelineState {
         }
 
         public static int encode(int cullMode, int topology, int polygonMode, int frontFace) {
-            int state = (polygonMode | (topology << TOPOLOGY_OFFSET));
+            int state = ((polygonMode & POLYGON_MODE_MASK) | ((topology & TOPOLOGY_MASK) << TOPOLOGY_OFFSET));
             state |= ((cullMode & CULL_MODE_MASK) << CULL_MODE_OFFSET);
             state |= ((frontFace & FRONT_FACE_MASK) << FRONT_FACE_OFFSET);
 
@@ -368,6 +375,11 @@ public class PipelineState {
 
         public static int decodePolygonMode(int state) {
             return state & POLYGON_MODE_MASK;
+        }
+
+        /** Lines (a line list, or polygons drawn as lines): the pipeline takes its line width as dynamic state (GraphicsPipeline). */
+        public static boolean drawsLines(int state) {
+            return decodeTopology(state) == VK_PRIMITIVE_TOPOLOGY_LINE_LIST || decodePolygonMode(state) == VK_POLYGON_MODE_LINE;
         }
 
         public static int decodeCullMode(int state) {

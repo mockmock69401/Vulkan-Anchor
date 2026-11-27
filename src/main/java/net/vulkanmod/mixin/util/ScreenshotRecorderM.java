@@ -22,6 +22,12 @@ public class ScreenshotRecorderM {
         int width = target.width;
         int height = target.height;
 
+        //2026-11-27: a grab kept while FSR's swapchain was live reads the copy its frame made before the hand-over (FsrScreenshot)
+        NativeImage copied = net.vulkanmod.visuals.fsr.FsrScreenshot.read(width, height);
+        if (copied != null) {
+            return copied;
+        }
+
         NativeImage nativeimage = new NativeImage(width, height, false);
         GlTexture.bindTexture(target.getColorTextureId());
 

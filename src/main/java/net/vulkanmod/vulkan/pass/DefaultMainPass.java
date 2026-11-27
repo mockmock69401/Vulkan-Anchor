@@ -259,6 +259,8 @@ public class DefaultMainPass implements MainPass {
                 //FSR design 4.5: FSR's swapchain takes its frames in SHADER_READ_ONLY_OPTIMAL (it copies and generates from them), and
                 // FSR is told this frame (configure, prepare, generation) before the submit
                 VulkanImage image = swapChain.getColorAttachment();
+                //2026-11-27: a screenshot kept for this frame copies the image while it is still the game's (leaves it handed over)
+                net.vulkanmod.visuals.fsr.FsrScreenshot.copyBeforeHandOver(stack, commandBuffer, image);
                 if (image.getCurrentLayout() == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
                     //FSR reads it in later submissions (its passthrough copy, the generation compute, the composition), each ordered
                     // after this submit by FSR's semaphores; the stages and accesses named are those reads
