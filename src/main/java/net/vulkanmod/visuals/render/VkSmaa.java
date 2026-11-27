@@ -31,6 +31,8 @@ final class VkSmaa {
     static final float[][] PRESETS = {null, {0.15f, 4, 0, 100}, {0.10f, 8, 0, 100}, {0.10f, 16, 8, 25}, {0.05f, 32, 16, 25}};
     static final int AREA_WIDTH = 160, AREA_HEIGHT = 560, SEARCH_WIDTH = 64, SEARCH_HEIGHT = 16;
     static final int METRICS = 0, PARAMS = 1;
+    /** 2026-11-26: the blend's dither mode (smaa-blend.comp smaaDither). */
+    static final int BLEND_DITHER = 2;
     // post_ldr.comp: post_final's samplers at 0..2, the output image at 3; the SMAA passes: output image at 0, inputs from 1
     private static final int LDR_OUT = 3, OUT = 0, IN0 = 1, IN1 = 2, IN2 = 3;
     /** 2026-11-13 (shader roadmap session 19): post_ldr.comp reads the heat haze's offsets here (postfinal.glsl heatTex). */
@@ -180,12 +182,16 @@ final class VkSmaa {
         return this.ldrImage;
     }
 
-    /** After finalColour(): the three SMAA passes on input (readable, the final colour or TAA's), into an image it returns (readable). */
-    VkImage2D antiAlias(VkCommandBuffer cmd, VkImage2D input, long nearest, long linear, int preset) {
+    /**
+     * After finalColour(): the three SMAA passes on input (readable, the final colour or TAA's), into an image it returns (readable).
+     * 2026-11-26: dither is the blend's dither mode into its rgba8 output (dither.glsl: the setting's with TAA's float input, 0 without).
+     */
+    VkImage2D antiAlias(VkCommandBuffer cmd, VkImage2D input, long nearest, long linear, int preset, float dither) {
         float[] p = PRESETS[preset];
         for (LooseUniformWriter w : new LooseUniformWriter[]{this.edgesUniforms, this.weightsUniforms, this.blendUniforms}) {
             w.putVec4(METRICS, 1f / this.width, 1f / this.height, this.width, this.height).putVec4(PARAMS, p[0], p[1], p[2], p[3]);
         }
+        if (this.blendUniforms.has(BLEND_DITHER)) this.blendUniforms.putVec4(BLEND_DITHER, dither, 0, 0, 0);
         VkGpuTimer.mark(cmd, "smaa");
         toWrite(cmd, this.edgesImage);
         this.edges.dispatchWithPush(cmd, new VkBindings().storageImage(OUT, this.edgesImage.view()).sampled(IN0, input, linear),
@@ -208,8 +214,9 @@ final class VkSmaa {
      * (PostMath.sharpenStrength), one full-screen strip. 2026-11-09 (session 6): the weather overlay (in the read layout) blended over it
      * when weather is true.
      */
-    void draw(VkCommandBuffer cmd, long nearest, VkImage2D image, float strength, VkImage2D overlay, boolean weather) {
-        this.blitUniforms.putVec4(0, strength, weather ? 1 : 0, 0, 0);
+    void draw(VkCommandBuffer cmd, long nearest, VkImage2D image, float strength, VkImage2D overlay, boolean weather, float dither) {
+        //2026-11-26: z the dither mode into the 8-bit target (dither.glsl: the setting's when image is TAA's float colour, else 0)
+        this.blitUniforms.putVec4(0, strength, weather ? 1 : 0, dither, 0);
         //2026-11-16 (session 26): water running down the lens (LensWater; zeros = none)
         if (this.blitUniforms.has(LensWater.BLIT_SLOT)) {
             float[] lens = LensWater.params();

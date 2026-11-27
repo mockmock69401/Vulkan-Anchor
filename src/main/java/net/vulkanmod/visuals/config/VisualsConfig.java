@@ -718,6 +718,12 @@ public class VisualsConfig {
     public int antiAliasing = 2;
     public boolean edgeCover = true;
     public boolean taa = true;
+    /**
+     * 2026-11-26 (the user: "디더 조정 옵션을 추가하고 더 강하게"): the random rounding into the 8-bit screen against banding in smooth
+     * gradients (PostMath.DITHER_*): 0 off, 1 fine (half a step either way, as before), 2 strong (one step, triangular: no contour
+     * left even in the flattest gradient, at the cost of a faint grain).
+     */
+    public int outputDither = net.vulkanmod.visuals.render.PostMath.DITHER_FINE;
     public boolean dhLods = true;
     public boolean dhShadows = true;
     /** FG design 7: frame generation (camera reprojection), off by default; applied through a swapchain update (FrameGen.beginFrame). */

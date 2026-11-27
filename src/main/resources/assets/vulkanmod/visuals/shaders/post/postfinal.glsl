@@ -17,6 +17,9 @@ layout(location = 5) uniform vec4 heatParams;
 //2026-11-16 (shader roadmap session 26): water running down the lens (lenswater.glsl; LensWater): post_final.frag reads it while lensParams.y > 0
 // (post_ldr.comp, before TAA and SMAA, leaves it to post_blit.frag: written 0 there)
 layout(location = 6) uniform vec4 lensParams;
+//2026-11-26: x the Output Dither setting's mode (dither.glsl: 0 off, 1 fine, 2 strong; PostUniforms.DITHER)
+layout(location = 7) uniform vec4 ditherParams;
+#import <vulkanmod:visuals/post/dither.glsl>
 
 //Just under one 8-bit step peak to peak: values already on the 8-bit grid stay where they are
 const float DITHER = 0.0039137257;
@@ -73,7 +76,11 @@ vec4 finalColour(vec2 fragCoord) {
     c *= tint;
     c = clamp(mix(vec3(luminance(c)), c, warmParams.w), 0.0, 1.0);
     vec3 d = contrastCurve(linearToDisplay(c), coolParams.w);
-    //Random rounding to the 8-bit output (dither against banding in skies)
-    d += (interleavedGradientNoise(floor(fragCoord)) - 0.5)*DITHER;
+    //Random rounding to the 8-bit output (dither against banding in skies); 2026-11-26: off, fine (DITHER, as before) or strong
+    if (ditherParams.x > 1.5) {
+        d = ditherOutput(d, fragCoord, ditherParams.x);
+    } else if (ditherParams.x > 0.5) {
+        d += (interleavedGradientNoise(floor(fragCoord)) - 0.5)*DITHER;
+    }
     return vec4(clamp(d, 0.0, 1.0), 1.0);
 }

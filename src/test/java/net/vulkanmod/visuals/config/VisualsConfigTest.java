@@ -241,7 +241,8 @@ class VisualsConfigTest {
             previous = item;
         }
         assertNotNull(fg);
-        assertEquals("taa", beforeFg.key());
+        //2026-11-26: Output Dither follows TAA at the end of the effects block
+        assertEquals("output_dither", beforeFg.key());
         assertEquals(VisualsOptionLayout.Kind.SWITCH, fg.kind());
         assertEquals(VisualsOptionLayout.Impact.LOW, fg.impact());
         assertNull(fg.requires());

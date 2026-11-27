@@ -15,7 +15,8 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * records vanilla's vignette colour and the crosshair quads (through the GuiGraphics pose, which Shoulder Surfing's dynamic crosshair
  * translates), and the compose pass applies them over the world and the UI. Otherwise both draw as in vanilla. Forge's GUI overlays
  * call these same methods. require = 0: a HUD mod that redirects the same blit keeps the game starting (frame generation then draws
- * that blit into the layer as it is).
+ * that blit into the layer as it is). 2026-11-27: otherwise the vignette is drawn with DitheredVignette's texture while the visuals are
+ * on (vanilla's, dithered per pixel against its rings).
  */
 @Mixin(Gui.class)
 public abstract class GuiFrameGenMixin {
@@ -29,7 +30,10 @@ public abstract class GuiFrameGenMixin {
             FrameGen.vignette(colour[0], colour[1], colour[2]);
             return;
         }
-        graphics.blit(texture, x, y, z, u, v, width, height, textureWidth, textureHeight);
+        //2026-11-27: vanilla's 8-bit vignette left rings a step apart; with the visuals on, the same texture dithered per pixel
+        // (DitheredVignette; the whole texture over the same quad, under the same colour and blend)
+        ResourceLocation dithered = net.vulkanmod.visuals.render.DitheredVignette.texture();
+        graphics.blit(dithered != null ? dithered : texture, x, y, z, u, v, width, height, textureWidth, textureHeight);
     }
 
     @Redirect(method = "renderCrosshair", at = @At(value = "INVOKE",

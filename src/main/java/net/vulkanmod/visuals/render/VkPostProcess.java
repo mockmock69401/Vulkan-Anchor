@@ -220,6 +220,8 @@ public final class VkPostProcess {
     private final VkTaa taa;//TAA pass (2026-10-15): null when it could not be built
     private boolean taaFailed, taaPrepared, taaDrawn;
     private VkImage2D drawnImage;//the anti-aliased colour post.draw blits (null: post_final draws)
+    /** 2026-11-26: the blit's dither mode (dither.glsl): the setting's when it blits TAA's float colour (SMAA off), else 0. */
+    private float blitDither;
     private Depths lastDepths;
     private final VkComputeProgram copy, prefilter, down, up, shaftMask, shaftBlur;
     private final VkComputeProgram lighting, lightingBlur, reflection;
@@ -1540,7 +1542,11 @@ public final class VkPostProcess {
                     VisualsLog.error("Visuals TAA failed, turned off for this session: ", e);
                 }
             }
-            if (smaaOn) image = this.smaa.antiAlias(cmd, image, this.nearest, this.linear, preset);
+            //2026-11-26: TAA's float colour is dithered into the 8-bit images after it (dither.glsl): in SMAA's blend when SMAA runs,
+            // else in the blit; the final colour without TAA is dithered already (postfinal.glsl), so neither adds a second dither then
+            float dither = this.taaDrawn ? PostUniforms.ditherMode() : 0;
+            if (smaaOn) image = this.smaa.antiAlias(cmd, image, this.nearest, this.linear, preset, dither);
+            this.blitDither = smaaOn ? 0 : dither;
             this.smaaDrawn = true;
             this.drawnImage = image;
         } catch (RuntimeException e) {
@@ -1552,7 +1558,8 @@ public final class VkPostProcess {
     /** Inside the resumed main pass, after compute(): one full-screen strip over Reforged's viewport and scissor; no depth is read. */
     public void draw(VkCommandBuffer cmd, PostUniforms.Values values) {
         if (this.smaaDrawn && this.drawnImage != null) {
-            this.smaa.draw(cmd, this.nearest, this.drawnImage, PostMath.sharpenStrength(this.taaDrawn), this.weatherImage, this.weatherDrawn);
+            this.smaa.draw(cmd, this.nearest, this.drawnImage, PostMath.sharpenStrength(this.taaDrawn), this.weatherImage, this.weatherDrawn,
+                    this.blitDither);
             return;
         }
         values.write(this.finalUniforms);

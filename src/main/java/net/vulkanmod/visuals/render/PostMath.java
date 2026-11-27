@@ -35,6 +35,18 @@ public final class PostMath {
 
     /** Dither amplitude: just under one 8-bit step peak to peak, so a value already on the 8-bit grid never moves. */
     public static final float DITHER = 0.0039137257f;//0.998 / 255
+    /**
+     * 2026-11-26: the Output Dither setting's choices (VisualsConfig.outputDither; dither.glsl, postfinal.glsl): off, fine (DITHER,
+     * rectangular: a value on the 8-bit grid stays), strong (DITHER_STRONG either way, triangular: two noises summed, so the rounding
+     * error no longer follows the colour and no contour is left).
+     */
+    public static final int DITHER_OFF = 0, DITHER_FINE = 1, DITHER_STRONG = 2;
+    public static final float DITHER_STRONG_STEP = 1f / 255f;
+
+    /** The final pass's and the passes after TAA's dither mode for the setting (0..2, anything else as fine). */
+    public static float ditherMode(int setting) {
+        return setting == DITHER_OFF || setting == DITHER_STRONG ? setting : DITHER_FINE;
+    }
     /** Vignette (cos^4 law): tan^2 of the angle at the screen's corner, see vignette(). */
     public static final float VIGNETTE_TAN2 = 0.16f;
 
