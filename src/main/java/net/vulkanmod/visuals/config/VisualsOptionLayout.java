@@ -144,7 +144,9 @@ public final class VisualsOptionLayout {
                             BLOOM,
                             percent("vignette_strength", STRENGTH_MAX),
                             new Item("anti_aliasing", Kind.CHOICE, 0, ANTI_ALIASING_MAX, Impact.MEDIUM, null),
-                            toggle("taa", Impact.LOW, null))),
+                            toggle("taa", Impact.LOW, null),
+                            //2026-11-26: the dither into the 8-bit screen (PostMath.DITHER_*)
+                            new Item("output_dither", Kind.CHOICE, 0, net.vulkanmod.visuals.render.PostMath.DITHER_STRONG, Impact.NONE, null))),
                     //2026-10-25: the two generators in their own block, with the cost warning under them (block.frame_generation.note)
                     new Block(FRAME_GENERATION_BLOCK, List.of(
                             toggle(FRAME_GENERATION, Impact.LOW, null),
@@ -338,6 +340,7 @@ public final class VisualsOptionLayout {
             case "vignette_strength" -> c.vignetteStrength;
             case "anti_aliasing" -> c.antiAliasing;
             case "taa" -> c.taa ? 1 : 0;
+            case "output_dither" -> c.outputDither;
             case FRAME_GENERATION -> c.frameGeneration ? 1 : 0;
             case FSR_FRAME_GENERATION -> c.fsrFrameGeneration ? 1 : 0;
             case "fog_strength" -> c.fogStrength;
@@ -438,6 +441,7 @@ public final class VisualsOptionLayout {
             case "vignette_strength" -> c.vignetteStrength = v;
             case "anti_aliasing" -> c.antiAliasing = v;
             case "taa" -> c.taa = v != 0;
+            case "output_dither" -> c.outputDither = v;
             case FRAME_GENERATION, FSR_FRAME_GENERATION -> FsrSettings.onToggle(c, item.key(), v != 0);
             case "fog_strength" -> c.fogStrength = v;
             case "fog_height" -> c.fogHeight = v;

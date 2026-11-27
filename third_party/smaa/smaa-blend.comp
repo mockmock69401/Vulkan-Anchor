@@ -8,6 +8,8 @@ layout(local_size_x = 8, local_size_y = 8) in;
 
 layout(location = 0) uniform vec4 smaaMetrics;//1/width, 1/height, width, height
 layout(location = 1) uniform vec4 smaaParams;//threshold, max search steps, max diagonal search steps, corner rounding (percent)
+//2026-11-26: x the dither mode (post/dither.glsl; 0 when the input is already the dithered 8-bit image, without TAA)
+layout(location = 2) uniform vec4 smaaDither;
 
 #define SMAA_GLSL_4 1
 #define SMAA_RT_METRICS smaaMetrics
@@ -28,9 +30,28 @@ layout(binding = 2) uniform sampler2D blendTex;//linear
 
 #include "smaa.h"
 
+//2026-11-26 (banding after TAA): TAA's float colour randomly rounded into the rgba8 output, as post/dither.glsl's ditherOutput (the same
+// amounts and noise; inlined here: the preprocessor that builds smaa_blend.comp does not take the visuals' #import)
+const float OUTPUT_DITHER = 0.0039137257;
+const float OUTPUT_DITHER_STRONG = 0.003921569;
+
+float outputDitherNoise(vec2 pixel) {
+    return fract(52.9829189*fract(dot(pixel, vec2(0.06711056, 0.00583715))));
+}
+
+vec3 ditherOutput(vec3 d, vec2 pixel, float mode) {
+    vec2 at = floor(pixel);
+    float n = outputDitherNoise(at);
+    if (mode > 1.5) {
+        return d + (n + outputDitherNoise(at.yx) - 1.0)*OUTPUT_DITHER_STRONG;
+    }
+    return mode > 0.5 ? d + (n - 0.5)*OUTPUT_DITHER : d;
+}
+
 void main() {
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
     if (coord.x < int(smaaMetrics.z) && coord.y < int(smaaMetrics.w)) {
-        imageStore(outputImage, coord, SMAANeighborhoodBlendingCS(coord, colorTex, blendTex));
+        vec4 blended = SMAANeighborhoodBlendingCS(coord, colorTex, blendTex);
+        imageStore(outputImage, coord, vec4(ditherOutput(blended.rgb, vec2(coord), smaaDither.x), blended.a));
     }
 }

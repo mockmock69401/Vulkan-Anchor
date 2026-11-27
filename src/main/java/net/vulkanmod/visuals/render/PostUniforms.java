@@ -21,6 +21,17 @@ public final class PostUniforms {
     static final int HEAT = 5;
     /** 2026-11-16 (session 26): water running down the lens (postfinal.glsl lensParams, LensWater.params); write leaves it 0 (none). */
     static final int LENS = LensWater.FINAL_SLOT;
+    /** 2026-11-26: x the Output Dither setting's mode (postfinal.glsl ditherParams, PostMath.ditherMode). */
+    static final int DITHER = 7;
+
+    /** The Output Dither setting's mode (fine when the settings cannot be read). */
+    static float ditherMode() {
+        try {
+            return PostMath.ditherMode(net.vulkanmod.visuals.config.VisualsConfig.get().outputDither);
+        } catch (RuntimeException | LinkageError e) {
+            return PostMath.DITHER_FINE;
+        }
+    }
 
     public record Values(int width, int height, float exposure, float toneKnee, float bloomMix, float bloomNorm, float[] shaft,
                          boolean shaftsOn, float[] warm, float[] cool, float saturation, float contrast, float vignette) {
@@ -32,6 +43,7 @@ public final class PostUniforms {
             w.putVec4(SCREEN, 1f / Math.max(1, this.width), 1f / Math.max(1, this.height), this.vignette, 0);
             writeHeat(w, false);
             if (w.has(LENS)) w.putVec4(LENS, 0, 0, 0, 0);
+            if (w.has(DITHER)) w.putVec4(DITHER, ditherMode(), 0, 0, 0);
         }
 
         /** 2026-11-09 (session 6): after write, post_final.frag's screen slot with w 1 when it blends the weather overlay (0 as write leaves it). */
