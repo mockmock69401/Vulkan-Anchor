@@ -196,6 +196,7 @@
     "visuals.EntityRenderDispatcherShadowMixin",
     "visuals.MouseHandlerLatencyMixin",
     "visuals.ScreenshotFrameGenMixin",
+    "visuals.ScreenshotFsrMixin",
     "visuals.ParticleTagMixin",
     "visuals.ParticleEngineLookMixin",
     "visuals.TextureSheetParticleAccessor",

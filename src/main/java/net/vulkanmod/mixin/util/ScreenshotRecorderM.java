@@ -24,6 +24,12 @@ public class ScreenshotRecorderM {
             throw new IllegalStateException("Screenshot target has no color image");
         }
 
+        //2026-11-27: a grab kept while FSR's swapchain was live reads the copy its frame made before the hand-over (FsrScreenshot)
+        NativeImage copied = net.vulkanmod.visuals.fsr.FsrScreenshot.read(source.width, source.height);
+        if (copied != null) {
+            return copied;
+        }
+
 
 
         NativeImage nativeimage = new NativeImage(source.width, source.height, false);

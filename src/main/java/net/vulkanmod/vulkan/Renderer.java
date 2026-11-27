@@ -95,6 +95,10 @@ public class Renderer {
     private int appliedStencilWriteMask;
     private boolean stencilStateApplied;
     private float appliedLineWidth = 1.0F;
+    //2026-11-27 (stability test, ZTE's FTB Chunks minimap): only line pipelines take the line width as dynamic state, so binding any
+    // other pipeline leaves it undefined (VUID-vkCmdDraw-None-07833); the width asked for (appliedLineWidth) is set again when a line
+    // pipeline follows
+    private boolean lineWidthValid;
     private float appliedDepthBiasUnits;
     private float appliedDepthBiasFactor;
 
@@ -146,11 +150,13 @@ public class Renderer {
     }
 
     public static void setLineWidth(float width) {
+        INSTANCE.appliedLineWidth = width;
         if (INSTANCE.boundFramebuffer == null) {
+            INSTANCE.lineWidthValid = false;
             return;
         }
         vkCmdSetLineWidth(INSTANCE.currentCmdBuffer, width);
-        INSTANCE.appliedLineWidth = width;
+        INSTANCE.lineWidthValid = true;
     }
 
     private void init() {
@@ -429,6 +435,7 @@ public class Renderer {
         boundPipelineHandle = 0;
         blendConstantsApplied = false;
         stencilStateApplied = false;
+        lineWidthValid = false;
         VkFrames.onFrameStart(getCommandBuffer(), currentFrame);
     }
 
@@ -772,6 +779,7 @@ public class Renderer {
                 vkCmdSetLineWidth(renderer.currentCmdBuffer, lineWidth);
                 vkCmdSetDepthBias(renderer.currentCmdBuffer, depthBiasUnits, 0.0F, depthBiasFactor);
                 renderer.appliedLineWidth = lineWidth;
+                renderer.lineWidthValid = true;
                 renderer.appliedDepthBiasUnits = depthBiasUnits;
                 renderer.appliedDepthBiasFactor = depthBiasFactor;
                 renderer.boundPipeline = pipeline;
@@ -993,6 +1001,7 @@ public class Renderer {
 
         blendConstantsApplied = false;
         stencilStateApplied = false;
+        lineWidthValid = false;
     }
 
     void waitForSwapChain() {
@@ -1135,6 +1144,13 @@ public class Renderer {
             //2026-11-26: a pipeline bound behind this renderer's back (clearBoundPipeline) may have had static blend constants, which
             // leaves the dynamic ones undefined: set them again with each new bind
             blendConstantsApplied = false;
+            //a pipeline with a static line width leaves the dynamic one undefined for the next line pipeline
+            if (!currentState.drawsLines()) lineWidthValid = false;
+        }
+
+        if (!lineWidthValid && currentState.drawsLines()) {
+            vkCmdSetLineWidth(commandBuffer, appliedLineWidth);
+            lineWidthValid = true;
         }
 
         float blendR = VRenderSystem.blendColor.get(0);
@@ -1216,6 +1232,7 @@ public class Renderer {
     public void clearBoundPipeline() {
         boundPipeline = null;
         boundPipelineHandle = 0;
+        lineWidthValid = false;
     }
 
     public void restoreGraphicsPipeline(Pipeline previousPipeline) {
@@ -1225,6 +1242,7 @@ public class Renderer {
         }
         boundPipeline = null;
         boundPipelineHandle = 0;
+        lineWidthValid = false;
     }
 
     private static void resetDynamicState(VkCommandBuffer commandBuffer) {
@@ -1234,6 +1252,7 @@ public class Renderer {
 
         vkCmdSetLineWidth(commandBuffer, 1.0F);
         INSTANCE.appliedLineWidth = 1.0F;
+        INSTANCE.lineWidthValid = true;
     }
 
     public static void setDepthBias(float units, float factor) {
