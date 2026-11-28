@@ -61,6 +61,17 @@ bool terrainTinted(vec3 tint) {
 layout(binding = SCENE_LIGHT_BINDING, r32ui) uniform restrict uimage2D TerrainLight;
 layout(binding = SCENE_LIGHT_BINDING + 1, r32ui) uniform restrict uimage2D TerrainAlbedo;
 
+//2026-11-28 (the user: per-pixel light looked awkward, "밴딩 현상 관련"): the levels are kept in quarter steps, and a torch's light
+// fading across a face turned into flat bands a quarter level apart in the composite (several percent of brightness each in dim
+// light; vanilla blends the colour smoothly). The levels are rounded with this pixel's interleaved gradient noise (Jimenez 2014), as
+// post/dither.glsl's: on average the stored level is the interpolated one. A pure function of the pixel and the levels, so two
+// fragments of one plane at one pixel (the grass side's overlay and its dirt, writeSceneMaterial) still pack the same value
+vec2 ditheredLight(vec2 light) {
+    vec2 at = floor(gl_FragCoord.xy);
+    float n = fract(52.9829189*fract(dot(at, vec2(0.06711056, 0.00583715))));
+    return light + (n - 0.5)/TERRAIN_LIGHT_LEVEL_STEPS;
+}
+
 //light: (sky, block) levels; colour: the fragment's colour before the lightmap and the fog; unfogged: no vanilla fog on it; tinted:
 // a biome-tinted layer (terrainTinted)
 //Writes packed (the albedo of the fragment with light value v) while v is still the pixel's light, a few tries (each failed swap means
@@ -102,7 +113,7 @@ bool writeSceneLight(vec2 light, vec4 colour, bool unfogged, bool tinted) {
     bool layers = 1.0/gl_FragCoord.w <= TERRAIN_ALBEDO_LAYER_DISTANCE;
     tinted = tinted && layers;
     uint stale = writes && layers && !tinted ? imageAtomicOr(TerrainAlbedo, p, 0u) : 0u;
-    uint v = packTerrainLight(gl_FragCoord.z, light);
+    uint v = packTerrainLight(gl_FragCoord.z, ditheredLight(light));
     uint before = imageAtomicMin(TerrainLight, p, v);
     if (!writes) {
         return v <= before;

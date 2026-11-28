@@ -195,7 +195,7 @@ void writeSceneMaterial(vec2 light, vec2 uv, vec3 pos, vec4 params) {
     if (any(greaterThanEqual(p, imageSize(TerrainNormal)))) {
         return;
     }
-    uint v = packTerrainLight(gl_FragCoord.z, light);
+    uint v = packTerrainLight(gl_FragCoord.z, ditheredLight(light));
     //A fragment already behind a nearer one (most of the overdraw) reads no maps
     if (imageAtomicOr(TerrainLight, p, 0u) != v) {
         return;

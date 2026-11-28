@@ -1239,8 +1239,12 @@ vec4 compositeAt(ivec2 p, ivec2 size, vec4 colour, bool overdrawn) {
         vec3 relit = scene;
         if (known) {
             if (hasAlbedo) {
-                //2026-10-23: vanilla's own product at the new levels, the held light's too: no gain cap, no stretched 8-bit steps
-                relit = vanillaToScene(albedo*lightmapDisplay(blockT, skyT));
+                //2026-10-23: vanilla's own product at the new levels, the held light's too: no gain cap, no stretched 8-bit steps.
+                // 2026-11-28: as the change from vanilla's own pixel: the stored levels are rounded (terrain_light.glsl's quarter steps,
+                // dithered), vanilla's colour is not, so where the levels stay this is vanilla's pixel and a torch's light keeps its
+                // smooth fade
+                relit = max(scene + vanillaToScene(albedo*lightmapDisplay(blockT, skyT)) - vanillaToScene(albedo*lightmapDisplay(block, sky)),
+                        vec3(0.0));
             } else {
                 gain = relightGain(lightNow, lightSky);
                 floorWeight = relightFloorWeight(lightNow, lightSky);

@@ -596,10 +596,14 @@ public final class SceneCompositeMath {
             float[] relit = scene;
             if (known) {
                 if (hasAlbedo) {
-                    //2026-10-23: vanilla's own product at the new levels (the held light's too)
-                    float[] lmd = lightmapDisplay(lm, blockT, skyT);
+                    //2026-10-23: vanilla's own product at the new levels (the held light's too); 2026-11-28: as the change from vanilla's
+                    // own pixel (the stored levels are rounded, vanilla's colour is not)
+                    float[] lmd = lightmapDisplay(lm, blockT, skyT), was = lightmapDisplay(lm, block, sky);
                     relit = new float[3];
-                    for (int i = 0; i < 3; i++) relit[i] = PostMath.displayToLinear(px.albedo[i] * lmd[i]) * PostMath.SCENE_WHITE;
+                    for (int i = 0; i < 3; i++) {
+                        relit[i] = Math.max(scene[i] + (PostMath.displayToLinear(px.albedo[i] * lmd[i])
+                                - PostMath.displayToLinear(px.albedo[i] * was[i])) * PostMath.SCENE_WHITE, 0);
+                    }
                 } else {
                     for (int i = 0; i < 3; i++) {
                         gain[i] = RelightMath.gain(lightNow[i], lightSky[i]);
