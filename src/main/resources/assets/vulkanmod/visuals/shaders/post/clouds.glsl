@@ -688,13 +688,15 @@ const float ANIME_PUFF_PROFILE = 0.8;
 const float ANIME_PUFF_BLEND = 0.35;
 const float ANIME_EDGE = 0.5;
 const float ANIME_TOWER = 0.35;
-//Samples every ANIME_STEP blocks of the span, ANIME_SAMPLES_MIN up to the quality's count; the top's normal from its heights
-// ANIME_NORMAL_STEP blocks either side
+//Samples every ANIME_STEP blocks of the span, ANIME_SAMPLES_MIN (a count below it: that count) up to the count asked; the top's normal
+// from its heights ANIME_NORMAL_STEP blocks either side. 2026-11-28 (the user's lake at night: the reflected sky map's clouds took 0.34 ms):
+// the water's reflection marches ANIME_REFLECT_SAMPLES, blurred and rippled anyway (0.1 ms less, no change past the frame's own noise)
 const float ANIME_STEP = 6.0;
 const int ANIME_SAMPLES_LOW = 16;
 const int ANIME_SAMPLES_MEDIUM = 28;
 const int ANIME_SAMPLES_HIGH = 44;
 const int ANIME_SAMPLES_MIN = 10;
+const int ANIME_REFLECT_SAMPLES = 6;
 const float ANIME_NORMAL_STEP = 12.0;
 const float ANIME_SOFT = 16.0;
 const float ANIME_SOFT_BASE = 60.0;
@@ -960,7 +962,7 @@ vec4 animeMarch(vec3 origin, vec3 dir, float maxDist, vec3 lightDir, float jitte
     float len = max(span.y - span.x, 0.0);
     //The size scales the step, the soft lengths and the fade's shrink, and the density over it: the same samples and look at every size
     float k = animeScale();
-    int n = len > 0.0 ? int(clamp(ceil(len/(ANIME_STEP*k)), float(ANIME_SAMPLES_MIN), float(max(samples, ANIME_SAMPLES_MIN)))) : 0;
+    int n = len > 0.0 ? int(clamp(ceil(len/(ANIME_STEP*k)), float(min(samples, ANIME_SAMPLES_MIN)), float(samples))) : 0;
     float dt = len/float(max(n, 1));
     float trans = 1.0;
     float tsum = 0.0;

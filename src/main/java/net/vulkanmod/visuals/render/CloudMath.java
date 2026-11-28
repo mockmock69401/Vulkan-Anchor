@@ -536,7 +536,7 @@ public final class CloudMath {
     public static final float ANIME_PUFF_LOW = 0.15f, ANIME_PUFF_HIGH = 0.55f, ANIME_PUFF_TALL = 1, ANIME_PUFF_PROFILE = 0.8f, ANIME_PUFF_BLEND = 0.35f;
     public static final float ANIME_EDGE = 0.5f, ANIME_TOWER = 0.35f;
     public static final float ANIME_STEP = 6, ANIME_NORMAL_STEP = 12;
-    public static final int ANIME_SAMPLES_LOW = 16, ANIME_SAMPLES_MEDIUM = 28, ANIME_SAMPLES_HIGH = 44, ANIME_SAMPLES_MIN = 10;
+    public static final int ANIME_SAMPLES_LOW = 16, ANIME_SAMPLES_MEDIUM = 28, ANIME_SAMPLES_HIGH = 44, ANIME_SAMPLES_MIN = 10, ANIME_REFLECT_SAMPLES = 6;
     public static final float ANIME_SOFT = 16, ANIME_SOFT_BASE = 60, ANIME_DENSITY = 0.12f;
     public static final float ANIME_FADE_NEAR = 500, ANIME_FADE_FAR = 1800, ANIME_FADE_SHRINK = 24, ANIME_HAZE = 0.5f;
     public static final float ANIME_WRAP = 0.8f, ANIME_SHADE_FROM = 0, ANIME_SHADE_TO = 1, ANIME_SHADOW = 0.4f, ANIME_FLAT = 0.6f;
@@ -777,7 +777,7 @@ public final class CloudMath {
         //2026-11-23: a ray that misses the layer still meets the cirrus behind it
         float len = span == null ? 0 : span[1] - span[0];
         float k = animeScale(r);
-        int n = len > 0 ? (int) Math.max(ANIME_SAMPLES_MIN, Math.min(Math.max(samples, ANIME_SAMPLES_MIN), Math.ceil(len / (ANIME_STEP * k)))) : 0;
+        int n = len > 0 ? (int) Math.max(Math.min(samples, ANIME_SAMPLES_MIN), Math.min(samples, Math.ceil(len / (ANIME_STEP * k)))) : 0;
         float dt = len / Math.max(n, 1);
         float trans = 1, tsum = 0, wsum = 0;
         for (int i = 0; i < ANIME_SAMPLES_HIGH; i++) {

@@ -61,7 +61,7 @@ class AnimeCloudTest {
         assertEquals(CloudMath.ANIME_SAMPLES_MEDIUM, CloudMath.animeSamples(1));
         assertEquals(CloudMath.ANIME_SAMPLES_HIGH, CloudMath.animeSamples(2));
         String reflection = ShaderFiles.read("post/reflection.comp");
-        assertTrue(reflection.contains("animeMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, REAL_REFLECT_SAMPLES, false)"));
+        assertTrue(reflection.contains("animeMarch(origin, dir, HAZE_MAX_DISTANCE, cloudLightDir.xyz, jitter, ANIME_REFLECT_SAMPLES, false)"));
         //Left out of the lean reflection build with the realistic march (VkPostProcess picks the lean one when Values.realistic() is false)
         int lean = reflection.indexOf("#ifndef REFLECT_LEAN"), anime = reflection.indexOf("if (cloudAnime())"), end = reflection.indexOf("#endif", lean);
         assertTrue(lean >= 0 && lean < anime && anime < end, "the anime branch sits in the non-lean part");
@@ -361,6 +361,33 @@ class AnimeCloudTest {
             float[] m = CloudMath.animeMarch(MAP, full, new float[3], d, 1e6f, UP, 0.5f, CloudMath.ANIME_SAMPLES_HIGH);
             assertTrue(m[3] / CloudMath.ANIME_HAZE * Math.cos(el) <= CloudMath.ANIME_FADE_FAR + 1, "drawn at " + m[3]);
         }
+    }
+
+    /**
+     * 2026-11-28: the reflection's march (ANIME_REFLECT_SAMPLES, below ANIME_SAMPLES_MIN) takes that many samples and gives the clouds
+     * about the coverage, sunlight and sky light the earlier 12 gave them along rising reflected rays.
+     */
+    @Test
+    void theReflectionsShortMarchMatchesTheLongerOne() {
+        assertTrue(CloudMath.ANIME_REFLECT_SAMPLES < CloudMath.ANIME_SAMPLES_MIN);
+        CloudMath.Realistic r = layer(CloudMath.REAL_COVER);
+        double cs = 0, cl = 0, ss = 0, sl = 0, as = 0, al = 0;
+        for (int i = 0; i < 400; i++) {
+            double az = i * 0.0157, el = Math.toRadians(12 + (i % 7) * 3);
+            float[] d = {(float) (Math.cos(el) * Math.sin(az)), (float) Math.sin(el), (float) (Math.cos(el) * Math.cos(az))};
+            float[] s = CloudMath.animeMarch(MAP, r, new float[]{0, -2, 30}, d, 1e6f, UP, 0.5f, CloudMath.ANIME_REFLECT_SAMPLES);
+            float[] l = CloudMath.animeMarch(MAP, r, new float[]{0, -2, 30}, d, 1e6f, UP, 0.5f, 12);
+            cs += s[2];
+            cl += l[2];
+            ss += s[0];
+            sl += l[0];
+            as += s[1];
+            al += l[1];
+        }
+        assertTrue(cl > 20, "covered rays " + cl);
+        assertEquals(1, cs / cl, 0.15, "coverage");
+        assertEquals(1, (ss / cs) / (sl / cl), 0.15, "sunlight per coverage");
+        assertEquals(1, (as / cs) / (al / cl), 0.15, "sky light per coverage");
     }
 
     private static PostProcessSettings settings(Consumer<VisualsConfig> edit) {
