@@ -252,7 +252,9 @@ class TerrainLightMathTest {
         assertArrayEquals(new float[]{SceneCompositeMath.DEBUG_UNKNOWN_RED, SceneCompositeMath.DEBUG_UNKNOWN_GREEN, SceneCompositeMath.DEBUG_UNKNOWN_BLUE},
                 SceneCompositeMath.sourceView(0, false, false));
         assertTrue(COPY.contains("sourceView(pl.z, fromLod, hasAlbedo)"));
-        assertTrue(COPY.contains("relit = vanillaToScene(albedo*lightmapDisplay(blockT, skyT));"));
+        //2026-11-28: as the change from vanilla's own pixel (the stored levels are rounded in dithered quarter steps)
+        assertTrue(COPY.contains("relit = max(scene + vanillaToScene(albedo*lightmapDisplay(blockT, skyT)) - vanillaToScene(albedo*lightmapDisplay(block, sky)),"));
+        assertTrue(PACK.contains("uint v = packTerrainLight(gl_FragCoord.z, ditheredLight(light));"));
         assertTrue(COPY.contains("lit = relit*perLight*ao;"));
         assertEquals(PostProcessSettings.LIGHT_DEBUG_MAX, SceneCompositeMath.DEBUG_SOURCE_VIEW);
     }
